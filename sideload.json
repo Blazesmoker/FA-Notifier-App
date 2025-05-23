@@ -1,0 +1,11 @@
+{
+  "name": "FA Notifier",
+  "bundleIdentifier": "com.blazesmoker.FANotifier",
+  "developerName": "Blazesmoker",
+  "version": "1.1.1",
+  "downloadURL": "https://blazesmoker.github.io/FA-Notifier-App/FA_Notifier_v111.ipa",
+  "iconURL": "https://blazesmoker.github.io/FA-Notifier-App/AppIcon.png",
+  "localizedDescription": "FA Notifier",
+  "tintColor": "#000000",
+  "screenshots": []
+}

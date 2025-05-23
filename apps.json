@@ -1,0 +1,18 @@
+{
+  "name": "Blazesmoker's AltStore Repo",
+  "identifier": "com.blazesmoker.repo",
+  "apps": [
+    {
+      "name": "FA Notifier",
+      "bundleIdentifier": "com.blazesmoker.FANotifier",
+      "developerName": "Blazesmoker",
+      "subtitle": "FA Notifier",
+      "version": "1.1.1",
+      "downloadURL": "https://blazesmoker.github.io/FA-Notifier-App/FA_Notifier_v111.ipa",
+      "iconURL": "https://blazesmoker.github.io/FA-Notifier-App/AppIcon.png",
+      "tintColor": "#000000",
+      "localizedDescription": "FA Notifier",
+      "screenshots": []
+    }
+  ]
+}
