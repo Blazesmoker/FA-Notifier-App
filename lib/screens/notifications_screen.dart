@@ -1082,45 +1082,79 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                     decoration: const BoxDecoration(color: Color(0xFF111111)),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 0.0),
-                      child: TabBar(
-                        controller: _tabController,
-                        isScrollable: true,
-                        indicator: const UnderlineTabIndicator(
-                          borderSide: BorderSide(color: Color(0xFFE09321), width: 3.4),
-                          insets: EdgeInsets.symmetric(horizontal: -6.0),
-                        ),
-                        labelStyle: const TextStyle(fontSize: 17.0, fontWeight: FontWeight.bold),
-                        unselectedLabelStyle: const TextStyle(fontSize: 15.0),
-                        tabAlignment: TabAlignment.start,
-                        dividerColor: Colors.black,
-                        dividerHeight: 3.7,
-                        tabs: sections.map((section) {
-                          final count = section.items.length;
-                          return Tab(
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(section.title),
-                                  const SizedBox(width: 4),
-                                  if (count > 0)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFE09321),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        '$count',
-                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                ],
-                              ),
+                      child: Consumer<FANotificationService>(
+                        builder: (context, service, child) {
+                          return TabBar(
+                            controller: _tabController,
+                            isScrollable: true,
+                            indicator: const UnderlineTabIndicator(
+                              borderSide: BorderSide(color: Color(0xFFE09321), width: 3.4),
+                              insets: EdgeInsets.symmetric(horizontal: -6.0),
                             ),
+                            labelStyle: const TextStyle(fontSize: 17.0, fontWeight: FontWeight.bold),
+                            unselectedLabelStyle: const TextStyle(fontSize: 15.0),
+                            tabAlignment: TabAlignment.start,
+                            dividerColor: Colors.black,
+                            dividerHeight: 3.7,
+                            tabs: sections.map((section) {
+                              // Determine the typeKey based on section title
+                              String? typeKey;
+                              final titleLower = section.title.toLowerCase();
+                              if (titleLower.contains('watch')) {
+                                typeKey = 'W';
+                              } else if (titleLower.contains('favorite')) {
+                                typeKey = 'F';
+                              } else if (titleLower.contains('journal') && !titleLower.contains('comment')) {
+                                typeKey = 'J';
+                              }
+
+
+                              // Get count from messageBarCounts if W/F/J, else use section.items.length
+                              int rawCount = 0;
+                              if (typeKey != null && service.messageBarCounts.containsKey(typeKey)) {
+                                rawCount = service.messageBarCounts[typeKey]!;
+                              } else {
+                                rawCount = section.items.length;
+                              }
+
+                              // Apply "30+" rule for Comments and Shouts
+                              String displayText;
+                              if (titleLower.contains('comment') || titleLower.contains('shout')) {
+                                displayText = rawCount >= 30 ? '30+' : '$rawCount';
+                              } else {
+                                displayText = '$rawCount';
+                              }
+
+                              return Tab(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(section.title),
+                                      const SizedBox(width: 4),
+                                      if (rawCount > 0)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFE09321),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            displayText,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                           );
-                        }).toList(),
+                        },
                       ),
                     ),
                   ),

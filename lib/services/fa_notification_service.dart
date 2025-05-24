@@ -41,7 +41,7 @@ class Shout {
   final String nickname; // e.g. "UserName" for display
   final String nicknameLink; // e.g. "username" parsed from href
   final String postedTitle; // e.g. "Mar 6, 2025 07:34 PM"
-  final String avatarUrl; // Possibly from user profile
+  final String avatarUrl; // Avatar from user profile
   final String postedAgo; // e.g. "a few minutes ago"
   final String textContent; // The actual text of the shout (or "removed")
   bool isChecked;
@@ -129,6 +129,10 @@ class FANotificationService with ChangeNotifier {
     fetchNotifications();
   }
 
+  /// Stores counts from the message-bar (e.g., {"W": 1, "F": 2, "J": 3}).
+  Map<String, int> messageBarCounts = {};
+
+
   /// Helper method to extract a username (nicknameLink).
   static String _extractNicknameLink(dom.Element li) {
     String nicknameLink = "";
@@ -203,6 +207,53 @@ class FANotificationService with ChangeNotifier {
       }
 
       final document = html_parser.parse(response.data.toString());
+
+      // Clear existing message-bar counts
+      messageBarCounts.clear();
+
+      // Find message-bar in both modern and classic formats
+      final messageBar = document.querySelector('li.message-bar-desktop') ??
+          document.querySelector('li.noblock');
+
+      if (messageBar != null) {
+        final links = messageBar.querySelectorAll('a.notification-container');
+        for (var link in links) {
+          final href = link.attributes['href'] ?? '';
+          final text = link.text.trim();
+
+          String? typeKey;
+
+          // Determine type key based on href
+          if (href.contains('#watches')) {
+            typeKey = 'W';
+          } else if (href.contains('#favorites')) {
+            typeKey = 'F';
+          } else if (href.contains('#journals')) {
+            typeKey = 'J';
+          }
+
+          // Extract numeric value from text (both modern and classic styles)
+          int count = 0;
+          if (typeKey != null) {
+            // Modern format: e.g. "24S"
+            final modernMatch = RegExp(r'^(\d+)').firstMatch(text);
+            if (modernMatch != null) {
+              count = int.tryParse(modernMatch.group(1)!) ?? 0;
+            } else {
+              // Classic format: e.g. "40<span>S</span>"
+              final classicMatch = RegExp(r'^(\d+)').firstMatch(text);
+              if (classicMatch != null) {
+                count = int.tryParse(classicMatch.group(1)!) ?? 0;
+              }
+            }
+
+            if (count > 0) {
+              messageBarCounts[typeKey] = count;
+            }
+          }
+        }
+      }
+
 
 
       currentUsername = await _guessMenubarUser();
@@ -513,6 +564,7 @@ class FANotificationService with ChangeNotifier {
           );
         }
 
+
         fetchedSections.add(
           NotificationSection(
             title: heading,
@@ -541,6 +593,7 @@ class FANotificationService with ChangeNotifier {
       errorMessage = e.toString();
       debugPrint("[fetchNotifications] Error: $e\n$st");
     } finally {
+
 
       isLoading = false;
       hasFetched = true;

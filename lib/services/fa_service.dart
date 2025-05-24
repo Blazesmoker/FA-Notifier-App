@@ -166,6 +166,8 @@ class FaService {
       String comments = '0';
       String favorites = '0';
 
+
+
       if (isClassic) {
         final notifContainer = doc.querySelector('li.noblock');
         if (notifContainer != null) {
@@ -245,7 +247,7 @@ class FaService {
 
   /// Helper method to extract a number from a given text.
   String _extractNumber(String text) {
-    final match = RegExp(r'(\d+)').firstMatch(text);
-    return match?.group(1) ?? '0';
+    final Match? match = RegExp(r'\d+').firstMatch(text);
+    return match?.group(0) ?? '0'; // Extracts "1000" from "1000 Favorite Notifications"
   }
 }
