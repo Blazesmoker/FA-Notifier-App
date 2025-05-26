@@ -457,13 +457,12 @@ Future<String> _fetchMessageContentInBackground(String link) async {
   if (resp.statusCode == 200) {
     final doc = html_parser.parse(resp.data);
 
-    // Remove scam warning.
-    doc.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
-        .forEach((element) => element.remove());
-
-    // modern layout
+    // Modern layout
     final modernContentElement = doc.querySelector('.section-body .user-submitted-links');
     if (modernContentElement != null) {
+      // Remove scam warning
+      modernContentElement.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
+          .forEach((e) => e.remove());
 
       modernContentElement.querySelectorAll('a.auto_link_shortened').forEach((anchor) {
         final fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
@@ -471,17 +470,26 @@ Future<String> _fetchMessageContentInBackground(String link) async {
           anchor.innerHtml = fullLink;
         }
       });
-      final content = modernContentElement.text.trim();
-      final newestContent = extractNewestContent(content);
+
+      final rawHtml = modernContentElement.innerHtml;
+      final innerDoc = html_parser.parse(rawHtml);
+      final updatedText = innerDoc.body?.text.trim() ?? '';
+      final newestContent = extractNewestContent(updatedText);
       return newestContent.isNotEmpty ? newestContent : 'No content';
     } else {
-      // classic layout
+      // Classic layout
       final classicContentElement = doc.querySelector('td.noteContent.alt1');
       if (classicContentElement != null) {
+        // Remove scam warning
+        classicContentElement
+            .querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
+            .forEach((e) => e.remove());
 
         classicContentElement.querySelector('span[style*="color: #999999"]')?.remove();
 
-        classicContentElement.querySelectorAll('a.auto_link_shortened').forEach((anchor) {
+        classicContentElement
+            .querySelectorAll('a.auto_link_shortened')
+            .forEach((anchor) {
           final fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
           if (fullLink != null) {
             anchor.innerHtml = fullLink;

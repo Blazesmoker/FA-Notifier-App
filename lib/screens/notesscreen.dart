@@ -460,7 +460,6 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
     if (cookieA == null || cookieB == null) {
       throw Exception('No cookies => not logged in');
     }
-
     final dio = Dio();
     final cookieJar = CookieJar();
     dio.interceptors.add(CookieManager(cookieJar));
@@ -468,7 +467,6 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
       Uri.parse('https://www.furaffinity.net'),
       [Cookie('a', cookieA), Cookie('b', cookieB)],
     );
-
     final resp = await dio.get(
       'https://www.furaffinity.net$link',
       options: Options(
@@ -486,6 +484,10 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
       // Check for modern layout
       final modernContentElement = doc.querySelector('.section-body .user-submitted-links');
       if (modernContentElement != null) {
+        // Remove scam warning
+        modernContentElement.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
+            .forEach((e) => e.remove());
+
         final rawHtml = modernContentElement.innerHtml;
         final innerDoc = html_parser.parse(rawHtml);
 
@@ -499,14 +501,17 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
 
         // Convert to plain text
         final updatedText = innerDoc.body?.text.trim() ?? '';
-        // Return only the newest content
         final newestContent = extractNewestContent(updatedText);
         return newestContent.isNotEmpty ? newestContent : 'No content';
       } else {
         // Classic layout approach:
         final classicContentElement = doc.querySelector('td.noteContent.alt1');
         if (classicContentElement != null) {
-          // Remove the header block (e.g. "Sent By:")
+          // Remove scam warning
+          classicContentElement.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
+              .forEach((e) => e.remove());
+
+          // Remove the header block (e.g., "Sent By:")
           classicContentElement.querySelector('span[style*="color: #999999"]')?.remove();
 
           final rawHtml = classicContentElement.innerHtml;
@@ -522,7 +527,6 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
 
           // Convert to plain text
           final updatedText = innerDoc.body?.text.trim() ?? '';
-          // Return only the newest content
           final newestContent = extractNewestContent(updatedText);
           return newestContent.isNotEmpty ? newestContent : 'No content';
         }
@@ -1095,10 +1099,6 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
         print("Extracted messageId: $extractedId, pageNumber: $pageNumber");
 
 
-        // Removes scam/warning blocks.
-        document.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
-            .forEach((e) => e.remove());
-
         // Extracting sender link and username.
         final tempSenderLink = document
             .querySelector('.message-center-note-information .addresses a')
@@ -1166,9 +1166,15 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
           String? modernHtml;
           String? classicHtml;
           if (modernElem != null) {
+            // Remove scam warning from modern layout content
+            modernElem.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
+                .forEach((e) => e.remove());
             modernHtml = modernElem.innerHtml;
           }
           if (classicContentElement != null) {
+            // Remove scam warning from classic layout content
+            classicContentElement.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
+                .forEach((e) => e.remove());
             // Removes the header block
             classicContentElement.querySelector('span[style*="color: #999999"]')?.remove();
             classicHtml = classicContentElement.innerHtml;
