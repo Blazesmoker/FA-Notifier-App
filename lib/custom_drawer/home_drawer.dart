@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_switch/flutter_switch.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 import '../model/user_profile.dart';
 import '../model/notifications.dart';
+import '../screens/openjournal.dart';
+import '../screens/openpost.dart';
 import '../screens/settings_screen.dart';
 import '../screens/user_profile_screen.dart';
 import '../services/fa_service.dart';
 import '../model/drawer_list.dart';
 import '../enums/drawer_index.dart';
+import '../services/notification_refresh_service.dart';
 import '../services/notification_service.dart';
 import '../utils/notification_counts.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
+import '../widgets/StarBurstAnimation.dart';
 import '../widgets/notification_badge.dart';
 import 'dart:async';
 import '../app_theme.dart';
@@ -67,6 +73,12 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
   bool _sfwEnabled = true;
   static const String NsfwConfirmationDisabled = 'nsfwConfirmationDisabled';
 
+  GlobalKey _kofiKey = GlobalKey();
+  List<Offset>? _starOrigins;
+
+  Timer? _kofiTimer;
+  bool _isCooldownActive = false;
+
   @override
   void initState() {
     super.initState();
@@ -76,12 +88,16 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
     _startTimer();
     fetchNotifications();
     _loadSfwEnabled();
+    NotificationRefreshService().onRefresh.listen((_) {
+      fetchNotifications();
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _kofiTimer?.cancel();
     super.dispose();
   }
 
@@ -95,6 +111,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
       _timer?.cancel();
+      _kofiTimer?.cancel();
       _timer = null;
     }
   }
@@ -248,100 +265,372 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
         labelName: 'Upload Submission',
         icon: const Icon(Icons.upload),
       ),
-      // This replaces the old "Notifications Settings" with "Settings"
+
       DrawerList(
         index: DrawerIndex.Help,
         labelName: 'Settings',
         icon: const Icon(Icons.settings),
       ),
+      DrawerList(
+        index: DrawerIndex.Help,
+        labelName: 'Open Link',
+        icon: const Icon(Icons.open_in_browser),
+      ),
+      DrawerList(
+        index: DrawerIndex.Help,
+        labelName: 'Support us on Ko-Fi!',
+        isAssetsImage: true,
+        imageName: 'assets/images/kofi_symbol.png',
+      ),
     ];
   }
 
+  bool showStars = false;
+
+  void _onKofiPressed(Offset globalTapPosition) {
+    // Ignore if in cooldown
+    if (_isCooldownActive) return;
+
+    final renderBox = _kofiKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox != null) {
+      final localPosition = renderBox.globalToLocal(globalTapPosition);
+
+      setState(() {
+        _starOrigins = [localPosition];
+        showStars = true;
+      });
+    }
+
+    _isCooldownActive = true;
+
+    // Schedule link opening and reset
+    _kofiTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) {
+        setState(() {
+          showStars = false;
+          _starOrigins = null;
+          _isCooldownActive = false;
+        });
+      }
+
+      const url = 'https://ko-fi.com/fanotifier';
+      launchUrlString(url, mode: LaunchMode.externalApplication);
+    });
+  }
+
+
   Widget inkwell(DrawerList listData) {
+    final isKoFi = listData.labelName == 'Support us on Ko-Fi!';
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        splashColor: Colors.grey.withOpacity(0.1),
-        highlightColor: Colors.transparent,
+        splashColor: isKoFi ? Colors.transparent : Colors.grey.withOpacity(0.1),
+        highlightColor: isKoFi ? Colors.transparent : Colors.transparent,
+        splashFactory: isKoFi ? NoSplash.splashFactory : null,
         onTap: () {
-
           if (listData.labelName == 'Settings') {
             navigationtoScreen(listData.index!);
+          } else if (listData.labelName == 'Open Link') {
+            _showOpenLinkDialog(context);
+          } else if (listData.labelName == 'Support us on Ko-Fi!') {
+            /*launchUrlString(
+              'https://ko-fi.com/fanotifier',
+              mode: LaunchMode.externalApplication,
+            );
+             */
           } else {
             navigationtoScreen(listData.index!);
           }
         },
         child: Stack(
           children: <Widget>[
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Row(
-                children: <Widget>[
-                  const SizedBox(width: 6.0, height: 46.0),
-                  const Padding(padding: EdgeInsets.all(4.0)),
-                  listData.isAssetsImage
-                      ? SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: Image.asset(
-                      listData.imageName,
+            if (listData.labelName == 'Support us on Ko-Fi!')
+              GestureDetector(
+                key: _kofiKey,
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (TapDownDetails details) {
+                  _onKofiPressed(details.globalPosition);
+                },
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(left: 8, right: 16, top: 9, bottom: 9),
+                  padding: const EdgeInsets.only(left: 8, right: 16, top: 9, bottom: 9),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.max,
+                        children: [
+                          SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Image.asset(listData.imageName),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            listData.labelName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              fontSize: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (showStars && _starOrigins != null)
+                        Positioned.fill(
+                          child: StarBurstAnimation(
+                            origins: _starOrigins!,
+                            onCompleted: () {
+                              setState(() {
+                                showStars = false;
+                                _starOrigins = null;
+                              });
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              )
+
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Row(
+                  children: <Widget>[
+                    const SizedBox(width: 6.0, height: 46.0),
+                    const Padding(padding: EdgeInsets.all(4.0)),
+                    listData.isAssetsImage
+                        ? SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Image.asset(
+                        listData.imageName,
+                        color: widget.screenIndex == listData.index
+                            ? Colors.white
+                            : Colors.grey.shade300,
+                      ),
+                    )
+                        : Icon(
+                      listData.icon?.icon,
                       color: widget.screenIndex == listData.index
-                          ? Colors.white
-                          : Colors.grey.shade300,
+                          ? Colors.grey
+                          : Colors.grey,
                     ),
-                  )
-                      : Icon(
-                    listData.icon?.icon,
-                    color: widget.screenIndex == listData.index
-                        ? Colors.grey
-                        : Colors.grey,
-                  ),
-                  const Padding(padding: EdgeInsets.all(4.0)),
-                  Text(
-                    listData.labelName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 16,
-                      color: Colors.white,
+                    const Padding(padding: EdgeInsets.all(4.0)),
+                    Text(
+                      listData.labelName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 16,
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.left,
                     ),
-                    textAlign: TextAlign.left,
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            widget.screenIndex == listData.index
-                ? AnimatedBuilder(
-              animation: widget.iconAnimationController!,
-              builder: (BuildContext context, Widget? child) {
-                return Transform(
-                  transform: Matrix4.translationValues(
-                    (MediaQuery.of(context).size.width * 0.75 - 64) *
-                        (1.0 - widget.iconAnimationController!.value - 1.0),
-                    0.0,
-                    0.0,
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Container(
-                      width: MediaQuery.of(context).size.width * 0.75 - 64,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: const BorderRadius.only(
-                          topRight: Radius.circular(28),
-                          bottomRight: Radius.circular(28),
+            if (widget.screenIndex == listData.index &&
+                listData.labelName != 'Support us on Ko-Fi!')
+              AnimatedBuilder(
+                animation: widget.iconAnimationController!,
+                builder: (BuildContext context, Widget? child) {
+                  return Transform(
+                    transform: Matrix4.translationValues(
+                      (MediaQuery.of(context).size.width * 0.75 - 64) *
+                          (1.0 - widget.iconAnimationController!.value - 1.0),
+                      0.0,
+                      0.0,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Container(
+                        width: MediaQuery.of(context).size.width * 0.75 - 64,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: const BorderRadius.only(
+                            topRight: Radius.circular(28),
+                            bottomRight: Radius.circular(28),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
-            )
-                : const SizedBox(),
+                  );
+                },
+              ),
           ],
         ),
       ),
     );
+  }
+
+  void _showOpenLinkDialog(BuildContext context) {
+    final TextEditingController _controller = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Open Link'),
+          content: TextField(
+            controller: _controller,
+            decoration: const InputDecoration(labelText: 'Enter link'),
+          ),
+          actions: [
+            TextButton(
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                backgroundColor: const Color(0xFFE09321),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                final String url = _controller.text.trim();
+                if (url.isNotEmpty) {
+                  // Close dialog first, then handle the link
+                  Navigator.of(context).pop();
+
+                  _handleFALink(context, url);
+
+                } else {
+                  Navigator.of(context).pop();
+                }
+              },
+              child: const Text('Ok'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _handleFALink(BuildContext context, String url) async {
+    try {
+      String cleanUrl = url.trim();
+
+      // Add protocol if missing
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+        cleanUrl = 'https://$cleanUrl';
+      }
+
+      print('Processing URL: $cleanUrl');
+
+      final Uri uri = Uri.parse(cleanUrl);
+      String urlToMatch = uri.toString();
+
+
+      if (urlToMatch.endsWith('/')) {
+        urlToMatch = urlToMatch.substring(0, urlToMatch.length - 1);
+      }
+
+      print('URL to match: $urlToMatch');
+
+      if (!context.mounted) {
+        print('Context not mounted, cannot navigate');
+        return;
+      }
+
+      // 1. Gallery Folder Link:
+      final RegExp galleryFolderRegex = RegExp(
+          r'https?://(?:www\.)?furaffinity\.net/gallery/([^/]+)/folder/(\d+)/([^/]+)/?$');
+      final Match? galleryMatch = galleryFolderRegex.firstMatch(urlToMatch);
+      if (galleryMatch != null) {
+        print('Matched gallery folder link'); // Debug log
+        final String tappedUsername = galleryMatch.group(1)!;
+        final String folderNumber = galleryMatch.group(2)!;
+        final String folderName = galleryMatch.group(3)!;
+        final String folderUrl =
+            'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => UserProfileScreen(
+              nickname: tappedUsername,
+              initialSection: ProfileSection.Gallery,
+              initialFolderUrl: folderUrl,
+              initialFolderName: folderName,
+            ),
+          ),
+        );
+        return;
+      }
+
+      // 2. User Link:
+      final RegExp userRegex = RegExp(
+          r'https?://(?:www\.)?furaffinity\.net/user/([^/]+)/?$');
+      final Match? userMatch = userRegex.firstMatch(urlToMatch);
+      if (userMatch != null) {
+        print('Matched user link');
+        final String tappedUsername = userMatch.group(1)!;
+        print('Navigating to user: $tappedUsername');
+
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => UserProfileScreen(nickname: tappedUsername),
+          ),
+        );
+        return;
+      }
+
+      // 3. Journal Link:
+      final RegExp journalRegex = RegExp(
+          r'https?://(?:www\.)?furaffinity\.net/journal/(\d+)(?:/.*)?$');
+      final Match? journalMatch = journalRegex.firstMatch(urlToMatch);
+      if (journalMatch != null) {
+        print('Matched journal link');
+        final String journalId = journalMatch.group(1)!;
+
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OpenJournal(uniqueNumber: journalId),
+          ),
+        );
+        return;
+      }
+
+      // 4. Submission/View Link:
+      final RegExp viewRegex = RegExp(
+          r'https?://(?:www\.)?furaffinity\.net/view/(\d+)(?:/.*)?(?:#.*)?$');
+      final Match? viewMatch = viewRegex.firstMatch(urlToMatch);
+      if (viewMatch != null) {
+        print('Matched submission link');
+        final String submissionId = viewMatch.group(1)!;
+
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OpenPost(uniqueNumber: submissionId, imageUrl: ''),
+          ),
+        );
+        return;
+      }
+
+      // 5. Fallback: open externally
+      print('No pattern matched, opening externally: $cleanUrl');
+      await launchUrlString(cleanUrl, mode: LaunchMode.externalApplication);
+
+    } catch (e) {
+      print('Error handling FA link: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening link: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _loadSfwEnabled() async {
@@ -359,7 +648,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
   Future<void> _showNsfwConfirmationDialog() async {
     bool currentSfw = _sfwEnabled;
     String targetMode = currentSfw ? "NSFW" : "SFW";
-    Color yesColor = currentSfw ? Colors.red : Colors.green;
+    Color yesColor = Colors.white;
     String dialogMessage = "Are you sure you want to enable $targetMode mode?";
     bool _dontAskAgain = false;
 
@@ -393,7 +682,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                           onPressed: () {
                             Navigator.of(dialogContext).pop(true);
                           },
-                          style: TextButton.styleFrom(backgroundColor: Colors.white),
+                          style: TextButton.styleFrom(backgroundColor: const Color(0xFFE09321)),
                           child: Text("Yes", style: TextStyle(color: yesColor)),
                         ),
                       ],
@@ -403,20 +692,33 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                     // Compact checkbox layout
                     Row(
                       children: [
-                        Checkbox(
-                          value: _dontAskAgain,
-                          onChanged: (value) {
-                            setStateDialog(() {
-                              _dontAskAgain = value!;
-                            });
-                          },
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
-                          activeColor: const Color(0xFFE09321),
+                        CheckboxTheme(
+                          data: CheckboxThemeData(
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            side: const BorderSide(width: 1, color: Colors.white),
+                            fillColor: WidgetStateProperty.resolveWith<Color>((Set<WidgetState> states) {
+                              if (states.contains(WidgetState.selected)) {
+                                return const Color(0xFFE09321);
+                              }
+                              return Colors.transparent;
+                            }),
+                            checkColor: WidgetStateProperty.all(Colors.white),
+                          ),
+                          child: Checkbox(
+                            value: _dontAskAgain,
+                            onChanged: (bool? value) {
+                              setStateDialog(() {
+                                _dontAskAgain = value ?? false;
+                              });
+                            },
+                          ),
                         ),
-                        const SizedBox(width: 4), // Tight spacing
+
+
+                        const SizedBox(width: 1),
                         const Text("Don't ask anymore",
-                            style: TextStyle(fontSize: 14)), // Slightly smaller text
+                            style: TextStyle(fontSize: 14)),
                       ],
                     ),
                   ],
@@ -581,12 +883,15 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.only(top: 40.0),
+            color: Color(0xFF111111),
             child: Container(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.only(right: 0.0, left: 0.0, top: 8.0, bottom: 4.0),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: <Widget>[
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       // Avatar widget
                       GestureDetector(
@@ -675,7 +980,9 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                                       }
                                     },
                                   ),
+
                                 ),
+
                               ),
                             );
                           },
@@ -692,35 +999,51 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                           ),
                         ),
                       ),
-                      const Spacer(),
+
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 4),
+
+
+                  const Divider(
+                    height: 4.0,
+                    color: Colors.black,
+                    thickness: 4.0,
+                  ),
+                  const SizedBox(height: 8),
                   // Username
                   Text(
                     widget.userProfile?.username ?? 'Username',
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
-                      fontSize: 18,
+                      fontSize: 19,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  // Notifications Row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: badgesWithSpacing,
+                  const SizedBox(height: 8),
+
+                  const Divider(
+                    height: 3.0,
+                    color: Colors.black,
+                    thickness: 3.0,
                   ),
+                  const SizedBox(height: 6),
+                  // Notifications Row
+                  Container(
+                    color: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: badgesWithSpacing,
+                    ),
+                  ),
+
+
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 4),
-          const Divider(
-            height: 1.0,
-            color: Color(0xFF111111),
-            thickness: 3.0,
-          ),
+
           // Drawer Items
           Expanded(
             child: ListView.builder(

@@ -954,6 +954,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
                 child: Card(
+                  color: const Color(0xFF151515),
                   child: ListTile(
                     title: Text(submissionTitle ?? ''),
                     subtitle: Column(
@@ -961,7 +962,8 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                       children: [
                         Text('Posted on: ${getFormattedPublicationTime()}'),
                         const SizedBox(height: 4.0),
-                        Divider(color: Colors.grey, thickness: 0.3, height: 24),
+                        Divider(color: Colors.grey.shade900, thickness: 1.5, height: 24),
+
                         const SizedBox(height: 4.0),
                         SelectionArea(
                           child: html_pkg.Html(
@@ -972,6 +974,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                 fontSize: html_pkg.FontSize(16),
                                 padding: HtmlPaddings.zero,
                                 margin: Margins.zero,
+                                backgroundColor: const Color(0xFF151515),
                               ),
                               "a": html_pkg.Style(
                                 textDecoration: TextDecoration.none,
@@ -1147,11 +1150,15 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
               ),
             ),
             const SliverToBoxAdapter(
-              child: Divider(color: Colors.grey, thickness: 0.3, height: 24),
+              child: const Divider(
+                height: 3.0,
+                color: Color(0xFF111111),
+                thickness: 3.0,
+              ),
             ),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
                 child: Center(
                   child: Text(
                     commentsCount > 0 ? '$commentsCount Comments' : 'No Comments',
@@ -1160,6 +1167,17 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                 ),
               ),
             ),
+            const SliverToBoxAdapter(
+              child: const Divider(
+                height: 3.0,
+                color: Color(0xFF111111),
+                thickness: 3.0,
+              ),
+            ),
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 8),
+            ),
+
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 8.0),
               sliver: SliverList(
@@ -1229,49 +1247,54 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
           ],
         ),
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: 8.0,
-            right: 8.0,
-            bottom: keyboardHeight > 0 ? keyboardHeight : 4.0,
-            top: 8.0,
-          ),
-          child: GestureDetector(
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => AddJournalCommentScreen(
-                    submissionTitle: submissionTitle ?? '',
-                    onSendComment: _addComment,
-                    uniqueNumber: widget.uniqueNumber,
-                  ),
-                ),
-              ).then((result) {
-                if (result == true) {
-                  _fetchPostDetails();
-                }
-              });
-            },
-            child: AbsorbPointer(
-              absorbing: true,
-              child: SizedBox(
-                height: 40.0,
-                child: TextField(
-                  controller: _commentController,
-                  readOnly: true,
-                  decoration: InputDecoration(
-                    hintText: 'Add a comment...',
-                    hintStyle: TextStyle(color: Colors.white54),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-                    filled: true,
-                    fillColor: const Color(0xFF353535),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
+      bottomNavigationBar: isLoading
+          ? null
+          : Container(
+        color: Colors.black,
+        child: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 8.0,
+              right: 8.0,
+              bottom: keyboardHeight > 0 ? keyboardHeight : 4.0,
+              top: 8.0,
+            ),
+            child: GestureDetector(
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AddJournalCommentScreen(
+                      submissionTitle: submissionTitle ?? '',
+                      onSendComment: _addComment,
+                      uniqueNumber: widget.uniqueNumber,
                     ),
-                    suffixIcon: Icon(Icons.send, color: Colors.white54),
+                  ),
+                ).then((result) {
+                  if (result == true) {
+                    _fetchPostDetails();
+                  }
+                });
+              },
+              child: AbsorbPointer(
+                absorbing: true,
+                child: SizedBox(
+                  height: 40.0,
+                  child: TextField(
+                    controller: _commentController,
+                    readOnly: true,
+                    decoration: InputDecoration(
+                      hintText: 'Add a comment...',
+                      hintStyle: const TextStyle(color: Colors.white54),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                      filled: true,
+                      fillColor: const Color(0xFF151515),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                      suffixIcon: const Icon(Icons.send, color: Colors.white54),
+                    ),
                   ),
                 ),
               ),
@@ -1279,6 +1302,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
           ),
         ),
       ),
+
     );
   }
 
@@ -1321,11 +1345,13 @@ class CommentWidget extends StatefulWidget {
 
 class _CommentWidgetState extends State<CommentWidget> {
   bool _showFullDate = false;
+
   @override
   Widget build(BuildContext context) {
     double widthPercent = (widget.comment['width'] ?? 100).toDouble();
     int nestingLevel = ((100.0 - widthPercent) / 3.0).round().clamp(0, 4);
     double leftPadding = nestingLevel * 16.0;
+
     if (widget.comment['deleted'] == true) {
       return Padding(
         padding: EdgeInsets.only(left: leftPadding, bottom: 6.0),
@@ -1339,15 +1365,13 @@ class _CommentWidgetState extends State<CommentWidget> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: ExtendedText(
+                child: Text(
                   widget.comment['text'] ?? '',
-                  specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
-                    onTapLink: widget.handleLink,
-                  ),
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade300),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  textAlign: TextAlign.left,
                 ),
               ),
-              if (widget.comment['hideLink'] != null && widget.onUnhide != null)
+              if (widget.comment['hideLink'] != null)
                 TextButton(
                   style: TextButton.styleFrom(
                     padding: EdgeInsets.zero,
@@ -1365,17 +1389,23 @@ class _CommentWidgetState extends State<CommentWidget> {
         ),
       );
     }
+
     return Padding(
       padding: EdgeInsets.only(left: leftPadding, bottom: 6.0),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
+        padding: const EdgeInsets.only(right: 12.0, left: 12.0, top: 8.0, bottom: 2.0),
         decoration: BoxDecoration(
-          color: Colors.grey.shade900,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0b0b0b), Color(0xFF202020)],
+          ),
           borderRadius: BorderRadius.circular(8.0),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Top row with avatar, username
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1400,6 +1430,12 @@ class _CommentWidgetState extends State<CommentWidget> {
                         width: 46,
                         height: 46,
                         fit: BoxFit.cover,
+                        placeholder: (context, url) => Image.asset(
+                          'assets/images/defaultpic.gif',
+                          width: 46,
+                          height: 46,
+                          fit: BoxFit.cover,
+                        ),
                         errorWidget: (context, url, error) => Image.asset(
                           'assets/images/defaultpic.gif',
                           width: 46,
@@ -1407,7 +1443,6 @@ class _CommentWidgetState extends State<CommentWidget> {
                           fit: BoxFit.cover,
                         ),
                       ),
-
                     ),
                   ),
                 Expanded(
@@ -1418,22 +1453,28 @@ class _CommentWidgetState extends State<CommentWidget> {
                         children: [
                           if (widget.comment['iconBeforeUrls'] != null &&
                               widget.comment['iconBeforeUrls'].isNotEmpty)
-                            ...widget.comment['iconBeforeUrls'].map((url) {
-                              final isEditedIcon = url.contains('edited.png');
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 4.0),
-                                child: Image.network(
-                                  url,
-                                  width: 16,
-                                  height: 16,
-                                  color: isEditedIcon ? Colors.white : null,
-                                  colorBlendMode: isEditedIcon ? BlendMode.srcIn : null,
-                                ),
-                              );
-                            }),
+                            ...widget.comment['iconBeforeUrls'].map(
+                                  (url) {
+                                final isEditedIcon = url.contains('edited.png');
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 4.0),
+                                  child: Image.network(
+                                    url,
+                                    width: 16,
+                                    height: 16,
+                                    color: isEditedIcon ? Colors.white : null,
+                                    colorBlendMode: isEditedIcon
+                                        ? BlendMode.srcIn
+                                        : null,
+                                  ),
+                                );
+                              },
+                            ),
                           Flexible(
                             child: Text(
-                              widget.comment['displayName'] ?? widget.comment['username'] ?? 'Anonymous',
+                              widget.comment['displayName'] ??
+                                  widget.comment['username'] ??
+                                  'Anonymous',
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
@@ -1446,7 +1487,11 @@ class _CommentWidgetState extends State<CommentWidget> {
                             ...widget.comment['iconAfterUrls'].map(
                                   (url) => Padding(
                                 padding: const EdgeInsets.only(left: 4.0),
-                                child: Image.network(url, width: 16, height: 16),
+                                child: Image.network(
+                                  url,
+                                  width: 16,
+                                  height: 16,
+                                ),
                               ),
                             ),
                           if (widget.comment['isOP'] == true)
@@ -1463,18 +1508,12 @@ class _CommentWidgetState extends State<CommentWidget> {
                             ),
                         ],
                       ),
-                      Row(
-                        children: [
-                          Text(
-                            (widget.comment['symbol'] ?? '~') +
-                                (widget.comment['username'] ?? 'Anonymous'),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFFE09321),
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                      Text(
+                        '${widget.comment['symbol'] ?? '~'}${widget.comment['username'] ?? 'Anonymous'}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFFE09321),
+                        ),
                       ),
                       if ((widget.comment['userTitle'] ?? '').isNotEmpty)
                         Text(
@@ -1489,24 +1528,23 @@ class _CommentWidgetState extends State<CommentWidget> {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 0.0),
+              padding: const EdgeInsets.only(left: 8.0, right: 8.0, top: 11.0, bottom: 1.0),
               child: SelectionArea(
                 child: ExtendedText(
                   widget.comment['text'] ?? '',
                   specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
                     onTapLink: widget.handleLink,
                   ),
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade300),
                 ),
               ),
-
             ),
-
+            // Footer row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // Date
                 GestureDetector(
                   onTap: () {
                     setState(() {
@@ -1517,9 +1555,14 @@ class _CommentWidgetState extends State<CommentWidget> {
                     padding: const EdgeInsets.symmetric(vertical: 12.0),
                     child: Text(
                       _showFullDate
-                          ? (widget.comment['popupDateFull'] ?? widget.comment['popupDateRelative'] ?? '')
+                          ? (widget.comment['popupDateFull'] ??
+                          widget.comment['popupDateRelative'] ??
+                          '')
                           : (widget.comment['popupDateRelative'] ?? ''),
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade400,
+                      ),
                     ),
                   ),
                 ),
@@ -1529,29 +1572,43 @@ class _CommentWidgetState extends State<CommentWidget> {
                       IconButton(
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        icon: const Icon(Icons.visibility_off, size: 16, color: Colors.white),
+                        icon: const Icon(Icons.visibility_off,
+                            size: 16, color: Colors.white),
                         onPressed: widget.onHide,
                       ),
                     if (widget.comment['editLink'] != null)
-                      TextButton.icon(
+                      TextButton(
                         style: TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
+                          padding: const EdgeInsets.only(left: 4.0, right: 8),
                           minimumSize: const Size(0, 0),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                         onPressed: widget.onEdit,
-                        icon: const Icon(Icons.edit, size: 16, color: Colors.white),
-                        label: const Text('Edit', style: TextStyle(color: Colors.white, fontSize: 12)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.edit, size: 16, color: Colors.white),
+                            SizedBox(width: 4),
+                            Text('Edit', style: TextStyle(color: Colors.white, fontSize: 14)),
+                          ],
+                        ),
                       ),
-                    TextButton.icon(
+                    TextButton(
                       style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
+                        padding: EdgeInsets.only(left: 6),
                         minimumSize: const Size(0, 0),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       onPressed: widget.onReply,
-                      icon: const Icon(Icons.reply, size: 16, color: Colors.white),
-                      label: const Text('Reply', style: TextStyle(color: Colors.white, fontSize: 14)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.reply, size: 19, color: Colors.white),
+                          const SizedBox(width: 4),
+                          const Text('Reply',
+                              style: TextStyle(color: Colors.white, fontSize: 14)),
+                        ],
+                      ),
                     ),
                   ],
                 ),

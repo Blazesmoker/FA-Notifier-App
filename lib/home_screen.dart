@@ -11,6 +11,7 @@ import 'package:FANotifier/screens/search_screen.dart';
 import 'package:FANotifier/screens/submissions_screen.dart';
 import 'package:FANotifier/screens/upload_submission.dart';
 import 'package:FANotifier/services/fa_notification_service.dart';
+import 'package:FANotifier/services/notification_refresh_service.dart';
 import 'package:FANotifier/widgets/PulsatingLoadingIndicator.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:collection/collection.dart';
@@ -57,6 +58,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _elementCheckTimer;
   DateTime? _firstTimeElementFound;
   bool _mainPageStable = false;
+
+  int _previousSum = 0;
 
   final GlobalKey<DrawerUserControllerState> _drawerKey =
   GlobalKey<DrawerUserControllerState>();
@@ -260,6 +263,8 @@ class _HomeScreenState extends State<HomeScreen> {
       NotificationSettingsProvider settings,
       FANotificationService faNotificationService) {
     int sum = 0;
+
+
     for (var section in faNotificationService.sections) {
       if (section.title.contains('Watches') && settings.watchersEnabled) {
         sum += section.items.length;
@@ -282,6 +287,13 @@ class _HomeScreenState extends State<HomeScreen> {
         sum += section.items.length;
       }
     }
+
+    // Only trigger refresh in home_drawer.dart if the sum has changed
+    if (sum != _previousSum) {
+      _previousSum = sum;
+      NotificationRefreshService().triggerRefresh();
+    }
+
     return sum;
   }
 
@@ -797,7 +809,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       backgroundColor: AppTheme.background,
                     ),
                     BottomNavigationBarItem(
-                      icon: const Icon(Icons.subscriptions),
+                      icon: Image.asset(
+                        'assets/icons/submissions.png',
+                        width: 27,
+                        height: 27,
+                        color: Colors.grey,
+                      ),
+                      activeIcon: Image.asset(
+                        'assets/icons/submissions.png',
+                        width: 27,
+                        height: 27,
+                        color: const Color(0xFFE09321),
+                      ),
                       label: 'Submissions',
                       backgroundColor: AppTheme.background,
                     ),

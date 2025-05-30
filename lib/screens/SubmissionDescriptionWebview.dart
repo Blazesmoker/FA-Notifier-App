@@ -148,7 +148,7 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
         html, body {
           margin: 0 !important;
           padding: 0 !important;
-          background-color: #000 !important;
+          background-color: #111111 !important;
           color: $textColor !important;
           font-family: 'Open Sans', sans-serif;
           -webkit-user-select: text;

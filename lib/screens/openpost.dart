@@ -2355,7 +2355,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     bool showLoadingIndicator = !_detailsLoaded || !_webViewLoaded;
 
     return Scaffold(
+      backgroundColor: const Color(0xFF111111),
       appBar: AppBar(
+        backgroundColor: const Color(0xFF111111),
+        scrolledUnderElevation: 0,
         title: const Text("Post"),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -2480,7 +2483,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
             },
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.only(bottom: keyboardHeight + 20),
+              padding: EdgeInsets.only(bottom: keyboardHeight + 0),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
@@ -2551,7 +2554,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                             Text(
                                               username!,
                                               style: const TextStyle(
-                                                fontSize: 14,
+                                                fontSize: 15,
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
@@ -2610,7 +2613,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                     ),
                   if (fullViewImageUrl != null)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
+                      padding: const EdgeInsets.only(bottom: 0.0),
                       child: GestureDetector(
                         onLongPressStart: (details) async {
                           final tapPosition = details.globalPosition;
@@ -2706,22 +2709,79 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
+
+                  const Divider(
+                    height: 5.0,
+                    color: Colors.black,
+                    thickness: 5.0,
+                  ),
+                  const Divider(
+                    height: 3.0,
+                    color: Color(0xFF111111),
+                    thickness: 3.0,
+                  ),
+                  const Divider(
+                    height: 3.0,
+                    color: Colors.black,
+                    thickness: 3.0,
+                  ),
+
+
+
+
+
+
+
+
                   if (submissionTitle != null)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
+                      padding: const EdgeInsets.only(bottom: 4.0, top: 4.0),
                       child: Text(
                         submissionTitle!,
                         style: const TextStyle(
-                          fontSize: 20,
+                          fontSize: 23,
                           fontWeight: FontWeight.bold,
                         ),
                         textAlign: TextAlign.center,
                       ),
                     ),
-                  const Divider(color: Colors.grey, thickness: 0.3, height: 16),
+                  if (publicationTime != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: GestureDetector(
+                        onTap: () {
+                          // Toggle between full and short date display.
+                          setState(() {
+                            _showFullPublicationDate = !_showFullPublicationDate;
+                          });
+                        },
+                        child: Text(
+                          '${getFormattedPublicationTime()}',
+                          style: const TextStyle(fontSize: 13, color: Colors.grey),
+                        ),
+                      ),
+                    ),
+
+
+
+                  const Divider(
+                    height: 5.0,
+                    color: Colors.black,
+                    thickness: 5.0,
+                  ),
+                  const Divider(
+                    height: 2.0,
+                    color: Color(0xFF111111),
+                    thickness: 2.0,
+                  ),
+                  const Divider(
+                    height: 3.0,
+                    color: Colors.black,
+                    thickness: 3.0,
+                  ),
                   if (_isWebViewVisible && submissionDescription != null)
                     Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.only(right: 16.0, left: 16.0, top: 16.0),
                       child: GestureDetector(
                         onLongPressStart: (LongPressStartDetails details) async {
                           final RenderBox overlay =
@@ -2778,24 +2838,44 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                  const Divider(color: Colors.grey, thickness: 0.3, height: 24),
+
+
+                  const Divider(
+                    height: 2.0,
+                    color: Colors.black,
+                    thickness: 2.0,
+                  ),
+                  const Divider(
+                    height: 3.0,
+                    color: Color(0xFF111111),
+                    thickness: 3.0,
+                  ),
+                  const Divider(
+                    height: 4.0,
+                    color: Colors.black,
+                    thickness: 4.0,
+                  ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    padding: const EdgeInsets.only(right: 0.0, left: 0.0, top: 11.0, bottom: 0.0),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         _buildPublicationAndViewsRow(),
-                        const Divider(color: Colors.grey, thickness: 0.3, height: 24),
-                        _buildFavoritesAndCommentsRow(),
+
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 0.0, top: 12.0),
-                          child: const Divider(color: Colors.grey, thickness: 0.3, height: 0),
+                          padding: const EdgeInsets.only(bottom: 0.0, top: 11.0),
+                          child: const Divider(
+                            height: 3.0,
+                            color: Colors.black,
+                            thickness: 3.0,
+                          ),
                         ),
                         SizedBox(
                           height: 50,
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
+                              /*
                               Expanded(
                                 child: IconButton(
                                   icon: const Icon(
@@ -2818,6 +2898,37 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                         _fetchPostDetails();
                                       }
                                     });
+                                  },
+                                  splashRadius: 24,
+                                ),
+                              ),
+
+                               */
+                              Expanded(
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.mail_outline,
+                                    size: 26,
+                                    color: Colors.grey,
+                                  ),
+                                  onPressed: () {
+                                    if (linkUsername != null) {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => NewMessageScreen(
+                                            recipient: linkUsername!,
+                                          ),
+                                        ),
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Recipient username is unavailable.'),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
                                   },
                                   splashRadius: 24,
                                 ),
@@ -2881,35 +2992,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                   splashRadius: 24,
                                 ),
                               ),
-                              Expanded(
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.note_outlined,
-                                    size: 26,
-                                    color: Colors.grey,
-                                  ),
-                                  onPressed: () {
-                                    if (linkUsername != null) {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => NewMessageScreen(
-                                            recipient: linkUsername!,
-                                          ),
-                                        ),
-                                      );
-                                    } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Recipient username is unavailable.'),
-                                          backgroundColor: Colors.red,
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  splashRadius: 24,
-                                ),
-                              ),
+
                               Expanded(
                                 child: IconButton(
                                   icon: const Icon(
@@ -2924,23 +3007,35 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                             ],
                           ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12.0, top: 0.0),
-                          child: const Divider(
-                            color: Colors.grey,
-                            thickness: 0.3,
-                            height: 0,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        _buildCommentsSection(),
+
+
                       ],
                     ),
+                  ),
+                  const Divider(
+                    height: 3.0,
+                    color: Colors.black,
+                    thickness: 3.0,
+                  ),
+                  const Divider(
+                    height: 4.0,
+                    color: Color(0xFF111111),
+                    thickness: 4.0,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 0.0, vertical: 0.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          _buildCommentsSection(),
+                        ],
+                      ),
                   )
                 ],
               ),
             ),
           ),
+
           if (_isTyping)
             Positioned.fill(
               child: GestureDetector(
@@ -2954,7 +3049,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           // Overlay the loading indicator until both details and the webview are loaded.
           if (showLoadingIndicator)
             Container(
-              color: Colors.black.withOpacity(1.0),
+              color: const Color(0xFF111111),
               child: const Center(
                 child: PulsatingLoadingIndicator(
                   size: 78.0,
@@ -2964,49 +3059,54 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
             ),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: 8.0,
-            right: 8.0,
-            bottom: keyboardHeight > 0 ? keyboardHeight : 4.0,
-            top: 8.0,
-          ),
-          child: GestureDetector(
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => AddCommentScreen(
-                    submissionTitle: submissionTitle ?? '',
-                    onSendComment: _addComment,
-                    uniqueNumber: widget.uniqueNumber,
-                  ),
-                ),
-              ).then((result) {
-                if (result == true) {
-                  _fetchPostDetails();
-                }
-              });
-            },
-            child: AbsorbPointer(
-              absorbing: true,
-              child: SizedBox(
-                height: 40.0,
-                child: TextField(
-                  controller: _commentController,
-                  readOnly: true,
-                  decoration: InputDecoration(
-                    hintText: 'Add a comment...',
-                    hintStyle: const TextStyle(color: Colors.white54),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-                    filled: true,
-                    fillColor: const Color(0xFF353535),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
+      bottomNavigationBar: showLoadingIndicator
+          ? null
+          : Container(
+        color: Colors.black,
+        child: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 8.0,
+              right: 8.0,
+              bottom: keyboardHeight > 0 ? keyboardHeight : 4.0,
+              top: 8.0,
+            ),
+            child: GestureDetector(
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AddCommentScreen(
+                      submissionTitle: submissionTitle ?? '',
+                      onSendComment: _addComment,
+                      uniqueNumber: widget.uniqueNumber,
                     ),
-                    suffixIcon: const Icon(Icons.send, color: Colors.white54),
+                  ),
+                ).then((result) {
+                  if (result == true) {
+                    _fetchPostDetails();
+                  }
+                });
+              },
+              child: AbsorbPointer(
+                absorbing: true,
+                child: SizedBox(
+                  height: 40.0,
+                  child: TextField(
+                    controller: _commentController,
+                    readOnly: true,
+                    decoration: InputDecoration(
+                      hintText: 'Add a comment...',
+                      hintStyle: const TextStyle(color: Colors.white54),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                      filled: true,
+                      fillColor: const Color(0xFF151515),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                      suffixIcon: const Icon(Icons.send, color: Colors.white54),
+                    ),
                   ),
                 ),
               ),
@@ -3014,6 +3114,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           ),
         ),
       ),
+
     );
   }
 
@@ -3021,25 +3122,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   Widget _buildPublicationAndViewsRow() {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        if (publicationTime != null)
-          GestureDetector(
-            onTap: () {
-              // Toggle between full and short date display.
-              setState(() {
-                _showFullPublicationDate = !_showFullPublicationDate;
-              });
-            },
-            child: Text(
-              '${getFormattedPublicationTime()}',
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-          ),
-        if (publicationTime != null && viewCount != null)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 5.0),
-            child: Icon(Icons.circle, size: 4, color: Colors.grey),
-          ),
         if (viewCount != null)
           Row(
             children: [
@@ -3058,14 +3142,11 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
               ),
             ],
           ),
-      ],
-    );
-  }
-
-  Widget _buildFavoritesAndCommentsRow() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
+        if (publicationTime != null && viewCount != null)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 5.0),
+            child: Icon(Icons.circle, size: 4, color: Colors.grey),
+          ),
         if (favoritesCount >= 0)
           Row(
             children: [
@@ -3084,7 +3165,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
               ),
             ],
           ),
-        if (favoritesCount >= 0 && commentsCount >= 0)
+        if (publicationTime != null && viewCount != null)
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 5.0),
             child: Icon(Icons.circle, size: 4, color: Colors.grey),
@@ -3107,87 +3188,88 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
               ),
             ],
           ),
-        const SizedBox(height: 16),
       ],
     );
   }
 
+
+
   Widget _buildCommentsSection() {
     if (comments.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(8.0),
-        child: Text(
+      return Container(
+        padding: const EdgeInsets.only(top: 10.0, bottom: 14.0, right: 8.0, left: 8.0),
+        child: const Text(
           "No comments.",
           style: TextStyle(fontSize: 16, color: Colors.grey),
         ),
       );
     }
-
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: comments.length,
-      itemBuilder: (context, index) {
-        final comment = comments[index];
-        return CommentWidget(
-          key: ValueKey(comment['commentId'] ?? index),
-          comment: comment,
-          onHide: () {
-            final hideLink = comment['hideLink'] as String?;
-            final cId = comment['commentId'] as String?;
-            if (hideLink != null && cId != null) {
-              hideComment(hideLink, cId);
-            }
-          },
-          onEdit: () {
-            if (comment['editLink'] != null) {
-              Navigator.push(
+    return Container(
+      color: Colors.black,
+      padding: const EdgeInsets.only(top: 8.0, bottom: 0.0, right: 8.0, left: 8.0),
+      child: ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: comments.length,
+        itemBuilder: (context, index) {
+          final comment = comments[index];
+          return CommentWidget(
+            key: ValueKey(comment['commentId'] ?? index),
+            comment: comment,
+            onHide: () {
+              final hideLink = comment['hideLink'] as String?;
+              final cId = comment['commentId'] as String?;
+              if (hideLink != null && cId != null) {
+                hideComment(hideLink, cId);
+              }
+            },
+            onEdit: () {
+              if (comment['editLink'] != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EditCommentScreen(
+                      comment: comment,
+                      editLink: comment['editLink'],
+                      onUpdateComment: (updatedText) {
+                        setState(() {
+                          comment['text'] = updatedText;
+                        });
+                      },
+                    ),
+                  ),
+                );
+              }
+            },
+            onReply: () async {
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => EditCommentScreen(
+                  builder: (context) => ReplyScreen(
                     comment: comment,
-                    editLink: comment['editLink'],
-                    onUpdateComment: (updatedText) {
-                      setState(() {
-                        comment['text'] = updatedText;
-                      });
-                    },
+                    uniqueNumber: widget.uniqueNumber,
+                    isClassic: _isClassicUserPage,
+                    onSendReply: (replyText) {},
                   ),
                 ),
-              );
+              ).then((result) {
+                if (result == true) {
+                  _fetchPostDetails();
+                }
+              });
+            },
+            onUnhide: (comment['deleted'] == true && comment['hideLink'] != null)
+                ? () {
+              _unhideComment(comment['hideLink'], "");
             }
-          },
-          onReply: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ReplyScreen(
-                  comment: comment,
-                  uniqueNumber: widget.uniqueNumber,
-                  isClassic: _isClassicUserPage,
-                  onSendReply: (replyText) {
-
-                  },
-                ),
-              ),
-            ).then((result) {
-              if (result == true) {
-                _fetchPostDetails();
-              }
-            });
-          },
-
-          onUnhide: (comment['deleted'] == true && comment['hideLink'] != null)
-              ? () {
-            _unhideComment(comment['hideLink'], "");
-          }
-              : null,
-          handleLink: (url) async {
-            final commentHtml = comment['commentHtml'] ?? '';
-            await _handleCommentLink(context, url, commentHtml);
-          },
-        );
-      },
+                : null,
+            handleLink: (url) async {
+              final commentHtml = comment['commentHtml'] ?? '';
+              await _handleCommentLink(context, url, commentHtml);
+            },
+          );
+        },
+      ),
     );
   }
 }
@@ -3265,11 +3347,16 @@ class _CommentWidgetState extends State<CommentWidget> {
     return Padding(
       padding: EdgeInsets.only(left: leftPadding, bottom: 6.0),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
+        padding: const EdgeInsets.only(right: 12.0, left: 12.0, top: 8.0, bottom: 2.0),
         decoration: BoxDecoration(
-          color: Colors.grey.shade900,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0b0b0b), Color(0xFF202020)],
+          ),
           borderRadius: BorderRadius.circular(8.0),
         ),
+
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -3398,7 +3485,7 @@ class _CommentWidgetState extends State<CommentWidget> {
               ],
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6.0),
+              padding: const EdgeInsets.only(left: 8.0, right: 8.0, top: 11.0, bottom: 01.0),
               child: SelectionArea(
                 child: ExtendedText(
                   widget.comment['text'] ?? '',
@@ -3448,29 +3535,38 @@ class _CommentWidgetState extends State<CommentWidget> {
                         onPressed: widget.onHide,
                       ),
                     if (widget.comment['editLink'] != null)
-                      TextButton.icon(
+                      TextButton(
                         style: TextButton.styleFrom(
-                          padding: EdgeInsets.only(left: 0.0, right: 8),
+                          padding: const EdgeInsets.only(left: 4.0, right: 8),
                           minimumSize: const Size(0, 0),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                         onPressed: widget.onEdit,
-                        icon: const Icon(Icons.edit,
-                            size: 16, color: Colors.white),
-                        label: const Text('Edit',
-                            style: TextStyle(color: Colors.white, fontSize: 14)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.edit, size: 16, color: Colors.white),
+                            SizedBox(width: 4),
+                            Text('Edit', style: TextStyle(color: Colors.white, fontSize: 14)),
+                          ],
+                        ),
                       ),
-                    TextButton.icon(
+                    TextButton(
                       style: TextButton.styleFrom(
-                        padding: EdgeInsets.only(left: 0),
+                        padding: EdgeInsets.only(left: 6),
                         minimumSize: const Size(0, 0),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       onPressed: widget.onReply,
-                      icon: const Icon(Icons.reply,
-                          size: 16, color: Colors.white),
-                      label: const Text('Reply',
-                          style: TextStyle(color: Colors.white, fontSize: 14)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.reply, size: 19, color: Colors.white),
+                          const SizedBox(width: 4),
+                          const Text('Reply',
+                              style: TextStyle(color: Colors.white, fontSize: 14)),
+                        ],
+                      ),
                     ),
                   ],
                 ),
