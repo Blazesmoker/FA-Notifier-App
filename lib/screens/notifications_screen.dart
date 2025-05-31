@@ -1056,12 +1056,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                     ),
                   );
                   if (confirm) {
-                    final currentTabIndex = _tabController?.index ?? 0;
-                    if (sections[currentTabIndex].title.toLowerCase().contains('shouts')) {
-                      await _shoutsSectionKey.currentState?.nukeSection();
-                    } else {
-                      await service.removeAllNotifications();
-                    }
+                    await service.removeAllNotifications();
                   }
                 },
               ),

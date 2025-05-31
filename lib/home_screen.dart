@@ -261,41 +261,48 @@ class _HomeScreenState extends State<HomeScreen> {
 
   int _getNotificationsEnabledSum(
       NotificationSettingsProvider settings,
-      FANotificationService faNotificationService) {
-    int sum = 0;
-
+      FANotificationService faNotificationService,
+      ) {
+    int totalSum = 0;
 
     for (var section in faNotificationService.sections) {
-      if (section.title.contains('Watches') && settings.watchersEnabled) {
-        sum += section.items.length;
-      }
-      if (section.title.contains('Journals') && settings.journalsEnabled) {
-        sum += section.items.length;
-      }
-      if (section.title.contains('Submission Comments') &&
-          settings.commentsEnabled) {
-        sum += section.items.length;
-      }
-      if (section.title.contains('Journal Comments') &&
-          settings.commentsEnabled) {
-        sum += section.items.length;
-      }
-      if (section.title.contains('Favorites') && settings.favoritesEnabled) {
-        sum += section.items.length;
-      }
-      if (section.title.contains('Shouts') && settings.shoutsEnabled) {
-        sum += section.items.length;
-      }
+      totalSum += section.items.length; // Always count every notification
     }
 
-    // Only trigger refresh in home_drawer.dart if the sum has changed
-    if (sum != _previousSum) {
-      _previousSum = sum;
+    // Trigger refresh only if total count changed
+    if (totalSum != _previousSum) {
+      _previousSum = totalSum;
       NotificationRefreshService().triggerRefresh();
     }
 
-    return sum;
+    // Return only enabled notifications sum (used for display)
+    int visibleSum = 0;
+    for (var section in faNotificationService.sections) {
+      if (section.title.contains('Watches') && settings.watchersEnabled) {
+        visibleSum += section.items.length;
+      }
+      if (section.title.contains('Journals') && settings.journalsEnabled) {
+        visibleSum += section.items.length;
+      }
+      if (section.title.contains('Submission Comments') &&
+          settings.commentsEnabled) {
+        visibleSum += section.items.length;
+      }
+      if (section.title.contains('Journal Comments') &&
+          settings.commentsEnabled) {
+        visibleSum += section.items.length;
+      }
+      if (section.title.contains('Favorites') && settings.favoritesEnabled) {
+        visibleSum += section.items.length;
+      }
+      if (section.title.contains('Shouts') && settings.shoutsEnabled) {
+        visibleSum += section.items.length;
+      }
+    }
+
+    return visibleSum;
   }
+
 
   void _onNotificationsUpdated(Notifications notifications) {
     setState(() {

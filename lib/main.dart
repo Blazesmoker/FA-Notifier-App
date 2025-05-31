@@ -27,6 +27,7 @@ import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'custom_cache_manager.dart';
+import 'custom_drawer/drawer_user_controller.dart';
 import 'model/notifications.dart';
 import 'services/notification_service.dart';
 import 'utils.dart';
@@ -654,6 +655,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
+
         ChangeNotifierProvider<TimezoneProvider>.value(value: timezoneProvider),
         ChangeNotifierProvider<NotificationNavigationProvider>(
           create: (_) => NotificationNavigationProvider(),

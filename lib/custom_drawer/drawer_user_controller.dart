@@ -9,6 +9,7 @@ import '../app_theme.dart';
 import '../model/notifications.dart';
 
 class DrawerUserController extends StatefulWidget {
+
   const DrawerUserController({
     super.key,
     this.drawerWidth = 250,

@@ -73,6 +73,10 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
   bool _sfwEnabled = true;
   static const String NsfwConfirmationDisabled = 'nsfwConfirmationDisabled';
 
+
+  int _previousTotalSumOfNotifications = 0;
+  static const String kPreviousTotalSumKey = 'previousTotalSumOfNotifications';
+
   GlobalKey _kofiKey = GlobalKey();
   List<Offset>? _starOrigins;
 
@@ -124,6 +128,8 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
       );
     }
   }
+
+
 
   Future<void> fetchNotifications() async {
     try {

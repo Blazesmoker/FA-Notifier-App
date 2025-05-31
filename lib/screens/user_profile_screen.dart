@@ -3409,6 +3409,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                   ),
                 ),
               ],
+
               body: TabBarView(
                 controller: _tabController,
                 children: ProfileSection.values.map((section) {
