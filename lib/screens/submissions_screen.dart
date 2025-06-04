@@ -704,9 +704,25 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
+        drawerEnableOpenDragGesture: false,
         appBar: AppBar(
           centerTitle: true,
-          title: const Text('Submissions'),
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('Submissions'),
+              if (_selectionMode)
+                Padding(
+                  padding: const EdgeInsets.only(left: 11.0, right: 8.0),
+                  child: GestureDetector(
+                    onTap: _toggleAllSelection,
+                    child: const Icon(Icons.library_add_check, size: 22),
+                  ),
+                ),
+            ],
+          ),
+
           actions: [
             IconButton(
               icon: Icon(_selectionMode ? Icons.delete_forever : Icons.delete),
@@ -801,6 +817,19 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     } else {
       return rowWithSpacing;
     }
+  }
+
+  void _toggleAllSelection() {
+    setState(() {
+      if (_selectedSubmissions.length == _flatSubmissionsList.length) {
+        _selectedSubmissions.clear(); // Deselect all
+      } else {
+        _selectedSubmissions.clear();
+        for (var item in _flatSubmissionsList) {
+          _selectedSubmissions.add(item['uniqueNumber']);
+        }
+      }
+    });
   }
 
   Widget _buildSingleImage(Map<String, dynamic> data, double maxHeight) {
