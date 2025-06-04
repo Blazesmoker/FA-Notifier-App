@@ -70,6 +70,7 @@ class NotificationItem {
   final String id;
   final String content;
   final String? username;
+  final String? linkUsername;
   final String? submissionId;
   final String? journalId;
   final String? url;
@@ -82,6 +83,7 @@ class NotificationItem {
     required this.id,
     required this.content,
     this.username,
+    this.linkUsername,
     this.submissionId,
     this.journalId,
     this.url,
@@ -90,6 +92,8 @@ class NotificationItem {
     required this.fullDate,
     this.isChecked = false,
   });
+
+
 }
 
 /// Model representing a notification section.
@@ -115,6 +119,7 @@ class FANotificationService with ChangeNotifier {
   String? errorMessage;
   List<NotificationSection> sections = [];
   String? currentUsername;
+  String? linkUsername;
   String? currentUsernameFromLink;
 
   // For shouts caching and concurrency control.
@@ -123,7 +128,8 @@ class FANotificationService with ChangeNotifier {
   static final Map<String, String> _previewCache = {};
   static bool _didFetchProfileShouts = false;
   static List<Shout> _profileShoutList = [];
-
+  String? displayName;
+  String? username;
   FANotificationService() {
     _initializeDio();
     fetchNotifications();
@@ -178,6 +184,7 @@ class FANotificationService with ChangeNotifier {
     sections.clear();
     notifyListeners();
   }
+
 
   /// Fetch and parse notifications from /msg/others/.
   Future<void> fetchNotifications() async {
@@ -322,6 +329,17 @@ class FANotificationService with ChangeNotifier {
               dom.Element? tableElem = li.querySelector('table');
               if (tableElem != null) {
                 dom.Element? av = tableElem.querySelector('td.avatar a img.avatar');
+
+                dom.Element? avatarLink = li.querySelector('td.avatar a');
+                if (avatarLink != null) {
+                  String? href = avatarLink.attributes['href'];
+                  if (href != null) {
+                    final match = RegExp(r'/user/([^/]+)/').firstMatch(href);
+                    if (match != null) {
+                      linkUsername = match.group(1);
+                    }
+                  }
+                }
                 if (av != null) {
                   avatarUrl = av.attributes['src'];
                   if (avatarUrl != null && avatarUrl.startsWith('//')) {
@@ -331,19 +349,39 @@ class FANotificationService with ChangeNotifier {
               }
               dom.Element? infoDiv = li.querySelector('div.info');
               if (infoDiv != null) {
-                username = infoDiv.querySelector('span')?.text.trim();
+                displayName = infoDiv.querySelector('span')?.text.trim();
               }
-              dom.Element? avatarLink = li.querySelector('div.avatar a');
+
+
+              dom.Element? avatarLink = li.querySelector('td.avatar a');
               if (avatarLink != null) {
-                url = avatarLink.attributes['href'];
+                String? href = avatarLink.attributes['href'];
+                if (href != null) {
+                  final match = RegExp(r'/user/([^/]+)/').firstMatch(href);
+                  if (match != null) {
+                    username = match.group(1);
+                  }
+                }
               }
+
               String avatarHtml = li.querySelector('div.avatar')?.outerHtml ?? '';
               String infoHtml = li.querySelector('div.info')?.outerHtml ?? '';
               content = avatarHtml + infoHtml;
             } else {
               dom.Element? infoDiv = li.querySelector('div.info');
               if (infoDiv != null) {
-                username = infoDiv.querySelector('span')?.text.trim();
+
+                dom.Element? avatarLink = li.querySelector('div.avatar a');
+                if (avatarLink != null) {
+                  String? href = avatarLink.attributes['href'];
+                  if (href != null) {
+                    final match = RegExp(r'/user/([^/]+)/').firstMatch(href);
+                    if (match != null) {
+                      linkUsername = match.group(1);
+                    }
+                  }
+                }
+                displayName = infoDiv.querySelector('span')?.text.trim();
                 dom.Element? avatarImg = li.querySelector('div.avatar img.avatar');
                 if (avatarImg != null) {
                   avatarUrl = avatarImg.attributes['src'];
@@ -519,6 +557,7 @@ class FANotificationService with ChangeNotifier {
               id: id,
               content: content,
               username: username,
+              linkUsername: linkUsername,
               submissionId: submissionId,
               journalId: journalId,
               url: url,
@@ -554,6 +593,7 @@ class FANotificationService with ChangeNotifier {
               id: id,
               content: content,
               username: username,
+              linkUsername: linkUsername,
               submissionId: submissionId,
               journalId: journalId,
               url: url,

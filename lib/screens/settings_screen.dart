@@ -48,64 +48,82 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Settings'),
       ),
-      body: ListView(
+      body: Column(
         children: [
-          ListTile(
-            leading: const Icon(Icons.phone_android),
-            title: const Text('App Settings'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AppSettingsScreen()),
-              );
-            },
-          ),
-          const Divider(
-            height: 1.0,
-            color: Color(0xFF111111),
-            thickness: 3.0,
-          ),
-
-          //TODO: Site Settings Screen
-          /*
-          ListTile(
-            leading: const Icon(Icons.public),
-            title: const Text('Site Settings'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const SiteSettingsScreen(),
+          Expanded(
+            child: ListView(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.phone_android),
+                  title: const Text('App Settings'),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AppSettingsScreen(),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
-          const Divider(
-            height: 1.0,
-            color: Color(0xFF111111),
-            thickness: 3.0,
-          ),
-          */
+                const Divider(
+                  height: 1.0,
+                  color: Color(0xFF111111),
+                  thickness: 3.0,
+                ),
 
+                //TODO: Site Settings Screen
+                /*
+              ListTile(
+                leading: const Icon(Icons.public),
+                title: const Text('Site Settings'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SiteSettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(
+                height: 1.0,
+                color: Color(0xFF111111),
+                thickness: 3.0,
+              ),
+              */
 
-
-
-
-          ListTile(
-            leading: const Icon(
-              Icons.power_settings_new,
-              color: Colors.redAccent,
+                ListTile(
+                  leading: const Icon(
+                    Icons.power_settings_new,
+                    color: Colors.redAccent,
+                  ),
+                  title: Text(
+                    'Log Out',
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontName,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      color: Colors.redAccent,
+                    ),
+                  ),
+                  onTap: () => _confirmLogout(context),
+                ),
+              ],
             ),
-            title: Text(
-              'Log Out',
+          ),
+          // Version Label at Bottom Middle
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16.0),
+            child: Text(
+              "FA Notifier v1.1.2",
+              textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: AppTheme.fontName,
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-                color: Colors.redAccent,
+                fontSize: 13,
+
+                color: Colors.grey[600],
               ),
             ),
-            onTap: () => _confirmLogout(context),
           ),
         ],
       ),

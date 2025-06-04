@@ -329,7 +329,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
 
     // 1. Gallery Folder Link
     final RegExp galleryFolderRegex = RegExp(
-        r'^https?://(?:www\.)?furaffinity\.net/gallery/([^/]+)/folder/(\d+)/([^/]+)/?$'
+      r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
     );
     if (galleryFolderRegex.hasMatch(urlToMatch)) {
       final match = galleryFolderRegex.firstMatch(urlToMatch)!;
@@ -354,8 +354,9 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
     }
 
     // 2. User Link
-    final RegExp userRegex =
-    RegExp(r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([^/]+)/?$');
+    final RegExp userRegex = RegExp(
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$',
+    );
     if (userRegex.hasMatch(urlToMatch)) {
       final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
       Navigator.push(
@@ -367,23 +368,44 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
       return;
     }
 
-    // 3. Journal Link
-    final RegExp journalRegex =
-    RegExp(r'^(?:https?://(?:www\.)?furaffinity\.net)?/journal/(\d+)/.*$');
+    // 3. Journal Link:
+    final RegExp journalRegex = RegExp(
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
+    );
+
     if (journalRegex.hasMatch(urlToMatch)) {
-      final String journalId = journalRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OpenJournal(uniqueNumber: journalId),
-        ),
-      );
+      final Match match = journalRegex.firstMatch(urlToMatch)!;
+      final String? username = match.group(1);
+      final String? journalId = match.group(2);
+
+      if (username != null) {
+        // Matched: /journals/username/
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => UserProfileScreen(
+              nickname: username,
+              initialSection: ProfileSection.Journals,
+            ),
+          ),
+        );
+      } else if (journalId != null) {
+        // Matched: /journal/12345/
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OpenJournal(uniqueNumber: journalId),
+          ),
+        );
+      }
+
       return;
     }
 
     // 4. Submission/View Link
     final RegExp viewRegex = RegExp(
-        r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$');
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$',
+    );
     if (viewRegex.hasMatch(urlToMatch)) {
       final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
       Navigator.push(
@@ -523,22 +545,31 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                 const Divider(height: 20, thickness: 1, color: Colors.white54),
                 Expanded(
                   child: SingleChildScrollView(
-                    child: SelectableLinkify(
-                      key: _selectableKey,
-                      onOpen: (link) async {
-                        await _handleFALink(context, link.url);
-                      },
-                      text: messageContent,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.white,
+                    child: Theme(
+                      data: Theme.of(context).copyWith(
+                        textSelectionTheme: TextSelectionThemeData(
+                          selectionColor: Color(0xFFE09321).withOpacity(0.4),
+                          selectionHandleColor: Color(0xFFE09321),
+                        ),
                       ),
-                      linkStyle: const TextStyle(
-                        fontSize: 16,
-                        color: Color(0xFFE09321),
-                        decoration: TextDecoration.none,
+                      child: SelectableLinkify(
+                        key: _selectableKey,
+                        onOpen: (link) async {
+                          await _handleFALink(context, link.url);
+                        },
+                        text: messageContent,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.white,
+                        ),
+                        linkStyle: const TextStyle(
+                          fontSize: 16,
+                          color: Color(0xFFE09321),
+                          decoration: TextDecoration.underline,
+                          decorationColor: Color(0xFFE09321),
+                        ),
+                        selectionControls: MaterialTextSelectionControls(),
                       ),
-                      selectionControls: MaterialTextSelectionControls(),
                     ),
                   ),
                 ),

@@ -575,11 +575,12 @@ class NotificationSectionWidget extends StatelessWidget {
                         if (section.title.toLowerCase().contains('watches'))
                           GestureDetector(
                             onTap: () {
-                              if (item.username != null) {
+                              print("Opening profile: ${item.linkUsername}");
+                              if (item.linkUsername != null) {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => UserProfileScreen(nickname: item.username!),
+                                    builder: (context) => UserProfileScreen(nickname: item.linkUsername!),
                                   ),
                                 );
                               }
@@ -597,11 +598,12 @@ class NotificationSectionWidget extends StatelessWidget {
                           child: GestureDetector(
                             onTap: () {
                               if (section.title.toLowerCase().contains('watches')) {
-                                if (item.username != null) {
+                                print("Opening profile: ${item.linkUsername}");
+                                if (item.linkUsername != null) {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) => UserProfileScreen(nickname: item.username!),
+                                      builder: (context) => UserProfileScreen(nickname: item.linkUsername!),
                                     ),
                                   );
                                 }

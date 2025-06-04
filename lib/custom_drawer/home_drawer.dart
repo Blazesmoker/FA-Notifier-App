@@ -523,7 +523,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
       String cleanUrl = url.trim();
 
       // Add protocol if missing
-      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://'))  {
         cleanUrl = 'https://$cleanUrl';
       }
 
@@ -531,7 +531,6 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
 
       final Uri uri = Uri.parse(cleanUrl);
       String urlToMatch = uri.toString();
-
 
       if (urlToMatch.endsWith('/')) {
         urlToMatch = urlToMatch.substring(0, urlToMatch.length - 1);
@@ -546,15 +545,15 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
 
       // 1. Gallery Folder Link:
       final RegExp galleryFolderRegex = RegExp(
-          r'https?://(?:www\.)?furaffinity\.net/gallery/([^/]+)/folder/(\d+)/([^/]+)/?$');
+        r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
+      );
       final Match? galleryMatch = galleryFolderRegex.firstMatch(urlToMatch);
       if (galleryMatch != null) {
-        print('Matched gallery folder link'); // Debug log
+        print('Matched gallery folder link');
         final String tappedUsername = galleryMatch.group(1)!;
         final String folderNumber = galleryMatch.group(2)!;
         final String folderName = galleryMatch.group(3)!;
-        final String folderUrl =
-            'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+        final String folderUrl = 'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
 
         Navigator.push(
           context,
@@ -572,7 +571,8 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
 
       // 2. User Link:
       final RegExp userRegex = RegExp(
-          r'https?://(?:www\.)?furaffinity\.net/user/([^/]+)/?$');
+        r'^https?://(?:www\.)?furaffinity\.net/user/([a-zA-Z0-9\-_.~]+)/?$',
+      );
       final Match? userMatch = userRegex.firstMatch(urlToMatch);
       if (userMatch != null) {
         print('Matched user link');
@@ -590,24 +590,42 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
 
       // 3. Journal Link:
       final RegExp journalRegex = RegExp(
-          r'https?://(?:www\.)?furaffinity\.net/journal/(\d+)(?:/.*)?$');
-      final Match? journalMatch = journalRegex.firstMatch(urlToMatch);
-      if (journalMatch != null) {
-        print('Matched journal link');
-        final String journalId = journalMatch.group(1)!;
+        r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
+      );
 
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OpenJournal(uniqueNumber: journalId),
-          ),
-        );
+      if (journalRegex.hasMatch(urlToMatch)) {
+        final Match match = journalRegex.firstMatch(urlToMatch)!;
+        final String? username = match.group(1);
+        final String? journalId = match.group(2);
+
+        if (username != null) {
+          // Matched: /journals/username/
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => UserProfileScreen(
+                nickname: username,
+                initialSection: ProfileSection.Journals,
+              ),
+            ),
+          );
+        } else if (journalId != null) {
+          // Matched: /journal/12345/
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => OpenJournal(uniqueNumber: journalId),
+            ),
+          );
+        }
+
         return;
       }
 
       // 4. Submission/View Link:
       final RegExp viewRegex = RegExp(
-          r'https?://(?:www\.)?furaffinity\.net/view/(\d+)(?:/.*)?(?:#.*)?$');
+        r'^https?://(?:www\.)?(?:furaffinity|fxfuraffinity)\.net/view/(\d+)(?:/.*)?(?:#.*)?$',
+      );
       final Match? viewMatch = viewRegex.firstMatch(urlToMatch);
       if (viewMatch != null) {
         print('Matched submission link');
@@ -638,6 +656,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
       }
     }
   }
+  
 
   Future<void> _loadSfwEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -903,14 +922,21 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                       GestureDetector(
                         onTap: () {
                           if (widget.userProfile != null &&
-                              widget.userProfile!.username.isNotEmpty) {
-                            String lowercaseUsername =
-                            widget.userProfile!.username.toLowerCase();
+                              widget.userProfile!.profileImageUrl.isNotEmpty) {
+                            final String imageUrl = widget.userProfile!.profileImageUrl;
+                            final String filename = imageUrl.split('/').last;
+                            final String nickname = filename.contains('.')
+                                ? filename.substring(0, filename.lastIndexOf('.'))
+                                : filename;
+                            final String lowercaseNickname = nickname.toLowerCase();
+
+                            print("Extracted nickname: $lowercaseNickname");
+
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => UserProfileScreen(
-                                  nickname: lowercaseUsername,
+                                  nickname: lowercaseNickname,
                                 ),
                               ),
                             );

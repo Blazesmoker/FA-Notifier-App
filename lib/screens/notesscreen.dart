@@ -1229,17 +1229,18 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
     final Uri uri = Uri.parse(url);
     final String urlToMatch = uri.toString();
 
-    // 1) Gallery Folder
+    // 1. Gallery Folder Link
     final RegExp galleryFolderRegex = RegExp(
-      r'^https?://(?:www\.)?furaffinity\.net/gallery/([^/]+)/folder/(\d+)/([^/]+)/?$',
+      r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
     );
     if (galleryFolderRegex.hasMatch(urlToMatch)) {
       final match = galleryFolderRegex.firstMatch(urlToMatch)!;
-      final tappedUsername = match.group(1)!;
-      final folderNumber = match.group(2)!;
-      final folderName = match.group(3)!;
+      final String tappedUsername = match.group(1)!;
+      final String folderNumber = match.group(2)!;
+      final String folderName = match.group(3)!;
       final folderUrl =
           'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -1254,12 +1255,12 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
       return;
     }
 
-    // 2) User link
+    // 2. User Link
     final RegExp userRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([^/]+)/?$',
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$',
     );
     if (userRegex.hasMatch(urlToMatch)) {
-      final tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
+      final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -1269,27 +1270,46 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
       return;
     }
 
-    // 3) Journal
+    // 3. Journal Link:
     final RegExp journalRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/journal/(\d+)/.*$',
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
     );
+
     if (journalRegex.hasMatch(urlToMatch)) {
-      final journalId = journalRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OpenJournal(uniqueNumber: journalId),
-        ),
-      );
+      final Match match = journalRegex.firstMatch(urlToMatch)!;
+      final String? username = match.group(1);
+      final String? journalId = match.group(2);
+
+      if (username != null) {
+        // Matched: /journals/username/
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => UserProfileScreen(
+              nickname: username,
+              initialSection: ProfileSection.Journals,
+            ),
+          ),
+        );
+      } else if (journalId != null) {
+        // Matched: /journal/12345/
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OpenJournal(uniqueNumber: journalId),
+          ),
+        );
+      }
+
       return;
     }
 
-    // 4) Submission
+    // 4. Submission/View Link
     final RegExp viewRegex = RegExp(
       r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$',
     );
     if (viewRegex.hasMatch(urlToMatch)) {
-      final submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
+      final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -1302,7 +1322,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
       return;
     }
 
-    // 5) Fallback external link
+    // 5. Fallback: external link
     await launchUrlString(url, mode: LaunchMode.externalApplication);
   }
 

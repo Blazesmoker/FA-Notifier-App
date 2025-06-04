@@ -247,7 +247,14 @@ class FaService {
 
   /// Helper method to extract a number from a given text.
   String _extractNumber(String text) {
-    final Match? match = RegExp(r'\d+').firstMatch(text);
-    return match?.group(0) ?? '0'; // Extracts "1000" from "1000 Favorite Notifications"
+    // Matches sequences like '1,123', '123,789', '12345'
+    final Match? match = RegExp(r'\d{1,3}(?:[,.]\d{3})*').firstMatch(text);
+    if (match == null) return '0';
+
+    // Remove commas/dots and return as a clean number (e.g., '1,234' → '1234')
+    return match.group(0)!
+        .replaceAll(RegExp(r'[,.]'), ''); // Remove commas and dots
   }
+
+
 }

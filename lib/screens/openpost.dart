@@ -81,6 +81,7 @@ class OpenPost extends StatefulWidget {
   final String imageUrl;
   final String uniqueNumber;
 
+
   const OpenPost({required this.imageUrl, required this.uniqueNumber, Key? key})
       : super(key: key);
 
@@ -214,22 +215,21 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     final response = await http.get(Uri.parse(url), headers: headers);
 
     // Check for NSFW marker in the HTML response only if NSFW not yet allowed.
-    if (_sfwEnabled &&
-        !_nsfwAllowed &&
-        !skipSfw &&
-        response.statusCode == 200 &&
-        response.body.contains(
-          '<div class="section-body alignleft">\n            <h2>System Message</h2>\n            This submission contains Mature or Adult content. To view this submission you must log in and enable the Mature or Adult content via Account Settings.\n        </div>',
-        )) {
-      bool userAgreed = await _showNSFWConfirmationDialog();
-      if (userAgreed) {
-        setState(() {
-          _nsfwAllowed = true;
-        });
-        return await _getWithSfwCookie(url,
-            additionalHeaders: additionalHeaders, skipSfw: true);
-      } else {
-        throw Exception("User declined to view NSFW content.");
+    if (_sfwEnabled && !_nsfwAllowed && !skipSfw && response.statusCode == 200) {
+      final document = html_parser.parse(response.body);
+      final body = document.querySelector('body');
+
+      if (body?.attributes['id'] == 'pageid-matureimage-error') {
+        // Show NSFW confirmation dialog
+        bool userAgreed = await _showNSFWConfirmationDialog();
+        if (userAgreed) {
+          setState(() {
+            _nsfwAllowed = true;
+          });
+          return await _getWithSfwCookie(url, additionalHeaders: additionalHeaders, skipSfw: true);
+        } else {
+          throw Exception("User declined to view NSFW content.");
+        }
       }
     }
     return response;
@@ -2050,7 +2050,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       final recoveredUrl = _getFullLinkFromCommentHtml(commentHtml, url);
       if (recoveredUrl != null && recoveredUrl.isNotEmpty) {
         url = recoveredUrl;
-
       }
     }
 
@@ -2059,7 +2058,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
     // 1. Gallery Folder Link
     final RegExp galleryFolderRegex = RegExp(
-      r'^https?://(?:www\.)?furaffinity\.net/gallery/([^/]+)/folder/(\d+)/([^/]+)/?$',
+      r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
     );
     if (galleryFolderRegex.hasMatch(urlToMatch)) {
       final match = galleryFolderRegex.firstMatch(urlToMatch)!;
@@ -2084,7 +2083,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
     // 2. User Link
     final RegExp userRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([^/]+)/?$',
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$',
     );
     if (userRegex.hasMatch(urlToMatch)) {
       final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
@@ -2097,18 +2096,37 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       return;
     }
 
-    // 3. Journal Link
+    // 3. Journal Link:
     final RegExp journalRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/journal/(\d+)/.*$',
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
     );
+
     if (journalRegex.hasMatch(urlToMatch)) {
-      final String journalId = journalRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OpenJournal(uniqueNumber: journalId),
-        ),
-      );
+      final Match match = journalRegex.firstMatch(urlToMatch)!;
+      final String? username = match.group(1);
+      final String? journalId = match.group(2);
+
+      if (username != null) {
+        // Matched: /journals/username/
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => UserProfileScreen(
+              nickname: username,
+              initialSection: ProfileSection.Journals,
+            ),
+          ),
+        );
+      } else if (journalId != null) {
+        // Matched: /journal/12345/
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OpenJournal(uniqueNumber: journalId),
+          ),
+        );
+      }
+
       return;
     }
 
@@ -2121,7 +2139,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => OpenPost(uniqueNumber: submissionId, imageUrl: ''),
+          builder: (context) => OpenPost(
+            uniqueNumber: submissionId,
+            imageUrl: '',
+          ),
         ),
       );
       return;
@@ -2131,93 +2152,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     await launchUrlString(url, mode: LaunchMode.externalApplication);
   }
 
-  /// Modified _handleFALink with fallback
-  Future<void> _handleFALink(BuildContext context, String url) async {
-    // If the URL appears truncated
-    if (url.contains(".....") && submissionDescription != null) {
-      final recoveredUrl = _getFullLinkFromFetchedHtml(url);
-      if (recoveredUrl != null && recoveredUrl.isNotEmpty) {
-        url = recoveredUrl;
-      }
-    }
-
-    final Uri uri = Uri.parse(url);
-    final String urlToMatch = uri.toString();
-
-    // 1. Gallery Folder Link
-    final RegExp galleryFolderRegex = RegExp(
-      r'^https?://(?:www\.)?furaffinity\.net/gallery/([^/]+)/folder/(\d+)/([^/]+)/?$',
-    );
-    if (galleryFolderRegex.hasMatch(urlToMatch)) {
-      final match = galleryFolderRegex.firstMatch(urlToMatch)!;
-      final String tappedUsername = match.group(1)!;
-      final String folderNumber = match.group(2)!;
-      final String folderName = match.group(3)!;
-      final String folderUrl =
-          'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(
-            nickname: tappedUsername,
-            initialSection: ProfileSection.Gallery,
-            initialFolderUrl: folderUrl,
-            initialFolderName: folderName,
-          ),
-        ),
-      );
-      return;
-    }
-
-    // 2. User Link
-    final RegExp userRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([^/]+)/?$',
-    );
-    if (userRegex.hasMatch(urlToMatch)) {
-      final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(nickname: tappedUsername),
-        ),
-      );
-      return;
-    }
-
-    // 3. Journal Link
-    final RegExp journalRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/journal/(\d+)/.*$',
-    );
-    if (journalRegex.hasMatch(urlToMatch)) {
-      final String journalId = journalRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OpenJournal(uniqueNumber: journalId),
-        ),
-      );
-      return;
-    }
-
-    // 4. Submission/View Link
-    final RegExp viewRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$',
-    );
-    if (viewRegex.hasMatch(urlToMatch)) {
-      final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              OpenPost(uniqueNumber: submissionId, imageUrl: ''),
-        ),
-      );
-      return;
-    }
-
-    // 5. Fallback
-    await launchUrlString(url, mode: LaunchMode.externalApplication);
-  }
 
   void _showEditDialog() {
     showDialog(
@@ -2827,7 +2761,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                           key: _submissionWebViewKey,
                           submissionId: widget.uniqueNumber,
                           onHeightChanged: (double height) {
-                            Future.delayed(const Duration(milliseconds: 20), () {
+                            Future.delayed(const Duration(milliseconds: 150), () {
                               setState(() {
                                 _webViewLoaded = true;
                               });
@@ -3484,8 +3418,15 @@ class _CommentWidgetState extends State<CommentWidget> {
                 ),
               ],
             ),
-            Padding(
-              padding: const EdgeInsets.only(left: 8.0, right: 8.0, top: 11.0, bottom: 01.0),
+        Padding(
+          padding: const EdgeInsets.only(left: 8.0, right: 8.0, top: 11.0, bottom: 1.0),
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              textSelectionTheme: TextSelectionThemeData(
+                selectionColor: Color(0xFFE09321).withOpacity(0.4),
+                selectionHandleColor: Color(0xFFE09321),
+              ),
+            ),
               child: SelectionArea(
                 child: ExtendedText(
                   widget.comment['text'] ?? '',
@@ -3497,6 +3438,7 @@ class _CommentWidgetState extends State<CommentWidget> {
 
               ),
             ),
+        ),
 
             // Footer row
             Row(

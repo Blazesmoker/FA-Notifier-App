@@ -374,7 +374,23 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Nuke All?'),
-        content: const Text('Do you really want to remove all of your submissions?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Do you really want to remove all of your submissions?'),
+            if (_sfwEnabled)
+              Column(
+                children: [
+                  const SizedBox(height: 8),
+                  Text(
+                    "When SFW mode is enabled, all NSFW posts will be nuked too - even if you haven't seen them yet.",
+                    style: TextStyle(color: Color(0xFFE09321)),
+                  ),
+                ],
+              ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),

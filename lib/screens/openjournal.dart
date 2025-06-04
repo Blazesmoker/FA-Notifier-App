@@ -176,8 +176,9 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
     final Uri uri = Uri.parse(fullUrlToMatch);
     final String urlToMatch = uri.toString();
 
+    // Gallery Folder Regex
     final RegExp galleryFolderRegex = RegExp(
-        r'^https?://(?:www\.)?furaffinity\.net/gallery/([^/]+)/folder/(\d+)/([^/]+)/?$'
+      r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
     );
     if (galleryFolderRegex.hasMatch(urlToMatch)) {
       final match = galleryFolderRegex.firstMatch(urlToMatch)!;
@@ -200,8 +201,9 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
       return;
     }
 
+    // User Regex
     final RegExp userRegex = RegExp(
-        r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([^/]+)/?$'
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$',
     );
     if (userRegex.hasMatch(urlToMatch)) {
       final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
@@ -213,21 +215,44 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
       );
       return;
     }
+
+    // 3. Journal Link:
     final RegExp journalRegex = RegExp(
-        r'^(?:https?://(?:www\.)?furaffinity\.net)?/journal/(\d+)/.*$'
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
     );
+
     if (journalRegex.hasMatch(urlToMatch)) {
-      final String journalId = journalRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OpenJournal(uniqueNumber: journalId),
-        ),
-      );
+      final Match match = journalRegex.firstMatch(urlToMatch)!;
+      final String? username = match.group(1);
+      final String? journalId = match.group(2);
+
+      if (username != null) {
+        // Matched: /journals/username/
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => UserProfileScreen(
+              nickname: username,
+              initialSection: ProfileSection.Journals,
+            ),
+          ),
+        );
+      } else if (journalId != null) {
+        // Matched: /journal/12345/
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OpenJournal(uniqueNumber: journalId),
+          ),
+        );
+      }
+
       return;
     }
+
+    // Submission/View Regex (unchanged, no username involved)
     final RegExp viewRegex = RegExp(
-        r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$'
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$',
     );
     if (viewRegex.hasMatch(urlToMatch)) {
       final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
@@ -242,6 +267,8 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
       );
       return;
     }
+
+    // Fallback: Launch externally
     await launchUrlString(fullUrlToMatch, mode: LaunchMode.externalApplication);
   }
 
@@ -965,7 +992,14 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                         Divider(color: Colors.grey.shade900, thickness: 1.5, height: 24),
 
                         const SizedBox(height: 4.0),
-                        SelectionArea(
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          textSelectionTheme: TextSelectionThemeData(
+                            selectionColor: Color(0xFFE09321).withOpacity(0.4),
+                            selectionHandleColor: Color(0xFFE09321),
+                          ),
+                        ),
+                        child: SelectionArea(
                           child: html_pkg.Html(
                             data: submissionDescription ?? '',
                             style: {
@@ -974,12 +1008,13 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                 fontSize: html_pkg.FontSize(16),
                                 padding: HtmlPaddings.zero,
                                 margin: Margins.zero,
-                                backgroundColor: const Color(0xFF151515),
+                                backgroundColor: Colors.transparent,
                               ),
                               "a": html_pkg.Style(
                                 textDecoration: TextDecoration.none,
                                 color: const Color(0xFFE09321),
                               ),
+
                             },
                             onLinkTap: (url, _, __) => _handleFALink(context, url!),
                             extensions: [
@@ -1139,11 +1174,13 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                             ],
                           ),
                         )
+                      )
 
 
 
 
                       ],
+
                     ),
                   ),
                 ),
@@ -1530,13 +1567,24 @@ class _CommentWidgetState extends State<CommentWidget> {
             ),
             Padding(
               padding: const EdgeInsets.only(left: 8.0, right: 8.0, top: 11.0, bottom: 1.0),
-              child: SelectionArea(
-                child: ExtendedText(
-                  widget.comment['text'] ?? '',
-                  specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
-                    onTapLink: widget.handleLink,
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  textSelectionTheme: TextSelectionThemeData(
+                    selectionColor: Color(0xFFE09321).withOpacity(0.4),
+                    selectionHandleColor: Color(0xFFE09321),
                   ),
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade300),
+                ),
+                child: SelectionArea(
+                  child: ExtendedText(
+                    widget.comment['text'] ?? '',
+                    specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
+                      onTapLink: widget.handleLink,
+                    ),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade300,
+                    ),
+                  ),
                 ),
               ),
             ),

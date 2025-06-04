@@ -747,6 +747,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
         print("No cookies found.");
         return;
       }
+      print('sanitizedUsername');
 
 
       final sanitizedUsername = _sanitizeUsername(widget.nickname);
@@ -850,8 +851,11 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   }
 
 
+  final _usernameSanitizeRegex = RegExp(r'[^a-zA-Z0-9\-_.~]');
   String _sanitizeUsername(String username) {
-    return username.replaceAll(RegExp(r'[^a-zA-Z0-9-_.]'), '').toLowerCase();
+    return username
+        .replaceAll(_usernameSanitizeRegex, '')
+        .toLowerCase();
   }
 
   void switchToGalleryTab() {
@@ -2440,17 +2444,16 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
     final String urlToMatch = uri.toString();
 
     // Gallery Folder Link
-    // Matches URLs like: https://www.furaffinity.net/gallery/username/folder/123456/folderName/
-
     final RegExp galleryFolderRegex = RegExp(
-        r'^https?://(?:www\.)?furaffinity\.net/gallery/([^/]+)/folder/(\d+)/([^/]+)/?$'
+      r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
     );
     if (galleryFolderRegex.hasMatch(urlToMatch)) {
       final match = galleryFolderRegex.firstMatch(urlToMatch)!;
       final String tappedUsername = match.group(1)!;
       final String folderNumber = match.group(2)!;
       final String folderName = match.group(3)!;
-      final String folderUrl = 'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+      final String folderUrl =
+          'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
 
       Navigator.push(
         context,
@@ -2468,7 +2471,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
     // User Link
     final RegExp userRegex = RegExp(
-        r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([^/]+)/?$'
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$',
     );
     if (userRegex.hasMatch(urlToMatch)) {
       final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
@@ -2481,24 +2484,43 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       return;
     }
 
-    // Journal Link
+    //  Journal Link
     final RegExp journalRegex = RegExp(
-        r'^(?:https?://(?:www\.)?furaffinity\.net)?/journal/(\d+)/.*$'
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
     );
+
     if (journalRegex.hasMatch(urlToMatch)) {
-      final String journalId = journalRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OpenJournal(uniqueNumber: journalId),
-        ),
-      );
+      final Match match = journalRegex.firstMatch(urlToMatch)!;
+      final String? username = match.group(1);
+      final String? journalId = match.group(2);
+
+      if (username != null) {
+        // Matched: /journals/username/
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => UserProfileScreen(
+              nickname: username,
+              initialSection: ProfileSection.Journals,
+            ),
+          ),
+        );
+      } else if (journalId != null) {
+        // Matched: /journal/12345/
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OpenJournal(uniqueNumber: journalId),
+          ),
+        );
+      }
+
       return;
     }
 
     // Submission/View Link
     final RegExp viewRegex = RegExp(
-        r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$'
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$',
     );
     if (viewRegex.hasMatch(urlToMatch)) {
       final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
