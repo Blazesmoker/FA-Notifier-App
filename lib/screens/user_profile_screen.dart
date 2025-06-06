@@ -3628,7 +3628,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
     return ListView(
       padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 8.0),
       children: [
-        if (hasRealUserProfile)
+        if (hasRealUserProfile && userDescription != null)
           GestureDetector(
             onLongPressStart: (LongPressStartDetails details) async {
               // Get the overlay's RenderBox to convert the global position.
@@ -3669,6 +3669,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                   MaterialPageRoute(
                     builder: (context) => UserDescriptionWebViewScreen(
                       sanitizedUsername: sanitizedUsername,
+                      initialHtml: userDescription,
                     ),
                   ),
                 );
@@ -3677,6 +3678,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
             child: UserDescriptionWebView(
               key: _webViewKey,
               sanitizedUsername: sanitizedUsername,
+              initialHtml: userDescription,
               forceHybridComposition: false,
               onWebViewLoaded: (loaded) {
                 setState(() {

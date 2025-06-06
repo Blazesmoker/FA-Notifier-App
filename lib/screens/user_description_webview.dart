@@ -15,6 +15,7 @@ import 'openpost.dart';
 
 class UserDescriptionWebView extends StatefulWidget {
   final String sanitizedUsername;
+  final String? initialHtml;
   final VoidCallback? onDispose;
   final bool forceHybridComposition;
   final ValueChanged<bool>? onWebViewLoaded;
@@ -22,6 +23,7 @@ class UserDescriptionWebView extends StatefulWidget {
   const UserDescriptionWebView({
     Key? key,
     required this.sanitizedUsername,
+    this.initialHtml,
     this.onDispose,
     this.forceHybridComposition = false,
     this.onWebViewLoaded,
@@ -45,7 +47,11 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   @override
   void initState() {
     super.initState();
-    _userDescriptionFuture = _fetchCleanHTML();
+    if (widget.initialHtml != null) {
+      _userDescriptionFuture = _processInitialHtml(widget.initialHtml!);
+    } else {
+      _userDescriptionFuture = _fetchCleanHTML();
+    }
   }
 
   @override
@@ -61,6 +67,44 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     setState(() {
       _isWebViewVisible = false;
     });
+  }
+
+  Future<String> _processInitialHtml(String html) async {
+    final doc = html_parser.parse(html);
+
+    doc.querySelectorAll(
+      'script, .footerAds, #ddmenu, .mobile-navigation, '
+          '.mobile-notification-bar, #header, .userpage-layout-left-col, '
+          '.userpage-layout-right-col, #footer, .online-stats, .news-block',
+    ).forEach((e) => e.remove());
+
+    final userDescElem = doc.querySelector('section.userpage-layout-profile')
+        ?? doc.querySelector('td.ldot')
+        ?? doc.body;
+
+    if (userDescElem == null) {
+      return '<p>No user profile found.</p>';
+    }
+
+    String extractedHtml;
+    if (userDescElem.localName == 'section') {
+      extractedHtml = userDescElem.outerHtml.trim();
+    } else if (userDescElem.localName == 'td') {
+      String classicHtml = userDescElem.innerHtml;
+      const headerMarker = '<b>Artist Profile:</b><br>';
+      final splitIndex = classicHtml.indexOf(headerMarker);
+      if (splitIndex != -1) {
+        extractedHtml = classicHtml.substring(splitIndex + headerMarker.length).trim();
+      } else {
+        extractedHtml = classicHtml.trim();
+      }
+    } else {
+      extractedHtml = userDescElem.outerHtml.trim();
+    }
+
+    final cleanHtml = _injectFACSS(extractedHtml);
+    _userDescriptionHtml = cleanHtml;
+    return cleanHtml;
   }
 
   /// Fetches and cleans the HTML content for the user description.
@@ -370,7 +414,6 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-
     return FutureBuilder<String>(
       future: _userDescriptionFuture,
       builder: (context, snapshot) {
@@ -403,106 +446,92 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
           return const SizedBox.shrink();
         }
 
-        return SizedBox(
-          height: _webViewHeight,
-          child: InAppWebView(
-            initialData: InAppWebViewInitialData(
-              data: _injectFACSS(cleanHtml),
-              baseUrl: WebUri('https://www.furaffinity.net'),
-              encoding: 'utf-8',
-              mimeType: 'text/html',
-            ),
-            initialSettings: InAppWebViewSettings(
-              javaScriptEnabled: true,
-              useShouldOverrideUrlLoading: true,
-              disableVerticalScroll: false,
-              disableHorizontalScroll: false,
-              verticalScrollBarEnabled: false,
-              horizontalScrollBarEnabled: false,
-              supportMultipleWindows: true,
-              useHybridComposition: widget.forceHybridComposition,
-            ),
-            onCreateWindow: (controller, createWindowReq) async {
-              final url = createWindowReq.request.url?.toString() ?? '';
-              if (url.isNotEmpty) {
-                await _handleFALink(context, url);
-              }
-              return true;
-            },
-            onLoadStop: (controller, url) async {
-
-              String heightString = await controller.evaluateJavascript(
-                source: "document.body.scrollHeight.toString()",
-              );
-              double height = double.tryParse(heightString) ?? 300.0;
-              Future.delayed(const Duration(milliseconds: 30), () {
-                setState(() {
-                  _webViewHeight = height;
-                  _webViewLoaded = true;
+        return Padding(
+          padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+          child: SizedBox(
+            height: _webViewHeight,
+            child: InAppWebView(
+              initialData: InAppWebViewInitialData(
+                data: _injectFACSS(cleanHtml),
+                baseUrl: WebUri('https://www.furaffinity.net'),
+                encoding: 'utf-8',
+                mimeType: 'text/html',
+              ),
+              initialSettings: InAppWebViewSettings(
+                javaScriptEnabled: true,
+                useShouldOverrideUrlLoading: true,
+                disableVerticalScroll: false,
+                disableHorizontalScroll: false,
+                verticalScrollBarEnabled: false,
+                horizontalScrollBarEnabled: false,
+                supportMultipleWindows: true,
+                useHybridComposition: widget.forceHybridComposition,
+              ),
+              onCreateWindow: (controller, createWindowReq) async {
+                final url = createWindowReq.request.url?.toString() ?? '';
+                if (url.isNotEmpty) {
+                  await _handleFALink(context, url);
+                }
+                return true;
+              },
+              onLoadStop: (controller, url) async {
+                String heightString = await controller.evaluateJavascript(
+                  source: "document.body.scrollHeight.toString()",
+                );
+                double height = double.tryParse(heightString) ?? 300.0;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  setState(() {
+                    _webViewHeight = height;
+                    _webViewLoaded = true;
+                  });
+                  widget.onWebViewLoaded?.call(true);
                 });
-
-                widget.onWebViewLoaded?.call(true);
-              });
-            },
-            /*
-
-            shouldOverrideUrlLoading: (controller, navAction) async {
-              if (navAction.isForMainFrame) {
+              },
+              shouldOverrideUrlLoading: (controller, navAction) async {
                 final url = navAction.request.url.toString();
-                await _handleFALink(context, url);
-                return NavigationActionPolicy.CANCEL;
-              }
-              return NavigationActionPolicy.ALLOW;
-            },
 
-             */
-            shouldOverrideUrlLoading: (controller, navAction) async {
-              final url = navAction.request.url.toString();
-
-              if (Platform.isAndroid) {
-                // Android logic
-                if (navAction.isForMainFrame) {
-                  await _handleFALink(context, url);
-                  return NavigationActionPolicy.CANCEL; // stop WebView
-                }
-                return NavigationActionPolicy.ALLOW;
-              } else if (Platform.isIOS) {
-                // iOS logic
-                if (navAction.navigationType == NavigationType.LINK_ACTIVATED) {
-                  if (url == "https://www.furaffinity.net/") {
-                    return NavigationActionPolicy.ALLOW;
+                if (Platform.isAndroid) {
+                  if (navAction.isForMainFrame) {
+                    await _handleFALink(context, url);
+                    return NavigationActionPolicy.CANCEL;
                   }
-                  await _handleFALink(context, url);
-                  return NavigationActionPolicy.CANCEL;
+                  return NavigationActionPolicy.ALLOW;
+                } else if (Platform.isIOS) {
+                  if (navAction.navigationType == NavigationType.LINK_ACTIVATED) {
+                    if (url == "https://www.furaffinity.net/") {
+                      return NavigationActionPolicy.ALLOW;
+                    }
+                    await _handleFALink(context, url);
+                    return NavigationActionPolicy.CANCEL;
+                  }
+                  return NavigationActionPolicy.ALLOW;
                 }
                 return NavigationActionPolicy.ALLOW;
-              }
-              // Default fallback
-              return NavigationActionPolicy.ALLOW;
-            },
-
-
-            onLoadError: (controller, url, code, message) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Failed to load content: $message'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            },
-            onLoadHttpError: (controller, url, statusCode, description) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('HTTP Error $statusCode: $description'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            },
-            onConsoleMessage: (controller, consoleMessage) {
-              debugPrint('WebView Console: ${consoleMessage.message}');
-            },
+              },
+              onLoadError: (controller, url, code, message) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to load content: $message'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              },
+              onLoadHttpError: (controller, url, statusCode, description) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('HTTP Error $statusCode: $description'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              },
+              onConsoleMessage: (controller, consoleMessage) {
+                debugPrint('WebView Console: ${consoleMessage.message}');
+              },
+            ),
           ),
         );
+
       },
     );
   }
@@ -510,7 +539,8 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
 
 class UserDescriptionWebViewScreen extends StatelessWidget {
   final String sanitizedUsername;
-  const UserDescriptionWebViewScreen({Key? key, required this.sanitizedUsername})
+  final String? initialHtml;
+  const UserDescriptionWebViewScreen({Key? key, required this.sanitizedUsername, this.initialHtml})
       : super(key: key);
 
   @override
@@ -518,7 +548,6 @@ class UserDescriptionWebViewScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Select Text'),
-
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
@@ -528,6 +557,7 @@ class UserDescriptionWebViewScreen extends StatelessWidget {
       ),
       body: UserDescriptionWebView(
         sanitizedUsername: sanitizedUsername,
+        initialHtml: initialHtml,
         forceHybridComposition: true,
       ),
     );

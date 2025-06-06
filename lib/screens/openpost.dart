@@ -155,7 +155,12 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     tz.initializeTimeZones();
     _loadSfwEnabled();
 
-    _fetchPostDetails();
+    _fetchPostDetails().then((_) {
+      if (username != null) {
+        _fetchUserPageLinks();
+      }
+    });
+
   }
 
   @override
@@ -689,6 +694,16 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     }
   }
 
+  void _fixPrefixedLinks(dom.Element root) {
+    for (final a in root.querySelectorAll('a[href]')) {
+      final href = a.attributes['href']!;
+      if (href.startsWith('/https://') || href.startsWith('/http://')) {
+        a.attributes['href'] = href.substring(1);
+      }
+    }
+  }
+
+
 
   Future<void> _fetchPostDetails() async {
     setState(() => isLoading = true);
@@ -795,6 +810,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           // Look for either the modern .submission-description or the classic td.alt1
           '.submission-description, td.alt1[width="70%"][valign="top"][align="left"][style*="padding:8px"]'
       );
+    }
+    if (descElem != null) {
+      _fixPrefixedLinks(descElem);
+
     }
 
 
@@ -1143,6 +1162,15 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     String? rawTime = publicationTimeElem?.attributes['title']?.trim();
     rawTime ??= publicationTimeElem?.text.trim();
 
+
+    // 14) Fix links
+    String fixedDescription = '';
+    if (descElem != null) {
+      _fixPrefixedLinks(descElem);
+      fixedDescription = fixTruncatedLinks(descElem.outerHtml);
+
+    }
+
     setState(() {
       username = extractedUsername;
       linkUsername = linkUser;
@@ -1156,9 +1184,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       fullViewImageUrl ??= imageElem?.attributes['src']
           ?.replaceFirst('//', 'https://');
 
-      submissionDescription = fixTruncatedLinks(
-          descElem?.outerHtml.replaceAll('//', 'https://') ?? ''
-      );
+      submissionDescription = fixedDescription;
+
 
       if (rawTime != null && rawTime.isNotEmpty) {
         _parsePublicationTime(rawTime);
@@ -1184,8 +1211,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       imageHeight = localImageHeight;
     });
 
-    // Also fetch watch/block links for that user
-    await _fetchUserPageLinks();
+
 
     //setState(() => isLoading = false);
 
@@ -2752,22 +2778,25 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                               MaterialPageRoute(
                                 builder: (context) => SubmissionDescriptionWebViewScreen(
                                   submissionId: widget.uniqueNumber,
+                                  initialHtml: submissionDescription,
                                 ),
                               ),
                             );
                           }
                         },
+
+
                         child: SubmissionDescriptionWebView(
                           key: _submissionWebViewKey,
                           submissionId: widget.uniqueNumber,
+                          initialHtml: submissionDescription,
+                          forceHybridComposition: false,
                           onHeightChanged: (double height) {
-                            Future.delayed(const Duration(milliseconds: 150), () {
+                            if (!_webViewLoaded) {
                               setState(() {
                                 _webViewLoaded = true;
                               });
-                            });
-
-                            print("WebView loaded with height: $height");
+                            }
                           },
                         ),
                       ),

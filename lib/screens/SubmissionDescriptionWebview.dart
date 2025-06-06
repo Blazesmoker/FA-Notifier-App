@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-
+import 'package:html/dom.dart' as dom;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -15,12 +15,14 @@ import 'user_profile_screen.dart';
 
 class SubmissionDescriptionWebView extends StatefulWidget {
   final String submissionId;
+  final String? initialHtml;
   final VoidCallback? onDispose;
   final bool forceHybridComposition;
   final void Function(double height)? onHeightChanged;
 
   const SubmissionDescriptionWebView({
     required this.submissionId,
+    this.initialHtml,
     this.onDispose,
     this.forceHybridComposition = false,
     this.onHeightChanged,
@@ -47,7 +49,11 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
   @override
   void initState() {
     super.initState();
-    _submissionDescriptionFuture = _fetchCleanHTML();
+    if (widget.initialHtml != null) {
+      _submissionDescriptionFuture = _processInitialHtml(widget.initialHtml!);
+    } else {
+      _submissionDescriptionFuture = _fetchCleanHTML();
+    }
   }
 
   @override
@@ -60,6 +66,43 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
 
   @override
   bool get wantKeepAlive => true;
+
+  void _fixPrefixedLinks(dom.Element root) {
+    for (final a in root.querySelectorAll('a[href]')) {
+      final href = a.attributes['href']!;
+      if (href.startsWith('/https://') || href.startsWith('/http://')) {
+        a.attributes['href'] = href.substring(1);   // trim the first "/"
+      }
+    }
+  }
+
+  Future<String> _processInitialHtml(String html) async {
+    final doc = html_parser.parse(html);
+    doc.querySelectorAll(
+      'script, .footerAds, #ddmenu, .mobile-navigation, '
+          '.mobile-notification-bar, #header, .online-stats, .news-block, '
+          '.submission-sidebar, .leaderboardAd, .footerAds, .online-stats',
+    ).forEach((e) => e.remove());
+
+    var submissionDesc = doc.querySelector(
+      '.submission-description, '
+          'td.alt1[width="70%"][valign="top"][align="left"][style*="padding:8px"]',
+    );
+
+    submissionDesc ??= doc.body;
+
+
+
+    if (submissionDesc == null) {
+      return '<p>No submission description found.</p>';
+    }
+
+    _fixPrefixedLinks(submissionDesc);
+
+    final cleanHtml = _injectFACSS(submissionDesc.outerHtml);
+    _submissionDescriptionHtml = cleanHtml;
+    return cleanHtml;
+  }
 
   /// Fetches and cleans the HTML content for the submission description.
   Future<String> _fetchCleanHTML() async {
@@ -239,6 +282,7 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
 
   Future<void> _handleFALink(BuildContext context, String url, {String? htmlSource}) async {
     String fullUrlToMatch = url;
+    print("full URL: $fullUrlToMatch");
     if (url.contains('.....')) {
       final recoveredLink = _getFullLinkFromFetchedHtml(url, htmlSource: htmlSource);
       if (recoveredLink != null) {
@@ -381,123 +425,92 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
         }
         final cleanHtml = snapshot.data ?? '';
         _submissionDescriptionHtml ??= cleanHtml;
-        return SizedBox(
-          height: _webViewHeight,
-          child: InAppWebView(
-            initialData: InAppWebViewInitialData(
-              data: _injectFACSS(cleanHtml),
-              baseUrl: WebUri('https://www.furaffinity.net'),
-              encoding: 'utf-8',
-              mimeType: 'text/html',
-            ),
-            initialSettings: InAppWebViewSettings(
-              javaScriptEnabled: true,
-              useShouldOverrideUrlLoading: true,
-              disableVerticalScroll: false,
-              disableHorizontalScroll: false,
-              verticalScrollBarEnabled: false,
-              horizontalScrollBarEnabled: false,
-              supportMultipleWindows: true,
-              // useWideViewPort: true,
-              // loadWithOverviewMode: true,
-              useHybridComposition: widget.forceHybridComposition,
-            ),
-            onCreateWindow: (controller, createWindowReq) async {
-              final url = createWindowReq.request.url?.toString() ?? '';
-              if (url.isNotEmpty) {
-                await _handleFALink(context, url);
-              }
-              return true;
-            },
 
-            onLoadStop: (controller, url) async {
-              String heightString = await controller.evaluateJavascript(
-                source: "document.body.scrollHeight.toString()",
-              );
-              double height = double.tryParse(heightString) ?? 300.0;
-              setState(() {
-                _webViewHeight = height;
-              });
-              // Notify the parent that the webview is loaded and send the height.
-              if (widget.onHeightChanged != null) {
-                widget.onHeightChanged!(height);
-              }
-
-            },
-            //below android version
-            /*shouldOverrideUrlLoading: (controller, navAction) async {
-              // Only care about the top frame.
-              if (navAction.isForMainFrame) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+          child: SizedBox(
+            height: _webViewHeight,
+            child: InAppWebView(
+              initialData: InAppWebViewInitialData(
+                data: _injectFACSS(cleanHtml),
+                baseUrl: WebUri('https://www.furaffinity.net'),
+                encoding: 'utf-8',
+                mimeType: 'text/html',
+              ),
+              initialSettings: InAppWebViewSettings(
+                javaScriptEnabled: true,
+                useShouldOverrideUrlLoading: true,
+                disableVerticalScroll: false,
+                disableHorizontalScroll: false,
+                verticalScrollBarEnabled: false,
+                horizontalScrollBarEnabled: false,
+                supportMultipleWindows: true,
+                // useWideViewPort: true,
+                // loadWithOverviewMode: true,
+                useHybridComposition: widget.forceHybridComposition,
+              ),
+              onCreateWindow: (controller, createWindowReq) async {
+                final url = createWindowReq.request.url?.toString() ?? '';
+                if (url.isNotEmpty) {
+                  await _handleFALink(context, url);
+                }
+                return true;
+              },
+              onLoadStop: (controller, url) async {
+                String heightString = await controller.evaluateJavascript(
+                  source: "document.body.scrollHeight.toString()",
+                );
+                double height = double.tryParse(heightString) ?? 300.0;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  setState(() {
+                    _webViewHeight = height;
+                  });
+                  if (widget.onHeightChanged != null) {
+                    widget.onHeightChanged!(height);
+                  }
+                });
+              },
+              shouldOverrideUrlLoading: (controller, navAction) async {
                 final url = navAction.request.url.toString();
-                await _handleFALink(context, url);
-                return NavigationActionPolicy.CANCEL;   // stop webView
-              }
-              return NavigationActionPolicy.ALLOW;
-            },
-             */
-
-            //below ios version
-            /*shouldOverrideUrlLoading: (controller, navAction) async {
-              // Only if this was a link tap (user-initiated)
-              if (navAction.navigationType == NavigationType.LINK_ACTIVATED) {
-                final tappedUrl = navAction.request.url.toString();
-
-                if (tappedUrl == "https://www.furaffinity.net/") {
+                if (Platform.isAndroid) {
+                  if (navAction.isForMainFrame) {
+                    await _handleFALink(context, url);
+                    return NavigationActionPolicy.CANCEL;
+                  }
+                  return NavigationActionPolicy.ALLOW;
+                } else if (Platform.isIOS) {
+                  if (navAction.navigationType == NavigationType.LINK_ACTIVATED) {
+                    if (url == "https://www.furaffinity.net/") {
+                      return NavigationActionPolicy.ALLOW;
+                    }
+                    await _handleFALink(context, url);
+                    return NavigationActionPolicy.CANCEL;
+                  }
                   return NavigationActionPolicy.ALLOW;
                 }
-                await _handleFALink(context, tappedUrl);
-                return NavigationActionPolicy.CANCEL;
-              }
-              return NavigationActionPolicy.ALLOW;
-            },
-
-             */
-            shouldOverrideUrlLoading: (controller, navAction) async {
-              final url = navAction.request.url.toString();
-
-              if (Platform.isAndroid) {
-                // Android logic
-                if (navAction.isForMainFrame) {
-                  await _handleFALink(context, url);
-                  return NavigationActionPolicy.CANCEL; // stop WebView
-                }
                 return NavigationActionPolicy.ALLOW;
-              } else if (Platform.isIOS) {
-                // iOS logic
-                if (navAction.navigationType == NavigationType.LINK_ACTIVATED) {
-                  if (url == "https://www.furaffinity.net/") {
-                    return NavigationActionPolicy.ALLOW;
-                  }
-                  await _handleFALink(context, url);
-                  return NavigationActionPolicy.CANCEL;
-                }
-                return NavigationActionPolicy.ALLOW;
-              }
-              // Default fallback
-              return NavigationActionPolicy.ALLOW;
-            },
-
-
-
-            onLoadError: (controller, url, code, message) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Failed to load content: $message'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            },
-            onLoadHttpError: (controller, url, statusCode, description) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('HTTP Error $statusCode: $description'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            },
-            onConsoleMessage: (controller, consoleMessage) {
-              print('WebView Console: ${consoleMessage.message}');
-            },
+              },
+              onLoadError: (controller, url, code, message) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to load content: $message'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              },
+              onLoadHttpError: (controller, url, statusCode, description) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('HTTP Error $statusCode: $description'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              },
+              onConsoleMessage: (controller, consoleMessage) {
+                print('WebView Console: ${consoleMessage.message}');
+              },
+            ),
           ),
         );
       },
@@ -508,7 +521,8 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
 
 class SubmissionDescriptionWebViewScreen extends StatelessWidget {
   final String submissionId;
-  const SubmissionDescriptionWebViewScreen({Key? key, required this.submissionId})
+  final String? initialHtml;
+  const SubmissionDescriptionWebViewScreen({Key? key, required this.submissionId, this.initialHtml})
       : super(key: key);
 
   @override
@@ -523,7 +537,7 @@ class SubmissionDescriptionWebViewScreen extends StatelessWidget {
       ),
       body: SubmissionDescriptionWebView(
         submissionId: submissionId,
-
+        initialHtml: initialHtml,
         forceHybridComposition: true,
       ),
     );

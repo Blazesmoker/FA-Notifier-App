@@ -461,7 +461,8 @@ class _HomeScreenState extends State<HomeScreen> {
       bool isClassicTheme = html != null && html.contains('data-static-path=\"/themes/classic\"');
 
 
-      bool usernameElementFound = isClassicTheme && html.contains('<a id=\"my-username\" href=\"/user/nevermoan/\"');
+      bool usernameElementFound = isClassicTheme && RegExp(r'<(?:a|span) id="my-username"').hasMatch(html);
+
 
 
       bool avatarElementFound = !isClassicTheme && html != null && html.contains('loggedin_user_avatar');
