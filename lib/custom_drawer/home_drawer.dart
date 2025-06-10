@@ -73,7 +73,6 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
   bool _sfwEnabled = true;
   static const String NsfwConfirmationDisabled = 'nsfwConfirmationDisabled';
 
-
   int _previousTotalSumOfNotifications = 0;
   static const String kPreviousTotalSumKey = 'previousTotalSumOfNotifications';
 
@@ -124,12 +123,10 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
     if (_timer == null || !_timer!.isActive) {
       _timer = Timer.periodic(
         const Duration(seconds: 120),
-            (Timer t) => fetchNotifications(),
+        (Timer t) => fetchNotifications(),
       );
     }
   }
-
-
 
   Future<void> fetchNotifications() async {
     try {
@@ -139,24 +136,24 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
         setState(() {
           _notifications = notifications != null
               ? Notifications(
-            submissions: notifications.submissions.replaceAll(',', ''),
-            watches: notifications.watches.replaceAll(',', ''),
-            journals: notifications.journals.replaceAll(',', ''),
-            notes: notifications.notes.replaceAll(',', ''),
-            comments: notifications.comments.replaceAll(',', ''),
-            favorites: notifications.favorites.replaceAll(',', ''),
-            registeredUsersOnline:
-            notifications.registeredUsersOnline.replaceAll(',', ''),
-          )
+                  submissions: notifications.submissions.replaceAll(',', ''),
+                  watches: notifications.watches.replaceAll(',', ''),
+                  journals: notifications.journals.replaceAll(',', ''),
+                  notes: notifications.notes.replaceAll(',', ''),
+                  comments: notifications.comments.replaceAll(',', ''),
+                  favorites: notifications.favorites.replaceAll(',', ''),
+                  registeredUsersOnline:
+                      notifications.registeredUsersOnline.replaceAll(',', ''),
+                )
               : Notifications(
-            submissions: '0',
-            watches: '0',
-            journals: '0',
-            notes: '0',
-            comments: '0',
-            favorites: '0',
-            registeredUsersOnline: '0',
-          );
+                  submissions: '0',
+                  watches: '0',
+                  journals: '0',
+                  notes: '0',
+                  comments: '0',
+                  favorites: '0',
+                  registeredUsersOnline: '0',
+                );
         });
 
         int actualNotesCount = int.tryParse(_notifications.notes) ?? 0;
@@ -165,17 +162,17 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
 
         print(
           'Drawer: Notifications - '
-              'Submissions: ${_notifications.submissions}, '
-              'Watches: ${_notifications.watches}, '
-              'Journals: ${_notifications.journals}, '
-              'Notes: ${_notifications.notes}, '
-              'Comments: ${_notifications.comments}, '
-              'Favorites: ${_notifications.favorites}, '
-              'RegisteredUsersOnline: ${_notifications.registeredUsersOnline}',
+          'Submissions: ${_notifications.submissions}, '
+          'Watches: ${_notifications.watches}, '
+          'Journals: ${_notifications.journals}, '
+          'Notes: ${_notifications.notes}, '
+          'Comments: ${_notifications.comments}, '
+          'Favorites: ${_notifications.favorites}, '
+          'RegisteredUsersOnline: ${_notifications.registeredUsersOnline}',
         );
 
         final settings =
-        Provider.of<NotificationSettingsProvider>(context, listen: false);
+            Provider.of<NotificationSettingsProvider>(context, listen: false);
         final int submissionsCount = settings.drawerSubmissionsEnabled
             ? (int.tryParse(_notifications.submissions) ?? 0)
             : 0;
@@ -216,7 +213,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
 
           if (messageBody.isNotEmpty) {
             final NotificationService notificationService =
-            NotificationService();
+                NotificationService();
             await notificationService.showNotification(
               999999,
               'New FA Activity',
@@ -225,7 +222,8 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
               'activities',
             );
 
-            print('[HomeDrawer] Sent new activities notification: $messageBody');
+            print(
+                '[HomeDrawer] Sent new activities notification: $messageBody');
             _previousSumOfNotifications = newSum;
             await _saveCurrentSum(newSum);
           }
@@ -271,7 +269,6 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
         labelName: 'Upload Submission',
         icon: const Icon(Icons.upload),
       ),
-
       DrawerList(
         index: DrawerIndex.Help,
         labelName: 'Settings',
@@ -324,7 +321,6 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
     });
   }
 
-
   Widget inkwell(DrawerList listData) {
     final isKoFi = listData.labelName == 'Support us on Ko-Fi!';
     return Material(
@@ -359,8 +355,10 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                 },
                 child: Container(
                   width: double.infinity,
-                  margin: const EdgeInsets.only(left: 8, right: 16, top: 9, bottom: 9),
-                  padding: const EdgeInsets.only(left: 8, right: 16, top: 9, bottom: 9),
+                  margin: const EdgeInsets.only(
+                      left: 8, right: 16, top: 9, bottom: 9),
+                  padding: const EdgeInsets.only(
+                      left: 8, right: 16, top: 9, bottom: 9),
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
@@ -399,7 +397,6 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                   ),
                 ),
               )
-
             else
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -409,21 +406,21 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                     const Padding(padding: EdgeInsets.all(4.0)),
                     listData.isAssetsImage
                         ? SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: Image.asset(
-                        listData.imageName,
-                        color: widget.screenIndex == listData.index
-                            ? Colors.white
-                            : Colors.grey.shade300,
-                      ),
-                    )
+                            width: 24,
+                            height: 24,
+                            child: Image.asset(
+                              listData.imageName,
+                              color: widget.screenIndex == listData.index
+                                  ? Colors.white
+                                  : Colors.grey.shade300,
+                            ),
+                          )
                         : Icon(
-                      listData.icon?.icon,
-                      color: widget.screenIndex == listData.index
-                          ? Colors.grey
-                          : Colors.grey,
-                    ),
+                            listData.icon?.icon,
+                            color: widget.screenIndex == listData.index
+                                ? Colors.grey
+                                : Colors.grey,
+                          ),
                     const Padding(padding: EdgeInsets.all(4.0)),
                     Text(
                       listData.labelName,
@@ -505,7 +502,6 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                   Navigator.of(context).pop();
 
                   _handleFALink(context, url);
-
                 } else {
                   Navigator.of(context).pop();
                 }
@@ -523,7 +519,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
       String cleanUrl = url.trim();
 
       // Add protocol if missing
-      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://'))  {
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
         cleanUrl = 'https://$cleanUrl';
       }
 
@@ -553,7 +549,8 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
         final String tappedUsername = galleryMatch.group(1)!;
         final String folderNumber = galleryMatch.group(2)!;
         final String folderName = galleryMatch.group(3)!;
-        final String folderUrl = 'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+        final String folderUrl =
+            'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
 
         Navigator.push(
           context,
@@ -634,7 +631,8 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => OpenPost(uniqueNumber: submissionId, imageUrl: ''),
+            builder: (context) =>
+                OpenPost(uniqueNumber: submissionId, imageUrl: ''),
           ),
         );
         return;
@@ -643,7 +641,6 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
       // 5. Fallback: open externally
       print('No pattern matched, opening externally: $cleanUrl');
       await launchUrlString(cleanUrl, mode: LaunchMode.externalApplication);
-
     } catch (e) {
       print('Error handling FA link: $e');
       if (context.mounted) {
@@ -656,7 +653,6 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
       }
     }
   }
-  
 
   Future<void> _loadSfwEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -683,14 +679,17 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16.0)),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Confirm Mode Switch", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text("Confirm Mode Switch",
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
                     Text(dialogMessage, style: const TextStyle(fontSize: 16)),
                     const SizedBox(height: 16),
@@ -698,16 +697,20 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         TextButton(
-                          onPressed: () => Navigator.of(dialogContext).pop(false),
-                          style: TextButton.styleFrom(backgroundColor: Colors.white),
-                          child: const Text("No", style: TextStyle(color: Colors.black)),
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(false),
+                          style: TextButton.styleFrom(
+                              backgroundColor: Colors.white),
+                          child: const Text("No",
+                              style: TextStyle(color: Colors.black)),
                         ),
                         const SizedBox(width: 8),
                         TextButton(
                           onPressed: () {
                             Navigator.of(dialogContext).pop(true);
                           },
-                          style: TextButton.styleFrom(backgroundColor: const Color(0xFFE09321)),
+                          style: TextButton.styleFrom(
+                              backgroundColor: const Color(0xFFE09321)),
                           child: Text("Yes", style: TextStyle(color: yesColor)),
                         ),
                       ],
@@ -720,9 +723,12 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                         CheckboxTheme(
                           data: CheckboxThemeData(
                             visualDensity: VisualDensity.compact,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            side: const BorderSide(width: 1, color: Colors.white),
-                            fillColor: WidgetStateProperty.resolveWith<Color>((Set<WidgetState> states) {
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            side:
+                                const BorderSide(width: 1, color: Colors.white),
+                            fillColor: WidgetStateProperty.resolveWith<Color>(
+                                (Set<WidgetState> states) {
                               if (states.contains(WidgetState.selected)) {
                                 return const Color(0xFFE09321);
                               }
@@ -739,8 +745,6 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                             },
                           ),
                         ),
-
-
                         const SizedBox(width: 1),
                         const Text("Don't ask anymore",
                             style: TextStyle(fontSize: 14)),
@@ -899,248 +903,255 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
     }
 
     return Container(
-      color: AppTheme.background,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: <Widget>[
-          // User Profile Section with avatar
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.only(top: 40.0),
-            color: Color(0xFF111111),
-            child: Container(
-              padding: const EdgeInsets.only(right: 0.0, left: 0.0, top: 8.0, bottom: 4.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: <Widget>[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Avatar widget
-                      GestureDetector(
-                        onTap: () {
-                          if (widget.userProfile != null &&
-                              widget.userProfile!.profileImageUrl.isNotEmpty) {
-                            final String imageUrl = widget.userProfile!.profileImageUrl;
-                            final String filename = imageUrl.split('/').last;
-                            final String nickname = filename.contains('.')
-                                ? filename.substring(0, filename.lastIndexOf('.'))
-                                : filename;
-                            final String lowercaseNickname = nickname.toLowerCase();
-
-                            print("Extracted nickname: $lowercaseNickname");
-
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => UserProfileScreen(
-                                  nickname: lowercaseNickname,
-                                ),
-                              ),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('User profile not available'),
-                              ),
-                            );
-                          }
-                        },
-                        child: widget.userProfile != null &&
-                            widget.userProfile!.profileImageUrl.isNotEmpty
-                            ? AnimatedBuilder(
-                          animation: widget.iconAnimationController!,
-                          builder:
-                              (BuildContext context, Widget? child) {
-                            return ScaleTransition(
-                              scale: AlwaysStoppedAnimation<double>(
-                                1.0 -
-                                    (widget.iconAnimationController!
-                                        .value) *
-                                        0.2,
-                              ),
-                              child: RotationTransition(
-                                turns:
-                                const AlwaysStoppedAnimation<double>(
-                                    0.0),
-                                child: Container(
-                                  height: 110,
-                                  width: 110,
-                                  decoration: BoxDecoration(
-                                    borderRadius:
-                                    BorderRadius.circular(12.0),
-                                    boxShadow: <BoxShadow>[
-                                      BoxShadow(
-                                        color: AppTheme.grey
-                                            .withOpacity(0.0),
-                                        offset: const Offset(2.0, 4.0),
-                                        blurRadius: 8,
-                                      ),
-                                    ],
+      color: Color(0xFF111111),
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: <Widget>[
+            // User Profile Section with avatar
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.only(top: 0.0),
+              color: Color(0xFF111111),
+              child: Container(
+                padding: const EdgeInsets.only(
+                    right: 0.0, left: 0.0, top: 4.0, bottom: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: <Widget>[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Avatar widget
+                        GestureDetector(
+                          onTap: () {
+                            if (widget.userProfile != null &&
+                                widget
+                                    .userProfile!.profileImageUrl.isNotEmpty) {
+                              final String imageUrl =
+                                  widget.userProfile!.profileImageUrl;
+                              final String filename = imageUrl.split('/').last;
+                              final String nickname = filename.contains('.')
+                                  ? filename.substring(
+                                      0, filename.lastIndexOf('.'))
+                                  : filename;
+                              final String lowercaseNickname =
+                                  nickname.toLowerCase();
+                              print("Extracted nickname: $lowercaseNickname");
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => UserProfileScreen(
+                                    nickname: lowercaseNickname,
                                   ),
-                                  child: CachedNetworkImage(
-                                    imageUrl: widget
-                                        .userProfile!.profileImageUrl,
-                                    fit: BoxFit.cover,
-                                    placeholder: (context, url) =>
-                                    const Center(
-                                      child: Center(
-                                        child:
-                                        PulsatingLoadingIndicator(
-                                          size: 58.0,
-                                          assetPath:
-                                          'assets/icons/fathemed.png',
+                                ),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('User profile not available'),
+                                ),
+                              );
+                            }
+                          },
+                          child: widget.userProfile != null &&
+                                  widget.userProfile!.profileImageUrl.isNotEmpty
+                              ? AnimatedBuilder(
+                                  animation: widget.iconAnimationController!,
+                                  builder:
+                                      (BuildContext context, Widget? child) {
+                                    return ScaleTransition(
+                                      scale: AlwaysStoppedAnimation<double>(
+                                        1.0 -
+                                            (widget.iconAnimationController!
+                                                    .value) *
+                                                0.2,
+                                      ),
+                                      child: RotationTransition(
+                                        turns: const AlwaysStoppedAnimation<
+                                            double>(0.0),
+                                        child: Container(
+                                          height: 110,
+                                          width: 110,
+                                          decoration: BoxDecoration(
+                                            borderRadius:
+                                                BorderRadius.circular(12.0),
+                                            boxShadow: <BoxShadow>[
+                                              BoxShadow(
+                                                color: AppTheme.grey
+                                                    .withOpacity(0.0),
+                                                offset: const Offset(2.0, 4.0),
+                                                blurRadius: 8,
+                                              ),
+                                            ],
+                                          ),
+                                          child: CachedNetworkImage(
+                                            imageUrl: widget
+                                                .userProfile!.profileImageUrl,
+                                            fit: BoxFit.cover,
+                                            placeholder: (context, url) =>
+                                                const Center(
+                                              child: Center(
+                                                child:
+                                                    PulsatingLoadingIndicator(
+                                                  size: 58.0,
+                                                  assetPath:
+                                                      'assets/icons/fathemed.png',
+                                                ),
+                                              ),
+                                            ),
+                                            errorWidget: (context, url, error) {
+                                              if (error
+                                                  .toString()
+                                                  .contains('404')) {
+                                                return Image.asset(
+                                                  'assets/images/defaultpic.gif',
+                                                  fit: BoxFit.cover,
+                                                );
+                                              } else {
+                                                return const Icon(
+                                                  Icons.person,
+                                                  size: 60,
+                                                  color: Colors.white,
+                                                );
+                                              }
+                                            },
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    errorWidget: (context, url, error) {
-                                      if (error
-                                          .toString()
-                                          .contains('404')) {
-                                        return Image.asset(
-                                          'assets/images/defaultpic.gif',
-                                          fit: BoxFit.cover,
-                                        );
-                                      } else {
-                                        return const Icon(
-                                          Icons.person,
-                                          size: 60,
-                                          color: Colors.white,
-                                        );
-                                      }
-                                    },
+                                    );
+                                  },
+                                )
+                              : ClipRRect(
+                                  borderRadius: const BorderRadius.all(
+                                    Radius.circular(60.0),
                                   ),
-
+                                  child: Image.asset(
+                                    'assets/images/defaultpic.gif',
+                                    width: 120,
+                                    height: 120,
+                                    fit: BoxFit.cover,
+                                  ),
                                 ),
-
-                              ),
-                            );
-                          },
-                        )
-                            : ClipRRect(
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(60.0),
-                          ),
-                          child: Image.asset(
-                            'assets/images/defaultpic.gif',
-                            width: 120,
-                            height: 120,
-                            fit: BoxFit.cover,
-                          ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Divider(
+                      height: 4.0,
+                      color: Colors.black,
+                      thickness: 4.0,
+                    ),
+                    const SizedBox(height: 8),
+                    // Username
+                    Text(
+                      widget.userProfile?.username ?? 'Username',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        fontSize: 19,
                       ),
-
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-
-
-                  const Divider(
-                    height: 4.0,
-                    color: Colors.black,
-                    thickness: 4.0,
-                  ),
-                  const SizedBox(height: 8),
-                  // Username
-                  Text(
-                    widget.userProfile?.username ?? 'Username',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      fontSize: 19,
                     ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  const Divider(
-                    height: 3.0,
-                    color: Colors.black,
-                    thickness: 3.0,
-                  ),
-                  const SizedBox(height: 6),
-                  // Notifications Row
-                  Container(
-                    color: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: badgesWithSpacing,
+                    const SizedBox(height: 8),
+                    const Divider(
+                      height: 3.0,
+                      color: Colors.black,
+                      thickness: 3.0,
                     ),
-                  ),
-
-
-                ],
+                    const SizedBox(height: 6),
+                    // Notifications Row
+                    Container(
+                      color: Colors.black,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: badgesWithSpacing,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-
-          // Drawer Items
-          Expanded(
-            child: ListView.builder(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.all(0.0),
-              itemCount: drawerList?.length,
-              itemBuilder: (BuildContext context, int index) {
-                return inkwell(drawerList![index]);
-              },
-            ),
-          ),
-          // NSFW Toggle
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12.0, top: 11.0, right: 16.0, left: 16.0),
-            child: Row(
-              children: [
-                FlutterSwitch(
-                  width: 68.0,
-                  height: 30.0,
-                  toggleSize: 20.0,
-                  value: !_sfwEnabled,
-                  borderRadius: 18.0,
-                  padding: 3,
-                  activeText: 'NSFW',
-                  inactiveText: ' SFW',
-                  valueFontSize: 11.6,
-                  activeTextColor: Colors.black,
-                  activeToggleColor: Colors.black,
-                  inactiveTextColor: Colors.white,
-                  activeColor: Color(0xFFE09321),
-                  inactiveColor: Color(0xFF111111),
-                  showOnOff: true,
-                  onToggle: (val) async {
-                    final prefs = await SharedPreferences.getInstance();
-                    bool confirmationDisabled = prefs.getBool(NsfwConfirmationDisabled) ?? false;
-
-                    if (confirmationDisabled) {
-                      await _toggleNsfwMode();
-                    } else {
-                      await _showNsfwConfirmationDialog();
-                    }
-                  },
+            // Drawer Items
+            Expanded(
+              child: Container(
+                color: AppTheme.background,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.all(0.0),
+                        itemCount: drawerList?.length,
+                        itemBuilder: (BuildContext context, int index) {
+                          return inkwell(drawerList![index]);
+                        },
+                      ),
+                    ),
+                    // NSFW Toggle
+                    Padding(
+                      padding: const EdgeInsets.only(
+                          bottom: 12.0, top: 11.0, right: 16.0, left: 16.0),
+                      child: Row(
+                        children: [
+                          FlutterSwitch(
+                            width: 68.0,
+                            height: 30.0,
+                            toggleSize: 20.0,
+                            value: !_sfwEnabled,
+                            borderRadius: 18.0,
+                            padding: 3,
+                            activeText: 'NSFW',
+                            inactiveText: ' SFW',
+                            valueFontSize: 11.6,
+                            activeTextColor: Colors.black,
+                            activeToggleColor: Colors.black,
+                            inactiveTextColor: Colors.white,
+                            activeColor: Color(0xFFE09321),
+                            inactiveColor: Color(0xFF111111),
+                            showOnOff: true,
+                            onToggle: (val) async {
+                              final prefs =
+                                  await SharedPreferences.getInstance();
+                              bool confirmationDisabled =
+                                  prefs.getBool(NsfwConfirmationDisabled) ??
+                                      false;
+                              if (confirmationDisabled) {
+                                await _toggleNsfwMode();
+                              } else {
+                                await _showNsfwConfirmationDialog();
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(
+                      height: 1.0,
+                      color: Color(0xFF111111),
+                      thickness: 3.0,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8.0, horizontal: 16.0),
+                      child: Text(
+                        'Registered users online: ${_notifications.registeredUsersOnline}',
+                        style:
+                            const TextStyle(fontSize: 14, color: Colors.white),
+                        textAlign: TextAlign.left,
+                      ),
+                    ),
+                    SizedBox(height: MediaQuery.of(context).padding.bottom),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-          const Divider(
-            height: 1.0,
-            color: Color(0xFF111111),
-            thickness: 3.0,
-          ),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-            child: Text(
-              'Registered users online: ${_notifications.registeredUsersOnline}',
-              style: const TextStyle(fontSize: 14, color: Colors.white),
-              textAlign: TextAlign.left,
-            ),
-          ),
-
-          SizedBox(height: MediaQuery.of(context).padding.bottom),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
-

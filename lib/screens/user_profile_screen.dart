@@ -2987,7 +2987,16 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                 SliverAppBar(
                   centerTitle: false,
                   leading: IconButton(
-                    icon: const Icon(Icons.arrow_back),
+                    icon: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Positioned(left: 1, child: Icon(Icons.arrow_back, size: 24, color: Color(0xFF111111))),
+                        Positioned(right: 1, child: Icon(Icons.arrow_back, size: 24, color: Color(0xFF111111))),
+                        Positioned(top: 1, child: Icon(Icons.arrow_back, size: 24, color: Color(0xFF111111))),
+                        Positioned(bottom: 1, child: Icon(Icons.arrow_back, size: 24, color: Color(0xFF111111))),
+                        Icon(Icons.arrow_back, size: 24, color: Colors.white),
+                      ],
+                    ),
                     onPressed: () {
                       _webViewKey.currentState?.hideWebView();
                       Future.delayed(const Duration(milliseconds: 5), () {
@@ -2998,14 +3007,32 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                   title: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        symbolUsername ?? 'Profile',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18.0,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Stack(
+                        children: [
+                          // Stroked text as outline
+                          Text(
+                            symbolUsername ?? 'Profile',
+                            style: TextStyle(
+                              fontSize: 18.0,
+                              fontWeight: FontWeight.bold,
+                              foreground: Paint()
+                                ..style = PaintingStyle.stroke
+                                ..strokeWidth = 2
+                                ..color = Color(0xFF111111),
+                            ),
+                          ),
+                          // Filled text on top
+                          Text(
+                            symbolUsername ?? 'Profile',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18.0,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
+
                       if (symbolUsername != null &&
                           symbolUsername!.startsWith('!'))
                         const Padding(
@@ -3035,7 +3062,17 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                     Builder(
                       builder: (context) {
                         return IconButton(
-                          icon: const Icon(Icons.more_vert),
+                          icon: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Positioned(left: 1, child: Icon(Icons.more_vert, size: 24, color: Color(0xFF111111))),
+                              Positioned(right: 1, child: Icon(Icons.more_vert, size: 24, color: Color(0xFF111111))),
+                              Positioned(top: 1, child: Icon(Icons.more_vert, size: 24, color: Color(0xFF111111))),
+                              Positioned(bottom: 1, child: Icon(Icons.more_vert, size: 24, color: Color(0xFF111111))),
+                              Icon(Icons.more_vert, size: 24, color: Colors.white),
+                            ],
+                          ),
+
                           onPressed: () async {
                             final RenderBox button =
                             context.findRenderObject() as RenderBox;
