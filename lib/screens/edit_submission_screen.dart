@@ -50,6 +50,9 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
             }
             await _injectCustomCssAndJs();
           },
+          onPageFinished: (url) async {
+            await _injectCustomCssAndJs();
+          },
           onWebResourceError: (error) {
             debugPrint("Web resource error: $error");
           },
@@ -202,7 +205,9 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: WebViewWidget(controller: _webViewController),
+      body: SafeArea(child:
+    WebViewWidget(controller: _webViewController),
+      ),
     );
   }
 }

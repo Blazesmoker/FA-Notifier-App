@@ -56,7 +56,8 @@ class _NotificationsSettingsScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Notifications Settings')),
-      body: SingleChildScrollView(
+      body: SafeArea(child:
+    SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -200,6 +201,7 @@ class _NotificationsSettingsScreenState
             ],
           ),
         ),
+      ),
       ),
     );
   }

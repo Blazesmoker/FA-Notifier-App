@@ -2966,7 +2966,10 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       length: ProfileSection.values.length,
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: Stack(
+        body:
+        SafeArea(
+          top: false,
+        child: Stack(
           children: [
 
           GestureDetector(
@@ -3471,6 +3474,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
               ),
           ],
         ),
+        ),
         floatingActionButton: AnimatedBuilder(
           animation: _tabController,
           builder: (context, child) {
@@ -3681,8 +3685,10 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
               initialHtml: userDescription,
               forceHybridComposition: false,
               onWebViewLoaded: (loaded) {
-                setState(() {
-                  _webViewLoaded = loaded;
+                Future.delayed(Duration(milliseconds: 25), () {
+                  setState(() {
+                    _webViewLoaded = loaded;
+                  });
                 });
               },
             ),

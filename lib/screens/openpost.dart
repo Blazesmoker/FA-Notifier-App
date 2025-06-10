@@ -2793,8 +2793,12 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                           forceHybridComposition: false,
                           onHeightChanged: (double height) {
                             if (!_webViewLoaded) {
-                              setState(() {
-                                _webViewLoaded = true;
+                              Future.delayed(const Duration(milliseconds: 25), () {
+                                if (mounted) {
+                                  setState(() {
+                                    _webViewLoaded = true;
+                                  });
+                                }
                               });
                             }
                           },

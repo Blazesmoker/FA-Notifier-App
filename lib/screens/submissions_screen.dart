@@ -707,29 +707,19 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
         drawerEnableOpenDragGesture: false,
         appBar: AppBar(
           centerTitle: true,
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('Submissions'),
-              if (_selectionMode)
-                Padding(
-                  padding: const EdgeInsets.only(left: 11.0, right: 8.0),
-                  child: GestureDetector(
-                    onTap: _toggleAllSelection,
-                    child: const Icon(Icons.library_add_check, size: 22),
-                  ),
-                ),
-            ],
-          ),
-
+          title: const Text('Submissions'),
           actions: [
+            if (_selectionMode)
+              IconButton(
+                icon: const Icon(Icons.library_add_check, size: 22),
+                tooltip: 'Select All',
+                onPressed: _toggleAllSelection,
+              ),
             IconButton(
               icon: Icon(_selectionMode ? Icons.delete_forever : Icons.delete),
               tooltip: 'Delete Selected',
               onPressed: _onTrashIconPressed,
             ),
-
             IconButton(
               icon: const Icon(Icons.block, color: Color(0xFFE09321)),
               tooltip: 'Nuke All',
@@ -746,7 +736,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
             itemCount: _listItems.length + (_isLoading ? 1 : 0),
             itemBuilder: (context, index) {
               if (index == _listItems.length) {
-                // Show a loading indicator at the bottom
+                // loading indicator at the bottom
                 return const Padding(
                   padding: EdgeInsets.only(top: 168.0),
                   child: Center(
@@ -769,6 +759,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       ),
     );
   }
+
 
   Widget _buildDateHeader(String dateLabel, bool showDividerAfterGroup) {
     return Column(

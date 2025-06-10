@@ -44,35 +44,37 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.phone_android),
-                  title: const Text('App Settings'),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const AppSettingsScreen(),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(
-                  height: 1.0,
-                  color: Color(0xFF111111),
-                  thickness: 3.0,
-                ),
+    return SafeArea(
+      top: false,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Settings'),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: ListView(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.phone_android),
+                    title: const Text('App Settings'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AppSettingsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const Divider(
+                    height: 1.0,
+                    color: Color(0xFF111111),
+                    thickness: 3.0,
+                  ),
 
-                //TODO: Site Settings Screen
-                /*
+                  //TODO: Site Settings Screen
+                  /*
               ListTile(
                 leading: const Icon(Icons.public),
                 title: const Text('Site Settings'),
@@ -92,40 +94,39 @@ class SettingsScreen extends StatelessWidget {
               ),
               */
 
-                ListTile(
-                  leading: const Icon(
-                    Icons.power_settings_new,
-                    color: Colors.redAccent,
-                  ),
-                  title: Text(
-                    'Log Out',
-                    style: TextStyle(
-                      fontFamily: AppTheme.fontName,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
+                  ListTile(
+                    leading: const Icon(
+                      Icons.power_settings_new,
                       color: Colors.redAccent,
                     ),
+                    title: Text(
+                      'Log Out',
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontName,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        color: Colors.redAccent,
+                      ),
+                    ),
+                    onTap: () => _confirmLogout(context),
                   ),
-                  onTap: () => _confirmLogout(context),
-                ),
-              ],
-            ),
-          ),
-          // Version Label at Bottom Middle
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16.0),
-            child: Text(
-              "FA Notifier v1.1.3",
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: AppTheme.fontName,
-                fontSize: 13,
-
-                color: Colors.grey[600],
+                ],
               ),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16.0),
+              child: Text(
+                "FA Notifier v1.1.4",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: AppTheme.fontName,
+                  fontSize: 13,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -435,6 +435,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTapDown: (TapDownDetails details) {
@@ -451,171 +452,172 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
         }
       },
       child: WillPopScope(
-        // Trigger refresh on back navigation
         onWillPop: () async {
           Navigator.pop(context, 'refresh');
           return false;
         },
-        child: Scaffold(
-          appBar: AppBar(
-            title: Text(subject),
+        child: SafeArea(
+          top: false,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(subject),
+              backgroundColor: Colors.black,
+            ),
             backgroundColor: Colors.black,
-          ),
-          backgroundColor: Colors.black,
-          body: isLoading
-              ? const Center(
-            child: PulsatingLoadingIndicator(
-              size: 108.0,
-              assetPath: 'assets/icons/fathemed.png',
-            ),
-          )
-              : errorMessage.isNotEmpty
-              ? Center(
-            child: Text(
-              errorMessage,
-              style: const TextStyle(color: Colors.red, fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
-          )
-              : Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    if (!isClassic)
-                      GestureDetector(
-                        onTap: () {
-                          if (senderLink.isNotEmpty) {
-                            _handleFALink(context, senderLink);
-                          }
-                        },
-                        child: Container(
-                          width: 60,
-                          height: 60,
-                          color: Colors.transparent,
-                          child: CachedNetworkImage(
-                            imageUrl: 'https:$avatarUrl',
-                            fit: BoxFit.cover,
-                            alignment: Alignment.center,
-                            errorWidget: (context, url, error) {
-                              return Transform.scale(
-                                scale: 1.05,
-                                child: Image.asset(
-                                  'assets/images/defaultpic.gif',
-                                  fit: BoxFit.cover,
-                                ),
-                              );
-                            },
+            body: isLoading
+                ? const Center(
+              child: PulsatingLoadingIndicator(
+                size: 108.0,
+                assetPath: 'assets/icons/fathemed.png',
+              ),
+            )
+                : errorMessage.isNotEmpty
+                ? Center(
+              child: Text(
+                errorMessage,
+                style: const TextStyle(color: Colors.red, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+            )
+                : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (!isClassic)
+                        GestureDetector(
+                          onTap: () {
+                            if (senderLink.isNotEmpty) {
+                              _handleFALink(context, senderLink);
+                            }
+                          },
+                          child: Container(
+                            width: 60,
+                            height: 60,
+                            color: Colors.transparent,
+                            child: CachedNetworkImage(
+                              imageUrl: 'https:$avatarUrl',
+                              fit: BoxFit.cover,
+                              alignment: Alignment.center,
+                              errorWidget: (context, url, error) {
+                                return Transform.scale(
+                                  scale: 1.05,
+                                  child: Image.asset(
+                                    'assets/images/defaultpic.gif',
+                                    fit: BoxFit.cover,
+                                  ),
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                      )
-                    else
-                      const SizedBox.shrink(),
-                    const SizedBox(width: 16),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Sent by: $sender',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.white,
+                        )
+                      else
+                        const SizedBox.shrink(),
+                      const SizedBox(width: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Sent by: $sender',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.white,
+                            ),
                           ),
-                        ),
-                        Text(
-                          'To: $recipient',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.white,
+                          Text(
+                            'To: $recipient',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.white,
+                            ),
                           ),
-                        ),
-                        Text(
-                          'Date: $sentDate',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
+                          Text(
+                            'Date: $sentDate',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const Divider(height: 20, thickness: 1, color: Colors.white54),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Theme(
-                      data: Theme.of(context).copyWith(
-                        textSelectionTheme: TextSelectionThemeData(
-                          selectionColor: Color(0xFFE09321).withOpacity(0.4),
-                          selectionHandleColor: Color(0xFFE09321),
-                        ),
+                        ],
                       ),
-                      child: SelectableLinkify(
-                        key: _selectableKey,
-                        onOpen: (link) async {
-                          await _handleFALink(context, link.url);
-                        },
-                        text: messageContent,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Colors.white,
+                    ],
+                  ),
+                  const Divider(height: 20, thickness: 1, color: Colors.white54),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Theme(
+                        data: Theme.of(context).copyWith(
+                          textSelectionTheme: TextSelectionThemeData(
+                            selectionColor: Color(0xFFE09321).withOpacity(0.4),
+                            selectionHandleColor: Color(0xFFE09321),
+                          ),
                         ),
-                        linkStyle: const TextStyle(
-                          fontSize: 16,
-                          color: Color(0xFFE09321),
-                          decoration: TextDecoration.underline,
-                          decorationColor: Color(0xFFE09321),
+                        child: SelectableLinkify(
+                          key: _selectableKey,
+                          onOpen: (link) async {
+                            await _handleFALink(context, link.url);
+                          },
+                          text: messageContent,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: Colors.white,
+                          ),
+                          linkStyle: const TextStyle(
+                            fontSize: 16,
+                            color: Color(0xFFE09321),
+                            decoration: TextDecoration.underline,
+                            decorationColor: Color(0xFFE09321),
+                          ),
+                          selectionControls: MaterialTextSelectionControls(),
                         ),
-                        selectionControls: MaterialTextSelectionControls(),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (widget.folder != 'sent')
-                      OutlinedButton(
-                        onPressed: _markAsUnread,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFFE09321),
-                          side: const BorderSide(
-                            color: Color(0xFFE09321),
-                          ),
-                        ),
-                        child: const Text('Mark Unread'),
-                      ),
-                    if (widget.folder != 'sent') const SizedBox(width: 8),
-                    if (widget.folder != 'sent')
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => NoteReplyScreen(
-                                subject: subject,
-                                originalContent: messageContent,
-                                username: senderUsername,
-                                messageId: messageId ?? '',
-                                messageLink: widget.messageLink,
-                              ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (widget.folder != 'sent')
+                        OutlinedButton(
+                          onPressed: _markAsUnread,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFE09321),
+                            side: const BorderSide(
+                              color: Color(0xFFE09321),
                             ),
-                          ).then((result) {
-                            if (result == 'marked_unread') {
-                            }
-                          });
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFE09321),
+                          ),
+                          child: const Text('Mark Unread'),
                         ),
-                        child: const Text('Reply'),
-                      ),
-                  ],
-                ),
-              ],
+                      if (widget.folder != 'sent') const SizedBox(width: 8),
+                      if (widget.folder != 'sent')
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => NoteReplyScreen(
+                                  subject: subject,
+                                  originalContent: messageContent,
+                                  username: senderUsername,
+                                  messageId: messageId ?? '',
+                                  messageLink: widget.messageLink,
+                                ),
+                              ),
+                            ).then((result) {
+                              if (result == 'marked_unread') {}
+                            });
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE09321),
+                          ),
+                          child: const Text('Reply'),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),

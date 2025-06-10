@@ -197,7 +197,9 @@ class _FiltersScreenState extends State<FiltersScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: SafeArea(
+        child:
+        Column(
         children: <Widget>[
           Expanded(
             child: SingleChildScrollView(
@@ -346,6 +348,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

@@ -278,7 +278,8 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
         title: const Text('Create Journal'),
         centerTitle: true,
       ),
-      body: Stack(
+      body: SafeArea(child:
+      Stack(
         children: [
           WebViewWidget(controller: _webViewController),
           if (_isWaitingToOpenJournal)
@@ -304,6 +305,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
               ),
             ),
         ],
+      ),
       ),
     );
   }

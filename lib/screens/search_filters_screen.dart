@@ -194,26 +194,30 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            _buildSortCriteria(),
-            SizedBox(height: 20),
-            _buildSortByRange(),
-            SizedBox(height: 20),
-            _buildSortByRating(),
-            SizedBox(height: 20),
-            _buildSortByType(),
-            SizedBox(height: 20),
-            _buildSortByKeywords(),
-            SizedBox(height: 40),
-            _buildAdditionalText(),
-          ],
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _buildSortCriteria(),
+              const SizedBox(height: 20),
+              _buildSortByRange(),
+              const SizedBox(height: 20),
+              _buildSortByRating(),
+              const SizedBox(height: 20),
+              _buildSortByType(),
+              const SizedBox(height: 20),
+              _buildSortByKeywords(),
+              const SizedBox(height: 40),
+              _buildAdditionalText(),
+            ],
+          ),
         ),
       ),
-      bottomNavigationBar: _buildApplyResetButtons(),
+      bottomNavigationBar: SafeArea(
+        child: _buildApplyResetButtons(),
+      ),
     );
   }
 

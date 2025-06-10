@@ -602,6 +602,7 @@ Future<void> requestIOSNotificationPermission() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+
   final timezoneProvider = TimezoneProvider();
   // Fetch timezone data once
   await timezoneProvider.fetchTimezone();
@@ -631,6 +632,7 @@ void main() async {
   final cacheManager = CustomCacheManager();
   final cacheMonitorService = CacheMonitorService(cacheManager);
   await cacheMonitorService.checkStorageUsage();
+
 
   // WorkManager init
   Workmanager().initialize(

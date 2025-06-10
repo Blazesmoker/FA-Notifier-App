@@ -351,47 +351,50 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            _timer?.cancel();
-            setState(() {
-              _isWaitingToOpenSubmission = false;
-            });
-            Navigator.pop(context);
-          },
+    return SafeArea(
+      top: false,
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              _timer?.cancel();
+              setState(() {
+                _isWaitingToOpenSubmission = false;
+              });
+              Navigator.pop(context);
+            },
+          ),
+          title: const Text('Upload Submission'),
+          centerTitle: true,
         ),
-        title: const Text('Upload Submission'),
-        centerTitle: true,
-      ),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: _webViewController),
-          if (_isWaitingToOpenSubmission)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Waiting to open your submission',
-                        style: TextStyle(color: Colors.white, fontSize: 24),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        '$_countdown',
-                        style: const TextStyle(color: Colors.white, fontSize: 48),
-                      ),
-                    ],
+        body: Stack(
+          children: [
+            WebViewWidget(controller: _webViewController),
+            if (_isWaitingToOpenSubmission)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Waiting to open your submission',
+                          style: TextStyle(color: Colors.white, fontSize: 24),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '$_countdown',
+                          style: const TextStyle(color: Colors.white, fontSize: 48),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
