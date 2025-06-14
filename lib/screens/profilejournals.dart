@@ -292,6 +292,11 @@ class ProfileJournalsState extends State<ProfileJournals> {
                             textDecoration: TextDecoration.none,
                             color: Color(0xFFE09321),
                           ),
+                          "hr": Style(
+                            padding: HtmlPaddings.symmetric(vertical: 8),
+                            margin: Margins.symmetric(vertical: 8),
+                            height: Height(1),
+                          ),
                         },
                         onLinkTap: (url, _, __) {
                           Navigator.push(

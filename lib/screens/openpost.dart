@@ -92,6 +92,7 @@ class OpenPost extends StatefulWidget {
 }
 
 class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
+
   bool _showFullPublicationDate = false;
   String? profileImageUrl;
   String? username;
@@ -142,6 +143,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   bool _nsfwAllowed = false;
   final GlobalKey<SubmissionDescriptionWebViewState> _submissionWebViewKey =
   GlobalKey<SubmissionDescriptionWebViewState>();
+  final ScrollController _scrollController = ScrollController();
+
 
   @override
   void initState() {
@@ -162,6 +165,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _commentController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -1185,7 +1189,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     });
 
 
-
     //setState(() => isLoading = false);
 
     setState(() {
@@ -1193,7 +1196,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     });
 
     // Fetch comments in the background so the UI can display sooner
-    unawaited(_fetchComments(document));
+    _fetchComments(document);
+    //unawaited(_fetchComments(document));
 
 
   }
@@ -2410,7 +2414,14 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       ),
       resizeToAvoidBottomInset: true,
       // Build the main content in a Stack so it can overlay the loading indicator.
-      body: Stack(
+    body: GestureDetector(
+    behavior: HitTestBehavior.opaque,
+      onTapDown: (_) {
+
+        _commentsSelectionKey.currentState?.clearSelection();
+        _commentsSelectionKey.currentState?.hideToolbar();
+      },
+    child: Stack(
         children: [
           RefreshIndicator(
             onRefresh: () async {
@@ -2418,6 +2429,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
               await _fetchPostDetails();
             },
             child: SingleChildScrollView(
+              controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
               padding: EdgeInsets.only(bottom: keyboardHeight + 0),
               child: Column(
@@ -2989,7 +3001,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                 ),
               ),
             ),
-          // Overlay the loading indicator until both details and the webview are loaded.
           if (showLoadingIndicator)
             Container(
               color: const Color(0xFF111111),
@@ -3002,6 +3013,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
             ),
         ],
       ),
+    ),
       bottomNavigationBar: showLoadingIndicator
           ? null
           : Container(
@@ -3009,50 +3021,73 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         child: SafeArea(
           child: Padding(
             padding: EdgeInsets.only(
-              left: 8.0,
-              right: 8.0,
-              bottom: keyboardHeight > 0 ? keyboardHeight : 4.0,
-              top: 8.0,
+              left: 8,
+              right: 8,
+              bottom: keyboardHeight > 0 ? keyboardHeight : 4,
+              top: 8,
             ),
-            child: GestureDetector(
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AddCommentScreen(
-                      submissionTitle: submissionTitle ?? '',
-                      onSendComment: _addComment,
-                      uniqueNumber: widget.uniqueNumber,
+            child: Row(
+              children: [
+                if (comments.isNotEmpty && isLoading)
+                  SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: FloatingActionButton.small(
+                      heroTag: 'scroll_top',
+                      backgroundColor: const Color(0xFFE09321),
+                      elevation: 0,
+                      onPressed: () {
+                        _scrollController.animateTo(
+                          0,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                        );
+                      },
+                      child: const Icon(Icons.arrow_upward, size: 18),
                     ),
                   ),
-                ).then((result) {
-                  if (result == true) {
-                    _fetchPostDetails();
-                  }
-                });
-              },
-              child: AbsorbPointer(
-                absorbing: true,
-                child: SizedBox(
-                  height: 40.0,
-                  child: TextField(
-                    controller: _commentController,
-                    readOnly: true,
-                    decoration: InputDecoration(
-                      hintText: 'Add a comment...',
-                      hintStyle: const TextStyle(color: Colors.white54),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-                      filled: true,
-                      fillColor: const Color(0xFF151515),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () async {
+                      final ok = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AddCommentScreen(
+                            submissionTitle: submissionTitle ?? '',
+                            onSendComment: _addComment,
+                            uniqueNumber: widget.uniqueNumber,
+                          ),
+                        ),
+                      );
+                      if (ok == true) _fetchPostDetails();
+                    },
+                    child: AbsorbPointer(
+                      child: SizedBox(
+                        height: 40,
+                        child: TextField(
+                          controller: _commentController,
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            hintText: 'Add a comment...',
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            contentPadding: const EdgeInsets.symmetric(
+                                vertical: 8, horizontal: 16),
+                            filled: true,
+                            fillColor: const Color(0xFF151515),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            suffixIcon: const Icon(Icons.send,
+                                color: Colors.white54),
+                          ),
+                        ),
                       ),
-                      suffixIcon: const Icon(Icons.send, color: Colors.white54),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
@@ -3134,6 +3169,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       ],
     );
   }
+  final _commentsSelectionKey = GlobalKey<SelectableRegionState>();
 
 
 
@@ -3147,75 +3183,78 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         ),
       );
     }
-    return Container(
-      color: Colors.black,
-      padding: const EdgeInsets.only(top: 8.0, bottom: 0.0, right: 8.0, left: 8.0),
-      child: ListView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: comments.length,
-        itemBuilder: (context, index) {
-          final comment = comments[index];
-          return CommentWidget(
-            key: ValueKey(comment['commentId'] ?? index),
-            comment: comment,
-            onHide: () {
-              final hideLink = comment['hideLink'] as String?;
-              final cId = comment['commentId'] as String?;
-              if (hideLink != null && cId != null) {
-                hideComment(hideLink, cId);
-              }
-            },
-            onEdit: () {
-              if (comment['editLink'] != null) {
-                Navigator.push(
+
+    return SelectionArea(
+      key: _commentsSelectionKey,
+      child: Container(
+        color: Colors.black,
+        padding: const EdgeInsets.only(top: 8.0, bottom: 0.0, right: 8.0, left: 8.0),
+        child: ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: comments.length,
+          itemBuilder: (context, index) {
+            final comment = comments[index];
+            return CommentWidget(
+              key: ValueKey(comment['commentId'] ?? index),
+              comment: comment,
+              onHide: () {
+                final hideLink = comment['hideLink'] as String?;
+                final cId = comment['commentId'] as String?;
+                if (hideLink != null && cId != null) {
+                  hideComment(hideLink, cId);
+                }
+              },
+              onEdit: () {
+                if (comment['editLink'] != null) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => EditCommentScreen(
+                        comment: comment,
+                        editLink: comment['editLink'],
+                        onUpdateComment: (updatedText) {
+                          setState(() {
+                            comment['text'] = updatedText;
+                          });
+                        },
+                      ),
+                    ),
+                  );
+                }
+              },
+              onReply: () async {
+                final result = await Navigator.push<bool>(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => EditCommentScreen(
+                    builder: (context) => ReplyScreen(
                       comment: comment,
-                      editLink: comment['editLink'],
-                      onUpdateComment: (updatedText) {
-                        setState(() {
-                          comment['text'] = updatedText;
-                        });
-                      },
+                      uniqueNumber: widget.uniqueNumber,
+                      isClassic: _isClassicUserPage,
+                      onSendReply: (_) {},
                     ),
                   ),
                 );
-              }
-            },
-            onReply: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ReplyScreen(
-                    comment: comment,
-                    uniqueNumber: widget.uniqueNumber,
-                    isClassic: _isClassicUserPage,
-                    onSendReply: (replyText) {},
-                  ),
-                ),
-              ).then((result) {
                 if (result == true) {
                   _fetchPostDetails();
                 }
-              });
-            },
-            onUnhide: (comment['deleted'] == true && comment['hideLink'] != null)
-                ? () {
-              _unhideComment(comment['hideLink'], "");
-            }
-                : null,
-            handleLink: (url) async {
-              final commentHtml = comment['commentHtml'] ?? '';
-              await _handleCommentLink(context, url, commentHtml);
-            },
-          );
-        },
+              },
+              onUnhide: (comment['deleted'] == true && comment['hideLink'] != null)
+                  ? () => _unhideComment(comment['hideLink'], "")
+                  : null,
+              handleLink: (url) async {
+                final commentHtml = comment['commentHtml'] ?? '';
+                await _handleCommentLink(context, url, commentHtml);
+              },
+            );
+          },
+        ),
       ),
     );
   }
 }
+
+
 
 class CommentWidget extends StatefulWidget {
   final Map<String, dynamic> comment;

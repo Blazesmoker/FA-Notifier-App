@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:extended_text/extended_text.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
@@ -15,6 +15,8 @@ import 'package:url_launcher/url_launcher_string.dart';
 import 'package:linkify/linkify.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:share_plus/share_plus.dart';
+import '../network.dart';
+import '../parsing_utils.dart';
 import '../providers/timezone_provider.dart';
 import '../utils/specialTextSpanBuilder.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
@@ -113,17 +115,23 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   String? fileSize;
   List<String> keywords = [];
 
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _fetchPostDetails();
+    _fetchPostDetails().then((_) {
+      _fetchUserPageLinks();          // fire & forget
+    });
+
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _commentController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -272,9 +280,6 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   }
 
   Future<void> _fetchPostDetails() async {
-    setState(() {
-      isLoading = true;
-    });
     String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     if (cookieA == null || cookieB == null) {
@@ -283,24 +288,20 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
       });
       return;
     }
-    final timezoneProvider =
-    Provider.of<TimezoneProvider>(context, listen: false);
-    String userTimezoneIana = timezoneProvider.userTimezoneIanaName;
-    bool isDstCorrectionApplied = timezoneProvider.isDstCorrectionApplied;
     final journalUrl =
         'https://www.furaffinity.net/journal/${widget.uniqueNumber}/';
-    final response = await http.get(
+    final response = await httpClient.get(
       Uri.parse(journalUrl),
       headers: {
         'Cookie': 'a=$cookieA; b=$cookieB',
         'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        'Accept-Encoding': 'gzip',
       },
     );
     if (response.statusCode == 200) {
       // Decodes the response body using a fallback to handle malformed UTF-8 bytes.
       final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
 
-      await _fetchComments(decodedBody);
       var document = html_parser.parse(decodedBody);
       var profileIcon = document.querySelector('.userpage-nav-avatar img');
       if (profileIcon == null) {
@@ -322,9 +323,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         submissionTitle = titleElem.text.trim();
       }
 
-      setState(() {
-        isOwner = ownerFound;
-      });
+
 
 
       var descriptionElem =
@@ -339,6 +338,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
       }
 
       setState(() {
+        isOwner = ownerFound;
         profileImageUrl =
             profileIcon?.attributes['src']?.replaceFirst('//', 'https://');
         username = usernameElem?.text.trim();
@@ -375,13 +375,18 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
       if (isOwner) {
         await _fetchDeleteLink(cookieA, cookieB);
       }
-      await _fetchUserPageLinks();
+
+      setState(() {
+        isLoading = false;
+      });
+      unawaited(_fetchComments(decodedBody));
+
+
+
     } else {
       print('Failed to fetch journal details: ${response.statusCode}');
     }
-    setState(() {
-      isLoading = false;
-    });
+
   }
 
 
@@ -390,7 +395,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
     bool deleteLinkFound = false;
     while (true) {
       final controlUrl = 'https://www.furaffinity.net/controls/journal/$pageIndex/${widget.uniqueNumber}/';
-      final response = await http.get(
+      final response = await httpClient.get(
         Uri.parse(controlUrl),
         headers: {
           'Cookie': 'a=$cookieA; b=$cookieB',
@@ -429,7 +434,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     if (cookieA == null || cookieB == null) return;
     final userPageUrl = 'https://www.furaffinity.net/user/$username/';
-    final response = await http.get(
+    final response = await httpClient.get(
       Uri.parse(userPageUrl),
       headers: {
         'Cookie': 'a=$cookieA; b=$cookieB',
@@ -484,7 +489,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
     }
     final fullUrl = 'https://www.furaffinity.net$urlPath';
     try {
-      final response = await http.get(
+      final response = await httpClient.get(
         Uri.parse(fullUrl),
         headers: {
           'Cookie': 'a=$cookieA; b=$cookieB',
@@ -517,20 +522,12 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _handleWatchButtonPressed() async {
-    if (isWatching) {
-      if (unwatchLink == null) return;
-      await _sendWatchUnwatchRequest(unwatchLink!, shouldWatch: false);
-    } else {
-      if (watchLink == null) return;
-      await _sendWatchUnwatchRequest(watchLink!, shouldWatch: true);
-    }
-  }
 
 
   // Fetch comments
   Future<void> _fetchComments(String body) async {
-    final document = html_parser.parse(body);
+
+    final document = await compute(parseHtml, body);
 
     // Selects both modern and classic comment containers
     final commentContainers = document.querySelectorAll('.comment_container, table.container-comment');
@@ -825,7 +822,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
         String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
         if (cookieA == null || cookieB == null) return;
-        final response = await http.get(
+        final response = await httpClient.get(
           Uri.parse(hideLink),
           headers: {
             'Cookie': 'a=$cookieA; b=$cookieB',
@@ -874,7 +871,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
         String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
         if (cookieA == null || cookieB == null) return;
-        final response = await http.get(
+        final response = await httpClient.get(
           Uri.parse(unhideLink),
           headers: {
             'Cookie': 'a=$cookieA; b=$cookieB',
@@ -971,9 +968,17 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
       ),
       body: isLoading
           ? const Center(child: PulsatingLoadingIndicator(size: 78.0, assetPath: 'assets/icons/fathemed.png'))
-          : RefreshIndicator(
+        : GestureDetector(
+    behavior: HitTestBehavior.deferToChild,
+        onTap: () {
+          FocusScope.of(context).unfocus();
+        },
+    child: SelectionArea(
+    key: _journalSelectionKey,
+    child: RefreshIndicator(
         onRefresh: _fetchPostDetails,
         child: CustomScrollView(
+          controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverToBoxAdapter(
@@ -1005,13 +1010,18 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                               "body": html_pkg.Style(
                                 textAlign: TextAlign.left,
                                 fontSize: html_pkg.FontSize(16),
-                                padding: HtmlPaddings.zero,
-                                margin: Margins.zero,
+                                padding: html_pkg.HtmlPaddings.zero,
+                                margin: html_pkg.Margins.zero,
                                 backgroundColor: Colors.transparent,
                               ),
                               "a": html_pkg.Style(
                                 textDecoration: TextDecoration.none,
                                 color: const Color(0xFFE09321),
+                              ),
+                              "hr": html_pkg.Style(
+                                padding: html_pkg.HtmlPaddings.symmetric(vertical: 8),
+                                margin: html_pkg.Margins.symmetric(vertical: 8),
+                                height: html_pkg.Height(1),
                               ),
 
                             },
@@ -1283,6 +1293,8 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
           ],
         ),
       ),
+    ),
+      ),
       bottomNavigationBar: isLoading
           ? null
           : Container(
@@ -1290,50 +1302,73 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         child: SafeArea(
           child: Padding(
             padding: EdgeInsets.only(
-              left: 8.0,
-              right: 8.0,
-              bottom: keyboardHeight > 0 ? keyboardHeight : 4.0,
-              top: 8.0,
+              left: 8,
+              right: 8,
+              bottom: keyboardHeight > 0 ? keyboardHeight : 4,
+              top: 8,
             ),
-            child: GestureDetector(
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AddJournalCommentScreen(
-                      submissionTitle: submissionTitle ?? '',
-                      onSendComment: _addComment,
-                      uniqueNumber: widget.uniqueNumber,
+            child: Row(
+              children: [
+                if (comments.isNotEmpty)
+                  SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: FloatingActionButton.small(
+                      heroTag: 'journal_scroll_top',
+                      backgroundColor: const Color(0xFFE09321),
+                      elevation: 0,
+                      onPressed: () {
+                        _scrollController.animateTo(
+                          0,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                        );
+                      },
+                      child: const Icon(Icons.arrow_upward, size: 18),
                     ),
                   ),
-                ).then((result) {
-                  if (result == true) {
-                    _fetchPostDetails();
-                  }
-                });
-              },
-              child: AbsorbPointer(
-                absorbing: true,
-                child: SizedBox(
-                  height: 40.0,
-                  child: TextField(
-                    controller: _commentController,
-                    readOnly: true,
-                    decoration: InputDecoration(
-                      hintText: 'Add a comment...',
-                      hintStyle: const TextStyle(color: Colors.white54),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-                      filled: true,
-                      fillColor: const Color(0xFF151515),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () async {
+                      final ok = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AddJournalCommentScreen(
+                            submissionTitle: submissionTitle ?? '',
+                            onSendComment: _addComment,
+                            uniqueNumber: widget.uniqueNumber,
+                          ),
+                        ),
+                      );
+                      if (ok == true) _fetchPostDetails();
+                    },
+                    child: AbsorbPointer(
+                      child: SizedBox(
+                        height: 40,
+                        child: TextField(
+                          controller: _commentController,
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            hintText: 'Add a comment…',
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            contentPadding:
+                            const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                            filled: true,
+                            fillColor: const Color(0xFF151515),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            suffixIcon:
+                            const Icon(Icons.send, color: Colors.white54),
+                          ),
+                        ),
                       ),
-                      suffixIcon: const Icon(Icons.send, color: Colors.white54),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
@@ -1356,6 +1391,9 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   }
 }
 
+
+final GlobalKey<SelectionAreaState> _journalSelectionKey = GlobalKey();
+
 /// A stateful widget for an individual comment.
 class CommentWidget extends StatefulWidget {
   final Map<String, dynamic> comment;
@@ -1376,7 +1414,8 @@ class CommentWidget extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _CommentWidgetState createState() => _CommentWidgetState();
+  _CommentWidgetState createState() =>
+      _CommentWidgetState();
 }
 
 class _CommentWidgetState extends State<CommentWidget> {
@@ -1384,27 +1423,31 @@ class _CommentWidgetState extends State<CommentWidget> {
 
   @override
   Widget build(BuildContext context) {
-    double widthPercent = (widget.comment['width'] ?? 100).toDouble();
-    int nestingLevel = ((100.0 - widthPercent) / 3.0).round().clamp(0, 4);
+    double widthPercent =
+    (widget.comment['width'] ?? 100).toDouble();
+    int nestingLevel =
+    ((100.0 - widthPercent) / 3.0).round().clamp(0, 4);
     double leftPadding = nestingLevel * 16.0;
-
     if (widget.comment['deleted'] == true) {
       return Padding(
-        padding: EdgeInsets.only(left: leftPadding, bottom: 6.0),
+        padding:
+        EdgeInsets.only(left: leftPadding, bottom: 6.0),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 12.0),
+          padding: const EdgeInsets.symmetric(
+              vertical: 16.0, horizontal: 12.0),
           decoration: BoxDecoration(
             color: Colors.grey.shade900,
             borderRadius: BorderRadius.circular(4.0),
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment:
+            MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
                 child: Text(
                   widget.comment['text'] ?? '',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  textAlign: TextAlign.left,
+                  style: const TextStyle(
+                      fontSize: 12, color: Colors.grey),
                 ),
               ),
               if (widget.comment['hideLink'] != null)
@@ -1412,12 +1455,15 @@ class _CommentWidgetState extends State<CommentWidget> {
                   style: TextButton.styleFrom(
                     padding: EdgeInsets.zero,
                     minimumSize: const Size(0, 0),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    tapTargetSize:
+                    MaterialTapTargetSize.shrinkWrap,
                   ),
                   onPressed: widget.onUnhide,
                   child: const Text(
                     'Unhide',
-                    style: TextStyle(color: Colors.white, fontSize: 14),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14),
                   ),
                 ),
             ],
@@ -1425,120 +1471,167 @@ class _CommentWidgetState extends State<CommentWidget> {
         ),
       );
     }
-
     return Padding(
-      padding: EdgeInsets.only(left: leftPadding, bottom: 6.0),
+      padding:
+      EdgeInsets.only(left: leftPadding, bottom: 6.0),
       child: Container(
-        padding: const EdgeInsets.only(right: 12.0, left: 12.0, top: 8.0, bottom: 2.0),
+        padding: const EdgeInsets.only(
+            right: 12.0,
+            left: 12.0,
+            top: 8.0,
+            bottom: 2.0),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0b0b0b), Color(0xFF202020)],
+            colors: [
+              Color(0xFF0b0b0b),
+              Color(0xFF202020)
+            ],
           ),
           borderRadius: BorderRadius.circular(8.0),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+          CrossAxisAlignment.start,
           children: [
-            // Top row with avatar, username
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+              CrossAxisAlignment.start,
               children: [
                 if (widget.comment['profileImage'] != null)
                   Padding(
-                    padding: const EdgeInsets.only(right: 8.0, top: 4.0),
+                    padding: const EdgeInsets.only(
+                        right: 8.0, top: 4.0),
                     child: GestureDetector(
                       onTap: () {
-                        if (widget.comment['username'] != null) {
+                        if (widget.comment['username'] !=
+                            null) {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => UserProfileScreen(
-                                nickname: widget.comment['username'],
-                              ),
+                              builder: (context) =>
+                                  UserProfileScreen(
+                                    nickname: widget.comment[
+                                    'username'],
+                                  ),
                             ),
                           );
                         }
                       },
                       child: CachedNetworkImage(
-                        imageUrl: widget.comment['profileImage'],
+                        imageUrl: widget.comment[
+                        'profileImage'],
                         width: 46,
                         height: 46,
                         fit: BoxFit.cover,
-                        placeholder: (context, url) => Image.asset(
-                          'assets/images/defaultpic.gif',
-                          width: 46,
-                          height: 46,
-                          fit: BoxFit.cover,
-                        ),
-                        errorWidget: (context, url, error) => Image.asset(
-                          'assets/images/defaultpic.gif',
-                          width: 46,
-                          height: 46,
-                          fit: BoxFit.cover,
-                        ),
+                        placeholder:
+                            (context, url) =>
+                            Image.asset(
+                              'assets/images/defaultpic.gif',
+                              width: 46,
+                              height: 46,
+                              fit: BoxFit.cover,
+                            ),
+                        errorWidget:
+                            (context, url, error) =>
+                            Image.asset(
+                              'assets/images/defaultpic.gif',
+                              width: 46,
+                              height: 46,
+                              fit: BoxFit.cover,
+                            ),
                       ),
                     ),
                   ),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment:
+                    CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          if (widget.comment['iconBeforeUrls'] != null &&
-                              widget.comment['iconBeforeUrls'].isNotEmpty)
-                            ...widget.comment['iconBeforeUrls'].map(
-                                  (url) {
-                                final isEditedIcon = url.contains('edited.png');
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 4.0),
-                                  child: Image.network(
-                                    url,
-                                    width: 16,
-                                    height: 16,
-                                    color: isEditedIcon ? Colors.white : null,
-                                    colorBlendMode: isEditedIcon
-                                        ? BlendMode.srcIn
-                                        : null,
-                                  ),
-                                );
-                              },
-                            ),
-                          Flexible(
-                            child: Text(
-                              widget.comment['displayName'] ??
-                                  widget.comment['username'] ??
-                                  'Anonymous',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (widget.comment['iconAfterUrls'] != null &&
-                              widget.comment['iconAfterUrls'].isNotEmpty)
-                            ...widget.comment['iconAfterUrls'].map(
-                                  (url) => Padding(
-                                padding: const EdgeInsets.only(left: 4.0),
+                          if (widget.comment[
+                          'iconBeforeUrls'] !=
+                              null &&
+                              widget.comment[
+                              'iconBeforeUrls']
+                                  .isNotEmpty)
+                            ...widget.comment[
+                            'iconBeforeUrls']
+                                .map((url) {
+                              final isEditedIcon =
+                              url.contains(
+                                  'edited.png');
+                              return Padding(
+                                padding:
+                                const EdgeInsets.only(
+                                    right: 4.0),
                                 child: Image.network(
                                   url,
                                   width: 16,
                                   height: 16,
+                                  color: isEditedIcon
+                                      ? Colors.white
+                                      : null,
+                                  colorBlendMode:
+                                  isEditedIcon
+                                      ? BlendMode
+                                      .srcIn
+                                      : null,
                                 ),
+                              );
+                            }),
+                          Flexible(
+                            child: Text(
+                              widget.comment[
+                              'displayName'] ??
+                                  widget.comment[
+                                  'username'] ??
+                                  'Anonymous',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight:
+                                FontWeight.bold,
                               ),
+                              overflow:
+                              TextOverflow.ellipsis,
                             ),
-                          if (widget.comment['isOP'] == true)
+                          ),
+                          if (widget.comment[
+                          'iconAfterUrls'] !=
+                              null &&
+                              widget.comment[
+                              'iconAfterUrls']
+                                  .isNotEmpty)
+                            ...widget.comment[
+                            'iconAfterUrls']
+                                .map((url) =>
+                                Padding(
+                                  padding:
+                                  const EdgeInsets.only(
+                                      left:
+                                      4.0),
+                                  child: Image.network(
+                                    url,
+                                    width: 16,
+                                    height: 16,
+                                  ),
+                                )),
+                          if (widget.comment[
+                          'isOP'] ==
+                              true)
                             const Padding(
-                              padding: EdgeInsets.only(left: 4.0),
+                              padding:
+                              EdgeInsets.only(
+                                  left: 4.0),
                               child: Text(
                                 'OP',
                                 style: TextStyle(
                                   color: Colors.blue,
                                   fontSize: 13,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight:
+                                  FontWeight.bold,
                                 ),
                               ),
                             ),
@@ -1551,12 +1644,16 @@ class _CommentWidgetState extends State<CommentWidget> {
                           color: Color(0xFFE09321),
                         ),
                       ),
-                      if ((widget.comment['userTitle'] ?? '').isNotEmpty)
+                      if ((widget.comment[
+                      'userTitle'] ??
+                          '')
+                          .isNotEmpty)
                         Text(
                           widget.comment['userTitle'],
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey.shade400,
+                            color:
+                            Colors.grey.shade400,
                           ),
                         ),
                     ],
@@ -1565,95 +1662,140 @@ class _CommentWidgetState extends State<CommentWidget> {
               ],
             ),
             Padding(
-              padding: const EdgeInsets.only(left: 8.0, right: 8.0, top: 11.0, bottom: 1.0),
+              padding: const EdgeInsets.only(
+                  left: 8.0,
+                  right: 8.0,
+                  top: 11.0,
+                  bottom: 1.0),
               child: Theme(
                 data: Theme.of(context).copyWith(
-                  textSelectionTheme: TextSelectionThemeData(
-                    selectionColor: Color(0xFFE09321).withOpacity(0.4),
-                    selectionHandleColor: Color(0xFFE09321),
+                  textSelectionTheme:
+                  TextSelectionThemeData(
+                    selectionColor: Color(0xFFE09321)
+                        .withOpacity(0.4),
+                    selectionHandleColor:
+                    const Color(0xFFE09321),
                   ),
                 ),
-                child: SelectionArea(
-                  child: ExtendedText(
-                    widget.comment['text'] ?? '',
-                    specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
-                      onTapLink: widget.handleLink,
-                    ),
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade300,
-                    ),
+                child: ExtendedText(
+                  widget.comment['text'] ?? '',
+                  specialTextSpanBuilder:
+                  EmojiSpecialTextSpanBuilder(
+                    onTapLink: widget.handleLink,
+                  ),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade300,
                   ),
                 ),
               ),
             ),
-            // Footer row
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment:
+              MainAxisAlignment.spaceBetween,
               children: [
-                // Date
                 GestureDetector(
                   onTap: () {
                     setState(() {
-                      _showFullDate = !_showFullDate;
+                      _showFullDate =
+                      !_showFullDate;
                     });
                   },
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    padding:
+                    const EdgeInsets.symmetric(
+                        vertical: 12.0),
                     child: Text(
                       _showFullDate
-                          ? (widget.comment['popupDateFull'] ??
-                          widget.comment['popupDateRelative'] ??
+                          ? (widget.comment[
+                      'popupDateFull'] ??
+                          widget.comment[
+                          'popupDateRelative'] ??
                           '')
-                          : (widget.comment['popupDateRelative'] ?? ''),
+                          : (widget.comment[
+                      'popupDateRelative'] ??
+                          ''),
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey.shade400,
+                        color:
+                        Colors.grey.shade400,
                       ),
                     ),
                   ),
                 ),
                 Row(
                   children: [
-                    if (widget.comment['hideLink'] != null)
+                    if (widget.comment[
+                    'hideLink'] !=
+                        null)
                       IconButton(
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        icon: const Icon(Icons.visibility_off,
-                            size: 16, color: Colors.white),
+                        constraints:
+                        const BoxConstraints(),
+                        icon: const Icon(
+                            Icons.visibility_off,
+                            size: 16,
+                            color: Colors.white),
                         onPressed: widget.onHide,
                       ),
-                    if (widget.comment['editLink'] != null)
+                    if (widget.comment[
+                    'editLink'] !=
+                        null)
                       TextButton(
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.only(left: 4.0, right: 8),
-                          minimumSize: const Size(0, 0),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        style:
+                        TextButton.styleFrom(
+                          padding:
+                          const EdgeInsets.only(
+                              left: 4.0,
+                              right: 8),
+                          minimumSize:
+                          const Size(0, 0),
+                          tapTargetSize:
+                          MaterialTapTargetSize
+                              .shrinkWrap,
                         ),
                         onPressed: widget.onEdit,
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                          mainAxisSize:
+                          MainAxisSize.min,
                           children: const [
-                            Icon(Icons.edit, size: 16, color: Colors.white),
+                            Icon(Icons.edit,
+                                size: 16,
+                                color: Colors.white),
                             SizedBox(width: 4),
-                            Text('Edit', style: TextStyle(color: Colors.white, fontSize: 14)),
+                            Text('Edit',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14)),
                           ],
                         ),
                       ),
                     TextButton(
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.only(left: 6),
-                        minimumSize: const Size(0, 0),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      style:
+                      TextButton.styleFrom(
+                        padding:
+                        const EdgeInsets.only(
+                            left: 6),
+                        minimumSize:
+                        const Size(0, 0),
+                        tapTargetSize:
+                        MaterialTapTargetSize
+                            .shrinkWrap,
                       ),
                       onPressed: widget.onReply,
                       child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.reply, size: 19, color: Colors.white),
-                          const SizedBox(width: 4),
-                          const Text('Reply',
-                              style: TextStyle(color: Colors.white, fontSize: 14)),
+                        mainAxisSize:
+                        MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.reply,
+                              size: 19,
+                              color: Colors.white),
+                          SizedBox(width: 4),
+                          Text('Reply',
+                              style: TextStyle(
+                                  color:
+                                  Colors.white,
+                                  fontSize: 14)),
                         ],
                       ),
                     ),

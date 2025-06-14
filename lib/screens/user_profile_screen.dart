@@ -22,6 +22,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import '../model/shout.dart';
 import '../model/user_link.dart';
+import '../network.dart';
+import '../parsing_utils.dart';
 import '../utils/html_tags_debug.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'avatardownloadscreen.dart';
@@ -392,7 +394,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
     final fullUrl = 'https://www.furaffinity.net$urlPath';
     try {
-      final response = await http.get(
+      final response = await httpClient.get(
         Uri.parse(fullUrl),
         headers: {
 
@@ -515,6 +517,11 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                   ),
                   ".bbcode_left": html_pkg.Style(
                     textAlign: TextAlign.left,
+                  ),
+                  "hr": html_pkg.Style(
+                    padding: HtmlPaddings.symmetric(vertical: 8),
+                    margin: Margins.symmetric(vertical: 8),
+                    height: html_pkg.Height(1),
                   ),
                 },
                 extensions: [
@@ -754,7 +761,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       final profileUrl = 'https://www.furaffinity.net/user/$sanitizedUsername/';
       print("Profile URL: $profileUrl");
 
-      final response = await http.get(
+      final response = await httpClient.get(
         Uri.parse(profileUrl),
         headers: {
           'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
@@ -771,8 +778,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
         _parseUserProfile(decodedBody);
 
-
-        var document = html_parser.parse(decodedBody);
+        var document = await parseHtml(decodedBody);
 
         var watchLinkElement = logQuery(document, 'a.button.standard.go[href^="/watch/"]')
             ?? logQuery(document, 'a[href^="/watch/"]');
@@ -1926,6 +1932,11 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
     ".bbcode_left": html_pkg.Style(
       textAlign: TextAlign.left,
     ),
+    "hr": html_pkg.Style(
+      padding: HtmlPaddings.symmetric(vertical: 8),
+      margin: Margins.symmetric(vertical: 8),
+      height: html_pkg.Height(1),
+    ),
   };
 
   /// Builds extensions for handling BBCode and emojis.
@@ -2122,11 +2133,17 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       margin: html_pkg.Margins.zero,
       textAlign: TextAlign.center,
     ),
+    "hr": html_pkg.Style(
+      padding: HtmlPaddings.symmetric(vertical: 8),
+      margin: Margins.symmetric(vertical: 8),
+      height: html_pkg.Height(1),
+    ),
     ".bbcode_left": html_pkg.Style(
       padding: html_pkg.HtmlPaddings.zero,
       margin: html_pkg.Margins.zero,
       textAlign: TextAlign.left,
     ),
+
   };
 
   Widget _buildShoutsSection() {
@@ -2134,14 +2151,13 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 0.0),
       child: Container(
         decoration: BoxDecoration(
-          color: Color(0xFF1F1F1F),
+          color: const Color(0xFF1F1F1F),
           borderRadius: BorderRadius.circular(8.0),
         ),
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Shouts Header
             const Text(
               'Shouts',
               style: TextStyle(
@@ -2167,7 +2183,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                 margin: const EdgeInsets.only(bottom: 16.0),
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 decoration: BoxDecoration(
-                  color: Color(0xFF353535),
+                  color: const Color(0xFF353535),
                   borderRadius: BorderRadius.circular(10.0),
                 ),
                 child: Row(
@@ -2183,45 +2199,126 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                 ),
               ),
             ),
-
-            shouts.isEmpty
-                ? const Text(
-              'No shouts yet. Be the first to shout!',
-              style: TextStyle(color: Colors.white70),
-            )
-                : ListView.separated(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: shouts.length,
-              separatorBuilder: (context, index) => const Divider(
-                color: Colors.white,
-                thickness: 0.3,
-              ),
-              itemBuilder: (context, index) {
-                final shout = shouts[index];
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onLongPress: () {
-                    _confirmDeleteShout(index, shout);
-                  },
-                  child: ShoutWidget(
-                    shout: shout,
-                    onDelete: () {
-                      if (isOwnProfile) {
+            if (shouts.isEmpty)
+              const Text(
+                'No shouts yet. Be the first to shout!',
+                style: TextStyle(color: Colors.white70),
+              )
+            else
+              ListView.separated(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: shouts.length,
+                separatorBuilder: (context, index) => const Divider(
+                  color: Colors.white,
+                  thickness: 0.2,
+                ),
+                itemBuilder: (context, index) {
+                  final shout = shouts[index];
+                  return GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onLongPress: () async {
+                      final plainText = html_parser.parse(shout.text).body?.text ?? shout.text;
+                      final action = await showDialog<String>(
+                        context: context,
+                        builder: (context) {
+                          final maxHeight = MediaQuery.of(context).size.height * 0.6;
+                          return AlertDialog(
+                            scrollable: true,
+                            titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                            title: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Rounded-rect avatar
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4.0),
+                                  child: Image.network(
+                                    shout.avatarUrl,
+                                    width: 40,
+                                    height: 40,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Username and ~nickname stack
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        shout.username,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${shout.symbol} ${shout.profileNickname}',
+                                        style: const TextStyle(
+                                          color: Color(0xFFE09321),
+                                          fontSize: 14,
+                                            fontWeight: FontWeight.normal
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            content: ConstrainedBox(
+                              constraints: BoxConstraints(maxHeight: maxHeight),
+                              child: SingleChildScrollView(
+                                child: Text(
+                                  plainText,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, 'copy'),
+                                child: const Text('Copy text'),
+                              ),
+                              if (isOwnProfile)
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                  child: const Text("Delete"),
+                                ),
+                            ],
+                          );
+                        },
+                      );
+                      if (action == 'copy') {
+                        await Clipboard.setData(ClipboardData(text: plainText));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Shout text copied'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      } else if (action == 'delete') {
                         _confirmDeleteShout(index, shout);
                       }
                     },
-                  ),
-                );
-              },
-            ),
+                    child: ShoutWidget(
+                      shout: shout,
+                      onDelete: () {
+                        if (isOwnProfile) {
+                          _confirmDeleteShout(index, shout);
+                        }
+                      },
+                    ),
+                  );
+                },
+              ),
           ],
         ),
       ),
     );
   }
-
   Widget _buildUserProfileSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -2784,7 +2881,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
     final fullUrl = 'https://www.furaffinity.net$urlPath';
     try {
-      final response = await http.get(
+      final response = await httpClient.get(
         Uri.parse(fullUrl),
         headers: {
           'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
@@ -3512,10 +3609,13 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
           ],
         ),
         ),
-        floatingActionButton: AnimatedBuilder(
+
+        floatingActionButton: !isLoading
+        ? AnimatedBuilder(
           animation: _tabController,
           builder: (context, child) {
-            bool showFab = _tabController.index != ProfileSection.Home.index;
+            // bool showFab = _tabController.index != ProfileSection.Home.index;
+            bool showFab = true;
             return AnimatedOpacity(
               opacity: showFab ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 300),
@@ -3540,8 +3640,10 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
               ),
             );
           },
-        ),
+        )
+            : null,
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+
       ),
     );
   }
