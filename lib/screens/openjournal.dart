@@ -117,7 +117,6 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    tz.initializeTimeZones();
     _fetchPostDetails();
   }
 

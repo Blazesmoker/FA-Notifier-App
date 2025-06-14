@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:extended_text/extended_text.dart';
 import 'package:html/dom.dart' as dom;
@@ -11,7 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
+import 'package:http/http.dart';
+import '../network.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -25,6 +27,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:linkify/linkify.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../parsing_utils.dart';
 import '../providers/timezone_provider.dart';
 import '../utils/html_tags_debug.dart';
 import '../utils/specialTextSpanBuilder.dart';
@@ -81,7 +84,6 @@ class OpenPost extends StatefulWidget {
   final String imageUrl;
   final String uniqueNumber;
 
-
   const OpenPost({required this.imageUrl, required this.uniqueNumber, Key? key})
       : super(key: key);
 
@@ -130,20 +132,13 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   String? _blockKey;
   String? _unblockKey;
   bool _isClassicUserPage = false;
-
   bool _isWebViewVisible = true;
-
   double? imageWidth;
   double? imageHeight;
-
   bool isLoading = true;
-
   bool _detailsLoaded = false;
   bool _webViewLoaded = false;
-
-
   bool _sfwEnabled = true;
-
   bool _nsfwAllowed = false;
   final GlobalKey<SubmissionDescriptionWebViewState> _submissionWebViewKey =
   GlobalKey<SubmissionDescriptionWebViewState>();
@@ -152,15 +147,15 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    tz.initializeTimeZones();
-    _loadSfwEnabled();
 
-    _fetchPostDetails().then((_) {
+    Future.wait([
+      _loadSfwEnabled(),
+      _fetchPostDetails(),
+    ]).then((_) {
       if (username != null) {
         _fetchUserPageLinks();
       }
     });
-
   }
 
   @override
@@ -189,16 +184,14 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     return url;
   }
 
-
-  void _loadSfwEnabled() async {
+  Future<void> _loadSfwEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
     });
   }
 
-
-  Future<http.Response> _getWithSfwCookie(String url,
+  Future<Response> _getWithSfwCookie(String url,
       {Map<String, String>? additionalHeaders, bool skipSfw = false}) async {
     String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
@@ -206,32 +199,34 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     if (cookieA != null && cookieB != null) {
       cookieHeader = 'a=$cookieA; b=$cookieB';
     }
-    // Only add sfw cookie if user hasn't allowed NSFW for this post
     if (!skipSfw && _sfwEnabled && !_nsfwAllowed) {
       cookieHeader += '; sfw=1';
     }
     Map<String, String> headers = {
       'Cookie': cookieHeader,
       'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+      'Accept-Encoding': 'gzip',
     };
     if (additionalHeaders != null) {
       headers.addAll(additionalHeaders);
     }
-    final response = await http.get(Uri.parse(url), headers: headers);
+    final response = await httpClient.get(Uri.parse(url), headers: headers);
 
-    // Check for NSFW marker in the HTML response only if NSFW not yet allowed.
-    if (_sfwEnabled && !_nsfwAllowed && !skipSfw && response.statusCode == 200) {
+    if (_sfwEnabled &&
+        !_nsfwAllowed &&
+        !skipSfw &&
+        response.statusCode == 200) {
       final document = html_parser.parse(response.body);
       final body = document.querySelector('body');
 
       if (body?.attributes['id'] == 'pageid-matureimage-error') {
-        // Show NSFW confirmation dialog
         bool userAgreed = await _showNSFWConfirmationDialog();
         if (userAgreed) {
           setState(() {
             _nsfwAllowed = true;
           });
-          return await _getWithSfwCookie(url, additionalHeaders: additionalHeaders, skipSfw: true);
+          return await _getWithSfwCookie(url,
+              additionalHeaders: additionalHeaders, skipSfw: true);
         } else {
           throw Exception("User declined to view NSFW content.");
         }
@@ -247,8 +242,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('NSFW Content'),
-          content:
-          const Text('This post is marked NSFW. Are you sure you want to view it?'),
+          content: const Text(
+              'This post is marked NSFW. Are you sure you want to view it?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -284,20 +279,14 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       } on FormatException {
         decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
       }
-      final document = html_parser.parse(decodedBody);
+      final document = await compute(parseHtml, decodedBody);
 
-
-
-
-
-      // Determine if the page is classic by checking data-static-path.
       final isClassic = document
           .querySelector('body')
           ?.attributes['data-static-path']
           ?.contains('themes/classic') ??
           false;
 
-      // These variables will hold the links and keys.
       dom.Element? watchLinkElement;
       dom.Element? unwatchLinkElement;
       dom.Element? blockLinkElement;
@@ -306,7 +295,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       String? unblockKey;
 
       if (!isClassic) {
-        // Modern (beta) style selectors.
         watchLinkElement =
             logQuery(document, 'a.button.standard.go[href^="/watch/"]');
         unwatchLinkElement =
@@ -316,61 +304,47 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         unblockLinkElement =
             logQuery(document, 'a.button.standard.stop[href^="/unblock/"]');
 
-        // Fallback if necessary.
         watchLinkElement ??= logQuery(document, 'a.cat[href^="/watch/"]');
         unwatchLinkElement ??= logQuery(document, 'a.cat[href^="/unwatch/"]');
         blockLinkElement ??= logQuery(document, 'a.cat[href^="/block/"]');
         unblockLinkElement ??= logQuery(document, 'a.cat[href^="/unblock/"]');
       } else {
-        // Classic style selectors.
-        // For watch/unwatch, classic pages wrap the link inside a <b> tag.
         watchLinkElement = logQuery(document, 'b > a[href^="/watch/"]');
         unwatchLinkElement = logQuery(document, 'b > a[href^="/unwatch/"]');
 
-        // For block/unblock, classic pages use forms.
         final blockForm = document.querySelector('form[action^="/block/"]');
         if (blockForm != null) {
           final blockButton = blockForm.querySelector('button');
-          if (blockButton != null && blockButton.text.trim().contains('+Block')) {
+          if (blockButton != null &&
+              blockButton.text.trim().contains('+Block')) {
             blockLinkElement = dom.Element.tag('a');
-            blockLinkElement.attributes['href'] = blockForm.attributes['action']!;
-            // Store the key from the button’s value:
+            blockLinkElement.attributes['href'] =
+            blockForm.attributes['action']!;
             blockKey = blockButton.attributes['value'];
           }
         }
         final unblockForm = document.querySelector('form[action^="/unblock/"]');
         if (unblockForm != null) {
           final unblockButton = unblockForm.querySelector('button');
-          // Only use this if the button text indicates that the user is blocked.
-          if (unblockButton != null && unblockButton.text.trim().contains('-Unblock')) {
+          if (unblockButton != null &&
+              unblockButton.text.trim().contains('-Unblock')) {
             unblockLinkElement = dom.Element.tag('a');
-            unblockLinkElement.attributes['href'] = unblockForm.attributes['action']!;
-            // Store the key from the button’s value:
+            unblockLinkElement.attributes['href'] =
+            unblockForm.attributes['action']!;
             unblockKey = unblockButton.attributes['value'];
           }
         }
       }
 
-
       setState(() {
-
         watchLink = watchLinkElement?.attributes['href'];
         unwatchLink = unwatchLinkElement?.attributes['href'];
-
-
         blockLink = blockLinkElement?.attributes['href'];
         unblockLink = unblockLinkElement?.attributes['href'];
-
-
         _blockKey = blockKey;
         _unblockKey = unblockKey;
-
-
         _isClassicUserPage = isClassic;
 
-        // Determine state:
-        // In modern pages, if an unwatch link is present, the user is already watching.
-        // In classic pages, we assume the presence of the unblock form (and key) means the user is blocked.
         isWatching = (unwatchLinkElement != null);
         isBlocked = (unblockLinkElement != null);
       });
@@ -503,7 +477,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     final fullUrl = 'https://www.furaffinity.net$urlPath';
 
     try {
-      final response = await http.post(
+      final response = await httpClient.post(
         Uri.parse(fullUrl),
         headers: {
           'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
@@ -668,7 +642,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       } on FormatException {
         decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
       }
-      final document = html_parser.parse(decodedBody);
+      final document = await compute(parseHtml, decodedBody);
 
 
       // Modern (beta) style
@@ -734,9 +708,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     } on FormatException {
       decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
     }
-    final document = html_parser.parse(decodedBody);
-
-    await _fetchComments(decodedBody);
+    final document = await compute(parseHtml, decodedBody);
 
     // 1) Current logged-in username
     var currentUserElem = logQuery(document, '#my-username');
@@ -1209,6 +1181,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
       imageWidth = localImageWidth;
       imageHeight = localImageHeight;
+
     });
 
 
@@ -1219,11 +1192,13 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       _detailsLoaded = true;
     });
 
+    // Fetch comments in the background so the UI can display sooner
+    unawaited(_fetchComments(document));
+
 
   }
 
-  Future<void> _fetchComments(String body) async {
-    var document = html_parser.parse(body);
+  Future<void> _fetchComments(dom.Document document) async {
 
     // Grab both modern and classic comment containers
     var commentContainers =
@@ -1528,7 +1503,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
     final url = 'https://www.furaffinity.net/controls/submissions/';
     try {
-      final response = await http.post(
+      final response = await httpClient.post(
         Uri.parse(url),
         headers: {
           'Cookie': 'a=$cookieA; b=$cookieB',
@@ -1544,6 +1519,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
       if (response.statusCode == 200) {
         var document = html_parser.parse(response.body);
+
         var confirmInput = document.querySelector('button[name="confirm"]');
         var confirmValue = confirmInput?.attributes['value'];
         var deleteSubmissionsSubmitInput =
@@ -1675,7 +1651,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
     final url = 'https://www.furaffinity.net/controls/submissions/';
     try {
-      final response = await http.post(
+      final response = await httpClient.post(
         Uri.parse(url),
         headers: {
           'Cookie': 'a=$cookieA; b=$cookieB',
@@ -1901,7 +1877,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         Uint8List bytes;
 
         // Attempt to download the image from the URL
-        final response = await http.get(Uri.parse(imageUrl));
+        final response = await httpClient.get(Uri.parse(imageUrl));
         if (response.statusCode == 200) {
           bytes = response.bodyBytes;
         } else {
@@ -1978,7 +1954,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       Uint8List bytes;
 
 
-      final response = await http.get(Uri.parse(imageUrl));
+      final response = await httpClient.get(Uri.parse(imageUrl));
       if (response.statusCode == 200) {
         bytes = response.bodyBytes;
       } else {

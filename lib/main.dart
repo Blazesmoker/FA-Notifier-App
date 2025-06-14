@@ -39,6 +39,7 @@ import 'services/fa_service.dart';
 import 'package:provider/provider.dart';
 import 'utils/notification_counts.dart';
 import 'package:html/dom.dart' as dom;
+import 'network.dart';
 
 
 final RouteObserver<ModalRoute<dynamic>> routeObserver = RouteObserver<ModalRoute<dynamic>>();
@@ -601,10 +602,7 @@ Future<void> requestIOSNotificationPermission() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-
   final timezoneProvider = TimezoneProvider();
-  // Fetch timezone data once
   await timezoneProvider.fetchTimezone();
 
   final notificationService = NotificationService();
