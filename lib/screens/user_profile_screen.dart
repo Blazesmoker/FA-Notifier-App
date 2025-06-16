@@ -2283,7 +2283,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                               ),
                               if (isOwnProfile)
                                 TextButton(
-                                  onPressed: () => Navigator.pop(context, true),
+                                  onPressed: () => Navigator.pop(context, 'delete'),
                                   style: TextButton.styleFrom(foregroundColor: Colors.red),
                                   child: const Text("Delete"),
                                 ),
