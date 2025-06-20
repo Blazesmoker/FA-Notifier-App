@@ -219,6 +219,9 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   static const double collapsibleHeaderMaxHeight = 110.0;
   static const double navigationSliderHeight = 64.0;
 
+  final double _bannerScaleStart = 0.0;
+  final double _bannerScaleEnd = 180.0;
+
 
   late ScrollController _scrollController;
 
@@ -237,8 +240,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   final double _avatarScaleStart = 0.0;
   final double _avatarScaleEnd = 140.0;
 
-  final double _bannerScaleStart = 0.0;
-  final double _bannerScaleEnd = 180.0;
+
 
   @override
   void initState() {
@@ -2148,15 +2150,24 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
   Widget _buildShoutsSection() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 0.0),
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF1F1F1F),
+          // ← replace solid color with a gradient
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF1F1F1F),
+              Colors.black,
+            ],
+            stops: [0.0, 0.06],     // fade setting
+          ),
           borderRadius: BorderRadius.circular(8.0),
         ),
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.only(top: 16.0, bottom: 64.0, right: 0.0, left: 0.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const Text(
               'Shouts',
@@ -2166,39 +2177,42 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                 color: Colors.white,
               ),
             ),
-            const SizedBox(height: 8.0),
-            GestureDetector(
-              onTap: () async {
-                final result = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => PostShoutScreen(username: sanitizedUsername),
-                  ),
-                );
-                if (result == true) {
-                  await _fetchUserProfile();
-                }
-              },
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 16.0),
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF353535),
-                  borderRadius: BorderRadius.circular(10.0),
-                ),
-                child: Row(
-                  children: const [
-                    Expanded(
-                      child: Text(
-                        'Type here to leave a shout!',
-                        style: TextStyle(color: Colors.white54),
-                      ),
+            const SizedBox(height: 0.0),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12.0, 12.0, 12.0, 12.0),
+              child: GestureDetector(
+                onTap: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => PostShoutScreen(username: sanitizedUsername),
                     ),
-                    Icon(Icons.send, color: Colors.white54),
-                  ],
+                  );
+                  if (result == true) {
+                    await _fetchUserProfile();
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF232323),
+                    borderRadius: BorderRadius.circular(10.0),
+                  ),
+                  child: Row(
+                    children: const [
+                      Expanded(
+                        child: Text(
+                          'Type here to leave a shout!',
+                          style: TextStyle(color: Colors.white54),
+                        ),
+                      ),
+                      Icon(Icons.send, color: Colors.white54),
+                    ],
+                  ),
                 ),
               ),
             ),
+
             if (shouts.isEmpty)
               const Text(
                 'No shouts yet. Be the first to shout!',
@@ -2210,10 +2224,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: shouts.length,
-                separatorBuilder: (context, index) => const Divider(
-                  color: Colors.white,
-                  thickness: 0.2,
-                ),
+                separatorBuilder: (context, index) => const SizedBox(height: 8.0),
                 itemBuilder: (context, index) {
                   final shout = shouts[index];
                   return GestureDetector(
@@ -2356,7 +2367,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                     borderRadius: BorderRadius.circular(8.0),
                     child: CachedNetworkImage(
                       imageUrl: userProfileImageUrl!,
-                      fit: BoxFit.contain,
+                      fit: BoxFit.cover,
                       placeholder: (context, url) => const SizedBox(
                         height: 200,
                         child: Center(child: CircularProgressIndicator()),
@@ -2926,26 +2937,24 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       double shiftFraction = 30.0 / constraints.maxWidth * 2;
       alignmentX += shiftFraction;
     }
-
     return AnimatedBuilder(
       animation: _scrollController,
       builder: (context, child) {
-        // Get current scroll offset
         double offset = _scrollController.hasClients ? _scrollController.offset : 0.0;
 
-        // Compute new scale (from 1.0 to 0.8)
         double newScale;
+
         if (offset <= _bannerScaleStart) {
           newScale = 1.0;
         } else if (offset >= _bannerScaleEnd) {
-          newScale = 1.0; // For example, scale down to 80%
+          newScale = 1.0; //
         } else {
           double scaleFraction = (offset - _bannerScaleStart) / (_bannerScaleEnd - _bannerScaleStart);
           newScale = 1.0 - (0.2 * scaleFraction);
         }
 
         return Transform.scale(
-          scale: newScale.clamp(1.0, 1.0),
+          scale: newScale.clamp(1.0, 1.0), //
           alignment: Alignment(alignmentX, 0),
           child: child,
         );
@@ -3011,6 +3020,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
           imageUrl: profileImageUrl ?? '',
           width: avatarSize,
           height: avatarSize,
+          filterQuality: FilterQuality.low,
           fit: BoxFit.cover,
           placeholder: (context, url) => SizedBox(
             width: avatarSize / 2,
@@ -3256,7 +3266,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                             child: buildAnimatedBanner(constraints),
                           ),
                           Container(
-                            color: Colors.black.withOpacity(0.3),
+                            color: Colors.black.withOpacity(0.15),
                           ),
                           buildAnimatedAvatar(),
                         ],

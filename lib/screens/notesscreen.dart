@@ -224,7 +224,7 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
                 noteEl.querySelector('a.notelink.note-read.read')?.attributes['href'] ??
                 '';
 
-            final isUnread = folder == 'inbox' && (noteEl.querySelector('img.unread') != null ||
+            final isUnread = (noteEl.querySelector('img.unread') != null ||
                 noteEl.querySelector('img[src*="pms-unread.png"]') != null);
 
             final id = extractMessageId(link);
@@ -743,7 +743,7 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
                     ),
                     child: Row(
                       children: [
-                        if (msg.isUnread && folder == 'inbox')
+                        if (msg.isUnread)
                           Container(
                             width: 10,
                             height: 10,
@@ -771,11 +771,12 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
                             ],
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.preview, color: Colors.white),
-                          tooltip: 'Preview',
-                          onPressed: () => _showPreviewDialog(msg, folder),
-                        ),
+                        if (folder == 'inbox')
+                          IconButton(
+                            icon: const Icon(Icons.preview, color: Colors.white),
+                            tooltip: 'Preview',
+                            onPressed: () => _showPreviewDialog(msg, folder),
+                          ),
                       ],
                     ),
                   ),

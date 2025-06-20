@@ -41,7 +41,6 @@ import 'keyword_search_screen.dart';
 import 'new_message.dart';
 import 'user_profile_screen.dart';
 import 'openjournal.dart';
-import 'openpost.dart';
 
 // Mapping from FA Timezone Names to IANA Timezones
 final Map<String, String> faTimezoneToIana = {
@@ -3467,7 +3466,7 @@ class _CommentWidgetState extends State<CommentWidget> {
               ],
             ),
         Padding(
-          padding: const EdgeInsets.only(left: 8.0, right: 8.0, top: 11.0, bottom: 1.0),
+          padding: const EdgeInsets.only(left: 0.0, right: 0.0, top: 8.0, bottom: 1.0),
           child: Theme(
             data: Theme.of(context).copyWith(
               textSelectionTheme: TextSelectionThemeData(
@@ -3477,6 +3476,7 @@ class _CommentWidgetState extends State<CommentWidget> {
             ),
               child: SelectionArea(
                 child: ExtendedText(
+
                   widget.comment['text'] ?? '',
                   specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
                     onTapLink: widget.handleLink,

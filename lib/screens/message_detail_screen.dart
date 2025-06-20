@@ -567,7 +567,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                           linkStyle: const TextStyle(
                             fontSize: 16,
                             color: Color(0xFFE09321),
-                            decoration: TextDecoration.underline,
+                            decoration: TextDecoration.none,
                             decorationColor: Color(0xFFE09321),
                           ),
                           selectionControls: MaterialTextSelectionControls(),

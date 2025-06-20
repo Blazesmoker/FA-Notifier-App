@@ -40,10 +40,15 @@ import 'package:provider/provider.dart';
 import 'utils/notification_counts.dart';
 import 'package:html/dom.dart' as dom;
 import 'network.dart';
+import 'utils/fa_link_handler.dart';
+import 'package:app_links/app_links.dart';
+import 'dart:async';
 
 
 final RouteObserver<ModalRoute<dynamic>> routeObserver = RouteObserver<ModalRoute<dynamic>>();
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<DrawerUserControllerState> drawerKey = GlobalKey<DrawerUserControllerState>();
+
 
 const String fetchBackgroundTask = "fetchBackgroundTask";
 const String kPreviousSumKey = 'previousSumOfNotifications';
@@ -680,18 +685,33 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  AppLinks? _appLinks;
+  StreamSubscription<Uri>? _linkSub;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _setAppActive(true);
+    _initDeepLinks();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _linkSub?.cancel();
     _setAppActive(false);
     super.dispose();
+  }
+
+  Future<void> _initDeepLinks() async {
+    _appLinks = AppLinks();
+
+    _linkSub = _appLinks!.uriLinkStream.listen((Uri uri) {
+      if (navigatorKey.currentContext != null) {
+        handleFALink(navigatorKey.currentContext!, uri.toString());
+      }
+    }, onError: (_) {});
   }
 
   Future<void> _setAppActive(bool active) async {

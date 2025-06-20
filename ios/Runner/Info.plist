@@ -19,13 +19,22 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1.4</string>
+	<string>1.1.5</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleVersion</key>
-	<string>10</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
+            <string>11</string>
+            <key>CFBundleURLTypes</key>
+            <array>
+                    <dict>
+                            <key>CFBundleURLSchemes</key>
+                            <array>
+                                    <string>fanotifier</string>
+                            </array>
+                    </dict>
+            </array>
+            <key>LSRequiresIPhoneOS</key>
+            <true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

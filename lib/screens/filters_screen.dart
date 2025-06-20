@@ -209,11 +209,12 @@ class _FiltersScreenState extends State<FiltersScreen> {
                 child: Column(
                   children: <Widget>[
 
-                    ...filterDisplayNames.entries.map((entry) {
+                    ...filterDisplayNames.entries
+                        .where((entry) => entry.key != 'gender')
+                        .map((entry) {
                       return Column(
                         children: [
-                          buildFilterButton(
-                              context, entry.key, entry.value),
+                          buildFilterButton(context, entry.key, entry.value),
                           const SizedBox(height: 20),
                         ],
                       );

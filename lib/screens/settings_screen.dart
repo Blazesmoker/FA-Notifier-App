@@ -116,7 +116,7 @@ class SettingsScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 16.0),
               child: Text(
-                "FA Notifier v1.1.4",
+                "FA Notifier v1.1.5",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: AppTheme.fontName,

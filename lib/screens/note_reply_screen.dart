@@ -380,6 +380,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
                         child: TextField(
                           controller: _replyController,
                           style: const TextStyle(color: Colors.white),
+                          minLines: 6,
                           maxLines: null,
                           keyboardType: TextInputType.multiline,
                           decoration: const InputDecoration(
