@@ -47,7 +47,6 @@ class NewMessageScreen extends StatelessWidget {
     String? sz = await _secureStorage.read(key: 'sz');
     String? folder = await _secureStorage.read(key: 'folder');
 
-    // Build a list of cookies
     List<Cookie> cookies = [];
 
     if (cookieA != null) cookies.add(Cookie('a', cookieA));
@@ -60,7 +59,6 @@ class NewMessageScreen extends StatelessWidget {
     if (sz != null) cookies.add(Cookie('sz', sz));
     if (folder != null) cookies.add(Cookie('folder', folder));
 
-    // Set cookies for the Fur Affinity domain
     Uri uri = Uri.parse('https://www.furaffinity.net');
     await _cookieJar.saveFromResponse(uri, cookies);
   }
@@ -68,7 +66,6 @@ class NewMessageScreen extends StatelessWidget {
   Future<String?> _fetchKey() async {
     await _loadCookies();
 
-    // Retrieve cookies `a` and `b`
     String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
 
@@ -103,7 +100,6 @@ class NewMessageScreen extends StatelessWidget {
       return;
     }
 
-    // Retrieve cookies `a` and `b`
     String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
 
@@ -118,7 +114,6 @@ class NewMessageScreen extends StatelessWidget {
       'message': _messageController.text.trim(),
     };
 
-    // Encode form data as application/x-www-form-urlencoded
     String encodedFormData = Uri(queryParameters: formData).query;
 
     try {
@@ -156,7 +151,9 @@ class NewMessageScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+        canPop: false,
+        child: Scaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.close),
@@ -170,7 +167,7 @@ class NewMessageScreen extends StatelessWidget {
           ),
         ],
       ),
-      resizeToAvoidBottomInset: true, // Adjust content when the keyboard is visible
+      resizeToAvoidBottomInset: true,
       body: LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
@@ -220,7 +217,8 @@ class NewMessageScreen extends StatelessWidget {
           );
         },
       ),
-    );
+    ));
+
   }
 
 }

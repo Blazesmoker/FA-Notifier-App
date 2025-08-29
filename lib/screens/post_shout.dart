@@ -201,8 +201,9 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // Ensures the scaffold resizes when the keyboard appears.
+    return PopScope(
+        canPop: false,
+        child: Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         leading: IconButton(
@@ -278,6 +279,6 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
           ),
         ),
       ),
-    );
+    ));
   }
 }

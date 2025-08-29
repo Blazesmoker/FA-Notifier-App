@@ -287,7 +287,9 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       );
     }
 
-    return Scaffold(
+    return PopScope(
+        canPop: false,
+        child: Scaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.close),
@@ -393,7 +395,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
           },
         ),
       ),
-    );
+    ));
   }
 
 }
