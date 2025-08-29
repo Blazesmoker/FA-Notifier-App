@@ -58,7 +58,6 @@ class _KeywordSearchScreenState extends State<KeywordSearchScreen> {
         const SnackBar(content: Text('Please enter a search query.')),
       );
     }
-    // If the query is the same, does nothing to prevent unnecessary refreshes.
   }
 
   /// Handles the filter application and updates the search results accordingly.

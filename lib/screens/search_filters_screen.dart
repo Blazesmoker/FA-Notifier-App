@@ -21,6 +21,15 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
 
   final Color _applyButtonColor = const Color(0xFFE09321);
 
+  static const List<Map<String, String>> _genderOptions = [
+    {'key': 'male',         'label': 'Male'},
+    {'key': 'female',       'label': 'Female'},
+    {'key': 'trans_male',   'label': 'Trans Male'},
+    {'key': 'trans_female', 'label': 'Trans Female'},
+    {'key': 'intersex',     'label': 'Intersex'},
+    {'key': 'non_binary',   'label': 'Non Binary'},
+  ];
+
   late Map<String, String> currentSearchFilters;
   DateTime? fromDate;
   DateTime? toDate;
@@ -38,6 +47,9 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
 
     if (currentSearchFilters['mode'] == null || currentSearchFilters['mode']!.isEmpty) {
       currentSearchFilters['mode'] = 'extended';
+    }
+    for (final g in _genderOptions) {
+      currentSearchFilters['gender-${g['key']}'] ??= '0';
     }
 
 
@@ -204,6 +216,8 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
               const SizedBox(height: 20),
               _buildSortByRange(),
               const SizedBox(height: 20),
+              _buildGenderFilter(),
+              const SizedBox(height: 20),
               _buildSortByRating(),
               const SizedBox(height: 20),
               _buildSortByType(),
@@ -263,6 +277,24 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
             ),
             Text(' order'),
           ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGenderFilter() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Gender Filter', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 12.0,
+          runSpacing: 4.0,
+          children: _genderOptions.map((opt) {
+            final filterKey = 'gender-${opt['key']}';
+            return _buildCheckboxOption(opt['label']!, filterKey, '1');
+          }).toList(),
         ),
       ],
     );
@@ -461,6 +493,12 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
                         'type-photo': '1',
                         'type-flash': '1',
                         'type-poetry': '1',
+                        'gender-male': '0',
+                        'gender-female': '0',
+                        'gender-trans_male': '0',
+                        'gender-trans_female': '0',
+                        'gender-intersex': '0',
+                        'gender-non_binary': '0',
                       };
                       fromDate = null;
                       toDate = null;

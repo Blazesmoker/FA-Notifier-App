@@ -143,58 +143,73 @@ class _AddCommentScreenState extends State<AddCommentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text("Add comment"),
-        actions: [
-          IconButton(
-            icon: _isSending
-                ? const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-            )
-                : const Icon(Icons.send),
-            onPressed: _isSending ? null : _sendComment,
+    return WillPopScope(
+      onWillPop: () async => false,
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.pop(context),
           ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Text(
-              widget.submissionTitle,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            const Divider(color: Colors.grey),
-            const SizedBox(height: 16),
-            Expanded(
-              child: TextField(
-                controller: _commentController,
-                style: const TextStyle(color: Colors.white),
-                maxLines: null,
-                expands: true,
-                decoration: const InputDecoration(
-                  hintText: 'Your comment',
-                  hintStyle: TextStyle(color: Colors.white70),
-                  contentPadding: EdgeInsets.zero,
-                  border: InputBorder.none,
+          title: const Text("Add comment"),
+          actions: [
+            IconButton(
+              icon: _isSending
+                  ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
-                textInputAction: TextInputAction.newline,
-              ),
+              )
+                  : const Icon(Icons.send),
+              onPressed: _isSending ? null : _sendComment,
             ),
-
           ],
+        ),
+        body: SafeArea(
+          bottom: true,
+          maintainBottomViewPadding: true,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                Text(
+                  widget.submissionTitle,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                const Divider(color: Colors.grey),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: Scrollbar(
+                    child: TextField(
+                      controller: _commentController,
+                      style: const TextStyle(color: Colors.white),
+                      keyboardType: TextInputType.multiline,
+                      maxLines: null,
+                      decoration: const InputDecoration(
+                        hintText: 'Your comment',
+                        hintStyle: TextStyle(color: Colors.white70),
+                        contentPadding: EdgeInsets.zero,
+                        border: InputBorder.none,
+                      ),
+                      textInputAction: TextInputAction.newline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
+
 }

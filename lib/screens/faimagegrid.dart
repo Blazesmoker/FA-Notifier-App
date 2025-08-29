@@ -111,59 +111,62 @@ class _FAImageGridState extends State<FAImageGrid> {
 
   Future<void> _fetchImages(int pageNumber, {bool isRefresh = false}) async {
     if (isLoading || !hasMore) return;
-    setState(() {
-      isLoading = true;
-    });
+    setState(() => isLoading = true);
 
     try {
       if (isRefresh) {
-        images.clear();
-        imageUrls.clear();
-        imageRows.clear();
-        normalImagesQueue.clear();
-        currentPage = 1;
-        hasMore = true;
+        images.clear(); imageUrls.clear(); imageRows.clear(); normalImagesQueue.clear();
+        currentPage = 1; hasMore = true;
       }
 
       final cookieHeader = await _getAllCookies();
+      final uri = Uri.parse('https://www.furaffinity.net/browse/$pageNumber');
 
-      final response = await http.post(
-        Uri.parse('https://www.furaffinity.net/browse/$pageNumber'),
-        headers: {
-          'Cookie': cookieHeader,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          'Referer': 'https://www.furaffinity.net',
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: {
-          'cat': getFilterValue('Category'),
-          'atype': getFilterValue('Type'),
-          'species': getFilterValue('Species'),
-          'gender': getFilterValue('Gender'),
-          'rating_general': getFilterValue('rating-general'),
-          'rating_mature': getFilterValue('rating-mature'),
-          'rating_adult': getFilterValue('rating-adult'),
-          'perpage': '48',
-          'btn': 'Next',
-        },
+      final headers = {
+        'Cookie': cookieHeader,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Referer': 'https://www.furaffinity.net/browse/',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      };
 
+      final body = {
+        'cat': getFilterValue('Category'),
+        'atype': getFilterValue('Type'),
+        'species': getFilterValue('Species'),
+        'gender': getFilterValue('Gender'),
+        'rating_general': getFilterValue('rating-general'),
+        'rating_mature': getFilterValue('rating-mature'),
+        'rating_adult': getFilterValue('rating-adult'),
+        'perpage': '48',
+        'btn': 'Next',
+      };
 
-      );
+      http.Response resp = await http.post(uri, headers: headers, body: body);
 
-      if (response.statusCode == 200) {
-        final newImages = await parseHtml(response.body);
-        if (newImages.isEmpty) {
-          setState(() {
-            hasMore = false;
-          });
+      // If gender is selected, FA redirects Browse -> Search via 302/303.
+      if (resp.isRedirect || (resp.statusCode >= 300 && resp.statusCode < 400)) {
+        final loc = resp.headers['location'];
+        if (loc == null || loc.isEmpty) {
+          throw Exception('Redirect without Location header');
         }
+        final redirectUri = uri.resolve(loc); // handles relative paths
+        // Use GET for the redirected Search page.
+        resp = await http.get(
+          redirectUri,
+          headers: {
+            'Cookie': cookieHeader,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            'Referer': uri.toString(),
+          },
+        );
+      }
 
-        /// Filter out duplicates
+      if (resp.statusCode == 200) {
+        final newImages = await parseHtml(resp.body);
+        if (newImages.isEmpty) setState(() => hasMore = false);
+
         final filtered = newImages.where((img) => !imageUrls.contains(img['url'])).toList();
-
-        for (var img in filtered) {
-          imageUrls.add(img['url']);
-        }
+        for (final img in filtered) { imageUrls.add(img['url']); }
 
         setState(() {
           images.addAll(filtered);
@@ -173,7 +176,7 @@ class _FAImageGridState extends State<FAImageGrid> {
         });
       } else {
         setState(() => isLoading = false);
-        throw Exception('FAImageGrid: HTTP ${response.statusCode} fetching images.');
+        throw Exception('FAImageGrid: HTTP ${resp.statusCode} fetching images.');
       }
     } catch (e) {
       setState(() => isLoading = false);

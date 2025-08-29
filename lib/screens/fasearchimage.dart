@@ -165,96 +165,85 @@ class _FASearchImageState extends State<FASearchImage> {
     }
   }
 
-  /// UPDATED: This function now first does a preview GET request to check if the search page is classic.
-  /// In classic style it adds the 'perpage' field.
-  Future<List<Map<String, dynamic>>> fetchImagesWithFilters(
-      int pageNumber, String cookieHeader) async {
-    // Check if the search page is classic by doing a GET request.
-    bool isClassic = false;
-    try {
-      final previewResponse = await http.get(
-        Uri.parse('https://www.furaffinity.net/search/?q=${widget.searchQuery}'),
-        headers: {
-          'Cookie': cookieHeader,
-          'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-        },
-      );
-      if (previewResponse.statusCode == 200) {
-        var previewDoc = html_parser.parse(previewResponse.body);
-        isClassic = previewDoc
-            .querySelector('body')
-            ?.attributes['data-static-path']
-            ?.contains('classic') ??
-            false;
-      }
-    } catch (e) {
-      print("Error checking search style: $e");
-    }
-
-    Map<String, String> postBody = {
-      'page': pageNumber.toString(),
-      'q': widget.searchQuery,
-      'order-by': widget.selectedFilters['order-by'] ?? 'relevancy',
-      'order-direction': widget.selectedFilters['order-direction'] ?? 'desc',
-      'range': widget.selectedFilters['range'] ?? '5years',
-      'mode': widget.selectedFilters['mode'] ?? 'extended',
-      'rating-general': widget.selectedFilters['rating-general'] ?? '1',
-      'rating-mature': widget.selectedFilters['rating-mature'] ?? '1',
-      'rating-adult': widget.selectedFilters['rating-adult'] ?? '1',
-      'type-art': widget.selectedFilters['type-art'] ?? '1',
-      'type-music': widget.selectedFilters['type-music'] ?? '1',
-      'type-flash': widget.selectedFilters['type-flash'] ?? '1',
-      'type-story': widget.selectedFilters['type-story'] ?? '1',
-      'type-photo': widget.selectedFilters['type-photo'] ?? '1',
-      'type-poetry': widget.selectedFilters['type-poetry'] ?? '1',
-      'do_search': 'Search',
+  String _buildGenderQuery(Map<String, String> f, {required bool useOr}) {
+    const map = {
+      'male': 'male',
+      'female': 'female',
+      'trans_male': '"trans male"',
+      'trans_female': '"trans female"',
+      'intersex': 'intersex',
+      'non_binary': '"non binary"',
     };
 
-    // In classic style, add the perpage field.
-    if (isClassic) {
-      postBody['perpage'] = widget.selectedFilters['perpage'] ?? '72';
-    }
+    final selected = <String>[];
+    map.forEach((k, term) {
+      if (f['gender-$k'] == '1') selected.add(term);
+    });
+    if (selected.isEmpty) return '';
 
-    if (widget.selectedFilters['range'] == 'manual') {
-      postBody['range_from'] = widget.selectedFilters['range_from'] ?? '';
-      postBody['range_to'] = widget.selectedFilters['range_to'] ?? '';
-    }
+    final glue = useOr ? ' | ' : ' ';
+    return selected.join(glue);
+  }
 
-    final response = await http.post(
-      Uri.parse('https://www.furaffinity.net/search/'),
-      headers: {
-        'Cookie': cookieHeader,
-        'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-        'Referer': 'https://www.furaffinity.net/browse/',
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept':
-        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br, zstd',
-        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Cache-Control': 'max-age=0',
-        'DNT': '1',
-        'Priority': 'u=0, i',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-CH-UA': '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
-        'Sec-CH-UA-Mobile': '?0',
-        'Sec-CH-UA-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-User': '?1',
-      },
-      body: postBody,
+
+  Future<List<Map<String, dynamic>>> fetchImagesWithFilters(
+      int pageNumber, String cookieHeader) async {
+
+    final filters = widget.selectedFilters;
+
+
+    final baseQ = (widget.searchQuery).trim();
+
+
+    final genderQ = _buildGenderQuery(
+      filters,
+      useOr: (filters['mode'] ?? 'extended') == 'any',
     );
 
 
+    final needsExtended = genderQ.contains('|') || genderQ.contains('"');
 
+    final q = [baseQ, genderQ].where((s) => s.isNotEmpty).join(' ').trim();
 
+    final queryParams = {
+      'page': pageNumber.toString(),
+      'q': q,
+      'order-by': filters['order-by'] ?? 'relevancy',
+      'order-direction': filters['order-direction'] ?? 'desc',
+      'range': filters['range'] ?? '5years',
+      'mode': needsExtended ? 'extended' : (filters['mode'] ?? 'extended'),
+      'rating-general': filters['rating-general'] ?? '1',
+      'rating-mature':  filters['rating-mature']  ?? '1',
+      'rating-adult':   filters['rating-adult']   ?? '1',
+      'type-art':   filters['type-art']   ?? '1',
+      'type-music': filters['type-music'] ?? '1',
+      'type-flash': filters['type-flash'] ?? '1',
+      'type-story': filters['type-story'] ?? '1',
+      'type-photo': filters['type-photo'] ?? '1',
+      'type-poetry':filters['type-poetry']?? '1',
+      'perpage': filters['perpage'] ?? '72',
+    };
 
+    if (filters['range'] == 'manual') {
+      queryParams['range_from'] = filters['range_from'] ?? '';
+      queryParams['range_to']   = filters['range_to'] ?? '';
+    }
+
+    final uri = Uri.https('www.furaffinity.net', '/search/', queryParams);
+
+    final response = await http.get(
+      uri,
+      headers: {
+        'Cookie': cookieHeader,
+        'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36',
+        'Referer': 'https://www.furaffinity.net/search/',
+        'Accept':
+        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      },
+    );
 
     if (response.statusCode == 200) {
-      print('Response body: ${response.body.substring(0, min(2500, response.body.length))}');
       return await parseHtml(response.body);
     } else {
       throw Exception('Failed to load images: ${response.statusCode}');

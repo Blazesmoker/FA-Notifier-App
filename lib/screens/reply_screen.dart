@@ -193,97 +193,144 @@ class _ReplyScreenState extends State<ReplyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text("Reply to Comment"),
-        actions: [
-          IconButton(
-            icon: _isSending
-                ? const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-            )
-                : const Icon(Icons.send),
-            onPressed: _isSending ? null : _sendReply,
+    return WillPopScope(
+      onWillPop: () async => false,
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.pop(context),
           ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Display the original comment being replied to.
-            Row(
+          title: const Text("Reply to Comment"),
+          actions: [
+            IconButton(
+              icon: _isSending
+                  ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+                  : const Icon(Icons.send),
+              onPressed: _isSending ? null : _sendReply,
+            ),
+          ],
+        ),
+        body: SafeArea(
+          bottom: true,
+          maintainBottomViewPadding: true,
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
+            physics: const ClampingScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              16,
+              16,
+              16 + MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ClipRRect(
-                  child: widget.comment['profileImage'] != null
-                      ? CachedNetworkImage(
-                    imageUrl: widget.comment['profileImage']!,
-                    width: 36,
-                    height: 36,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      width: 36,
-                      height: 36,
-                      color: Colors.grey,
-                      child: const Icon(Icons.person, size: 24),
+                Row(
+                  children: [
+                    ClipRRect(
+                      child: widget.comment['profileImage'] != null
+                          ? CachedNetworkImage(
+                        imageUrl: widget.comment['profileImage']!,
+                        width: 36,
+                        height: 36,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          width: 36,
+                          height: 36,
+                          color: Colors.grey,
+                          child: const Icon(Icons.person, size: 24),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          width: 36,
+                          height: 36,
+                          color: Colors.grey,
+                          child: const Icon(Icons.person, size: 24),
+                        ),
+                      )
+                          : Container(
+                        width: 36,
+                        height: 36,
+                        color: Colors.grey,
+                        child: const Icon(Icons.person, size: 24),
+                      ),
                     ),
-                    errorWidget: (context, url, error) => Container(
-                      width: 36,
-                      height: 36,
-                      color: Colors.grey,
-                      child: const Icon(Icons.person, size: 24),
+                    const SizedBox(width: 12),
+                    Text(
+                      widget.comment['username'] ?? 'Anonymous',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  )
-                      : Container(
-                    width: 36,
-                    height: 36,
-                    color: Colors.grey,
-                    child: const Icon(Icons.person, size: 24),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onLongPress: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: Text(widget.comment['username'] ?? 'Anonymous'),
+                        content: SelectableText(
+                          widget.comment['text'] ?? '',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Close'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      widget.comment['text'] ?? '',
+                      style: const TextStyle(fontSize: 14),
+                      textAlign: TextAlign.left,
+                    ),
                   ),
                 ),
-
-                const SizedBox(width: 12),
-                Text(
-                  widget.comment['username'] ?? 'Anonymous',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                const SizedBox(height: 16),
+                const Divider(color: Colors.grey),
+                const SizedBox(height: 16),
+                Container(
+                  constraints: const BoxConstraints(minHeight: 100),
+                  child: TextField(
+                    controller: _replyController,
+                    style: const TextStyle(color: Colors.white),
+                    keyboardType: TextInputType.multiline,
+                    maxLines: null,
+                    enableInteractiveSelection: true,
+                    scrollPhysics: const NeverScrollableScrollPhysics(),
+                    decoration: const InputDecoration(
+                      hintText: 'Write your reply...',
+                      hintStyle: TextStyle(color: Colors.white70),
+                      contentPadding: EdgeInsets.all(8),
+                      border: InputBorder.none,
+                      isDense: true,
+                    ),
+                    textInputAction: TextInputAction.newline,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              widget.comment['text'] ?? '',
-              style: const TextStyle(fontSize: 14),
-              textAlign: TextAlign.left,
-            ),
-            const SizedBox(height: 16),
-            const Divider(color: Colors.grey),
-            const SizedBox(height: 16),
-            Expanded(
-              child: TextField(
-                controller: _replyController,
-                style: const TextStyle(color: Colors.white),
-                maxLines: null,
-                expands: true,
-                decoration: const InputDecoration(
-                  hintText: 'Write your reply...',
-                  hintStyle: TextStyle(color: Colors.white70),
-                  contentPadding: EdgeInsets.zero,
-                  border: InputBorder.none,
-                ),
-                textInputAction: TextInputAction.newline,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
+
 }

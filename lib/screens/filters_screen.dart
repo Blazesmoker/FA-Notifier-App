@@ -137,9 +137,12 @@ class _FiltersScreenState extends State<FiltersScreen> {
 
   void _updateCurrentFilters() {
     _filterOptions.forEach((filterName, options) {
-      if (options.isNotEmpty &&
-          (currentFilters[filterName] == 'Unknown' ||
-              currentFilters[filterName] == null)) {
+      if (options.isEmpty) return;
+
+      final current = currentFilters[filterName];
+      final hasMatch = options.any((o) => o['value'] == current);
+
+      if (current == null || current == 'Unknown' || !hasMatch) {
         currentFilters[filterName] = options.first['value']!;
       }
     });
@@ -209,9 +212,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
                 child: Column(
                   children: <Widget>[
 
-                    ...filterDisplayNames.entries
-                        .where((entry) => entry.key != 'gender')
-                        .map((entry) {
+                    ...filterDisplayNames.entries.map((entry) {
                       return Column(
                         children: [
                           buildFilterButton(context, entry.key, entry.value),
@@ -293,7 +294,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
                             currentFilters['cat'] = '1';
                             currentFilters['atype'] = '1';
                             currentFilters['species'] = '1';
-                            currentFilters['gender'] = '0';
+                            currentFilters['gender'] = '1';
                             // Reset rating filters.
                             _ratingGeneral = true;
                             _ratingMature = true;

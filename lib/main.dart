@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_app_badge_control/flutter_app_badge_control.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_local_notifications_platform_interface/src/types.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -607,6 +608,7 @@ Future<void> requestIOSNotificationPermission() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await PackageInfo.fromPlatform();
   final timezoneProvider = TimezoneProvider();
   await timezoneProvider.fetchTimezone();
 

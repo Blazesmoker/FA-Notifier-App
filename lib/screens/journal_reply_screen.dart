@@ -5,21 +5,20 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 
 class JournalReplyScreen extends StatefulWidget {
-  final String submissionId; // Submission (Journal) ID
+  final String submissionId; // Journal ID
   final String commentId; // Comment ID being replied to
-  final Function(String) onSendReply;
-
   final String username;
   final String profileImage;
   final String commentText;
+  final Function(String) onSendReply;
 
   const JournalReplyScreen({
     required this.submissionId,
     required this.commentId,
-    required this.onSendReply,
     required this.username,
     required this.profileImage,
     required this.commentText,
+    required this.onSendReply,
     Key? key,
   }) : super(key: key);
 
@@ -29,11 +28,10 @@ class JournalReplyScreen extends StatefulWidget {
 
 class _JournalReplyScreenState extends State<JournalReplyScreen> {
   final TextEditingController _replyController = TextEditingController();
-  bool _isSending = false;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  bool _isSending = false;
 
-  void _sendReply() async {
-    print("_sendReply method called");
+  Future<void> _sendReply() async {
     final replyText = _replyController.text.trim();
     if (replyText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -46,28 +44,18 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
       return;
     }
 
-    setState(() {
-      _isSending = true;
-    });
-
-    print("Reply Text: $replyText");
-    print("Submission ID: ${widget.submissionId}");
-    print("Comment ID: ${widget.commentId}");
+    setState(() => _isSending = true);
 
     try {
-      bool success = await submitJournalReply(
+      final success = await _submitJournalReply(
         message: replyText,
         submissionId: widget.submissionId,
         commentId: widget.commentId,
       );
 
       if (success) {
-        // Notifies the parent widget about the successful reply
         widget.onSendReply(replyText);
-
-        // Clears the text field
         _replyController.clear();
-
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Reply posted successfully!'),
@@ -75,8 +63,6 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
             duration: Duration(seconds: 2),
           ),
         );
-
-        // Navigate back after a short delay to allow the SnackBar to display
         await Future.delayed(const Duration(milliseconds: 500));
         Navigator.pop(context, true);
       } else {
@@ -89,7 +75,6 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
         );
       }
     } catch (e) {
-      print("Error in _sendReply: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error: $e'),
@@ -98,43 +83,30 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
         ),
       );
     } finally {
-      setState(() {
-        _isSending = false;
-      });
+      setState(() => _isSending = false);
     }
   }
 
-
-  Future<bool> submitJournalReply({
+  Future<bool> _submitJournalReply({
     required String message,
     required String submissionId,
     required String commentId,
   }) async {
-
-    print('[DEBUG] Original commentId: "$commentId"');
-
-    // Removes "#cid:" or "cid:" if they appear at the start.
     String sanitizedCommentId = commentId;
     if (sanitizedCommentId.startsWith('#cid:')) {
-      // If it starts with "#cid:", remove the first 5 characters.
       sanitizedCommentId = sanitizedCommentId.substring(5);
     } else if (sanitizedCommentId.startsWith('cid:')) {
-      // If it starts with "cid:", remove the first 4 characters.
       sanitizedCommentId = sanitizedCommentId.substring(4);
     }
-
-    // Trim whitespace and verify it’s all digits.
     sanitizedCommentId = sanitizedCommentId.trim();
-    print('[DEBUG] After removing "#cid:" or "cid:" prefix: "$sanitizedCommentId"');
-
     if (!RegExp(r'^\d+$').hasMatch(sanitizedCommentId)) {
-      throw Exception('Invalid comment ID. (Not purely digits)');
+      throw Exception('Invalid comment ID.');
     }
 
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     if (cookieA == null || cookieB == null) {
-      throw Exception('Authentication cookies not found. Please log in again.');
+      throw Exception('Not authenticated.');
     }
 
     final postUrl = 'https://www.furaffinity.net/journal/$submissionId/';
@@ -145,136 +117,155 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
       'submit': 'Post Comment',
     };
 
-    print('[DEBUG] POST URL: $postUrl');
-    print('[DEBUG] POST body: $body');
-
-    final response = await http.post(
+    final resp = await http.post(
       Uri.parse(postUrl),
       headers: {
         'Cookie': 'a=$cookieA; b=$cookieB',
         'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Referer': 'https://www.furaffinity.net/journal/$submissionId/#cid:$sanitizedCommentId',
+        'Referer': '$postUrl#cid:$sanitizedCommentId',
       },
       body: body,
     );
 
-    print('[DEBUG] Status Code: ${response.statusCode}');
-    print('[DEBUG] Response Body: ${response.body}');
-
-    if (response.statusCode == 302) {
+    if (resp.statusCode == 302) return true;
+    if (resp.statusCode == 200 && resp.body.contains('Your comment has been posted')) {
       return true;
-    } else if (response.statusCode == 200) {
-      if (response.body.contains('Your comment has been posted')) {
-        return true;
-      } else {
-        final document = html_parser.parse(response.body);
-        final errorElement = document.querySelector('.error_message_class');
-        final errorMessage =
-        errorElement != null ? errorElement.text : 'Unknown error occurred.';
-        throw Exception('Failed to post reply: $errorMessage');
-      }
-    } else {
-      throw Exception('Unexpected status code: ${response.statusCode}');
     }
+    if (resp.statusCode == 200) {
+      final doc = html_parser.parse(resp.body);
+      final err = doc.querySelector('.error_message_class')?.text ?? 'Unknown error';
+      throw Exception(err);
+    }
+    return false;
   }
-
-
-
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text("Reply to Comment"),
-        actions: [
-          IconButton(
-            icon: _isSending
-                ? const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                strokeWidth: 2.0,
-              ),
-            )
-                : const Icon(Icons.send),
-            onPressed: _isSending ? null : _sendReply,
+    return WillPopScope(
+      onWillPop: () async => !_isSending,
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: _isSending ? null : () => Navigator.pop(context),
           ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+          title: const Text("Reply to Comment"),
+          actions: [
+            IconButton(
+              icon: _isSending
+                  ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.0,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+                  : const Icon(Icons.send),
+              onPressed: _isSending ? null : _sendReply,
+            ),
+          ],
+        ),
+        body: SafeArea(
+          bottom: true,
+          maintainBottomViewPadding: true,
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
+            physics: const ClampingScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              16,
+              16,
+              16 + MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: const BoxDecoration(
-                    color: Colors.transparent,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(0),
-                    child: CachedNetworkImage(
-                      imageUrl: widget.profileImage,
-                      fit: BoxFit.cover,
-                      alignment: Alignment.center,
-                      errorWidget: (context, url, error) => Image.asset(
-                        'assets/images/defaultpic.gif',
+                Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: CachedNetworkImage(
+                        imageUrl: widget.profileImage,
+                        width: 36,
+                        height: 36,
                         fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          width: 36,
+                          height: 36,
+                          color: Colors.grey,
+                        ),
+                        errorWidget: (_, __, ___) => Container(
+                          width: 36,
+                          height: 36,
+                          color: Colors.grey,
+                          child: const Icon(Icons.person, size: 24),
+                        ),
                       ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      widget.username,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onLongPress: () => showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: Text(widget.username),
+                      content: SelectableText(widget.commentText),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Close'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      widget.commentText,
+                      style: const TextStyle(fontSize: 14),
                     ),
                   ),
                 ),
-
-                const SizedBox(width: 12),
-                Text(
-                  widget.username,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                const SizedBox(height: 16),
+                const Divider(color: Colors.grey),
+                const SizedBox(height: 16),
+                Container(
+                  constraints: const BoxConstraints(minHeight: 100),
+                  child: TextField(
+                    controller: _replyController,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    maxLines: null,
+                    enableInteractiveSelection: true,
+                    scrollPhysics: const NeverScrollableScrollPhysics(),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      hintText: 'Write your reply...',
+                      hintStyle: TextStyle(color: Colors.white70),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.all(8),
+                      isDense: true,
+                    ),
                   ),
                 ),
               ],
             ),
-
-
-            const SizedBox(height: 8),
-            Text(
-              widget.commentText,
-              style: const TextStyle(fontSize: 14),
-              textAlign: TextAlign.left,
-            ),
-            const SizedBox(height: 16),
-            const Divider(color: Colors.grey),
-            const SizedBox(height: 16),
-            Expanded(
-              child: TextField(
-                controller: _replyController,
-                style: const TextStyle(color: Colors.white),
-                maxLines: null,
-                expands: true,
-                decoration: const InputDecoration(
-                  hintText: 'Write your reply...',
-                  hintStyle: TextStyle(color: Colors.white70),
-                  contentPadding: EdgeInsets.zero,
-                  border: InputBorder.none,
-                ),
-                textInputAction: TextInputAction.newline,
-              ),
-            ),
-
-          ],
+          ),
         ),
       ),
     );
   }
-
 }

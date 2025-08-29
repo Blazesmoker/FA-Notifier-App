@@ -194,10 +194,14 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     });
   }
 
-  Future<Response> _getWithSfwCookie(String url,
-      {Map<String, String>? additionalHeaders, bool skipSfw = false}) async {
+  Future<Response> _getWithSfwCookie(
+      String url, {
+        Map<String, String>? additionalHeaders,
+        bool skipSfw = false,
+      }) async {
     String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+
     String cookieHeader = '';
     if (cookieA != null && cookieB != null) {
       cookieHeader = 'a=$cookieA; b=$cookieB';
@@ -205,36 +209,49 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     if (!skipSfw && _sfwEnabled && !_nsfwAllowed) {
       cookieHeader += '; sfw=1';
     }
-    Map<String, String> headers = {
+
+    final headers = <String, String>{
       'Cookie': cookieHeader,
       'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
-      'Accept-Encoding': 'gzip',
     };
-    if (additionalHeaders != null) {
-      headers.addAll(additionalHeaders);
-    }
+    if (additionalHeaders != null) headers.addAll(additionalHeaders);
+
     final response = await httpClient.get(Uri.parse(url), headers: headers);
 
-    if (_sfwEnabled &&
-        !_nsfwAllowed &&
-        !skipSfw &&
-        response.statusCode == 200) {
-      final document = html_parser.parse(response.body);
-      final body = document.querySelector('body');
+    if (_sfwEnabled && !_nsfwAllowed && !skipSfw && response.statusCode == 200) {
+      String decodedBody;
 
-      if (body?.attributes['id'] == 'pageid-matureimage-error') {
-        bool userAgreed = await _showNSFWConfirmationDialog();
-        if (userAgreed) {
-          setState(() {
-            _nsfwAllowed = true;
-          });
-          return await _getWithSfwCookie(url,
-              additionalHeaders: additionalHeaders, skipSfw: true);
-        } else {
-          throw Exception("User declined to view NSFW content.");
+      try {
+        decodedBody = utf8.decode(response.bodyBytes);
+      } on FormatException {
+        try {
+          decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
+        } catch (_) {
+          decodedBody = latin1.decode(response.bodyBytes, allowInvalid: true);
+        }
+      }
+
+      final ct = (response.headers['content-type'] ?? '').toLowerCase();
+      if (ct.contains('text/html') || ct.contains('application/xhtml')) {
+        final document = html_parser.parse(decodedBody);
+        final body = document.querySelector('body');
+
+        if (body?.attributes['id'] == 'pageid-matureimage-error') {
+          final userAgreed = await _showNSFWConfirmationDialog();
+          if (userAgreed) {
+            setState(() => _nsfwAllowed = true);
+            return await _getWithSfwCookie(
+              url,
+              additionalHeaders: additionalHeaders,
+              skipSfw: true,
+            );
+          } else {
+            throw Exception("User declined to view NSFW content.");
+          }
         }
       }
     }
+
     return response;
   }
 
@@ -278,9 +295,14 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     if (response.statusCode == 200) {
       String decodedBody;
       try {
-        decodedBody = response.body;
-      } on FormatException {
         decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
+      } catch (e) {
+        try {
+          decodedBody = latin1.decode(response.bodyBytes);
+        } catch (e2) {
+          debugPrint('Failed to decode user page response: $e2');
+          return;
+        }
       }
       final document = await compute(parseHtml, decodedBody);
 
@@ -707,9 +729,15 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     String decodedBody;
 
     try {
-      decodedBody = response.body;
-    } on FormatException {
       decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
+    } catch (e) {
+      try {
+        decodedBody = latin1.decode(response.bodyBytes);
+      } catch (e2) {
+        debugPrint('Failed to decode response body: $e2');
+        setState(() => isLoading = false);
+        return;
+      }
     }
     final document = await compute(parseHtml, decodedBody);
 
@@ -888,7 +916,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
     if (infoSection != null) {
       if (!isClassic) {
-        // Modern (Beta) Style.
+        // Modern
         final divs = infoSection.querySelectorAll('div');
         for (var div in divs) {
           final strong = div.querySelector('strong.highlight');
@@ -897,9 +925,13 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           switch (label) {
             case 'Category':
               localCategory = div.querySelector('.category-name')?.text.trim();
+              localType ??= div.querySelector('.type-name')?.text.trim();
               break;
             case 'Theme':
-              localType = div.querySelector('.type-name')?.text.trim();
+            case 'Type':
+              localType = div.querySelector('.type-name')?.text.trim()
+                  ?? div.querySelector('.theme-name')?.text.trim()
+                  ?? div.querySelector('span')?.text.trim();
               break;
             case 'Species':
               localSpecies = div.querySelector('span')?.text.trim();
@@ -1343,12 +1375,30 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         String rawHtml = commentTextElement.innerHtml;
         // Convert emoji <i> tags into placeholders.
         rawHtml = rawHtml.replaceAllMapped(
-          RegExp(r'<i\s+class="([^"]+)"\s*\/?>'),
-              (match) {
-            String classAttr = match.group(1)!;
-            return '[' + classAttr.replaceAll(' ', '-') + ']';
+          // Handles <i class="smilie ..."></i>, <i class="smilie ..." />, and variations
+          RegExp(r'<i\s+class="(smilie\s+[^"]+)"[^>]*>(?:\s*<\/i>)?|<i\s+class="(smilie\s+[^"]+)"[^>]*/?>',
+              caseSensitive: false),
+              (m) {
+            final cls = (m.group(1) ?? m.group(2))!;
+            return '[${cls.replaceAll(' ', '-')}]';
           },
         );
+        rawHtml = rawHtml
+            .replaceAll(RegExp(r'<i\s+class="bbcode\s+bbcode_i"[^>]*>', caseSensitive: false), '[[i]]')
+            .replaceAll(RegExp(r'</i>', caseSensitive: false), '[[/i]]')
+
+            // Bold
+            .replaceAll(RegExp(r'<strong\s+class="bbcode\s+bbcode_b"[^>]*>', caseSensitive: false), '[[b]]')
+            .replaceAll(RegExp(r'</strong>', caseSensitive: false), '[[/b]]')
+            // (optional fallback if FA ever emits <b class="bbcode bbcode_b">)
+            .replaceAll(RegExp(r'<b\s+class="bbcode\s+bbcode_b"[^>]*>', caseSensitive: false), '[[b]]')
+            .replaceAll(RegExp(r'</b>', caseSensitive: false), '[[/b]]')
+
+            // Underline
+            .replaceAll(RegExp(r'<u\s+class="bbcode\s+bbcode_u"[^>]*>', caseSensitive: false), '[[u]]')
+            .replaceAll(RegExp(r'</u>', caseSensitive: false), '[[/u]]');
+
+
         // Fix truncated links.
         rawHtml = fixTruncatedLinks(rawHtml);
         final commentDoc = html_parser.parse(rawHtml);

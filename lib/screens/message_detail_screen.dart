@@ -152,6 +152,12 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
             document
                 .querySelector('div.message-center-note-information.addresses a')
                 ?.attributes['href'];
+        tempSenderLink ??= document
+            .querySelector(
+            'td.noteContent.alt1 span[style*="color: #999999"] '
+                '.c-usernameBlock a[href^="/user/"]'
+        )
+            ?.attributes['href'];
 
         setState(() {
           subject = document.querySelector('#message h2')?.text.trim() ??
@@ -519,12 +525,27 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Sent by: $sender',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.white,
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'Sent by: ',
+                                style: TextStyle(fontSize: 16, color: Colors.white),
+                              ),
+                              InkWell(
+                                onTap: senderLink.isNotEmpty
+                                    ? () => _handleFALink(context, senderLink)
+                                    : null,
+                                child: Text(
+                                  sender.isNotEmpty ? sender : 'Unknown sender',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: Color(0xFFE09321),
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           Text(
                             'To: $recipient',
@@ -619,6 +640,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                 ],
               ),
             ),
+
           ),
         ),
       ),

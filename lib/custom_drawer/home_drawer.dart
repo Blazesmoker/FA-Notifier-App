@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_switch/flutter_switch.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -23,6 +26,7 @@ import '../app_theme.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../providers/notification_settings_provider.dart';
+import 'package:http/http.dart' as http;
 
 class HomeDrawer extends StatefulWidget {
   const HomeDrawer({
@@ -82,6 +86,10 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
   Timer? _kofiTimer;
   bool _isCooldownActive = false;
 
+  String? _latestGithubVersion;
+  String? _currentAppVersion;
+  bool _updateAvailable = false;
+
   @override
   void initState() {
     super.initState();
@@ -94,6 +102,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
     NotificationRefreshService().onRefresh.listen((_) {
       fetchNotifications();
     });
+    _checkForUpdate();
   }
 
   @override
@@ -125,6 +134,50 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
         const Duration(seconds: 120),
         (Timer t) => fetchNotifications(),
       );
+    }
+  }
+  Future<void> _checkForUpdate() async {
+    try {
+
+      final info = await PackageInfo.fromPlatform();
+      final current = info.version.trim(); // "1.2.3"
+      print('Current app version: $current');
+
+
+      final uri = Uri.parse(
+        'https://api.github.com/repos/Blazesmoker/FA-Notifier-App/releases/latest',
+      );
+      final resp = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'FA-Notifier/UpdateCheck',
+        },
+      );
+      print('GitHub API status: ${resp.statusCode}');
+
+      if (resp.statusCode == 200) {
+
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final tagName = data['tag_name'] as String;  // e.g. "v1.1.7"
+        final ghVer = tagName.startsWith('v')
+            ? tagName.substring(1)
+            : tagName;
+
+        if (!mounted) return;
+        setState(() {
+          _currentAppVersion   = current;
+          _latestGithubVersion = ghVer;
+          _updateAvailable     = ghVer != current;
+        });
+
+        print('Remote version: $ghVer; show update = $_updateAvailable');
+      } else {
+        // optional: handle rate-limit or error
+        print('Failed to fetch release: ${resp.body}');
+      }
+    } catch (e, st) {
+      debugPrint('_checkForUpdate error: $e\n$st');
     }
   }
 
@@ -399,7 +452,9 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
               )
             else
               Container(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                height: 60.0,
+                alignment: Alignment.centerLeft,
+
                 child: Row(
                   children: <Widget>[
                     const SizedBox(width: 6.0, height: 46.0),
@@ -1084,17 +1139,53 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                     Expanded(
                       child: ListView.builder(
                         physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.all(0.0),
-                        itemCount: drawerList?.length,
-                        itemBuilder: (BuildContext context, int index) {
-                          return inkwell(drawerList![index]);
+                        padding: EdgeInsets.zero,
+                        itemCount: drawerList!.length + (_updateAvailable ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index < drawerList!.length) {
+                            return inkwell(drawerList![index]);
+                          }
+                          return Container(
+                            height: 60.0,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF3ACD3E),
+                              borderRadius: BorderRadius.circular(0),
+                            ),
+                            child: ListTile(
+                              contentPadding: EdgeInsets.only(left: 16.0, top: 2),
+                              title: Row(
+                                mainAxisAlignment: MainAxisAlignment.start,
+                                children: const [
+                                  Icon(Icons.cached, color: Colors.white),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Update Available!',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              onTap: () => launchUrlString(
+                                'https://www.google.com',
+                                mode: LaunchMode.externalApplication,
+                              ),
+                            ),
+                          );
                         },
                       ),
                     ),
+
                     // NSFW Toggle
                     Padding(
                       padding: const EdgeInsets.only(
-                          bottom: 12.0, top: 11.0, right: 16.0, left: 16.0),
+                        bottom: 12.0,
+                        top: 11.0,
+                        right: 16.0,
+                        left: 16.0,
+                      ),
                       child: Row(
                         children: [
                           FlutterSwitch(
@@ -1110,15 +1201,13 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                             activeTextColor: Colors.black,
                             activeToggleColor: Colors.black,
                             inactiveTextColor: Colors.white,
-                            activeColor: Color(0xFFE09321),
-                            inactiveColor: Color(0xFF111111),
+                            activeColor: const Color(0xFFE09321),
+                            inactiveColor: const Color(0xFF111111),
                             showOnOff: true,
                             onToggle: (val) async {
-                              final prefs =
-                                  await SharedPreferences.getInstance();
+                              final prefs = await SharedPreferences.getInstance();
                               bool confirmationDisabled =
-                                  prefs.getBool(NsfwConfirmationDisabled) ??
-                                      false;
+                                  prefs.getBool(NsfwConfirmationDisabled) ?? false;
                               if (confirmationDisabled) {
                                 await _toggleNsfwMode();
                               } else {
@@ -1129,26 +1218,31 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                         ],
                       ),
                     ),
+
                     const Divider(
                       height: 1.0,
                       color: Color(0xFF111111),
                       thickness: 3.0,
                     ),
+
                     Padding(
                       padding: const EdgeInsets.symmetric(
-                          vertical: 8.0, horizontal: 16.0),
+                        vertical: 8.0,
+                        horizontal: 16.0,
+                      ),
                       child: Text(
                         'Registered users online: ${_notifications.registeredUsersOnline}',
-                        style:
-                            const TextStyle(fontSize: 14, color: Colors.white),
+                        style: const TextStyle(fontSize: 14, color: Colors.white),
                         textAlign: TextAlign.left,
                       ),
                     ),
+
                     SizedBox(height: MediaQuery.of(context).padding.bottom),
                   ],
                 ),
               ),
             ),
+
           ],
         ),
       ),

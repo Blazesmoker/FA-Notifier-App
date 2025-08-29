@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../app_theme.dart'; // If you need to reference AppTheme.fontName, etc.
 
 import 'siteSettings.dart';
@@ -11,6 +12,20 @@ class SettingsScreen extends StatelessWidget {
     Key? key,
     required this.onLogout,
   }) : super(key: key);
+
+  static final Uri _telegramUri = Uri.parse('https://t.me/+xTEmmXoDW5tkMGFi');
+
+  Future<void> _openTelegram(BuildContext context) async {
+    try {
+      if (!await launchUrl(_telegramUri, mode: LaunchMode.externalApplication)) {
+        await launchUrl(_telegramUri);
+      }
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the Telegram link')),
+      );
+    }
+  }
 
   void _confirmLogout(BuildContext context) {
     showDialog(
@@ -44,6 +59,8 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const String telegramDisplayText = 'Join our Telegram Group!';
+
     return SafeArea(
       top: false,
       child: Scaffold(
@@ -73,26 +90,26 @@ class SettingsScreen extends StatelessWidget {
                     thickness: 3.0,
                   ),
 
-                  //TODO: Site Settings Screen
+                  // TODO: Site Settings Screen
                   /*
-              ListTile(
-                leading: const Icon(Icons.public),
-                title: const Text('Site Settings'),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SiteSettingsScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(
-                height: 1.0,
-                color: Color(0xFF111111),
-                thickness: 3.0,
-              ),
-              */
+                  ListTile(
+                    leading: const Icon(Icons.public),
+                    title: const Text('Site Settings'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SiteSettingsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const Divider(
+                    height: 1.0,
+                    color: Color(0xFF111111),
+                    thickness: 3.0,
+                  ),
+                  */
 
                   ListTile(
                     leading: const Icon(
@@ -113,10 +130,52 @@ class SettingsScreen extends StatelessWidget {
                 ],
               ),
             ),
+
+            Padding(
+              padding: const EdgeInsets.only(bottom: 0.0),
+              child: TextButton(
+                onPressed: () => _openTelegram(context),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF0088CC),
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      'assets/icons/Telegram_Logo.png',
+                      width: 21,
+                      height: 21,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      telegramDisplayText,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontName,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFFE09321),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Image.asset(
+                      'assets/icons/fathemed.png',
+                      width: 21,
+                      height: 21,
+                      fit: BoxFit.contain,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
             Padding(
               padding: const EdgeInsets.only(bottom: 16.0),
               child: Text(
-                "FA Notifier v1.1.5",
+                "FA Notifier v1.1.6",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: AppTheme.fontName,

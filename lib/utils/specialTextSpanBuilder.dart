@@ -35,59 +35,90 @@ class EmojiSpecialTextSpanBuilder extends SpecialTextSpanBuilder {
     '[smilie-sleepy]': 'assets/emojis/sleepy.png',
   };
 
-
   final void Function(String)? onTapLink;
 
   EmojiSpecialTextSpanBuilder({this.onTapLink});
+
   @override
   SpecialText? createSpecialText(String flag,
       {TextStyle? textStyle, SpecialTextGestureTapCallback? onTap, int? index}) {
     return null;
   }
 
-
   @override
-  TextSpan build(String data, {TextStyle? textStyle, SpecialTextGestureTapCallback? onTap}) {
-    List<InlineSpan> spans = [];
-    RegExp regex = RegExp(r'(\[smilie-[^\]]+\])|(https?:\/\/[^\s]+)');
+  TextSpan build(String data,
+      {TextStyle? textStyle, SpecialTextGestureTapCallback? onTap}) {
+    final spans = <InlineSpan>[];
+
+    // Matches, in order:
+    // 1) [[i]]...[[/i]] or [[b]]...[[/b]] or [[u]]...[[/u]]
+    //    group1 = marker (i|b|u), group2 = inner text
+    // 2) [smilie-...]
+    // 3) http(s):// links
+    final regex = RegExp(
+      r'(?:\[\[(i|b|u)\]\](.*?)\[\[\/\1\]\])|(\[smilie-[^\]]+\])|(https?:\/\/[^\s]+)',
+      dotAll: true,
+      caseSensitive: false,
+    );
+
     int currentIndex = 0;
 
-    for (final Match match in regex.allMatches(data)) {
+    for (final match in regex.allMatches(data)) {
       if (match.start > currentIndex) {
         spans.add(TextSpan(
           text: data.substring(currentIndex, match.start),
           style: textStyle,
         ));
       }
+
       if (match.group(1) != null) {
-        String emojiKey = match.group(1)!;
-        if (emojiMapping.containsKey(emojiKey)) {
+        // Style markers: [[i]] / [[b]] / [[u]]
+        final marker = match.group(1)!.toLowerCase();
+        final inner = match.group(2) ?? '';
+        TextStyle mergeStyle;
+        switch (marker) {
+          case 'b':
+            mergeStyle = const TextStyle(fontWeight: FontWeight.bold);
+            break;
+          case 'u':
+            mergeStyle = const TextStyle(decoration: TextDecoration.underline);
+            break;
+          case 'i':
+          default:
+            mergeStyle = const TextStyle(fontStyle: FontStyle.italic);
+            break;
+        }
+        // Re-run builder on inner to keep emojis/links and allow nested styles
+        spans.add(build(
+          inner,
+          textStyle: (textStyle ?? const TextStyle()).merge(mergeStyle),
+          onTap: onTap,
+        ));
+      } else if (match.group(3) != null) {
+        // Emoji placeholder: [smilie-...]
+        final emojiKey = match.group(3)!;
+        final asset = emojiMapping[emojiKey];
+        if (asset != null) {
           spans.add(ExtendedWidgetSpan(
-            child: Image.asset(
-              emojiMapping[emojiKey]!,
-              width: 20,
-              height: 20,
-            ),
+            child: Image.asset(asset, width: 20, height: 20),
             actualText: emojiKey,
           ));
         } else {
           spans.add(TextSpan(text: emojiKey, style: textStyle));
         }
-      }
-
-      else if (match.group(2) != null) {
-        String url = match.group(2)!;
+      } else if (match.group(4) != null) {
+        // URL
+        final url = match.group(4)!;
         spans.add(TextSpan(
           text: url,
-          style: textStyle?.copyWith(color: Colors.orange),
+          style: (textStyle ?? const TextStyle()).copyWith(color: Colors.orange),
           recognizer: TapGestureRecognizer()
             ..onTap = () {
-              if (onTapLink != null) {
-                onTapLink!(url);
-              }
+              if (onTapLink != null) onTapLink!(url);
             },
         ));
       }
+
       currentIndex = match.end;
     }
 
@@ -97,6 +128,7 @@ class EmojiSpecialTextSpanBuilder extends SpecialTextSpanBuilder {
         style: textStyle,
       ));
     }
+
     return TextSpan(children: spans, style: textStyle);
   }
 }

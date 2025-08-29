@@ -92,6 +92,12 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   final TextEditingController _commentController = TextEditingController();
   bool _isTyping = false;
 
+  String? authorDisplayName;
+  String? authorUserName;
+  String? authorSymbol;
+  String? authorUserTitle;
+  bool isJournalClassic = false;
+
   // User timezone and DST settings
   String? userTimezoneIanaName;
   bool isDstCorrectionApplied = false;
@@ -105,6 +111,11 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   bool isLoading = true;
   bool isOwner = false;
   String? deleteLink;
+  bool _isDeleting = false;
+  bool _deleteLinkMatchesCurrentId(String link) {
+    final m = RegExp(r'/controls/deletejournal/(\d+)/').firstMatch(link);
+    return m != null && m.group(1) == widget.uniqueNumber;
+  }
 
   // Additional post info
   String? category;
@@ -114,6 +125,8 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   String? size;
   String? fileSize;
   List<String> keywords = [];
+
+
 
   final ScrollController _scrollController = ScrollController();
 
@@ -288,8 +301,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
       });
       return;
     }
-    final journalUrl =
-        'https://www.furaffinity.net/journal/${widget.uniqueNumber}/';
+    final journalUrl = 'https://www.furaffinity.net/journal/${widget.uniqueNumber}/';
     final response = await httpClient.get(
       Uri.parse(journalUrl),
       headers: {
@@ -298,79 +310,146 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         'Accept-Encoding': 'gzip',
       },
     );
-    if (response.statusCode == 200) {
-      // Decodes the response body using a fallback to handle malformed UTF-8 bytes.
+    if (response.statusCode == 200 || response.statusCode == 200) {
       final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-
       var document = html_parser.parse(decodedBody);
-      var profileIcon = document.querySelector('.userpage-nav-avatar img');
-      if (profileIcon == null) {
-        profileIcon = document.querySelector('img.avatar');
+
+      dom.Element? profileImgEl;
+      String? displayName;
+      String? authorSlug;
+      String? symbol;
+      String? userTitle;
+
+      final modernDetails = document.querySelector('userpage-nav-user-details');
+      final classicTitleBox = document.querySelector('td.journal-title-box');
+      isJournalClassic = (modernDetails == null) && (classicTitleBox != null);
+
+      if (!isJournalClassic && modernDetails != null) {
+        final modernHeader = modernDetails.parent;
+        profileImgEl = modernHeader?.querySelector('userpage-nav-avatar img');
+
+        displayName = modernDetails
+            .querySelector('a.c-usernameBlock__displayName span.js-displayName')
+            ?.text
+            .trim();
+
+        final userNameA = modernDetails.querySelector('a.c-usernameBlock__userName') ??
+            modernDetails.querySelector('a.c-usernameBlock__displayName');
+        symbol = userNameA?.querySelector('span.c-usernameBlock__symbol')?.text.trim();
+
+        final href = userNameA?.attributes['href'];
+        if (href != null) {
+          final path = Uri.parse(href).path.toLowerCase();
+          final m = RegExp(r'^/user/([^/]+)/?$').firstMatch(path);
+          if (m != null) authorSlug = m.group(1);
+        }
+
+
+
+        dom.Element? utSpan =
+            modernDetails.querySelector('span.user-title') ??
+                modernHeader?.querySelector('span.user-title') ??
+                document.querySelector('userpage-nav-header span.user-title');
+
+        if (utSpan != null) {
+
+          if (utSpan.text.contains('|')) {
+
+            final clone = (utSpan.clone(true) as dom.Element);
+
+            clone.querySelectorAll('.hideonmobile').forEach((e) => e.remove());
+
+            var t = clone.text.replaceAll('\u00A0', ' ')
+                .replaceAll(RegExp(r'\s+'), ' ')
+                .trim();
+
+            final parts = t.split('|');
+            final titleText = parts.first.trim();
+            if (titleText.isNotEmpty) {
+              userTitle = titleText;
+            }
+          }
+
+        }
+      } else {
+        dom.Element? classicTable;
+        var cur = classicTitleBox;
+        while (cur != null && cur.localName != 'table') {
+          cur = cur.parent;
+        }
+        classicTable = cur;
+
+        profileImgEl = classicTable?.querySelector('td.avatar-box img.avatar') ??
+            document.querySelector('td.avatar-box img.avatar');
+
+        displayName = classicTitleBox
+            ?.querySelector('a.c-usernameBlock__displayName span.js-displayName')
+            ?.text
+            ?.trim();
+
+        final userNameA = classicTitleBox?.querySelector('a.c-usernameBlock__userName') ??
+            classicTitleBox?.querySelector('a.c-usernameBlock__displayName');
+        symbol = userNameA?.querySelector('span.c-usernameBlock__symbol')?.text.trim();
+
+        final href = userNameA?.attributes['href'];
+        if (href != null) {
+          final path = Uri.parse(href).path.toLowerCase();
+          final m = RegExp(r'^/user/([^/]+)/?$').firstMatch(path);
+          if (m != null) authorSlug = m.group(1);
+        }
       }
-      var usernameElem =
-      document.querySelector('.userpage-nav-user-details h1.username');
-      if (usernameElem == null) {
-        usernameElem = document.querySelector('span.js-displayName');
-      }
-
-      var titleElem = document.querySelector('div.no_overflow') ?? document.querySelector('h2.journal-title');
-      bool ownerFound = false;
-      if (titleElem != null) {
-
-        ownerFound = titleElem.querySelector('a.owner_edit_journal.action-link') != null;
-
-        titleElem.querySelector('a.owner_edit_journal.action-link')?.remove();
-        submissionTitle = titleElem.text.trim();
-      }
 
 
+      bool ownerFound = document
+          .querySelector('a.owner_edit_journal.action-link') != null;
+      document
+          .querySelectorAll('a.owner_edit_journal.action-link')
+          .forEach((el) => el.remove());
 
 
-      var descriptionElem =
-      document.querySelector('div.journal-content.user-submitted-links');
-      if (descriptionElem == null) {
-        descriptionElem = document.querySelector('div.journal-body');
-      }
-      var publicationTimeElem =
-      document.querySelector('div.section-header span.popup_date');
-      if (publicationTimeElem == null) {
-        publicationTimeElem = document.querySelector('span.popup_date');
-      }
+      var titleElem = document.querySelector('div.no_overflow') ??
+          document.querySelector('h2.journal-title');
+      var descriptionElem = document.querySelector('div.journal-content.user-submitted-links') ??
+          document.querySelector('div.journal-body');
+      var publicationTimeElem = document.querySelector('div.section-header span.popup_date') ??
+          document.querySelector('span.popup_date');
 
       setState(() {
         isOwner = ownerFound;
-        profileImageUrl =
-            profileIcon?.attributes['src']?.replaceFirst('//', 'https://');
-        username = usernameElem?.text.trim();
+
+        final rawSrc = profileImgEl?.attributes['src'];
+        profileImageUrl = (rawSrc == null) ? null
+            : (rawSrc.startsWith('//') ? 'https:$rawSrc' : rawSrc);
+
+        authorDisplayName = displayName;
+        authorUserName    = authorSlug;
+        authorSymbol      = (symbol == null || symbol!.isEmpty) ? '@' : symbol;
+        authorUserTitle   = userTitle;
+
+        username = authorSlug ?? username;
+
         submissionTitle = titleElem?.text.trim();
         submissionDescription = descriptionElem?.innerHtml.replaceAllMapped(
           RegExp(r'src="(//[^"]+)"|href="(//[^"]+)"'),
-              (match) {
-            final url = match.group(1) ?? match.group(2);
-            return url != null
-                ? match[0]!.replaceFirst('//', 'https://')
-                : match[0]!;
+              (m) {
+            final url = m.group(1) ?? m.group(2);
+            return url != null ? m[0]!.replaceFirst('//', 'https://') : m[0]!;
           },
         );
+
         if (submissionDescription != null) {
-          var descriptionDoc = html_parser.parse(submissionDescription);
-          descriptionDoc.querySelectorAll('a.auto_link_shortened').forEach((element) {
-            final fullLink =
-                element.attributes['title'] ?? element.attributes['href'];
-            if (fullLink != null) {
-              element.innerHtml = fullLink;
-            }
-          });
-          submissionDescription = descriptionDoc.body?.innerHtml ??
-              submissionDescription;
-        }
-        if (publicationTimeElem != null) {
-          final rawTime = publicationTimeElem.attributes['title']?.trim();
-          if (rawTime != null && rawTime.isNotEmpty) {
-            _parsePublicationTime(rawTime);
+          final descDoc = html_parser.parse(submissionDescription);
+          for (final el in descDoc.querySelectorAll('a.auto_link_shortened')) {
+            final full = el.attributes['title'] ?? el.attributes['href'];
+            if (full != null) el.innerHtml = full;
           }
+          submissionDescription = descDoc.body?.innerHtml ?? submissionDescription;
         }
 
+        if (publicationTimeElem != null) {
+          final rawTime = publicationTimeElem.attributes['title']?.trim();
+          if (rawTime != null && rawTime.isNotEmpty) _parsePublicationTime(rawTime);
+        }
       });
       if (isOwner) {
         await _fetchDeleteLink(cookieA, cookieB);
@@ -380,20 +459,17 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         isLoading = false;
       });
       unawaited(_fetchComments(decodedBody));
-
-
-
     } else {
       print('Failed to fetch journal details: ${response.statusCode}');
     }
-
   }
+
 
 
   Future<void> _fetchDeleteLink(String cookieA, String cookieB) async {
     int pageIndex = 1;
-    bool deleteLinkFound = false;
-    while (true) {
+    String? found;
+    while (pageIndex <= 10) {
       final controlUrl = 'https://www.furaffinity.net/controls/journal/$pageIndex/${widget.uniqueNumber}/';
       final response = await httpClient.get(
         Uri.parse(controlUrl),
@@ -402,29 +478,124 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
           'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
         },
       );
-      if (response.statusCode == 200) {
-        var document = html_parser.parse(response.body);
-        var deleteButtonElement = document.querySelector('a.delete[onclick*="/controls/deletejournal/"]');
-        if (deleteButtonElement != null) {
-          String? onclickAttr = deleteButtonElement.attributes['onclick'];
-          if (onclickAttr != null) {
-            RegExp regex = RegExp(r"showConfirm\('Are you sure you want to delete this journal\?','(.*?)'\)");
-            Match? match = regex.firstMatch(onclickAttr);
-            if (match != null) {
-              deleteLink = match.group(1);
-              deleteLinkFound = true;
-              break;
-            }
-          }
+
+      if (response.statusCode != 200) break;
+
+      final document = html_parser.parse(response.body);
+
+      final candidates = document.querySelectorAll('a.delete[onclick*="/controls/deletejournal/"]');
+
+      for (final el in candidates) {
+        final onclickAttr = el.attributes['onclick'] ?? '';
+
+        final m = RegExp(r"showConfirm\('Are you sure you want to delete this journal\?','([^']+)'\)")
+            .firstMatch(onclickAttr);
+        if (m == null) continue;
+
+        final relUrl = m.group(1)!;
+        if (_deleteLinkMatchesCurrentId(relUrl)) {
+
+          found = relUrl.startsWith('http')
+              ? relUrl
+              : 'https://www.furaffinity.net$relUrl';
+          break;
         }
-      } else {
-        break;
       }
+
+      if (found != null) break;
       pageIndex++;
-      if (pageIndex > 10) break;
     }
-    if (!deleteLinkFound) {
-      print('Delete link not found for journal ${widget.uniqueNumber}.');
+
+    if (mounted) {
+      setState(() {
+        deleteLink = found;
+      });
+    }
+
+    if (found == null) {
+      debugPrint('Delete link not found or did not match journal ${widget.uniqueNumber}.');
+    }
+  }
+
+
+  Future<void> _confirmAndDeleteJournal() async {
+    if (_isDeleting) return;
+
+    final titleForDialog = (submissionTitle == null || submissionTitle!.trim().isEmpty)
+        ? '#${widget.uniqueNumber}'
+        : submissionTitle!.trim();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm deletion'),
+        content: Text('Are you sure you want to delete journal "$titleForDialog"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isDeleting = true);
+
+    try {
+      final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+      final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+      if (cookieA == null || cookieB == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please log in to perform this action.'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+
+      if (deleteLink == null || !_deleteLinkMatchesCurrentId(deleteLink!)) {
+        await _fetchDeleteLink(cookieA, cookieB);
+      }
+      if (deleteLink == null || !_deleteLinkMatchesCurrentId(deleteLink!)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Safe delete failed: couldn't confirm delete link for this journal."),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final uri = Uri.parse(deleteLink!);
+      final resp = await httpClient.get(
+        uri,
+        headers: {
+          'Cookie': 'a=$cookieA; b=$cookieB',
+          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        },
+      );
+
+
+      if (resp.statusCode >= 200 && resp.statusCode < 400) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Journal "$titleForDialog" deleted.'), backgroundColor: Colors.green),
+        );
+        Navigator.of(context).pop(true);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Delete failed (HTTP ${resp.statusCode}).'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error while deleting: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isDeleting = false);
     }
   }
 
@@ -609,13 +780,31 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         if (commentTextElement != null) {
           String rawHtml = commentTextElement.innerHtml;
           // Converts emoji <i> tags into placeholders.
+
           rawHtml = rawHtml.replaceAllMapped(
-            RegExp(r'<i\s+class="([^"]+)"\s*\/?>'),
-                (match) {
-              String classAttr = match.group(1)!;
-              return '[' + classAttr.replaceAll(' ', '-') + ']';
+            // Handles <i class="smilie ..."></i>, <i class="smilie ..." />, and variations
+            RegExp(r'<i\s+class="(smilie\s+[^"]+)"[^>]*>(?:\s*<\/i>)?|<i\s+class="(smilie\s+[^"]+)"[^>]*/?>',
+                caseSensitive: false),
+                (m) {
+              final cls = (m.group(1) ?? m.group(2))!;
+              return '[${cls.replaceAll(' ', '-')}]';
             },
           );
+          rawHtml = rawHtml
+              .replaceAll(RegExp(r'<i\s+class="bbcode\s+bbcode_i"[^>]*>', caseSensitive: false), '[[i]]')
+              .replaceAll(RegExp(r'</i>', caseSensitive: false), '[[/i]]')
+
+              // Bold
+              .replaceAll(RegExp(r'<strong\s+class="bbcode\s+bbcode_b"[^>]*>', caseSensitive: false), '[[b]]')
+              .replaceAll(RegExp(r'</strong>', caseSensitive: false), '[[/b]]')
+              // (optional fallback if FA ever emits <b class="bbcode bbcode_b">)
+              .replaceAll(RegExp(r'<b\s+class="bbcode\s+bbcode_b"[^>]*>', caseSensitive: false), '[[b]]')
+              .replaceAll(RegExp(r'</b>', caseSensitive: false), '[[/b]]')
+
+              // Underline
+              .replaceAll(RegExp(r'<u\s+class="bbcode\s+bbcode_u"[^>]*>', caseSensitive: false), '[[u]]')
+              .replaceAll(RegExp(r'</u>', caseSensitive: false), '[[/u]]');
+
           // Fix truncated links.
           rawHtml = fixTruncatedLinks(rawHtml);
 
@@ -895,6 +1084,15 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
     }
   }
 
+  void _sharePost() {
+    final postUrl = 'https://www.furaffinity.net/journal/${widget.uniqueNumber}/';
+    final shareContent = '$postUrl';
+    Share.share(
+      shareContent,
+      subject: submissionTitle ?? 'Fur Affinity Post',
+    );
+  }
+
   void _addComment(String commentText) {
     setState(() {
       comments.add({
@@ -921,50 +1119,51 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: isOwner
-            ? [
+        actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
-            offset: const Offset(0, 44),
-            onSelected: (String value) {
-              if (value == 'edit') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => CreateJournalScreen(
-                      uniqueNumber: widget.uniqueNumber,
+            onSelected: (value) {
+              switch (value) {
+                case 'share':
+                  _sharePost();
+                  break;
+                case 'edit':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CreateJournalScreen(
+                        uniqueNumber: widget.uniqueNumber,
+                      ),
                     ),
-                  ),
-                ).then((_) {
-                  _fetchPostDetails();
-                });
-              } else if (value == 'remove') {
-                if (deleteLink != null) {
-                  // calls delete post logic
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Delete link not found. Cannot delete journal.'),
-                    ),
-                  );
-                }
+                  ).then((_) => _fetchPostDetails());
+                  break;
+                case 'delete':
+                  if (!isOwner) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('You do not have permission to delete this journal.')),
+                    );
+                    break;
+                  }
+                  unawaited(_confirmAndDeleteJournal());
+                  break;
               }
             },
-            itemBuilder: (BuildContext context) {
-              return [
-                const PopupMenuItem<String>(
-                  value: 'edit',
-                  child: Text('Edit'),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'remove',
-                  child: Text('Remove'),
-                ),
-              ];
-            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'share',
+                child: Text('Share'),
+              ),
+              if (isOwner) const PopupMenuItem<String>(
+                value: 'edit',
+                child: Text('Edit'),
+              ),
+              if (isOwner) const PopupMenuItem<String>(
+                value: 'delete',
+                child: Text('Delete'),
+              ),
+            ],
           ),
-        ]
-            : null,
+        ],
       ),
       body: isLoading
           ? const Center(child: PulsatingLoadingIndicator(size: 78.0, assetPath: 'assets/icons/fathemed.png'))
@@ -986,23 +1185,100 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                 padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
                 child: Card(
                   color: const Color(0xFF151515),
-                  child: ListTile(
-                    title: Text(submissionTitle ?? ''),
-                    subtitle: Column(
+
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Posted on: ${getFormattedPublicationTime()}'),
-                        const SizedBox(height: 4.0),
+
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (profileImageUrl != null)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8.0, top: 4.0),
+                                child: GestureDetector(
+                                  onTap: () {
+                                    if (authorUserName != null && authorUserName!.isNotEmpty) {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => UserProfileScreen(
+                                            nickname: authorUserName!,
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: CachedNetworkImage(
+                                    imageUrl: profileImageUrl!,
+                                    width: 46,
+                                    height: 46,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Image.asset(
+                                      'assets/images/defaultpic.gif',
+                                      width: 46, height: 46, fit: BoxFit.cover,
+                                    ),
+                                    errorWidget: (context, url, error) => Image.asset(
+                                      'assets/images/defaultpic.gif',
+                                      width: 46, height: 46, fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+
+                                  Text(
+                                    authorDisplayName ?? authorUserName ?? 'Anonymous',
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+
+                                  if (authorUserName != null && authorUserName!.isNotEmpty)
+                                    Text(
+                                      '${(authorSymbol == null || authorSymbol!.isEmpty) ? '@' : authorSymbol!}${authorUserName!}',
+                                      style: const TextStyle(fontSize: 11, color: Color(0xFFE09321)),
+                                    ),
+
+                                  if (!isJournalClassic && (authorUserTitle ?? '').isNotEmpty)
+                                    Text(
+                                      authorUserTitle!,
+                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+
+
                         Divider(color: Colors.grey.shade900, thickness: 1.5, height: 24),
 
-                        const SizedBox(height: 4.0),
-                      Theme(
-                        data: Theme.of(context).copyWith(
-                          textSelectionTheme: TextSelectionThemeData(
-                            selectionColor: Color(0xFFE09321).withOpacity(0.4),
-                            selectionHandleColor: Color(0xFFE09321),
-                          ),
+
+                        Text(
+                          submissionTitle ?? '',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                         ),
+
+
+                        const SizedBox(height: 6),
+                        Text('Posted on: ${getFormattedPublicationTime() ?? ''}'),
+
+
+                        Divider(color: Colors.grey.shade900, thickness: 1.5, height: 24),
+
+
+                        Theme(
+                            data: Theme.of(context).copyWith(
+                              textSelectionTheme: TextSelectionThemeData(
+                                selectionColor: const Color(0xFFE09321).withOpacity(0.4),
+                                selectionHandleColor: const Color(0xFFE09321),
+                              ),
+                            ),
                         child: SelectionArea(
                           child: html_pkg.Html(
                             data: submissionDescription ?? '',
@@ -1663,7 +1939,7 @@ class _CommentWidgetState extends State<CommentWidget> {
             ),
             Padding(
               padding: const EdgeInsets.only(
-                  left: 8.0,
+                  left: 0.0,
                   right: 8.0,
                   top: 11.0,
                   bottom: 1.0),
