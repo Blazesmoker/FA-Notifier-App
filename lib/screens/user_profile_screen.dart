@@ -240,6 +240,11 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   final double _avatarScaleStart = 0.0;
   final double _avatarScaleEnd = 140.0;
 
+  int currentShoutPage = 1;
+  int totalShoutPages = 1;
+  bool isLoadingMoreShouts = false;
+  String? shoutPaginationKey;
+
 
 
   @override
@@ -897,7 +902,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
         profileBannerUrl = 'https://www.furaffinity.net$bannerUrl';
       }
     } else {
-      profileBannerUrl = 'https://www.furaffinity.net/themes/beta/img/banners/logo/fa-banner-summer.jpg';
+      profileBannerUrl = 'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg';
     }
     print("Profile banner URL: $profileBannerUrl");
 
@@ -1683,6 +1688,37 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
         ));
       }
       print("Modern shouts extracted: ${tempShouts.length}");
+      // Extract shout pagination info (only for modern markup)
+      if (shoutsSection != null) {
+        dom.Element? shoutPaginationForm = document.querySelector('form.c-shoutPaginationForm');
+        if (shoutPaginationForm != null) {
+          // Get the pagination key
+          final keyInput = shoutPaginationForm.querySelector('input[name="key"]');
+          if (keyInput != null) {
+            shoutPaginationKey = keyInput.attributes['value'];
+            print("Found shout pagination key: $shoutPaginationKey");
+          }
+
+          // Get total pages from the select dropdown
+          final pageSelect = shoutPaginationForm.querySelector('select[name="shout_page"]');
+          if (pageSelect != null) {
+            final options = pageSelect.querySelectorAll('option');
+            if (options.isNotEmpty) {
+              totalShoutPages = options.length;
+              print("Total shout pages: $totalShoutPages");
+            }
+          }
+
+          // Determine current page
+          final selectedOption = pageSelect?.querySelector('option[selected]');
+          if (selectedOption != null) {
+            currentShoutPage = int.tryParse(selectedOption.attributes['value'] ?? '1') ?? 1;
+            print("Current shout page: $currentShoutPage");
+          }
+        } else {
+          print("No shout pagination form found");
+        }
+      }
     } else {
 
       print("Modern Shouts section not found. Trying classic markup...");
@@ -1882,9 +1918,219 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       this.recentlyWatchedCount = tempRecentlyWatchedCount;
       this.shouts = tempShouts;
       this.isOwnProfile = localIsOwnProfile;
+      this.currentShoutPage = currentShoutPage;
+      this.totalShoutPages = totalShoutPages;
+      this.shoutPaginationKey = shoutPaginationKey;
     });
 
     print("Finished parsing user profile.");
+  }
+
+  Future<void> _loadMoreShouts() async {
+    if (isLoadingMoreShouts || currentShoutPage >= totalShoutPages) {
+      print("Cannot load more shouts. Loading: $isLoadingMoreShouts, Current: $currentShoutPage, Total: $totalShoutPages");
+      return;
+    }
+
+    setState(() {
+      isLoadingMoreShouts = true;
+    });
+
+    try {
+      String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+      String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+      final sfwValue = _sfwEnabled ? '1' : '0';
+
+      if (cookieA == null || cookieB == null || shoutPaginationKey == null) {
+        print("Missing required data. CookieA: ${cookieA != null}, CookieB: ${cookieB != null}, Key: $shoutPaginationKey");
+        setState(() {
+          isLoadingMoreShouts = false;
+        });
+        return;
+      }
+
+      final nextPage = currentShoutPage + 1;
+      final url = 'https://www.furaffinity.net/user/$sanitizedUsername/';
+
+      print("Loading shouts page $nextPage with key: $shoutPaginationKey");
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+          'Referer': 'https://www.furaffinity.net/user/$sanitizedUsername/',
+          'X-Requested-With': 'XMLHttpRequest', // This might trigger JSON response
+        },
+        body: {
+          'action': 'shout_pagination',
+          'key': shoutPaginationKey!,
+          'shout_page': nextPage.toString(),
+        },
+      );
+
+      print("Response status: ${response.statusCode}");
+
+      if (response.statusCode == 200) {
+        final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
+
+        // Check if response is JSON
+        if (decodedBody.trimLeft().startsWith('{')) {
+          print("Received JSON response");
+          _parseAdditionalShoutsJson(decodedBody);
+        } else if (decodedBody.contains('<!DOCTYPE html>') || decodedBody.contains('<html')) {
+          print("Received HTML response");
+          _parseAdditionalShoutsJson(decodedBody);
+        } else {
+          print("Unexpected response format");
+        }
+      } else {
+        print("Failed to load shouts. Status: ${response.statusCode}");
+      }
+    } catch (e) {
+      print('Error loading more shouts: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load more shouts'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        isLoadingMoreShouts = false;
+      });
+    }
+  }
+
+  void _parseAdditionalShoutsJson(String jsonBody) {
+    try {
+      final Map<String, dynamic> jsonData = json.decode(jsonBody);
+      List<Shout> newShouts = [];
+      Set<String> existingShoutIds = shouts.map((s) => s.id).toSet();
+
+      if (jsonData.containsKey('shouts')) {
+        final shoutsList = jsonData['shouts'] as List<dynamic>;
+        print("Found ${shoutsList.length} shouts in JSON response");
+
+        for (var shoutData in shoutsList) {
+          // Extract shout ID from anchor_id if available
+          String shoutId = shoutData['anchor_id'] ?? '';
+          if (shoutId.startsWith('shout-')) {
+            shoutId = shoutId.substring('shout-'.length);
+          }
+
+          // Skip if we already have this shout
+          if (shoutId.isNotEmpty && existingShoutIds.contains(shoutId)) {
+            print("Skipping duplicate shout: $shoutId");
+            continue;
+          }
+
+          // Parse the HTML content from JSON to extract username and other details
+          String avatarUrl = shoutData['avatar_url'] ?? '';
+          if (avatarUrl.startsWith('//')) {
+            avatarUrl = 'https:$avatarUrl';
+          }
+
+          // Parse the display name HTML
+          String displayNameHtml = shoutData['shout_display_name_with_icons'] ?? '';
+          final displayNameDoc = html_parser.parse(displayNameHtml);
+
+          final displayNameElem = displayNameDoc.querySelector('.js-displayName');
+          final userNameElem = displayNameDoc.querySelector('a.c-usernameBlock__userName span');
+          final symbolElem = displayNameDoc.querySelector('.c-usernameBlock__symbol');
+
+          String displayName = displayNameElem?.text.trim() ?? 'Unknown';
+          String userNamePart = userNameElem?.text.trim() ?? '';
+          String symbol = symbolElem?.text.trim() ?? "~";
+
+          // Process username
+          final usernameWithoutSymbol = userNamePart.replaceFirst(symbol, '').trim();
+          String cmtUsername = (usernameWithoutSymbol.isEmpty ||
+              displayName.toLowerCase() == usernameWithoutSymbol.toLowerCase())
+              ? displayName
+              : '$displayName\n@$usernameWithoutSymbol';
+
+          // Extract profile nickname from HTML
+          String profileNickname = 'Unknown';
+          final profileLink = displayNameDoc.querySelector('a[href*="/user/"]');
+          if (profileLink != null) {
+            String? href = profileLink.attributes['href'];
+            if (href != null) {
+              profileNickname = href.split('/').where((part) => part.isNotEmpty).last;
+            }
+          }
+
+          // Extract date from thisdate HTML
+          String relativeDate = 'Unknown date';
+          String fullDate = 'Unknown date';
+          String dateHtml = shoutData['thisdate'] ?? '';
+          if (dateHtml.isNotEmpty) {
+            final dateDoc = html_parser.parse(dateHtml);
+            final dateElem = dateDoc.querySelector('span.popup_date');
+            if (dateElem != null) {
+              relativeDate = dateElem.text.trim();
+              fullDate = dateElem.attributes['title']?.trim() ?? relativeDate;
+            }
+          }
+
+          // Get message text
+          String text = shoutData['message'] ?? '';
+
+          // Extract icon URLs from display name HTML
+          List<String> shoutIconBeforeUrls = [];
+          List<String> shoutIconAfterUrls = [];
+
+          final beforeIcons = displayNameDoc.querySelectorAll('usericon-block-before img');
+          shoutIconBeforeUrls = beforeIcons.map((imgElem) {
+            String? src = imgElem.attributes['src'];
+            if (src != null) {
+              if (src.startsWith('//')) return 'https:$src';
+              if (src.startsWith('/')) return 'https://www.furaffinity.net$src';
+              return src;
+            }
+            return '';
+          }).where((src) => src.isNotEmpty).toList();
+
+          final afterIcons = displayNameDoc.querySelectorAll('usericon-block-after img');
+          shoutIconAfterUrls = afterIcons.map((imgElem) {
+            String? src = imgElem.attributes['src'];
+            if (src != null) {
+              if (src.startsWith('//')) return 'https:$src';
+              if (src.startsWith('/')) return 'https://www.furaffinity.net$src';
+              return src;
+            }
+            return '';
+          }).where((src) => src.isNotEmpty).toList();
+
+          // Create shout object
+          newShouts.add(Shout(
+            id: shoutId,
+            avatarUrl: avatarUrl,
+            username: cmtUsername,
+            profileNickname: profileNickname,
+            date: relativeDate,
+            text: text,
+            popupDateFull: fullDate,
+            popupDateRelative: relativeDate,
+            iconBeforeUrls: shoutIconBeforeUrls,
+            iconAfterUrls: shoutIconAfterUrls,
+            symbol: symbol,
+          ));
+        }
+      }
+
+      // Update current page
+      setState(() {
+        shouts.addAll(newShouts);
+        currentShoutPage = currentShoutPage + 1;
+      });
+
+      print("Loaded ${newShouts.length} additional shouts from JSON. Total: ${shouts.length}");
+
+    } catch (e) {
+      print("Error parsing JSON response: $e");
+    }
   }
 
   /// Helper function to extract integer values from the stats text
@@ -2153,7 +2399,6 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
       child: Container(
         decoration: BoxDecoration(
-          // ← replace solid color with a gradient
           gradient: const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -2161,7 +2406,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
               Color(0xFF1F1F1F),
               Colors.black,
             ],
-            stops: [0.0, 0.06],     // fade setting
+            stops: [0.0, 0.06],
           ),
           borderRadius: BorderRadius.circular(8.0),
         ),
@@ -2219,111 +2464,144 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                 style: TextStyle(color: Colors.white70),
               )
             else
-              ListView.separated(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: shouts.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 8.0),
-                itemBuilder: (context, index) {
-                  final shout = shouts[index];
-                  return GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onLongPress: () async {
-                      final plainText = html_parser.parse(shout.text).body?.text ?? shout.text;
-                      final action = await showDialog<String>(
-                        context: context,
-                        builder: (context) {
-                          final maxHeight = MediaQuery.of(context).size.height * 0.6;
-                          return AlertDialog(
-                            scrollable: true,
-                            titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                            title: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Rounded-rect avatar
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(4.0),
-                                  child: Image.network(
-                                    shout.avatarUrl,
-                                    width: 40,
-                                    height: 40,
-                                    fit: BoxFit.cover,
+              Column(
+                children: [
+                  ListView.separated(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: shouts.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 8.0),
+                    itemBuilder: (context, index) {
+                      final shout = shouts[index];
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onLongPress: () async {
+                          final plainText = html_parser.parse(shout.text).body?.text ?? shout.text;
+                          final action = await showDialog<String>(
+                            context: context,
+                            builder: (context) {
+                              final maxHeight = MediaQuery.of(context).size.height * 0.6;
+                              return AlertDialog(
+                                scrollable: true,
+                                titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                                title: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(4.0),
+                                      child: Image.network(
+                                        shout.avatarUrl,
+                                        width: 40,
+                                        height: 40,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            shout.username,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${shout.symbol} ${shout.profileNickname}',
+                                            style: const TextStyle(
+                                                color: Color(0xFFE09321),
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.normal
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                content: ConstrainedBox(
+                                  constraints: BoxConstraints(maxHeight: maxHeight),
+                                  child: SingleChildScrollView(
+                                    child: Text(
+                                      plainText,
+                                      style: const TextStyle(color: Colors.white),
+                                    ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                // Username and ~nickname stack
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        shout.username,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      Text(
-                                        '${shout.symbol} ${shout.profileNickname}',
-                                        style: const TextStyle(
-                                          color: Color(0xFFE09321),
-                                          fontSize: 14,
-                                            fontWeight: FontWeight.normal
-                                        ),
-                                      ),
-                                    ],
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, 'copy'),
+                                    child: const Text('Copy text'),
                                   ),
-                                ),
-                              ],
-                            ),
-                            content: ConstrainedBox(
-                              constraints: BoxConstraints(maxHeight: maxHeight),
-                              child: SingleChildScrollView(
-                                child: Text(
-                                  plainText,
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, 'copy'),
-                                child: const Text('Copy text'),
-                              ),
-                              if (isOwnProfile)
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, 'delete'),
-                                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                  child: const Text("Delete"),
-                                ),
-                            ],
+                                  if (isOwnProfile)
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, 'delete'),
+                                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                      child: const Text("Delete"),
+                                    ),
+                                ],
+                              );
+                            },
                           );
+                          if (action == 'copy') {
+                            await Clipboard.setData(ClipboardData(text: plainText));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Shout text copied'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          } else if (action == 'delete') {
+                            _confirmDeleteShout(index, shout);
+                          }
                         },
+                        child: ShoutWidget(
+                          shout: shout,
+                          onDelete: () {
+                            if (isOwnProfile) {
+                              _confirmDeleteShout(index, shout);
+                            }
+                          },
+                        ),
                       );
-                      if (action == 'copy') {
-                        await Clipboard.setData(ClipboardData(text: plainText));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Shout text copied'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      } else if (action == 'delete') {
-                        _confirmDeleteShout(index, shout);
-                      }
                     },
-                    child: ShoutWidget(
-                      shout: shout,
-                      onDelete: () {
-                        if (isOwnProfile) {
-                          _confirmDeleteShout(index, shout);
-                        }
-                      },
+                  ),
+
+                  // Add Load More button only if there are more pages
+                  if (currentShoutPage < totalShoutPages)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16.0),
+                      child: isLoadingMoreShouts
+                          ? const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE09321)),
+                      )
+                          : ElevatedButton(
+                        onPressed: _loadMoreShouts,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFE09321),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24.0,
+                            vertical: 12.0,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                        ),
+                        child: const Text(
+                          'Load More',
+                          style: TextStyle(
+                            fontSize: 16.0,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     ),
-                  );
-                },
+                ],
               ),
           ],
         ),
@@ -2961,7 +3239,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       },
       child: CachedNetworkImage(
         imageUrl: profileBannerUrl ??
-            'https://www.furaffinity.net/themes/beta/img/banners/logo/fa-banner-summer.jpg',
+            'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg',
         fit: BoxFit.cover,
         alignment: Alignment(alignmentX, 0),
         placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
