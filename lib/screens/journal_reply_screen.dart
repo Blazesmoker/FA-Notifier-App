@@ -142,8 +142,8 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => !_isSending,
+    return PopScope(
+      canPop: false,
       child: Scaffold(
         resizeToAvoidBottomInset: true,
         appBar: AppBar(

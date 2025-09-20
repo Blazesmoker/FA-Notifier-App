@@ -457,10 +457,11 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
           _clearSelection();
         }
       },
-      child: WillPopScope(
-        onWillPop: () async {
-          Navigator.pop(context, 'refresh');
-          return false;
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (bool didPop, Object? result) {
+          if (didPop) return;
+          Navigator.of(context).pop('refresh');
         },
         child: SafeArea(
           top: false,

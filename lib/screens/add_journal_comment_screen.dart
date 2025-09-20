@@ -146,8 +146,8 @@ class _AddCommentScreenState extends State<AddJournalCommentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => false,
+    return PopScope(
+      canPop: false,
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(

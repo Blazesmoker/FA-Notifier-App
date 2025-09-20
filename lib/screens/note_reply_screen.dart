@@ -5,15 +5,18 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import '../utils.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 
 class NoteReplyScreen extends StatefulWidget {
-  final String subject;         // Title of the note
-  final String originalContent; // Original text in the note
-  final String username;        // The "from" user (or who we're replying to)
-  final String messageId;       // ID of the note
-  final String messageLink;     // Full path to the note (/viewmessage/xxx or /msg/pms/xxx/)
+  final String subject;
+  final String originalContent;
+  final String username;
+  final String messageId;
+  final String messageLink;
 
   const NoteReplyScreen({
     Key? key,
@@ -31,15 +34,21 @@ class NoteReplyScreen extends StatefulWidget {
 class _NoteReplyScreenState extends State<NoteReplyScreen> {
   final TextEditingController _replyController = TextEditingController();
   bool _isSending = false;
+  bool _useWebView = false;
+  bool _isClassicTheme = false;
 
   late Dio _dio;
   final CookieJar _cookieJar = CookieJar();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
-
   String recipient = 'Loading...';
   bool _isMessageDetailsLoading = true;
   String errorMessage = '';
+
+  WebViewController? _webViewController;
+  bool _isWebViewInitialized = false;
+
+  bool _showCloudflareMessage = true;
 
   @override
   void initState() {
@@ -86,28 +95,37 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       if (response.statusCode == 200) {
         final doc = html_parser.parse(response.data);
 
+        // Check if it's classic theme
+        _isClassicTheme = doc.querySelector(
+            'body[data-static-path="/themes/classic"][id="pageid-messagecenter-pms-view"]') !=
+            null;
 
-        final bool isClassic = doc.querySelector(
-            'body[data-static-path="/themes/classic"][id="pageid-messagecenter-pms-view"]'
-        ) != null;
-        print("classic: $isClassic");
-
-        if (isClassic) {
+        if (_isClassicTheme) {
           final classicSpan = doc.querySelector('span[style*="color: #999999"]');
           if (classicSpan != null) {
-            // Looks for all display name anchors and picks the one that isn't the sender.
-            final displayNameAnchors = classicSpan.querySelectorAll(
-                'a.c-usernameBlock__displayName.js-displayName-block');
-            if (displayNameAnchors.isNotEmpty) {
-              for (final anchor in displayNameAnchors) {
-                final href = anchor.attributes['href'] ?? '';
-                if (!href.toLowerCase().contains(widget.username.toLowerCase())) {
-                  final parts = href.split('/');
-                  if (parts.length >= 3) {
-                    recipient = parts[2];
-                    print("recipient: $recipient");
-                    break;
-                  }
+            // Look for "Sent By:" text and get the FIRST username after it (the sender)
+            final userNameAnchors = classicSpan.querySelectorAll(
+                'a.c-usernameBlock__userName.js-userName-block');
+            if (userNameAnchors.isNotEmpty) {
+              // The first userName anchor after "Sent By:" is the sender
+              final senderAnchor = userNameAnchors.first;
+              final href = senderAnchor.attributes['href'] ?? '';
+              final parts = href.split('/');
+              if (parts.length >= 3) {
+                recipient = parts[2]; // This is the sender who we're replying to
+              }
+            }
+
+            // Fallback: try display name if userName didn't work
+            if (recipient == 'Loading...') {
+              final displayNameAnchors = classicSpan.querySelectorAll(
+                  'a.c-usernameBlock__displayName.js-displayName-block');
+              if (displayNameAnchors.isNotEmpty) {
+                final senderAnchor = displayNameAnchors.first;
+                final href = senderAnchor.attributes['href'] ?? '';
+                final parts = href.split('/');
+                if (parts.length >= 3) {
+                  recipient = parts[2];
                 }
               }
             }
@@ -116,13 +134,13 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
             recipient = 'UnknownRecipient';
           }
         } else {
-          // For modern layout:
+          // Modern theme - get the FIRST username (sender), not the last
           recipient = (doc
-              .querySelector('.message-center-note-information .addresses a:last-child')
+              .querySelector('.message-center-note-information .addresses a:first-child')
               ?.text
-              .trim() ?? 'Unknown recipient')
+              .trim() ??
+              'Unknown recipient')
               .replaceFirst(RegExp(r'^.'), '');
-
 
           if (recipient == 'Loading...') {
             recipient = 'UnknownRecipient';
@@ -146,7 +164,160 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     }
   }
 
-  Future<void> _sendReply() async {
+  Future<void> _initializeWebView() async {
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+
+    if (cookieA == null || cookieB == null) {
+      setState(() {
+        errorMessage = 'Not logged in or missing cookies.';
+        _useWebView = false;
+      });
+      return;
+    }
+
+    // Use the main message page URL directly
+    final webViewUrl = 'https://www.furaffinity.net${widget.messageLink}';
+
+    // Initialize WebView controller
+    late final PlatformWebViewControllerCreationParams params;
+    if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+      params = WebKitWebViewControllerCreationParams(
+        allowsInlineMediaPlayback: true,
+        mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+      );
+    } else {
+      params = const PlatformWebViewControllerCreationParams();
+    }
+
+    final WebViewController controller = WebViewController.fromPlatformCreationParams(params);
+
+    controller
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (String url) {
+            // Page started loading
+          },
+          onPageFinished: (String url) async {
+            // Inject JavaScript to handle the form
+            await _injectFormHandler(controller);
+            setState(() {
+              _isWebViewInitialized = true;
+            });
+
+            // Check if submission was successful (redirected to inbox)
+            if (url.contains('/msg/pms/') && !url.contains('/viewmessage/') && !url.contains('#message')) {
+              // Successfully submitted
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Reply sent successfully!'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+              Navigator.pop(context, true);
+            }
+          },
+          onWebResourceError: (WebResourceError error) {
+            setState(() {
+              errorMessage = 'WebView error: ${error.description}';
+            });
+          },
+        ),
+      )
+      ..setUserAgent(
+        'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
+      );
+
+    // Set cookies
+    final cookieManager = WebViewCookieManager();
+    await cookieManager.setCookie(
+      WebViewCookie(
+        name: 'a',
+        value: cookieA,
+        domain: '.furaffinity.net',
+        path: '/',
+      ),
+    );
+    await cookieManager.setCookie(
+      WebViewCookie(
+        name: 'b',
+        value: cookieB,
+        domain: '.furaffinity.net',
+        path: '/',
+      ),
+    );
+
+    // Load the page
+    await controller.loadRequest(Uri.parse(webViewUrl));
+
+    setState(() {
+      _webViewController = controller;
+    });
+  }
+
+  Future<void> _injectFormHandler(WebViewController controller) async {
+    final replyText = _replyController.text.trim();
+    if (replyText.isEmpty) return;
+
+    // Prepare the message with proper escaping
+    final fullMessage = '$replyText\n\n—————————\n${widget.originalContent}';
+    final escapedMessage = fullMessage
+        .replaceAll('\\', '\\\\')
+        .replaceAll('\n', '\\n')
+        .replaceAll('\r', '\\r')
+        .replaceAll('\'', '\\\'')
+        .replaceAll('"', '\\"');
+
+    final js = '''
+      (function() {
+        // Add viewport meta tag for better mobile zoom control
+        var viewport = document.querySelector('meta[name="viewport"]');
+        if (!viewport) {
+          viewport = document.createElement('meta');
+          viewport.name = 'viewport';
+          document.head.appendChild(viewport);
+        }
+        viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes';
+        
+        // Wait a bit for the form to be fully loaded
+        setTimeout(function() {
+          // Fill in the form fields
+          var toField = document.querySelector('input[name="to"]');
+          var subjectField = document.querySelector('input[name="subject"]');
+          var messageField = document.querySelector('textarea[name="message"]');
+          
+          if (toField) toField.value = '$recipient';
+          if (subjectField) subjectField.value = '${widget.subject}';
+          if (messageField) messageField.value = '$escapedMessage';
+          
+          // Hide unnecessary elements and focus on the form
+          var style = document.createElement('style');
+          style.innerHTML = `
+            .block-menu-top, .block-banners, .footer, 
+            .headerAds, .leaderboardAd, .footerAds,
+            table[cellpadding="10"]:first-of-type { display: none !important; }
+            body { padding-top: 20px !important; }
+            .maintable { margin-top: 0 !important; }
+            .viewmessage .maintable:first-of-type { display: none !important; }
+          `;
+          document.head.appendChild(style);
+          
+          // Scroll to the reply form
+          var noteForm = document.getElementById('note-form');
+          if (noteForm) {
+            noteForm.scrollIntoView({ behavior: 'smooth' });
+          }
+        }, 500);
+      })();
+    ''';
+
+    await controller.runJavaScript(js);
+  }
+
+  Future<void> _sendReplyModern() async {
+    // Original code for modern theme (without Cloudflare)
     final replyText = _replyController.text.trim();
     if (replyText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -158,6 +329,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       );
       return;
     }
+
     setState(() {
       _isSending = true;
       errorMessage = '';
@@ -171,14 +343,13 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
         throw Exception('Not logged in or missing cookies.');
       }
 
-      // Extract message ID and page number for both classic and modern URLs.
       String msgId;
       int pageNo;
       if (widget.messageLink.contains('/viewmessage/')) {
         final match = RegExp(r'/viewmessage/(\d+)/').firstMatch(widget.messageLink);
         if (match != null) {
           msgId = match.group(1)!;
-          pageNo = 1; // Classic pages don't have a page number.
+          pageNo = 1;
         } else {
           throw Exception('Invalid message ID from link: ${widget.messageLink}');
         }
@@ -201,9 +372,11 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
           followRedirects: false,
         ),
       );
+
       if (getResp.statusCode == 302) {
         throw Exception("GET request was redirected (auth issue?)");
       }
+
       final doc = html_parser.parse(getResp.data);
       final keyInput = doc.querySelector('form#note-form input[name="key"]');
       final keyValue = keyInput?.attributes['value'] ?? '';
@@ -235,7 +408,6 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       );
 
       if (postResp.statusCode == 302) {
-        // A 302 redirect indicates success.
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Reply sent successfully!'),
@@ -269,6 +441,32 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     }
   }
 
+  Future<void> _sendReply() async {
+    final replyText = _replyController.text.trim();
+    if (replyText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Reply cannot be empty.'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    if (_isClassicTheme) {
+      // Use WebView for classic theme (has Cloudflare)
+      setState(() {
+        _useWebView = true;
+        _isSending = true;
+      });
+      await _initializeWebView();
+    } else {
+      // Use direct POST for modern theme (no Cloudflare)
+      await _sendReplyModern();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isMessageDetailsLoading) {
@@ -287,113 +485,199 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text("Reply to Note"),
-        actions: [
-          IconButton(
-            icon: _isSending
-                ? const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                strokeWidth: 2.0,
-              ),
-            )
-                : const Icon(Icons.send),
-            onPressed: _isSending ? null : _sendReply,
+    if (_useWebView && _webViewController != null) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () {
+              setState(() {
+                _useWebView = false;
+                _isSending = false;
+              });
+            },
           ),
-        ],
-      ),
-      backgroundColor: Colors.black,
-      resizeToAvoidBottomInset: true,
-      body: SafeArea(
-        top: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: IntrinsicHeight(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (errorMessage.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8.0),
-                            child: Text(
-                              errorMessage,
-                              style: const TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        Text(
-                          'Recipient: $recipient',
-                          style:
-                          const TextStyle(fontSize: 16, color: Colors.white),
+          title: const Text("Complete Reply"),
+          backgroundColor: Colors.black,
+        ),
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            WebViewWidget(controller: _webViewController!),
+            if (!_isWebViewInitialized)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: LinearProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  backgroundColor: Colors.grey[800],
+                ),
+              ),
+            if (_showCloudflareMessage) 
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.black87,
+                  ),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Complete the Cloudflare verification and click "Post" to send your reply.',
+                          style: TextStyle(color: Colors.white, fontSize: 14),
+                          textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Subject: ${widget.subject}',
-                          style:
-                          const TextStyle(fontSize: 16, color: Colors.white),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Original Note:',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white70,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[900],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: SelectableText(
-                            widget.originalContent,
-                            style: const TextStyle(
-                                fontSize: 16, color: Colors.white),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Expanded(
-                          child: TextField(
-                            controller: _replyController,
-                            style: const TextStyle(color: Colors.white),
-                            minLines: 6,
-                            maxLines: null,
-                            keyboardType: TextInputType.multiline,
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              labelText: 'Your Reply',
-                              labelStyle: TextStyle(color: Colors.white),
-                              alignLabelWithHint: true,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                    ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                        onPressed: () {
+                          setState(() {
+                            _showCloudflareMessage = false;
+                          });
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ),
-            );
-          },
+          ],
+        ),
+      );
+    }
+
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text("Reply to Note"),
+          actions: [
+            IconButton(
+              icon: _isSending
+                  ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  strokeWidth: 2.0,
+                ),
+              )
+                  : const Icon(Icons.send),
+              onPressed: _isSending ? null : _sendReply,
+            ),
+          ],
+        ),
+        backgroundColor: Colors.black,
+        resizeToAvoidBottomInset: true,
+        body: SafeArea(
+          top: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: IntrinsicHeight(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (errorMessage.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8.0),
+                              child: Text(
+                                errorMessage,
+                                style: const TextStyle(color: Colors.red),
+                              ),
+                            ),
+                          if (_isClassicTheme)
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.info_outline, color: Colors.orange, size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Cloudflare verification is required in Classic theme.',
+                                      style: TextStyle(color: Colors.orange, fontSize: 12),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          Text(
+                            'Recipient: $recipient',
+                            style: const TextStyle(fontSize: 16, color: Colors.white),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Subject: ${widget.subject}',
+                            style: const TextStyle(fontSize: 16, color: Colors.white),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Original Note:',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white70,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: SelectableText(
+                              widget.originalContent,
+                              style: const TextStyle(fontSize: 16, color: Colors.white),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Expanded(
+                            child: TextField(
+                              controller: _replyController,
+                              style: const TextStyle(color: Colors.white),
+                              minLines: 6,
+                              maxLines: null,
+                              keyboardType: TextInputType.multiline,
+                              decoration: const InputDecoration(
+                                border: OutlineInputBorder(),
+                                labelText: 'Your Reply',
+                                labelStyle: TextStyle(color: Colors.white),
+                                alignLabelWithHint: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
   }
-
 }

@@ -193,8 +193,8 @@ class _ReplyScreenState extends State<ReplyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => false,
+    return PopScope(
+      canPop: false,
       child: Scaffold(
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
