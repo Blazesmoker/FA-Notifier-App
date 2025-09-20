@@ -75,15 +75,6 @@ void callbackDispatcher() {
     final notificationService = NotificationService();
     await notificationService.init();
 
-    //debug
-    await notificationService.showNotification(
-      DateTime.now().millisecondsSinceEpoch.remainder(100000),
-      'Debug: Task Started',
-      'Task: $task at ${DateTime.now()}',
-      'debug',
-      'debug',
-    );
-
     await debugLogs('[CallbackDispatcher] START: Worker started for task: $task');
     SharedPreferences prefs;
     try {
