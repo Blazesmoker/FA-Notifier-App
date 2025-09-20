@@ -58,26 +58,19 @@ const String kPreviousSumKey = 'previousSumOfNotifications';
 void callbackDispatcher() {
   WidgetsFlutterBinding.ensureInitialized();
   Workmanager().executeTask((task, inputData) async {
-    print("🚀🚀🚀 BACKGROUND TASK TRIGGERED: $task");
+    print("BACKGROUND TASK TRIGGERED: $task");
     try {
       final notificationService = NotificationService();
       await notificationService.init();
 
-      await notificationService.showNotification(
-        DateTime.now().millisecondsSinceEpoch.remainder(100000),
-        'Background Task Running',
-        'Task: $task triggered at ${DateTime.now().toIso8601String()}',
-        'test_payload',
-        'debug',
-      );
-      print("✅ Test notification should be shown");
+      print("Test notification should be shown");
     } catch (e) {
-      print("❌ Failed to show test notification: $e");
+      print("Failed to show test notification: $e");
     }
 
     final startTime = DateTime.now();
-    print("🚀 [${DateTime.now()}] Background task started: $task");
-    print("📊 [TASK STATUS] Input data: $inputData");
+    print("[${DateTime.now()}] Background task started: $task");
+    print("[TASK STATUS] Input data: $inputData");
 
     final notificationService = NotificationService();
     await notificationService.init();
@@ -98,8 +91,8 @@ void callbackDispatcher() {
       await debugLogs('[CallbackDispatcher] SharedPreferences retrieved successfully.');
     } catch (e) {
       await debugLogs('[CallbackDispatcher] ERROR retrieving SharedPreferences: $e');
-      print('❌ [TASK STATUS] Failed to get SharedPreferences: $e');
-      return Future.value(false); // Will retry
+      print('[TASK STATUS] Failed to get SharedPreferences: $e');
+      return Future.value(false);
     }
 
     bool isAppActive;
@@ -109,15 +102,15 @@ void callbackDispatcher() {
       print('[TASK STATUS] App active: $isAppActive');
     } catch (e) {
       await debugLogs('[CallbackDispatcher] ERROR reading isAppActive flag: $e');
-      print('❌ [TASK STATUS] Failed to read isAppActive: $e');
-      return Future.value(false); // Will retry
+      print('[TASK STATUS] Failed to read isAppActive: $e');
+      return Future.value(false);
     }
 
     if (isAppActive) {
       await debugLogs('[CallbackDispatcher] App is active; skipping background fetch.');
       print('[TASK STATUS] App is active, marking task as completed (skipped)');
       final duration = DateTime.now().difference(startTime);
-      print('✅ [TASK STATUS] Task completed (skipped) in ${duration.inSeconds}s');
+      print('[TASK STATUS] Task completed (skipped) in ${duration.inSeconds}s');
       return Future.value(true); // Mark as completed (won't retry)
     }
 
@@ -194,7 +187,7 @@ void callbackDispatcher() {
               await debugLogs('[CallbackDispatcher] Marked message id ${msg.id} as unread.');
             } catch (e) {
               await debugLogs('[CallbackDispatcher] ERROR processing message id ${msg.id}: $e');
-              print('⚠️ [TASK STATUS] Error processing message ${msg.id}, continuing with others: $e');
+              print('[TASK STATUS] Error processing message ${msg.id}, continuing with others: $e');
             }
           }
 
@@ -287,23 +280,23 @@ void callbackDispatcher() {
 
         await debugLogs('[CallbackDispatcher] Task completed successfully.');
         final duration = DateTime.now().difference(startTime);
-        print('✅ [TASK STATUS] Task completed successfully in ${duration.inSeconds}s');
-        return Future.value(true); // Success
+        print('[TASK STATUS] Task completed successfully in ${duration.inSeconds}s');
+        return Future.value(true);
 
       } catch (e, stackTrace) {
         await debugLogs('[CallbackDispatcher] Error in background task: $e');
         final duration = DateTime.now().difference(startTime);
-        print('❌ [TASK STATUS] Task failed after ${duration.inSeconds}s: $e');
-        print('📋 Stack trace: $stackTrace');
+        print('[TASK STATUS] Task failed after ${duration.inSeconds}s: $e');
+        print('Stack trace: $stackTrace');
 
         // Check if it's a network error or temporary issue
         if (e.toString().contains('network') ||
             e.toString().contains('timeout') ||
             e.toString().contains('connection')) {
-          print('🔄 [TASK STATUS] Network error, will retry later');
-          return Future.value(false); // Retry later
+          print('[TASK STATUS] Network error, will retry later');
+          return Future.value(false);
         } else {
-          print('❌ [TASK STATUS] Permanent failure, won\'t retry');
+          print('[TASK STATUS] Permanent failure, won\'t retry');
           // For permanent failures, return true to prevent endless retries
           return Future.value(true);
         }
@@ -311,8 +304,8 @@ void callbackDispatcher() {
     }
 
     await debugLogs('[CallbackDispatcher] Unknown task received: $task');
-    print('⚠️ [TASK STATUS] Unknown task: $task, returning false to retry');
-    return Future.value(false); // Will retry unknown tasks
+    print('[TASK STATUS] Unknown task: $task, returning false to retry');
+    return Future.value(false);
   });
 }
 
@@ -357,7 +350,6 @@ Future<void> resetBadgeCounter() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt('badgeCounter', 0);
   if (Platform.isIOS) {
-    // Removing the badge from the app icon on iOS
     FlutterAppBadgeControl.removeBadge();
   }
 }
@@ -695,27 +687,24 @@ void main() async {
   final cacheMonitorService = CacheMonitorService(cacheManager);
   await cacheMonitorService.checkStorageUsage();
 
-  // Initialize Workmanager FIRST
+
   await Workmanager().initialize(
       callbackDispatcher,
-      isInDebugMode: false // Set to false in production
+      isInDebugMode: false
   );
 
-  // THEN register periodic tasks
   if (Platform.isAndroid) {
     await Workmanager().registerPeriodicTask(
       "FANotify",
-      "fetchBackgroundTask", // This is the 'task' string passed to callbackDispatcher
+      "fetchBackgroundTask",
       frequency: const Duration(minutes: 15),
     );
   } else if (Platform.isIOS) {
-    // --- USE OPTION A ---
     await Workmanager().registerPeriodicTask(
-      Workmanager.iOSBackgroundTask, // <-- Use this constant
-      "fetchBackgroundTask", // <-- Your custom task name for the Dart callback
+      Workmanager.iOSBackgroundTask,
+      "fetchBackgroundTask",
       frequency: const Duration(minutes: 15),
       existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
-      // initialDelay: const Duration(seconds: 10), // Remove for production
     );
     print("iOS periodic task (Background Fetch) registered via Dart Workmanager");
   }
@@ -793,7 +782,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool("isAppActive", active);
     if (active) {
-      // When the app becomes active, reset the badge counter and remove the badge
       await resetBadgeCounter();
     }
   }

@@ -74,20 +74,7 @@
         </activity-alias>
 
 
-        <service
-            android:name="be.tramckrijte.workmanager.WorkmanagerPlugin"
-            android:exported="false"
-            android:permission="android.permission.BIND_JOB_SERVICE"/>
 
-        <receiver
-            android:name="be.tramckrijte.workmanager.WorkmanagerBroadcastReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
-                <action android:name="android.intent.action.RESTART"/>
-                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED"/>
-            </intent-filter>
-        </receiver>
 
 
         <meta-data

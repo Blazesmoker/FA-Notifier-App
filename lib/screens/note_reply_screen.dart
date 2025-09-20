@@ -95,7 +95,6 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       if (response.statusCode == 200) {
         final doc = html_parser.parse(response.data);
 
-        // Check if it's classic theme
         _isClassicTheme = doc.querySelector(
             'body[data-static-path="/themes/classic"][id="pageid-messagecenter-pms-view"]') !=
             null;
@@ -103,20 +102,17 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
         if (_isClassicTheme) {
           final classicSpan = doc.querySelector('span[style*="color: #999999"]');
           if (classicSpan != null) {
-            // Look for "Sent By:" text and get the FIRST username after it (the sender)
             final userNameAnchors = classicSpan.querySelectorAll(
                 'a.c-usernameBlock__userName.js-userName-block');
             if (userNameAnchors.isNotEmpty) {
-              // The first userName anchor after "Sent By:" is the sender
               final senderAnchor = userNameAnchors.first;
               final href = senderAnchor.attributes['href'] ?? '';
               final parts = href.split('/');
               if (parts.length >= 3) {
-                recipient = parts[2]; // This is the sender who we're replying to
+                recipient = parts[2];
               }
             }
 
-            // Fallback: try display name if userName didn't work
             if (recipient == 'Loading...') {
               final displayNameAnchors = classicSpan.querySelectorAll(
                   'a.c-usernameBlock__displayName.js-displayName-block');
@@ -134,9 +130,8 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
             recipient = 'UnknownRecipient';
           }
         } else {
-          // Modern theme - get the FIRST username (sender), not the last
           recipient = (doc
-              .querySelector('.message-center-note-information .addresses a:first-child')
+              .querySelector('.message-center-note-information .addresses a:last-child')
               ?.text
               .trim() ??
               'Unknown recipient')
@@ -176,10 +171,8 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       return;
     }
 
-    // Use the main message page URL directly
     final webViewUrl = 'https://www.furaffinity.net${widget.messageLink}';
 
-    // Initialize WebView controller
     late final PlatformWebViewControllerCreationParams params;
     if (WebViewPlatform.instance is WebKitWebViewPlatform) {
       params = WebKitWebViewControllerCreationParams(
@@ -197,18 +190,14 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
-            // Page started loading
           },
           onPageFinished: (String url) async {
-            // Inject JavaScript to handle the form
             await _injectFormHandler(controller);
             setState(() {
               _isWebViewInitialized = true;
             });
 
-            // Check if submission was successful (redirected to inbox)
             if (url.contains('/msg/pms/') && !url.contains('/viewmessage/') && !url.contains('#message')) {
-              // Successfully submitted
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Reply sent successfully!'),
@@ -230,7 +219,6 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
         'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
       );
 
-    // Set cookies
     final cookieManager = WebViewCookieManager();
     await cookieManager.setCookie(
       WebViewCookie(
@@ -249,7 +237,6 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       ),
     );
 
-    // Load the page
     await controller.loadRequest(Uri.parse(webViewUrl));
 
     setState(() {
@@ -261,7 +248,6 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     final replyText = _replyController.text.trim();
     if (replyText.isEmpty) return;
 
-    // Prepare the message with proper escaping
     final fullMessage = '$replyText\n\n—————————\n${widget.originalContent}';
     final escapedMessage = fullMessage
         .replaceAll('\\', '\\\\')
@@ -272,7 +258,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
     final js = '''
       (function() {
-        // Add viewport meta tag for better mobile zoom control
+        // Added viewport meta tag for better mobile zoom control
         var viewport = document.querySelector('meta[name="viewport"]');
         if (!viewport) {
           viewport = document.createElement('meta');
@@ -281,9 +267,9 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
         }
         viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes';
         
-        // Wait a bit for the form to be fully loaded
+        // Waits a bit for the form to be fully loaded
         setTimeout(function() {
-          // Fill in the form fields
+          // Fills in the form fields
           var toField = document.querySelector('input[name="to"]');
           var subjectField = document.querySelector('input[name="subject"]');
           var messageField = document.querySelector('textarea[name="message"]');
@@ -292,7 +278,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
           if (subjectField) subjectField.value = '${widget.subject}';
           if (messageField) messageField.value = '$escapedMessage';
           
-          // Hide unnecessary elements and focus on the form
+       
           var style = document.createElement('style');
           style.innerHTML = `
             .block-menu-top, .block-banners, .footer, 
@@ -317,7 +303,6 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   }
 
   Future<void> _sendReplyModern() async {
-    // Original code for modern theme (without Cloudflare)
     final replyText = _replyController.text.trim();
     if (replyText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -455,14 +440,12 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     }
 
     if (_isClassicTheme) {
-      // Use WebView for classic theme (has Cloudflare)
       setState(() {
         _useWebView = true;
         _isSending = true;
       });
       await _initializeWebView();
     } else {
-      // Use direct POST for modern theme (no Cloudflare)
       await _sendReplyModern();
     }
   }
