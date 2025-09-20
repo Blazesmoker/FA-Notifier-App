@@ -1813,28 +1813,54 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
   void _parsePublicationTime(String rawTime) {
     try {
-      // We try a couple of common FA formats. Classic used "Dec 31, 2024 11:59 PM"
-      // Beta used "MMM d, yyyy hh:mm a" as well
-      final format = DateFormat('MMM d, yyyy hh:mm a');
-      DateTime naiveDateTime = format.parse(rawTime);
-      if (isDstCorrectionApplied) {
-        naiveDateTime = naiveDateTime.subtract(const Duration(hours: 1));
-      }
-      publicationTime = naiveDateTime.toUtc();
-    } catch (e, stackTrace) {
-      // If that fails, try a fallback parse
-      try {
-        // For example: "Dec 31st, 2024 23:59" or "Mar 16, 2025 04:05 PM"
-        final altFormat = DateFormat("MMM d, yyyy HH:mm");
-        DateTime naiveAlt = altFormat.parse(rawTime);
-        if (isDstCorrectionApplied) {
-          naiveAlt = naiveAlt.subtract(const Duration(hours: 1));
+      rawTime = rawTime.trim();
+      if (rawTime.contains(',')) {
+        List<String> parts = rawTime.split(',');
+        if (parts.length >= 3) {
+          String datePart = '${parts[0]}, ${parts[1].trim()}';
+          String timePart = parts[2].trim();
+
+          try {
+            final format = DateFormat('MMMM d, yyyy, HH:mm:ss');
+            DateTime naiveDateTime = format.parse(rawTime);
+            if (isDstCorrectionApplied) {
+              naiveDateTime = naiveDateTime.subtract(const Duration(hours: 1));
+            }
+            publicationTime = naiveDateTime.toUtc();
+            debugPrint("Successfully parsed FA date: $publicationTime");
+            return;
+          } catch (e) {
+            debugPrint("Failed to parse with standard FA format: $e");
+          }
         }
-        publicationTime = naiveAlt.toUtc();
-      } catch (e2) {
-        debugPrint("Error parsing publication time: $e2");
       }
+
+      List<DateFormat> fallbackFormats = [
+        DateFormat('MMM d, yyyy, HH:mm:ss'),
+        DateFormat('MMM d, yyyy hh:mm a'),
+        DateFormat('MMM d, yyyy HH:mm'),
+        DateFormat('yyyy-MM-dd HH:mm:ss'),
+      ];
+
+      for (var format in fallbackFormats) {
+        try {
+          DateTime naiveDateTime = format.parse(rawTime);
+          if (isDstCorrectionApplied) {
+            naiveDateTime = naiveDateTime.subtract(const Duration(hours: 1));
+          }
+          publicationTime = naiveDateTime.toUtc();
+          debugPrint("Successfully parsed with fallback format: $publicationTime");
+          return;
+        } catch (e) {
+          // Try next format
+        }
+      }
+
+      debugPrint("Could not parse date with any format. Raw string: '$rawTime'");
+
+    } catch (e, stackTrace) {
       debugPrint("Error parsing publication time: $e");
+      debugPrint("Raw time string was: '$rawTime'");
       debugPrint("Stack trace: $stackTrace");
     }
   }
@@ -3169,7 +3195,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
               ),
             ],
           ),
-        if (publicationTime != null && viewCount != null)
+        if (viewCount != null && favoritesCount >= 0)
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 5.0),
             child: Icon(Icons.circle, size: 4, color: Colors.grey),
@@ -3192,7 +3218,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
               ),
             ],
           ),
-        if (publicationTime != null && viewCount != null)
+        if (favoritesCount >= 0 && commentsCount >= 0)
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 5.0),
             child: Icon(Icons.circle, size: 4, color: Colors.grey),

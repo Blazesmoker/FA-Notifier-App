@@ -58,6 +58,39 @@ const String kPreviousSumKey = 'previousSumOfNotifications';
 void callbackDispatcher() {
   WidgetsFlutterBinding.ensureInitialized();
   Workmanager().executeTask((task, inputData) async {
+    print("🚀🚀🚀 BACKGROUND TASK TRIGGERED: $task");
+    try {
+      final notificationService = NotificationService();
+      await notificationService.init();
+
+      await notificationService.showNotification(
+        DateTime.now().millisecondsSinceEpoch.remainder(100000),
+        'Background Task Running',
+        'Task: $task triggered at ${DateTime.now().toIso8601String()}',
+        'test_payload',
+        'debug',
+      );
+      print("✅ Test notification should be shown");
+    } catch (e) {
+      print("❌ Failed to show test notification: $e");
+    }
+
+    final startTime = DateTime.now();
+    print("🚀 [${DateTime.now()}] Background task started: $task");
+    print("📊 [TASK STATUS] Input data: $inputData");
+
+    final notificationService = NotificationService();
+    await notificationService.init();
+
+    //debug
+    await notificationService.showNotification(
+      DateTime.now().millisecondsSinceEpoch.remainder(100000),
+      'Debug: Task Started',
+      'Task: $task at ${DateTime.now()}',
+      'debug',
+      'debug',
+    );
+
     await debugLogs('[CallbackDispatcher] START: Worker started for task: $task');
     SharedPreferences prefs;
     try {
@@ -65,31 +98,35 @@ void callbackDispatcher() {
       await debugLogs('[CallbackDispatcher] SharedPreferences retrieved successfully.');
     } catch (e) {
       await debugLogs('[CallbackDispatcher] ERROR retrieving SharedPreferences: $e');
-      return Future.value(false);
+      print('❌ [TASK STATUS] Failed to get SharedPreferences: $e');
+      return Future.value(false); // Will retry
     }
 
     bool isAppActive;
     try {
       isAppActive = prefs.getBool("isAppActive") ?? false;
       await debugLogs('[CallbackDispatcher] App active flag from prefs: $isAppActive');
+      print('[TASK STATUS] App active: $isAppActive');
     } catch (e) {
       await debugLogs('[CallbackDispatcher] ERROR reading isAppActive flag: $e');
-      return Future.value(false);
+      print('❌ [TASK STATUS] Failed to read isAppActive: $e');
+      return Future.value(false); // Will retry
     }
-
 
     if (isAppActive) {
       await debugLogs('[CallbackDispatcher] App is active; skipping background fetch.');
-      return Future.value(true);
+      print('[TASK STATUS] App is active, marking task as completed (skipped)');
+      final duration = DateTime.now().difference(startTime);
+      print('✅ [TASK STATUS] Task completed (skipped) in ${duration.inSeconds}s');
+      return Future.value(true); // Mark as completed (won't retry)
     }
 
-    if (task == fetchBackgroundTask || task == 'iOSPerformFetch') {
+    if (task == fetchBackgroundTask || task == Workmanager.iOSBackgroundTask) {
       await debugLogs('[CallbackDispatcher] Task matches fetchBackgroundTask or iOSPerformFetch, starting process.');
+      print('[TASK STATUS] Executing background fetch logic for task: $task');
 
       try {
-
         // Unread Notes Check
-
         await debugLogs('[CallbackDispatcher] Starting UNREAD NOTES CHECK.');
         try {
           await prefs.reload();
@@ -102,6 +139,7 @@ void callbackDispatcher() {
         await debugLogs('[CallbackDispatcher] did_first_run_skip flag: $didFirstRunSkip');
         if (!didFirstRunSkip) {
           await debugLogs('[CallbackDispatcher] First run skip not done; no notifications.');
+          print('[TASK STATUS] First run not complete, marking as successful (no work needed)');
           return Future.value(true);
         }
 
@@ -156,6 +194,7 @@ void callbackDispatcher() {
               await debugLogs('[CallbackDispatcher] Marked message id ${msg.id} as unread.');
             } catch (e) {
               await debugLogs('[CallbackDispatcher] ERROR processing message id ${msg.id}: $e');
+              print('⚠️ [TASK STATUS] Error processing message ${msg.id}, continuing with others: $e');
             }
           }
 
@@ -167,9 +206,7 @@ void callbackDispatcher() {
           await debugLogs('[CallbackDispatcher] No unread messages found.');
         }
 
-
         // Notification Counts Check
-
         await debugLogs('[CallbackDispatcher] Starting NOTIFICATION COUNTS CHECK.');
         final faService = FaService();
         await debugLogs('[CallbackDispatcher] Fetching new notification counts from FA.');
@@ -249,15 +286,33 @@ void callbackDispatcher() {
         }
 
         await debugLogs('[CallbackDispatcher] Task completed successfully.');
-        return Future.value(true);
-      } catch (e) {
+        final duration = DateTime.now().difference(startTime);
+        print('✅ [TASK STATUS] Task completed successfully in ${duration.inSeconds}s');
+        return Future.value(true); // Success
+
+      } catch (e, stackTrace) {
         await debugLogs('[CallbackDispatcher] Error in background task: $e');
-        return Future.value(false);
+        final duration = DateTime.now().difference(startTime);
+        print('❌ [TASK STATUS] Task failed after ${duration.inSeconds}s: $e');
+        print('📋 Stack trace: $stackTrace');
+
+        // Check if it's a network error or temporary issue
+        if (e.toString().contains('network') ||
+            e.toString().contains('timeout') ||
+            e.toString().contains('connection')) {
+          print('🔄 [TASK STATUS] Network error, will retry later');
+          return Future.value(false); // Retry later
+        } else {
+          print('❌ [TASK STATUS] Permanent failure, won\'t retry');
+          // For permanent failures, return true to prevent endless retries
+          return Future.value(true);
+        }
       }
     }
 
     await debugLogs('[CallbackDispatcher] Unknown task received: $task');
-    return Future.value(false);
+    print('⚠️ [TASK STATUS] Unknown task: $task, returning false to retry');
+    return Future.value(false); // Will retry unknown tasks
   });
 }
 
@@ -606,6 +661,8 @@ Future<void> requestIOSNotificationPermission() async {
   }
 }
 
+
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await PackageInfo.fromPlatform();
@@ -638,31 +695,34 @@ void main() async {
   final cacheMonitorService = CacheMonitorService(cacheManager);
   await cacheMonitorService.checkStorageUsage();
 
-
-  // WorkManager init
-  Workmanager().initialize(
-    callbackDispatcher,
-    isInDebugMode: false,
+  // Initialize Workmanager FIRST
+  await Workmanager().initialize(
+      callbackDispatcher,
+      isInDebugMode: false // Set to false in production
   );
 
-  // Periodic background fetch
-  Workmanager().registerPeriodicTask(
-    "FANotify",
-    fetchBackgroundTask,
-    frequency: const Duration(minutes: 15),
-    initialDelay: const Duration(seconds: 10),
-    constraints: Constraints(
-      networkType: NetworkType.connected,
-    ),
-    backoffPolicy: BackoffPolicy.linear,
-    backoffPolicyDelay: const Duration(minutes: 5),
-    existingWorkPolicy: ExistingWorkPolicy.keep,
-  );
+  // THEN register periodic tasks
+  if (Platform.isAndroid) {
+    await Workmanager().registerPeriodicTask(
+      "FANotify",
+      "fetchBackgroundTask", // This is the 'task' string passed to callbackDispatcher
+      frequency: const Duration(minutes: 15),
+    );
+  } else if (Platform.isIOS) {
+    // --- USE OPTION A ---
+    await Workmanager().registerPeriodicTask(
+      Workmanager.iOSBackgroundTask, // <-- Use this constant
+      "fetchBackgroundTask", // <-- Your custom task name for the Dart callback
+      frequency: const Duration(minutes: 15),
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+      // initialDelay: const Duration(seconds: 10), // Remove for production
+    );
+    print("iOS periodic task (Background Fetch) registered via Dart Workmanager");
+  }
 
   runApp(
     MultiProvider(
       providers: [
-
         ChangeNotifierProvider<TimezoneProvider>.value(value: timezoneProvider),
         ChangeNotifierProvider<NotificationNavigationProvider>(
           create: (_) => NotificationNavigationProvider(),
@@ -699,6 +759,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Debug
+    print('Lifecycle state changed: $state');
+    if (state == AppLifecycleState.resumed) {
+      _setAppActive(true);
+      print('App marked as ACTIVE');
+    } else {
+      _setAppActive(false);
+      print('App marked as INACTIVE');
+    }
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
@@ -725,10 +798,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    _setAppActive(state == AppLifecycleState.resumed);
-  }
+
 
   @override
   Widget build(BuildContext context) {

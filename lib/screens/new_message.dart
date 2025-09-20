@@ -134,19 +134,29 @@ class NewMessageScreen extends StatelessWidget {
 
       if (response.statusCode == 302) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Message sent successfully!')),
+          const SnackBar(
+            content: Text('Message sent successfully!'),
+            backgroundColor: Colors.green,
+          ),
         );
         Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send message: ${response.statusCode}')),
+          SnackBar(
+            content: Text('Failed to send message: ${response.statusCode}'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
+
   }
 
   @override
