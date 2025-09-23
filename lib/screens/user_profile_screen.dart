@@ -3568,235 +3568,191 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                           color: Colors.black,
                           thickness: 1.0,
                         ),
-                        Stack(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Column(
-                              crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  width: double.infinity,
-                                  color: const Color(0xFF111111),
-                                  child: Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                        8.0, 0.0, 8.0, 8.0),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                      CrossAxisAlignment.center,
-                                      children: [
-                                        MediaQuery(
-                                          data: MediaQuery.of(context)
-                                              .copyWith(
-                                              textScaleFactor: 1.0),
-                                          child: Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                              CrossAxisAlignment
-                                                  .start,
-                                              children: [
-                                                Padding(
+                            Container(
+                              width: double.infinity,
+                              color: const Color(0xFF111111),
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(8.0, 0.0, 8.0, 8.0),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    MediaQuery(
+                                      data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
+                                      child: Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            SizedBox(
+                                              height: 30.0,
+                                              child: Padding(
+                                                padding: EdgeInsets.only(left: textLeftPadding),
+                                                child: FittedBox(
+                                                  fit: BoxFit.scaleDown,
+                                                  alignment: Alignment.centerLeft,
+                                                  child: _buildProfileHeaderNameRow(),
+                                                ),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              height: 24.0,
+                                              child: Visibility(
+                                                visible: true,
+                                                maintainSize: true,
+                                                maintainAnimation: true,
+                                                maintainState: true,
+                                                child: Padding(
                                                   padding: EdgeInsets.only(
-                                                      left:
-                                                      textLeftPadding),
+                                                    top: 0.0,
+                                                    left: textLeftPadding,
+                                                  ),
                                                   child: FittedBox(
                                                     fit: BoxFit.scaleDown,
-                                                    alignment: Alignment
-                                                        .centerLeft,
-                                                    child:
-                                                    _buildProfileHeaderNameRow(),
+                                                    alignment: Alignment.centerLeft,
+                                                    child: Text(
+                                                      (userTitle?.isNotEmpty ?? false)
+                                                          ? userTitle!
+                                                          : " ",
+                                                      style: const TextStyle(
+                                                        color: Colors.white70,
+                                                        fontSize: 16.0,
+                                                      ),
+                                                      maxLines: 1,
+                                                    ),
                                                   ),
                                                 ),
-                                                Visibility(
-
-                                                  visible: true,
-
-                                                  maintainSize: true,
-                                                  maintainAnimation: true,
-                                                  maintainState: true,
-                                                  child: Padding(
-                                                    padding: EdgeInsets.only(
-                                                      top: 4.0,
-                                                      left: textLeftPadding,
-                                                    ),
-                                                    child: FittedBox(
-                                                      fit: BoxFit.scaleDown,
-                                                      alignment: Alignment.centerLeft,
-                                                      child: Text(
-
-                                                        (userTitle?.isNotEmpty ?? false) ? userTitle! : " ",
-                                                        style: const TextStyle(
-                                                          color: Colors.white70,
-                                                          fontSize: 16.0,
-                                                        ),
-                                                        maxLines: 1,
-                                                      ),
-                                                    ),
+                                              ),
+                                            ),
+                                            Padding(
+                                              padding: EdgeInsets.only(
+                                                top: 8.0,
+                                                left: 0.0,
+                                              ),
+                                              child: FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                alignment: Alignment.centerLeft,
+                                                child: Text(
+                                                  registrationDate != null &&
+                                                      registrationDate!.isNotEmpty
+                                                      ? 'Joined $registrationDate'
+                                                      : '',
+                                                  style: const TextStyle(
+                                                    color: Colors.white70,
+                                                    fontSize: 14.0,
                                                   ),
-                                                )
-                                                ,
-                                                const SizedBox(
-                                                    height: 30.0),
-                                              ],
+                                                  maxLines: 1,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    if (isOwnProfile)
+                                      SizedBox(
+                                        width: 100,
+                                        height: 38,
+                                        child: ElevatedButton(
+                                          onPressed: _showEditProfileDialog,
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.black,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(2),
+                                            ),
+                                            side: const BorderSide(
+                                              color: Color(0xFFE09321),
+                                            ),
+                                          ),
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: const Text(
+                                              "Edit Profile",
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                              ),
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(width: 4),
-                                        if (isOwnProfile)
+                                      )
+                                    else
+                                      Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
                                           SizedBox(
-                                            width: 110,
+                                            width: 100,
                                             height: 38,
                                             child: ElevatedButton(
-                                              onPressed:
-                                              _showEditProfileDialog,
-                                              style: ElevatedButton
-                                                  .styleFrom(
-                                                backgroundColor:
-                                                Colors.black,
-                                                shape:
-                                                RoundedRectangleBorder(
-                                                  borderRadius:
-                                                  BorderRadius
-                                                      .circular(2),
+                                              onPressed: () => _handleWatchButtonPressed(),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.black,
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(2),
                                                 ),
-                                                side:
-                                                const BorderSide(
-                                                  color: Color(
-                                                      0xFFE09321),
+                                                side: const BorderSide(
+                                                  color: Color(0xFFE09321),
                                                 ),
                                               ),
                                               child: FittedBox(
                                                 fit: BoxFit.scaleDown,
-                                                child: const Text(
-                                                  "Edit Profile",
-                                                  style: TextStyle(
-                                                    color:
-                                                    Colors.white,
+                                                child: Text(
+                                                  isWatching ? "-Watch" : "+Watch",
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
                                                   ),
                                                 ),
                                               ),
                                             ),
-                                          )
-                                        else
-                                          Column(
-                                            mainAxisSize:
-                                            MainAxisSize.min,
-                                            children: [
-                                              SizedBox(
-                                                width: 110,
-                                                height: 38,
-                                                child: ElevatedButton(
-                                                  onPressed:
-                                                      () => _handleWatchButtonPressed(),
-                                                  style: ElevatedButton
-                                                      .styleFrom(
-                                                    backgroundColor:
-                                                    Colors.black,
-                                                    shape:
-                                                    RoundedRectangleBorder(
-                                                      borderRadius:
-                                                      BorderRadius
-                                                          .circular(
-                                                          2),
-                                                    ),
-                                                    side:
-                                                    const BorderSide(
-                                                      color: Color(
-                                                          0xFFE09321),
-                                                    ),
-                                                  ),
-                                                  child: FittedBox(
-                                                    fit: BoxFit.scaleDown,
-                                                    child: Text(
-                                                      isWatching
-                                                          ? "-Watch"
-                                                          : "+Watch",
-                                                      style:
-                                                      const TextStyle(
-                                                        color: Colors
-                                                            .white,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(
-                                                  height: 5),
-                                              SizedBox(
-                                                width: 110,
-                                                height: 38,
-                                                child: ElevatedButton(
-                                                  onPressed: () {
-                                                    Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder: (context) =>
-                                                            NewMessageScreen(
-                                                              recipient:
-                                                              sanitizedUsername,
-                                                            ),
-                                                      ),
-                                                    );
-                                                  },
-                                                  style: ElevatedButton
-                                                      .styleFrom(
-                                                    backgroundColor:
-                                                    const Color(
-                                                        0xFFE09321),
-                                                    shape:
-                                                    RoundedRectangleBorder(
-                                                      borderRadius:
-                                                      BorderRadius
-                                                          .circular(
-                                                          2),
-                                                    ),
-                                                  ),
-                                                  child: const FittedBox(
-                                                    fit: BoxFit.scaleDown,
-                                                    child: Text(
-                                                      "Note",
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
                                           ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const Divider(
-                                  height: 3.0,
-                                  color: Colors.black,
-                                  thickness: 3.0,
-                                ),
-                                const Divider(
-                                  height: 4.0,
-                                  color: Color(0xFF111111),
-                                  thickness: 4.0,
-                                ),
-                              ],
-                            ),
-                            Positioned(
-                              bottom: 18.0,
-                              left: 30.0,
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  registrationDate != null &&
-                                      registrationDate!.isNotEmpty
-                                      ? 'Joined $registrationDate'
-                                      : '',
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 14.0,
-                                  ),
-                                  maxLines: 1,
+                                          const SizedBox(height: 5),
+                                          SizedBox(
+                                            width: 100,
+                                            height: 38,
+                                            child: ElevatedButton(
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) => NewMessageScreen(
+                                                      recipient: sanitizedUsername,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: const Color(0xFFE09321),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(2),
+                                                ),
+                                              ),
+                                              child: const FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: Text(
+                                                  "Note",
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                  ],
                                 ),
                               ),
+                            ),
+                            const Divider(
+                              height: 3.0,
+                              color: Colors.black,
+                              thickness: 3.0,
+                            ),
+                            const Divider(
+                              height: 4.0,
+                              color: Color(0xFF111111),
+                              thickness: 4.0,
                             ),
                           ],
                         ),
