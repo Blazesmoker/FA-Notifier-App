@@ -3610,7 +3610,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                                                   ),
                                                   child: FittedBox(
                                                     fit: BoxFit.scaleDown,
-                                                    alignment: Alignment.centerLeft,
+                                                    alignment: Alignment.center,
                                                     child: Text(
                                                       (userTitle?.isNotEmpty ?? false)
                                                           ? userTitle!
