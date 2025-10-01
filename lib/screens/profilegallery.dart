@@ -52,7 +52,9 @@ class ProfileGallerySliver extends StatefulWidget {
 }
 
 class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device));
 
   final List<Map<String, dynamic>> _images = [];
   bool _isLoading = false;

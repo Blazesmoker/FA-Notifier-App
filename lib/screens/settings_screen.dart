@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../app_theme.dart'; // If you need to reference AppTheme.fontName, etc.
 
+import '../main.dart';
 import 'siteSettings.dart';
 import 'appSettings.dart';
 
@@ -110,6 +111,8 @@ class SettingsScreen extends StatelessWidget {
                     thickness: 3.0,
                   ),
                   */
+                  // In your debug/settings screen
+
 
                   ListTile(
                     leading: const Icon(

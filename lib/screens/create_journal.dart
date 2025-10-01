@@ -19,7 +19,9 @@ class CreateJournalScreen extends StatefulWidget {
 
 class _CreateJournalScreenState extends State<CreateJournalScreen>
     with AutomaticKeepAliveClientMixin {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device));
   late final String initialUrl;
   final String finalizeUrlPrefix = 'https://www.furaffinity.net/journal/';
   late final WebViewController _webViewController;

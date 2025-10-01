@@ -95,7 +95,12 @@ class _HomeScreenState extends State<HomeScreen> {
   ValueNotifier({});
 
   InAppWebViewController? _webViewController;
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
+
   final String loginUrl = 'https://www.furaffinity.net/login';
   final String postLoginUrl = 'https://www.furaffinity.net/';
   final FaService _faService = FaService();
@@ -401,6 +406,8 @@ class _HomeScreenState extends State<HomeScreen> {
               _profileFetched = true;
               await _fetchUserProfile();
             }
+            ScaffoldMessenger.of(context).clearSnackBars();
+
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Logged in successfully!'),
@@ -496,8 +503,13 @@ class _HomeScreenState extends State<HomeScreen> {
               _profileFetched = true;
               await _fetchUserProfile();
             }
+            ScaffoldMessenger.of(context).clearSnackBars();
+
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Logged in successfully!')),
+              SnackBar(
+                content: Text('Logged in successfully!'),
+                backgroundColor: Colors.green,
+              ),
             );
           }
         }

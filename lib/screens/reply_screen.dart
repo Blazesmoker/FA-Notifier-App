@@ -24,7 +24,11 @@ class ReplyScreen extends StatefulWidget {
 class _ReplyScreenState extends State<ReplyScreen> {
   final TextEditingController _replyController = TextEditingController();
   bool _isSending = false;
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
 
   // Extract numeric ID from a classic reply link (e.g. "/replyto/submission/184823275/")
   String? extractClassicCommentId(String input) {

@@ -49,7 +49,11 @@ class TimezoneProvider with ChangeNotifier {
 
   /// Fetch timezone data from the FA settings page once.
   Future<void> fetchTimezone() async {
-    final storage = const FlutterSecureStorage();
+    final storage = const FlutterSecureStorage(
+      iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+    );
     String? cookieA = await storage.read(key: 'fa_cookie_a');
     String? cookieB = await storage.read(key: 'fa_cookie_b');
     if (cookieA == null || cookieB == null) {

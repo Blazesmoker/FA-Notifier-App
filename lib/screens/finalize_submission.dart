@@ -49,7 +49,9 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
   String _errorMessage = '';
 
   final Dio _dio = Dio();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device));
   final CookieJar _cookieJar = CookieJar();
 
   // Option Groups

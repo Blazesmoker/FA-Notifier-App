@@ -88,7 +88,11 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   DateTime? publicationTime;
   int commentsCount = 0;
   List<Map<String, dynamic>> comments = [];
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
   final TextEditingController _commentController = TextEditingController();
   bool _isTyping = false;
 

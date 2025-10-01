@@ -39,7 +39,9 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   final List<List<Map<String, dynamic>>> _imageRows = [];
   final List<Map<String, dynamic>> _normalImagesQueue = [];
 
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device));
 
   // Favorite functionality
   final Set<String> _favoritedImages = {};

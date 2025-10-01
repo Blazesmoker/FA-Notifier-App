@@ -9,7 +9,11 @@ import '../model/user_profile.dart';
 import '../model/notifications.dart';
 
 class FaService {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
 
   /// Fetches the user profile information (display name and profile picture).
   Future<UserProfile?> fetchUserProfile({ BuildContext? context }) async {

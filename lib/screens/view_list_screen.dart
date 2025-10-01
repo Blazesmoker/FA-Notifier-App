@@ -21,7 +21,11 @@ class ViewListScreen extends StatefulWidget {
 }
 
 class _ViewListScreenState extends State<ViewListScreen> {
-  final _secureStorage = FlutterSecureStorage();
+  final _secureStorage = FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
   List<UserLink> users = [];
   List<UserLink> filteredUsers = [];
   int currentPage = 1;

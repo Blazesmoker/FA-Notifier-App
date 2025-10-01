@@ -28,7 +28,11 @@ class JournalReplyScreen extends StatefulWidget {
 
 class _JournalReplyScreenState extends State<JournalReplyScreen> {
   final TextEditingController _replyController = TextEditingController();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
   bool _isSending = false;
 
   Future<void> _sendReply() async {

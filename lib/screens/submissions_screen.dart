@@ -46,7 +46,9 @@ class SubmissionsScreen extends StatefulWidget {
 
 class SubmissionsScreenState extends State<SubmissionsScreen>
     with AutomaticKeepAliveClientMixin<SubmissionsScreen> {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device));
   final FavoriteService _favoriteService = FavoriteService();
 
   /// All submissions grouped by date

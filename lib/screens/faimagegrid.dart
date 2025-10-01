@@ -40,7 +40,11 @@ class _FAImageGridState extends State<FAImageGrid> {
 
   final Set<String> imageUrls = <String>{}; // For de-duping
   final ScrollController _scrollController = ScrollController();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
 
 
   final Set<String> _favoritedImages = {};

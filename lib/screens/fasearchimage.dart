@@ -37,7 +37,9 @@ class _FASearchImageState extends State<FASearchImage> {
   List<Map<String, dynamic>> normalImagesQueue = [];
   final Set<String> imageUrls = <String>{};
   final ScrollController _scrollController = ScrollController();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device));
   final FavoriteService _favoriteService = FavoriteService();
 
 

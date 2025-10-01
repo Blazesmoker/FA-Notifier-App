@@ -19,7 +19,9 @@ class UploadSubmissionScreen extends StatefulWidget {
 }
 
 class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device));
   final String initialUrl = 'https://www.furaffinity.net/submit/';
   final String finalizeUrl = 'https://www.furaffinity.net/submit/finalize/';
   late final WebViewController _webViewController;

@@ -19,7 +19,9 @@ class NewMessageScreen extends StatelessWidget {
 
   final _dio = Dio();
   final _cookieJar = CookieJar();
-  final _secureStorage = const FlutterSecureStorage();
+  final _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device));
 
   Future<void> _initializeDio() async {
     _dio.interceptors.add(CookieManager(_cookieJar));

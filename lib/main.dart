@@ -45,263 +45,246 @@ import 'utils/fa_link_handler.dart';
 import 'package:app_links/app_links.dart';
 import 'dart:async';
 
-
 final RouteObserver<ModalRoute<dynamic>> routeObserver = RouteObserver<ModalRoute<dynamic>>();
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<DrawerUserControllerState> drawerKey = GlobalKey<DrawerUserControllerState>();
 
-
 const String fetchBackgroundTask = "fetchBackgroundTask";
+const String iOSBackgroundTask = "dev.flutter.backgroundFetch.ios.task";
 const String kPreviousSumKey = 'previousSumOfNotifications';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   WidgetsFlutterBinding.ensureInitialized();
-  Workmanager().executeTask((task, inputData) async {
-    print("BACKGROUND TASK TRIGGERED: $task");
-    try {
-      final notificationService = NotificationService();
-      await notificationService.init();
 
-      print("Test notification should be shown");
-    } catch (e) {
-      print("Failed to show test notification: $e");
-    }
+  Workmanager().executeTask((task, inputData) async {
+    print("===============================================");
+    print("BACKGROUND TASK TRIGGERED: $task");
+    print("Time: ${DateTime.now()}");
+    print("Input data: $inputData");
+    print("===============================================");
 
     final startTime = DateTime.now();
-    print("[${DateTime.now()}] Background task started: $task");
-    print("[TASK STATUS] Input data: $inputData");
 
-    final notificationService = NotificationService();
-    await notificationService.init();
-
-    await debugLogs('[CallbackDispatcher] START: Worker started for task: $task');
-    SharedPreferences prefs;
     try {
-      prefs = await SharedPreferences.getInstance();
-      await debugLogs('[CallbackDispatcher] SharedPreferences retrieved successfully.');
-    } catch (e) {
-      await debugLogs('[CallbackDispatcher] ERROR retrieving SharedPreferences: $e');
-      print('[TASK STATUS] Failed to get SharedPreferences: $e');
-      return Future.value(false);
-    }
+      // Initialize notification service first
+      final notificationService = NotificationService();
+      await notificationService.init();
+      print("[BG] NotificationService initialized");
 
-    bool isAppActive;
-    try {
-      isAppActive = prefs.getBool("isAppActive") ?? false;
-      await debugLogs('[CallbackDispatcher] App active flag from prefs: $isAppActive');
-      print('[TASK STATUS] App active: $isAppActive');
-    } catch (e) {
-      await debugLogs('[CallbackDispatcher] ERROR reading isAppActive flag: $e');
-      print('[TASK STATUS] Failed to read isAppActive: $e');
-      return Future.value(false);
-    }
-
-    if (isAppActive) {
-      await debugLogs('[CallbackDispatcher] App is active; skipping background fetch.');
-      print('[TASK STATUS] App is active, marking task as completed (skipped)');
-      final duration = DateTime.now().difference(startTime);
-      print('[TASK STATUS] Task completed (skipped) in ${duration.inSeconds}s');
-      return Future.value(true); // Mark as completed (won't retry)
-    }
-
-    if (task == fetchBackgroundTask || task == Workmanager.iOSBackgroundTask) {
-      await debugLogs('[CallbackDispatcher] Task matches fetchBackgroundTask or iOSPerformFetch, starting process.');
-      print('[TASK STATUS] Executing background fetch logic for task: $task');
-
+      // Get SharedPreferences with reload
+      SharedPreferences prefs;
       try {
-        // Unread Notes Check
-        await debugLogs('[CallbackDispatcher] Starting UNREAD NOTES CHECK.');
+        prefs = await SharedPreferences.getInstance();
+        await prefs.reload(); // Force reload to get latest values
+        print('[BG] SharedPreferences loaded successfully');
+      } catch (e) {
+        print('[BG ERROR] Failed to load SharedPreferences: $e');
+        return Future.value(false);
+      }
+
+      // Check if app is active
+      bool isAppActive = prefs.getBool("isAppActive") ?? false;
+      print('[BG] App active status: $isAppActive');
+
+      if (isAppActive) {
+        print('[BG] App is ACTIVE - skipping background fetch');
+        print('[BG] Task completed (skipped) in ${DateTime.now().difference(startTime).inSeconds}s');
+        return Future.value(true);
+      }
+
+      print('[BG] App is INACTIVE - proceeding with background fetch');
+
+      // Check if this is a valid background task
+      if (task == Workmanager.iOSBackgroundTask ||
+          task == iOSBackgroundTask ||
+          task == fetchBackgroundTask ||
+          task.contains("backgroundFetch") ||
+          task.contains("ios.task")) {
+
+        print('[BG] Valid background task detected: $task');
+
         try {
-          await prefs.reload();
-          await debugLogs('[CallbackDispatcher] SharedPreferences reloaded.');
-        } catch (e) {
-          await debugLogs('[CallbackDispatcher] ERROR reloading SharedPreferences: $e');
-        }
+          // Check first run status
+          bool didFirstRunSkip = prefs.getBool('did_first_run_skip') ?? false;
+          print('[BG] First run skip status: $didFirstRunSkip');
 
-        bool didFirstRunSkip = prefs.getBool('did_first_run_skip') ?? false;
-        await debugLogs('[CallbackDispatcher] did_first_run_skip flag: $didFirstRunSkip');
-        if (!didFirstRunSkip) {
-          await debugLogs('[CallbackDispatcher] First run skip not done; no notifications.');
-          print('[TASK STATUS] First run not complete, marking as successful (no work needed)');
-          return Future.value(true);
-        }
-
-        final notificationService = NotificationService();
-        await debugLogs('[CallbackDispatcher] Initializing NotificationService.');
-        await notificationService.init();
-
-        await debugLogs('[CallbackDispatcher] Fetching inbox messages.');
-        final List<Message> fetchedInbox = await _fetchInboxTwoPagesBg();
-        await debugLogs('[CallbackDispatcher] Fetched ${fetchedInbox.length} messages from inbox.');
-
-        // Retrieving IDs that have already been processed
-        final Set<String> shownSet = await MessageStorage.getShownNoteIds();
-        await debugLogs('[CallbackDispatcher] Retrieved ${shownSet.length} shown message IDs.');
-
-        // Filter unread messages
-        final List<Message> unread = fetchedInbox.where((m) => m.isUnread).toList();
-        await debugLogs('[CallbackDispatcher] Found ${unread.length} unread messages.');
-
-        if (unread.isNotEmpty) {
-          // Identify new messages that have not been shown before
-          final List<Message> newNotes = unread.where((m) => !shownSet.contains(m.id)).toList();
-          await debugLogs('[CallbackDispatcher] New unread messages count: ${newNotes.length}');
-
-          // Processing each new unread message
-          for (var msg in newNotes) {
-            try {
-              await debugLogs('[CallbackDispatcher] Processing message id: ${msg.id}');
-              final String content = await _fetchMessageContentInBackground(msg.link);
-              await debugLogs('[CallbackDispatcher] Fetched content for msg id: ${msg.id}');
-              final String payload = 'note_${msg.id}';
-              await debugLogs('[CallbackDispatcher] Showing notification for msg id: ${msg.id} with payload: $payload');
-
-              // Show the notification
-              await notificationService.showNotification(
-                msg.id.hashCode,
-                'New Note from ${msg.sender}',
-                content,
-                payload,
-                'notes',
-              );
-              await debugLogs('[CallbackDispatcher] Notification shown for msg id: ${msg.id}');
-
-              // Increment the badge counter for iOS only
-              if (Platform.isIOS) {
-                int currentBadge = await getBadgeCounter();
-                int newBadge = currentBadge + 1;
-                await updateBadgeCounter(newBadge);
-              }
-
-              await _markAsUnreadBackground(msg);
-              await debugLogs('[CallbackDispatcher] Marked message id ${msg.id} as unread.');
-            } catch (e) {
-              await debugLogs('[CallbackDispatcher] ERROR processing message id ${msg.id}: $e');
-              print('[TASK STATUS] Error processing message ${msg.id}, continuing with others: $e');
-            }
+          if (!didFirstRunSkip) {
+            print('[BG] First run not complete - skipping notifications');
+            return Future.value(true);
           }
 
-          // Updating the list of shown message IDs
-          final List<String> newIds = newNotes.map((m) => m.id).toList();
-          await MessageStorage.addShownNoteIds(newIds);
-          await debugLogs('[CallbackDispatcher] Updated shown message IDs: $newIds');
-        } else {
-          await debugLogs('[CallbackDispatcher] No unread messages found.');
-        }
+          // UNREAD NOTES CHECK
+          print('[BG] === Starting UNREAD NOTES CHECK ===');
 
-        // Notification Counts Check
-        await debugLogs('[CallbackDispatcher] Starting NOTIFICATION COUNTS CHECK.');
-        final faService = FaService();
-        await debugLogs('[CallbackDispatcher] Fetching new notification counts from FA.');
-        final Notifications? newNotifications = await faService.fetchNotifications();
-        if (newNotifications != null) {
-          final NotificationCounts newCounts = NotificationCounts(
-            submissions: int.tryParse(newNotifications.submissions) ?? 0,
-            watches: int.tryParse(newNotifications.watches) ?? 0,
-            comments: int.tryParse(newNotifications.comments) ?? 0,
-            favorites: int.tryParse(newNotifications.favorites) ?? 0,
-            journals: int.tryParse(newNotifications.journals) ?? 0,
-            notes: int.tryParse(newNotifications.notes) ?? 0,
-          );
-          await debugLogs('[CallbackDispatcher] New notification counts: $newCounts');
+          try {
+            final List<Message> fetchedInbox = await _fetchInboxTwoPagesBg();
+            print('[BG] Fetched ${fetchedInbox.length} messages from inbox');
 
-          // Read user settings for enabled notification categories
-          final bool submissionsEnabled = prefs.getBool('drawer_notif_submissions_enabled') ?? true;
-          final bool watchesEnabled = prefs.getBool('drawer_notif_watches_enabled') ?? true;
-          final bool commentsEnabled = prefs.getBool('drawer_notif_comments_enabled') ?? true;
-          final bool favoritesEnabled = prefs.getBool('drawer_notif_favorites_enabled') ?? true;
-          final bool journalsEnabled = prefs.getBool('drawer_notif_journals_enabled') ?? true;
-          final bool notesEnabled = prefs.getBool('drawer_notif_notes_enabled') ?? true;
+            // Get already shown message IDs
+            final Set<String> shownSet = await MessageStorage.getShownNoteIds();
+            print('[BG] Already shown: ${shownSet.length} message IDs');
 
-          // Calculate the sum count based on enabled categories
-          final int newSum = (submissionsEnabled ? newCounts.submissions : 0) +
-              (watchesEnabled ? newCounts.watches : 0) +
-              (commentsEnabled ? newCounts.comments : 0) +
-              (favoritesEnabled ? newCounts.favorites : 0) +
-              (journalsEnabled ? newCounts.journals : 0) +
-              (notesEnabled ? newCounts.notes : 0);
-          await debugLogs('[CallbackDispatcher] Calculated new sum: $newSum');
+            // Filter unread messages
+            final List<Message> unread = fetchedInbox.where((m) => m.isUnread).toList();
+            print('[BG] Found ${unread.length} unread messages');
 
-          final int previousSum = prefs.getInt(kPreviousSumKey) ?? 0;
-          await debugLogs('[CallbackDispatcher] Previous sum: $previousSum');
+            if (unread.isNotEmpty) {
+              // Find new unread messages
+              final List<Message> newNotes = unread.where((m) => !shownSet.contains(m.id)).toList();
+              print('[BG] New unread messages: ${newNotes.length}');
 
-          // If there's a change, display the activity notification
-          if (newSum != previousSum) {
-            final NotificationCounts filteredCounts = NotificationCounts(
-              submissions: submissionsEnabled ? newCounts.submissions : 0,
-              watches: watchesEnabled ? newCounts.watches : 0,
-              comments: commentsEnabled ? newCounts.comments : 0,
-              favorites: favoritesEnabled ? newCounts.favorites : 0,
-              journals: journalsEnabled ? newCounts.journals : 0,
-              notes: notesEnabled ? newCounts.notes : 0,
-            );
-            final String messageBody = _buildNotificationMessage(filteredCounts);
-            await debugLogs('[CallbackDispatcher] Built activity notification message: "$messageBody"');
+              // Process each new unread message
+              for (var msg in newNotes) {
+                try {
+                  print('[BG] Processing message: ${msg.id} from ${msg.sender}');
+                  final String content = await _fetchMessageContentInBackground(msg.link);
+                  final String payload = 'note_${msg.id}';
 
-            if (messageBody.isNotEmpty) {
-              final bool soundActivitiesEnabled = prefs.getBool('sound_new_activities_enabled') ?? true;
-              final bool vibrationActivitiesEnabled = prefs.getBool('vibration_new_activities_enabled') ?? true;
-              if (soundActivitiesEnabled || vibrationActivitiesEnabled) {
-                final String payload = 'activity_fa_activity';
-                await debugLogs('[CallbackDispatcher] Displaying activity notification with payload: $payload');
-                await notificationService.showNotification(
-                  999999,
-                  'New FA Activity',
-                  messageBody,
-                  payload,
-                  'activities',
+                  // Show notification
+                  await notificationService.showNotification(
+                    msg.id.hashCode,
+                    'New Note from ${msg.sender}',
+                    content,
+                    payload,
+                    'notes',
+                  );
+                  print('[BG] Notification shown for message ${msg.id}');
+
+                  // Update badge for iOS
+                  if (Platform.isIOS) {
+                    int currentBadge = await getBadgeCounter();
+                    int newBadge = currentBadge + 1;
+                    await updateBadgeCounter(newBadge);
+                    print('[BG] Badge updated to: $newBadge');
+                  }
+
+                  await _markAsUnreadBackground(msg);
+                  print('[BG] Message ${msg.id} marked as unread on server');
+                } catch (e) {
+                  print('[BG ERROR] Failed to process message ${msg.id}: $e');
+                }
+              }
+
+              // Update shown message IDs
+              if (newNotes.isNotEmpty) {
+                final List<String> newIds = newNotes.map((m) => m.id).toList();
+                await MessageStorage.addShownNoteIds(newIds);
+                print('[BG] Saved ${newIds.length} new message IDs');
+              }
+            }
+          } catch (e) {
+            print('[BG ERROR] Notes check failed: $e');
+          }
+
+          // NOTIFICATION COUNTS CHECK
+          print('[BG] === Starting NOTIFICATION COUNTS CHECK ===');
+
+          try {
+            final faService = FaService();
+            final Notifications? newNotifications = await faService.fetchNotifications();
+
+            if (newNotifications != null) {
+              final NotificationCounts newCounts = NotificationCounts(
+                submissions: int.tryParse(newNotifications.submissions) ?? 0,
+                watches: int.tryParse(newNotifications.watches) ?? 0,
+                comments: int.tryParse(newNotifications.comments) ?? 0,
+                favorites: int.tryParse(newNotifications.favorites) ?? 0,
+                journals: int.tryParse(newNotifications.journals) ?? 0,
+                notes: int.tryParse(newNotifications.notes) ?? 0,
+              );
+              print('[BG] New counts: S:${newCounts.submissions} W:${newCounts.watches} C:${newCounts.comments} F:${newCounts.favorites} J:${newCounts.journals} N:${newCounts.notes}');
+
+              // Check user settings for enabled notifications
+              final bool submissionsEnabled = prefs.getBool('drawer_notif_submissions_enabled') ?? true;
+              final bool watchesEnabled = prefs.getBool('drawer_notif_watches_enabled') ?? true;
+              final bool commentsEnabled = prefs.getBool('drawer_notif_comments_enabled') ?? true;
+              final bool favoritesEnabled = prefs.getBool('drawer_notif_favorites_enabled') ?? true;
+              final bool journalsEnabled = prefs.getBool('drawer_notif_journals_enabled') ?? true;
+              final bool notesEnabled = prefs.getBool('drawer_notif_notes_enabled') ?? true;
+
+              // Calculate sum based on enabled categories
+              final int newSum = (submissionsEnabled ? newCounts.submissions : 0) +
+                  (watchesEnabled ? newCounts.watches : 0) +
+                  (commentsEnabled ? newCounts.comments : 0) +
+                  (favoritesEnabled ? newCounts.favorites : 0) +
+                  (journalsEnabled ? newCounts.journals : 0) +
+                  (notesEnabled ? newCounts.notes : 0);
+
+              final int previousSum = prefs.getInt(kPreviousSumKey) ?? 0;
+              print('[BG] Sum comparison - Previous: $previousSum, New: $newSum');
+
+              // Show notification if there's a change
+              if (newSum != previousSum && newSum > 0) {
+                final NotificationCounts filteredCounts = NotificationCounts(
+                  submissions: submissionsEnabled ? newCounts.submissions : 0,
+                  watches: watchesEnabled ? newCounts.watches : 0,
+                  comments: commentsEnabled ? newCounts.comments : 0,
+                  favorites: favoritesEnabled ? newCounts.favorites : 0,
+                  journals: journalsEnabled ? newCounts.journals : 0,
+                  notes: notesEnabled ? newCounts.notes : 0,
                 );
-                await debugLogs('[CallbackDispatcher] Activity notification displayed.');
-              } else {
-                await debugLogs('[CallbackDispatcher] Activity notifications are disabled; not displaying.');
+
+                final String messageBody = _buildNotificationMessage(filteredCounts);
+
+                if (messageBody.isNotEmpty) {
+                  final bool soundActivitiesEnabled = prefs.getBool('sound_new_activities_enabled') ?? true;
+                  final bool vibrationActivitiesEnabled = prefs.getBool('vibration_new_activities_enabled') ?? true;
+
+                  if (soundActivitiesEnabled || vibrationActivitiesEnabled) {
+                    await notificationService.showNotification(
+                      999999,
+                      'New FA Activity',
+                      messageBody,
+                      'activity_fa_activity',
+                      'activities',
+                    );
+                    print('[BG] Activity notification shown: $messageBody');
+                  }
+                }
+
+                await prefs.setInt(kPreviousSumKey, newSum);
+                print('[BG] Previous sum updated to: $newSum');
               }
             } else {
-              await debugLogs('[CallbackDispatcher] Notification message empty; nothing to display.');
+              print('[BG] No notification data received from FA');
             }
-
-            await prefs.setInt(kPreviousSumKey, newSum);
-            await debugLogs('[CallbackDispatcher] Updated previous sum to $newSum.');
-          } else {
-            await debugLogs('[CallbackDispatcher] Notification counts have not changed.');
+          } catch (e) {
+            print('[BG ERROR] Notification counts check failed: $e');
           }
-        } else {
-          await debugLogs('[CallbackDispatcher] faService.fetchNotifications() returned null.');
-        }
 
-        await debugLogs('[CallbackDispatcher] Task completed successfully.');
-        final duration = DateTime.now().difference(startTime);
-        print('[TASK STATUS] Task completed successfully in ${duration.inSeconds}s');
-        return Future.value(true);
+          print('[BG] === Task completed successfully ===');
+          print('[BG] Total duration: ${DateTime.now().difference(startTime).inSeconds}s');
+          return Future.value(true);
 
-      } catch (e, stackTrace) {
-        await debugLogs('[CallbackDispatcher] Error in background task: $e');
-        final duration = DateTime.now().difference(startTime);
-        print('[TASK STATUS] Task failed after ${duration.inSeconds}s: $e');
-        print('Stack trace: $stackTrace');
+        } catch (e, stackTrace) {
+          print('[BG ERROR] Task failed: $e');
+          print('[BG ERROR] Stack: $stackTrace');
 
-        // Check if it's a network error or temporary issue
-        if (e.toString().contains('network') ||
-            e.toString().contains('timeout') ||
-            e.toString().contains('connection')) {
-          print('[TASK STATUS] Network error, will retry later');
-          return Future.value(false);
-        } else {
-          print('[TASK STATUS] Permanent failure, won\'t retry');
-          // For permanent failures, return true to prevent endless retries
+          // Network errors should retry
+          if (e.toString().contains('network') ||
+              e.toString().contains('timeout') ||
+              e.toString().contains('connection') ||
+              e.toString().contains('SocketException')) {
+            print('[BG] Network error detected - will retry');
+            return Future.value(false);
+          }
+
+          print('[BG] Non-network error - marking as complete');
           return Future.value(true);
         }
       }
-    }
 
-    await debugLogs('[CallbackDispatcher] Unknown task received: $task');
-    print('[TASK STATUS] Unknown task: $task, returning false to retry');
-    return Future.value(false);
+      print('[BG] Unknown task type: $task');
+      return Future.value(true);
+
+    } catch (e) {
+      print('[BG FATAL ERROR] Callback dispatcher crash: $e');
+      return Future.value(false);
+    }
   });
 }
 
-
-/// build a message "3S | 1W | 4C | 1F | 2J | 106N"
 String _buildNotificationMessage(NotificationCounts counts) {
   final parts = <String>[];
   if (counts.submissions > 0) parts.add('${counts.submissions}S');
@@ -314,12 +297,8 @@ String _buildNotificationMessage(NotificationCounts counts) {
 }
 
 Future<void> debugLogs(String message) async {
-  try {
-    final timestamp = DateTime.now().toIso8601String();
-    print('[$timestamp] $message');
-  } catch (e) {
-    print('Error writing log to console: $e');
-  }
+  final timestamp = DateTime.now().toIso8601String();
+  print('[$timestamp] $message');
 }
 
 Future<int> getBadgeCounter() async {
@@ -331,11 +310,9 @@ Future<void> updateBadgeCounter(int newCount) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt('badgeCounter', newCount);
   if (Platform.isIOS) {
-    print("Updating badge count to: $newCount");
     FlutterAppBadgeControl.updateBadgeCount(newCount);
   }
 }
-
 
 Future<void> resetBadgeCounter() async {
   final prefs = await SharedPreferences.getInstance();
@@ -345,110 +322,83 @@ Future<void> resetBadgeCounter() async {
   }
 }
 
-
-
-
 // BACKGROUND NOTE FETCH
 Future<List<Message>> _fetchInboxTwoPagesBg() async {
-  final storage = const FlutterSecureStorage();
-
+  final storage = const FlutterSecureStorage(
+    iOptions: IOSOptions(
+      groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+    ),
+  );
 
   final cookieA = await storage.read(key: 'fa_cookie_a');
   final cookieB = await storage.read(key: 'fa_cookie_b');
 
-
   if (cookieA == null || cookieB == null) {
-    print('[ERRORnote] Missing cookies. Not logged in.');
-    throw Exception('[Bgnote] no cookies => not logged in');
+    print('[BG] No cookies found - user not logged in');
+    throw Exception('Not logged in');
   }
 
   final result = <Message>[];
   for (int page = 1; page <= 2; page++) {
-    print('[DEBUGnote] Fetching page $page.');
     final url = Uri.parse('https://www.furaffinity.net/msg/pms/$page/');
-    print('[DEBUGnote] Constructed URL: $url');
 
     final resp = await http.get(
       url,
       headers: {
         'Cookie': 'a=$cookieA; b=$cookieB; folder=inbox',
-        'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
     );
-    print('[DEBUGnote] Received response with status code: ${resp.statusCode}');
 
     if (resp.statusCode == 200) {
       final decoded = utf8.decode(resp.bodyBytes, allowMalformed: true);
       final doc = html_parser.parse(decoded);
 
-      // modern layout
-      var noteElements =
-      doc.querySelectorAll('.message-center-pms-note-list-view .note-list-container');
+      // Try modern layout first
+      var noteElements = doc.querySelectorAll('.message-center-pms-note-list-view .note-list-container');
 
       if (noteElements.isEmpty) {
         noteElements = doc.querySelectorAll('#notes-list .note-list-container');
-        print('[DEBUGnote] Fallback selector "#notes-list .note-list-container" found ${noteElements.length} elements.');
       }
 
-      // classic layout
+      // Try classic layout
       if (noteElements.isEmpty) {
         final bool isClassic = doc.querySelector('body[data-static-path="/themes/classic"]') != null;
-        print('[DEBUGnote] Checking classic layout: isClassic = $isClassic');
         if (isClassic) {
           List<dom.Element> classicRows = List.from(doc.querySelectorAll('#notes-list tr.note'));
-          print('[DEBUGnote] Classic layout: found ${classicRows.length} note rows before removal check.');
-          if (classicRows.isNotEmpty &&
-              classicRows.last.querySelector('input[type="checkbox"]') == null) {
-            print('[DEBUGnote] Removing trailing row from classic layout as it lacks a checkbox.');
+          if (classicRows.isNotEmpty && classicRows.last.querySelector('input[type="checkbox"]') == null) {
             classicRows.removeLast();
           }
           noteElements = classicRows;
-          print('[DEBUGnote] Classic layout: ${noteElements.length} note rows after removal check.');
         } else {
-
           noteElements = doc.querySelectorAll('td.note-list-container tr.note');
-          print('[DEBUGnote] Fallback layout selector "td.note-list-container tr.note" found ${noteElements.length} elements.');
         }
       }
 
-      if (noteElements.isEmpty) {
-        print('[DEBUGnote] No note elements found on page $page. Exiting loop.');
-        break;
-      }
+      if (noteElements.isEmpty) break;
 
       for (var noteEl in noteElements) {
-
         final subject = noteEl.querySelector('a.notelink')?.text.trim() ?? 'No subject';
-
-
         final sender = noteEl.querySelector('.c-usernameBlock__displayName .js-displayName')?.text.trim() ??
             'Unknown sender';
-
-
         final checkbox = noteEl.querySelector('input[type="checkbox"]');
         final id = checkbox?.attributes['value'] ?? '';
-
 
         final aTag = noteEl.querySelector('a.notelink');
         String link = '';
         if (aTag != null) {
           final classicLink = aTag.attributes['href'] ?? '';
           if (classicLink.startsWith('/viewmessage/')) {
-
             link = classicLink;
           } else {
-
             link = aTag.attributes['newhref'] ?? classicLink;
           }
         }
 
-
         final date = noteEl.querySelector('span.popup_date')?.attributes['title'] ?? 'Unknown date';
-
         final isUnread = noteEl.querySelector('img.unread') != null;
-
-
 
         result.add(Message(
           id: id,
@@ -458,25 +408,28 @@ Future<List<Message>> _fetchInboxTwoPagesBg() async {
           link: link,
           isUnread: isUnread,
         ));
-
       }
-
-
     } else {
-      print('[ERRORnote] HTTP request failed for page $page with status code ${resp.statusCode}.');
-      throw Exception('[Bgnote] fail => page $page, code ${resp.statusCode}');
+      throw Exception('HTTP ${resp.statusCode}');
     }
   }
-  print('[DEBUGnote] Finished fetching messages. Total messages fetched: ${result.length}');
+
   return result;
 }
 
 Future<String> _fetchMessageContentInBackground(String link) async {
-  final storage = const FlutterSecureStorage();
+  final storage = const FlutterSecureStorage(
+    iOptions: IOSOptions(
+      groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+    ),
+  );
   final cookieA = await storage.read(key: 'fa_cookie_a');
   final cookieB = await storage.read(key: 'fa_cookie_b');
+
   if (cookieA == null || cookieB == null) {
-    throw Exception('[Bg] no cookies => not logged in');
+    throw Exception('Not logged in');
   }
 
   final dio = Dio();
@@ -492,8 +445,7 @@ Future<String> _fetchMessageContentInBackground(String link) async {
     options: Options(
       responseType: ResponseType.plain,
       headers: {
-        'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
       validateStatus: (status) => status != null && status >= 200 && status < 400,
@@ -503,10 +455,9 @@ Future<String> _fetchMessageContentInBackground(String link) async {
   if (resp.statusCode == 200) {
     final doc = html_parser.parse(resp.data);
 
-    // Modern layout
+    // Try modern layout
     final modernContentElement = doc.querySelector('.section-body .user-submitted-links');
     if (modernContentElement != null) {
-      // Remove scam warning
       modernContentElement.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
           .forEach((e) => e.remove());
 
@@ -522,45 +473,50 @@ Future<String> _fetchMessageContentInBackground(String link) async {
       final updatedText = innerDoc.body?.text.trim() ?? '';
       final newestContent = extractNewestContent(updatedText);
       return newestContent.isNotEmpty ? newestContent : 'No content';
-    } else {
-      // Classic layout
-      final classicContentElement = doc.querySelector('td.noteContent.alt1');
-      if (classicContentElement != null) {
-        // Remove scam warning
-        classicContentElement
-            .querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
-            .forEach((e) => e.remove());
-
-        classicContentElement.querySelector('span[style*="color: #999999"]')?.remove();
-
-        classicContentElement
-            .querySelectorAll('a.auto_link_shortened')
-            .forEach((anchor) {
-          final fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
-          if (fullLink != null) {
-            anchor.innerHtml = fullLink;
-          }
-        });
-
-        final rawHtml = classicContentElement.innerHtml;
-        final innerDoc = html_parser.parse(rawHtml);
-        final updatedText = innerDoc.body?.text.trim() ?? '';
-        final newestContent = extractNewestContent(updatedText);
-        return newestContent.isNotEmpty ? newestContent : 'No content';
-      }
     }
+
+    // Try classic layout
+    final classicContentElement = doc.querySelector('td.noteContent.alt1');
+    if (classicContentElement != null) {
+      classicContentElement
+          .querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
+          .forEach((e) => e.remove());
+
+      classicContentElement.querySelector('span[style*="color: #999999"]')?.remove();
+
+      classicContentElement
+          .querySelectorAll('a.auto_link_shortened')
+          .forEach((anchor) {
+        final fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
+        if (fullLink != null) {
+          anchor.innerHtml = fullLink;
+        }
+      });
+
+      final rawHtml = classicContentElement.innerHtml;
+      final innerDoc = html_parser.parse(rawHtml);
+      final updatedText = innerDoc.body?.text.trim() ?? '';
+      final newestContent = extractNewestContent(updatedText);
+      return newestContent.isNotEmpty ? newestContent : 'No content';
+    }
+
     return 'No content';
   } else {
-    throw Exception('[Bg] _fetchMessageContent => code ${resp.statusCode}');
+    throw Exception('HTTP ${resp.statusCode}');
   }
 }
 
 Future<void> _markAsUnreadBackground(Message msg) async {
-  final storage = const FlutterSecureStorage();
+  final storage = const FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
   final cookieA = await storage.read(key: 'fa_cookie_a');
   final cookieB = await storage.read(key: 'fa_cookie_b');
+
   if (cookieA == null || cookieB == null) {
-    throw Exception('[Bg] no cookies => not logged in');
+    throw Exception('Not logged in');
   }
 
   final dio = Dio();
@@ -578,9 +534,9 @@ Future<void> _markAsUnreadBackground(Message msg) async {
     final classicMatch = RegExp(r'/viewmessage/(\d+)/').firstMatch(msg.link);
     if (classicMatch != null) {
       mId = classicMatch.group(1)!;
-      pNum = 1; // Classic messages don't have a page number.
+      pNum = 1;
     } else {
-      throw Exception('[Bg] invalid msg ID => cannot mark unread');
+      throw Exception('Invalid message ID');
     }
   }
 
@@ -590,7 +546,7 @@ Future<void> _markAsUnreadBackground(Message msg) async {
     'move_to': 'unread',
   };
 
-  final response = await dio.post(
+  await dio.post(
     'https://www.furaffinity.net/msg/pms/$pNum/$mId/',
     data: formData,
     options: Options(
@@ -603,51 +559,37 @@ Future<void> _markAsUnreadBackground(Message msg) async {
       validateStatus: (s) => s != null && (s == 302 || (s >= 200 && s < 300)),
     ),
   );
-  if (response.statusCode == 302 || response.statusCode == 200) {
-    print('[Bg] re-marked ${msg.id} => unread');
-  } else {
-    print('[Bg] failed marking unread => ${response.statusCode}');
-  }
 }
 
-// PERMISSION FUNCTIONS
+// Permission functions
 Future<void> requestAndroidNotificationPermission() async {
   if (Platform.isAndroid) {
     final status = await Permission.notification.status;
     if (status.isDenied || status.isPermanentlyDenied) {
       final newStatus = await Permission.notification.request();
-      if (newStatus.isGranted) {
-        print('Android notification permission granted');
-      } else {
-        print('Android notification permission denied');
-      }
-    } else if (status.isGranted) {
-      print('Android notification permission already granted');
+      print('Android notification permission: ${newStatus.isGranted ? "granted" : "denied"}');
     }
   }
 }
 
-// iOS-specific permission request
 Future<void> requestIOSNotificationPermission() async {
   if (Platform.isIOS) {
     final status = await Permission.notification.status;
     if (status.isDenied || status.isPermanentlyDenied) {
       final newStatus = await Permission.notification.request();
-      if (newStatus.isGranted) {
-        print('iOS notification permission granted');
-      } else {
-        print('iOS notification permission denied');
-      }
-    } else if (status.isGranted) {
-      print('iOS notification permission already granted');
+      print('iOS notification permission: ${newStatus.isGranted ? "granted" : "denied"}');
     }
   }
 }
 
-
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  print("===============================================");
+  print("APP STARTING: ${DateTime.now()}");
+  print("===============================================");
+
+  // Initialize basic services
   await PackageInfo.fromPlatform();
   final timezoneProvider = TimezoneProvider();
   await timezoneProvider.fetchTimezone();
@@ -658,10 +600,11 @@ void main() async {
 
   tz.initializeTimeZones();
 
-  // Request Android and iOS permission
+  // Request permissions
   await requestAndroidNotificationPermission();
   await requestIOSNotificationPermission();
 
+  // Handle notification launch
   final NotificationAppLaunchDetails? notificationAppLaunchDetails =
   await notificationService.flutterLocalNotificationsPlugin
       .getNotificationAppLaunchDetails();
@@ -674,31 +617,42 @@ void main() async {
     }
   }
 
+  // Initialize cache manager
   final cacheManager = CustomCacheManager();
   final cacheMonitorService = CacheMonitorService(cacheManager);
   await cacheMonitorService.checkStorageUsage();
 
+  // CRITICAL: Initialize Workmanager BEFORE registering tasks
+  print("Initializing Workmanager...");
+  await Workmanager().initialize(callbackDispatcher);
+  print("Workmanager initialized");
 
-  await Workmanager().initialize(
-      callbackDispatcher,
-      isInDebugMode: false
-  );
-
+  // Register background tasks based on platform
   if (Platform.isAndroid) {
     await Workmanager().registerPeriodicTask(
       "FANotify",
-      "fetchBackgroundTask",
+      fetchBackgroundTask,
       frequency: const Duration(minutes: 15),
+      constraints: Constraints(
+        networkType: NetworkType.connected,
+      ),
     );
+    print("Android background task registered");
   } else if (Platform.isIOS) {
-    await Workmanager().registerPeriodicTask(
-      Workmanager.iOSBackgroundTask,
-      "fetchBackgroundTask",
-      frequency: const Duration(minutes: 15),
-      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+    // For iOS, register the task to handle BGTaskScheduler callbacks
+    await Workmanager().registerOneOffTask(
+      "ios-background-init",
+      iOSBackgroundTask,
+      initialDelay: const Duration(seconds: 0),
+      existingWorkPolicy: ExistingWorkPolicy.keep,
     );
-    print("iOS periodic task (Background Fetch) registered via Dart Workmanager");
+    print("iOS background task handler registered");
   }
+
+  // Set initial app state
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool("isAppActive", true);
+  print("App initial state set to ACTIVE");
 
   runApp(
     MultiProvider(
@@ -729,6 +683,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   AppLinks? _appLinks;
   StreamSubscription<Uri>? _linkSub;
+  Timer? _stateDebugTimer;
 
   @override
   void initState() {
@@ -736,23 +691,51 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _setAppActive(true);
     _initDeepLinks();
+
+    // Add periodic debug logging for state verification
+    if (kDebugMode || true) { // Always log in release for debugging
+      _stateDebugTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
+        final prefs = await SharedPreferences.getInstance();
+        final isActive = prefs.getBool("isAppActive") ?? false;
+        print("[STATE CHECK] App active: $isActive at ${DateTime.now()}");
+      });
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Debug
-    print('Lifecycle state changed: $state');
-    if (state == AppLifecycleState.resumed) {
-      _setAppActive(true);
-      print('App marked as ACTIVE');
-    } else {
-      _setAppActive(false);
-      print('App marked as INACTIVE');
+    print('===============================================');
+    print('APP LIFECYCLE CHANGED: $state');
+    print('Time: ${DateTime.now()}');
+    print('===============================================');
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _setAppActive(true);
+        print('→ App RESUMED - Background fetch DISABLED');
+        break;
+      case AppLifecycleState.inactive:
+      // Don't change state on inactive - it's transitional
+        print('→ App INACTIVE (transitional state)');
+        break;
+      case AppLifecycleState.paused:
+        _setAppActive(false);
+        print('→ App PAUSED - Background fetch ENABLED');
+        break;
+      case AppLifecycleState.detached:
+        _setAppActive(false);
+        print('→ App DETACHED - Background fetch ENABLED');
+        break;
+      case AppLifecycleState.hidden:
+        _setAppActive(false);
+        print('→ App HIDDEN - Background fetch ENABLED');
+        break;
     }
   }
 
   @override
   void dispose() {
+    _stateDebugTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
     _setAppActive(false);
@@ -770,10 +753,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _setAppActive(bool active) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool("isAppActive", active);
-    if (active) {
-      await resetBadgeCounter();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool("isAppActive", active);
+      await prefs.reload(); // Force commit
+      print("[APP STATE] Set to: ${active ? 'ACTIVE' : 'INACTIVE'}");
+
+      if (active) {
+        await resetBadgeCounter();
+      }
+    } catch (e) {
+      print("[ERROR] Failed to set app state: $e");
     }
   }
 
@@ -782,6 +772,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      scaffoldMessengerKey: rootMessengerKey,
       title: 'FA Notify',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
@@ -791,3 +782,5 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     );
   }
 }
+final GlobalKey<ScaffoldMessengerState> rootMessengerKey =
+GlobalKey<ScaffoldMessengerState>();

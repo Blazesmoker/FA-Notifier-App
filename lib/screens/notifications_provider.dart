@@ -48,7 +48,11 @@ class NotificationSection {
 /// Provider managing notifications from Fur Affinity.
 class NotificationsProvider with ChangeNotifier {
   final Dio _dio = Dio();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
 
   bool isLoading = true;
   bool hasFetched = false;

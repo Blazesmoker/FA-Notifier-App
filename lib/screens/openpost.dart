@@ -104,7 +104,11 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   int viewCount = 0;
   int commentsCount = 0;
   List<Map<String, dynamic>> comments = [];
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
   final TextEditingController _commentController = TextEditingController();
   Timer? _debounceTimer;
   bool _pendingFavoriteState = false;
@@ -1814,29 +1818,25 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   void _parsePublicationTime(String rawTime) {
     try {
       rawTime = rawTime.trim();
-      if (rawTime.contains(',')) {
-        List<String> parts = rawTime.split(',');
-        if (parts.length >= 3) {
-          String datePart = '${parts[0]}, ${parts[1].trim()}';
-          String timePart = parts[2].trim();
 
-          try {
-            final format = DateFormat('MMMM d, yyyy, HH:mm:ss');
-            DateTime naiveDateTime = format.parse(rawTime);
-            if (isDstCorrectionApplied) {
-              naiveDateTime = naiveDateTime.subtract(const Duration(hours: 1));
-            }
-            publicationTime = naiveDateTime.toUtc();
-            debugPrint("Successfully parsed FA date: $publicationTime");
-            return;
-          } catch (e) {
-            debugPrint("Failed to parse with standard FA format: $e");
-          }
+      try {
+        // Correct format for "August 7, 2025 09:26:21 PM"
+        final format = DateFormat('MMMM d, yyyy hh:mm:ss a');
+        DateTime naiveDateTime = format.parse(rawTime);
+        if (isDstCorrectionApplied) {
+          naiveDateTime = naiveDateTime.subtract(const Duration(hours: 1));
         }
+        publicationTime = naiveDateTime.toUtc();
+        debugPrint("Successfully parsed FA date: $publicationTime");
+        return;
+      } catch (e) {
+        debugPrint("Failed to parse with primary format: $e");
       }
 
+      // fallback formats
       List<DateFormat> fallbackFormats = [
-        DateFormat('MMM d, yyyy, HH:mm:ss'),
+        DateFormat('MMM d, yyyy hh:mm:ss a'),
+        DateFormat('MMM d, yyyy HH:mm:ss'),
         DateFormat('MMM d, yyyy hh:mm a'),
         DateFormat('MMM d, yyyy HH:mm'),
         DateFormat('yyyy-MM-dd HH:mm:ss'),
@@ -1852,7 +1852,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           debugPrint("Successfully parsed with fallback format: $publicationTime");
           return;
         } catch (e) {
-          // Try next format
+          // continue
         }
       }
 
@@ -1864,6 +1864,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       debugPrint("Stack trace: $stackTrace");
     }
   }
+
 
   String? getFormattedPublicationTime() {
     if (publicationTime == null) return null;
@@ -2505,7 +2506,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
             },
             child: SingleChildScrollView(
               controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
+              physics: Platform.isIOS
+                  ? const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics())
+                  : const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
               padding: EdgeInsets.only(bottom: keyboardHeight + 0),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
@@ -3266,7 +3269,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         padding: const EdgeInsets.only(top: 8.0, bottom: 0.0, right: 8.0, left: 8.0),
         child: ListView.builder(
           shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
+          physics: Platform.isIOS
+              ? const NeverScrollableScrollPhysics(parent: ClampingScrollPhysics())
+              : const NeverScrollableScrollPhysics(parent: ClampingScrollPhysics()),
           itemCount: comments.length,
           itemBuilder: (context, index) {
             final comment = comments[index];

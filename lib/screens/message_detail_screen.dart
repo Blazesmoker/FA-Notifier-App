@@ -9,6 +9,7 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:url_launcher/url_launcher.dart';
+import '../main.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'note_reply_screen.dart';
 import '../utils.dart';
@@ -31,7 +32,11 @@ class MessageDetailScreen extends StatefulWidget {
 }
 
 class _MessageDetailScreenState extends State<MessageDetailScreen> {
-  final _secureStorage = const FlutterSecureStorage();
+  final _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
   late Dio _dio;
   final CookieJar _cookieJar = CookieJar();
 
@@ -48,6 +53,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
   String senderLink = '';
   int pageNumber = 1;
   bool isClassic = false;
+  bool _shouldShowReplySuccess = false;
 
   @override
   void initState() {
@@ -441,7 +447,21 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-
+    if (_shouldShowReplySuccess) {
+      _shouldShowReplySuccess = false; // Reset immediately
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          print('DEBUG: Showing snackbar from build cycle');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Reply sent successfully!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      });
+    }
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTapDown: (TapDownDetails details) {
@@ -613,6 +633,8 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                           child: const Text('Mark Unread'),
                         ),
                       if (widget.folder != 'sent') const SizedBox(width: 8),
+                      // In MessageDetailScreen, find and replace the entire Reply button ElevatedButton widget with this:
+
                       if (widget.folder != 'sent')
                         ElevatedButton(
                           onPressed: () {
@@ -628,8 +650,17 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                                 ),
                               ),
                             ).then((result) {
-                              if (result == 'marked_unread') {}
+                              if (result == true) {
+                                rootMessengerKey.currentState?.showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Reply sent successfully!'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
                             });
+
+
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFE09321),

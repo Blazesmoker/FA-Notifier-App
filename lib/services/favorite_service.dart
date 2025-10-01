@@ -7,7 +7,11 @@ import 'package:http/http.dart' as http;
 
 /// Service to handle favorite/unfavorite operations with retry logic.
 class FavoriteService {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
   final int maxRetries;
   final Duration retryInterval;
 

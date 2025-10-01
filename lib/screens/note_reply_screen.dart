@@ -39,7 +39,11 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
   late Dio _dio;
   final CookieJar _cookieJar = CookieJar();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+        accountName: 'flutter_secure_storage_service',
+        accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
 
   String recipient = 'Loading...';
   bool _isMessageDetailsLoading = true;
@@ -47,14 +51,21 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
   WebViewController? _webViewController;
   bool _isWebViewInitialized = false;
-
   bool _showCloudflareMessage = true;
+  bool _replySentSuccessfully = false;
+  bool _hasPopped = false;
 
   @override
   void initState() {
     super.initState();
     _initializeDio();
     _fetchMessageDetails();
+  }
+
+  @override
+  void dispose() {
+    _replyController.dispose();
+    super.dispose();
   }
 
   void _initializeDio() {
@@ -142,20 +153,26 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
           }
         }
 
-        setState(() {
-          _isMessageDetailsLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _isMessageDetailsLoading = false;
+          });
+        }
       } else {
+        if (mounted) {
+          setState(() {
+            errorMessage = 'Failed to fetch details: status ${response.statusCode}';
+            _isMessageDetailsLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          errorMessage = 'Failed to fetch details: status ${response.statusCode}';
+          errorMessage = 'Error fetching details: $e';
           _isMessageDetailsLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        errorMessage = 'Error fetching details: $e';
-        _isMessageDetailsLoading = false;
-      });
     }
   }
 
@@ -164,10 +181,12 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
 
     if (cookieA == null || cookieB == null) {
-      setState(() {
-        errorMessage = 'Not logged in or missing cookies.';
-        _useWebView = false;
-      });
+      if (mounted) {
+        setState(() {
+          errorMessage = 'Not logged in or missing cookies.';
+          _useWebView = false;
+        });
+      }
       return;
     }
 
@@ -190,28 +209,41 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
-          },
-          onPageFinished: (String url) async {
-            await _injectFormHandler(controller);
-            setState(() {
-              _isWebViewInitialized = true;
-            });
-
-            if (url.contains('/msg/pms/') && !url.contains('/viewmessage/') && !url.contains('#message')) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Reply sent successfully!'),
-                  backgroundColor: Colors.green,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-              Navigator.pop(context, true);
+            // Check if we've navigated to the messages list (success)
+            print('DEBUG: WebView page started: $url');
+            if (url.contains('/msg/pms/') && !url.contains('/viewmessage/')) {
+              print('DEBUG: Success detected in onPageStarted');
+              if (mounted && !_replySentSuccessfully) {
+                print('DEBUG: Setting _replySentSuccessfully = true in onPageStarted');
+                setState(() {
+                  _replySentSuccessfully = true;
+                  _useWebView = false;
+                  _isSending = false;
+                });
+              }
             }
           },
-          onWebResourceError: (WebResourceError error) {
-            setState(() {
-              errorMessage = 'WebView error: ${error.description}';
-            });
+          onPageFinished: (String url) async {
+            print('DEBUG: WebView page finished: $url');
+            await _injectFormHandler(controller);
+            if (mounted) {
+              setState(() {
+                _isWebViewInitialized = true;
+              });
+            }
+
+            // Double-check for success page
+            if (url.contains('/msg/pms/') && !url.contains('/viewmessage/')) {
+              print('DEBUG: Success detected in onPageFinished');
+              if (mounted && !_replySentSuccessfully) {
+                print('DEBUG: Setting _replySentSuccessfully = true in onPageFinished');
+                setState(() {
+                  _replySentSuccessfully = true;
+                  _useWebView = false;
+                  _isSending = false;
+                });
+              }
+            }
           },
         ),
       )
@@ -239,9 +271,11 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
     await controller.loadRequest(Uri.parse(webViewUrl));
 
-    setState(() {
-      _webViewController = controller;
-    });
+    if (mounted) {
+      setState(() {
+        _webViewController = controller;
+      });
+    }
   }
 
   Future<void> _injectFormHandler(WebViewController controller) async {
@@ -305,13 +339,15 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   Future<void> _sendReplyModern() async {
     final replyText = _replyController.text.trim();
     if (replyText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Reply cannot be empty.'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Reply cannot be empty.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
       return;
     }
 
@@ -393,49 +429,53 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       );
 
       if (postResp.statusCode == 302) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Reply sent successfully!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-        Navigator.pop(context, true);
+        if (mounted) {
+          // Just pop back with true result, MessageDetailScreen will show the snackbar
+          Navigator.pop(context, true);
+        }
       } else {
         errorMessage = 'Failed to send reply: ${postResp.statusCode}';
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      errorMessage = 'Error sending reply: $e';
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(errorMessage),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
-    } catch (e) {
-      errorMessage = 'Error sending reply: $e';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
     } finally {
-      setState(() {
-        _isSending = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
     }
   }
 
   Future<void> _sendReply() async {
     final replyText = _replyController.text.trim();
     if (replyText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Reply cannot be empty.'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Reply cannot be empty.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
       return;
     }
 
@@ -452,6 +492,21 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    print('DEBUG: NoteReplyScreen build() - _replySentSuccessfully: $_replySentSuccessfully, _useWebView: $_useWebView, _hasPopped: $_hasPopped');
+
+    // If reply was sent successfully via WebView, show success and close
+    if (_replySentSuccessfully && !_useWebView && !_hasPopped) {
+      print('DEBUG: Conditions met, setting _hasPopped = true and scheduling pop');
+      _hasPopped = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        print('DEBUG: PostFrameCallback executing - mounted: $mounted');
+        if (mounted) {
+          print('DEBUG: Calling Navigator.pop(context, true)');
+          Navigator.pop(context, true);
+        }
+      });
+    }
+
     if (_isMessageDetailsLoading) {
       return Scaffold(
         appBar: AppBar(
@@ -497,7 +552,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
                   backgroundColor: Colors.grey[800],
                 ),
               ),
-            if (_showCloudflareMessage) 
+            if (_showCloudflareMessage)
               Positioned(
                 top: 0,
                 left: 0,

@@ -24,7 +24,9 @@ class _EditJournalCommentScreenState extends State<EditJournalCommentScreen> {
   bool _isLoading = false;
   String? cookieA;
   String? cookieB;
-  final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device));
   late http.Client _client;
 
   @override

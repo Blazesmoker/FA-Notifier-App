@@ -38,7 +38,11 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
     with AutomaticKeepAliveClientMixin<SubmissionDescriptionWebView> {
   static const Color background = Color(0xFF121212);
 
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device),
+  );
   late Future<String> _submissionDescriptionFuture;
   double _webViewHeight = 50.0;
 

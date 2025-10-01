@@ -18,7 +18,9 @@ class EditSubmissionScreen extends StatefulWidget {
 }
 
 class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock_this_device));
   late final WebViewController _webViewController;
 
   // detect if it's the "Update Submission File" page by checking the URL:
