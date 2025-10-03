@@ -42,8 +42,6 @@
 	</dict>
 	<key>NSLocalNotificationUsageDescription</key>
 	<string>We use notifications to alert you about new FA notes and activity.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>This app uses background fetch to retrieve new messages.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>We need access to your photo library to save images.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
