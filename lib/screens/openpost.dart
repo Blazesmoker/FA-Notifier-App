@@ -105,9 +105,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   int commentsCount = 0;
   List<Map<String, dynamic>> comments = [];
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device),
+    accessibility: KeychainAccessibility.first_unlock),
   );
   final TextEditingController _commentController = TextEditingController();
   Timer? _debounceTimer;
@@ -1195,6 +1195,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       fullViewImageUrl ??= imageElem?.attributes['src']
           ?.replaceFirst('//', 'https://');
 
+
       submissionDescription = fixedDescription;
 
 
@@ -1969,7 +1970,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         final result = await SaverGallery.saveImage(
           bytes,
           quality: 80,
-          fileName: "avatar_${DateTime.now().millisecondsSinceEpoch}.jpg",
+          fileName: "image_${DateTime.now().millisecondsSinceEpoch}.jpg",
           skipIfExists: false,
           androidRelativePath: "Pictures/YourAppName/images",
         );
@@ -2663,7 +2664,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                             ],
                           );
                           if (selected == 'download') {
+                            print("$fullViewImageUrl image2");
                             await _downloadImage(context, fullViewImageUrl!);
+
                           } else if (selected == 'share') {
                             await _shareImage(context, fullViewImageUrl!);
                           }

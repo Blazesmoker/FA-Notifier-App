@@ -43,9 +43,9 @@ class NotesScreen extends StatefulWidget {
 
 class _NotesScreenState extends State<NotesScreen> with RouteAware {
   final _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device),
+    accessibility: KeychainAccessibility.first_unlock),
   );
   Timer? _refreshTimer;
 
@@ -1006,9 +1006,9 @@ class PreviewDialogContent extends StatefulWidget {
 
 class _PreviewDialogContentState extends State<PreviewDialogContent> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device),
+    accessibility: KeychainAccessibility.first_unlock),
   );
   late Dio _dio;
   final CookieJar _cookieJar = CookieJar();

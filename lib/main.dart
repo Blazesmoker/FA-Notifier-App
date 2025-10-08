@@ -326,9 +326,10 @@ Future<void> resetBadgeCounter() async {
 Future<List<Message>> _fetchInboxTwoPagesBg() async {
   final storage = const FlutterSecureStorage(
     iOptions: IOSOptions(
-      groupId: 'group.com.blazesmoker.FANotifier',
+       
+
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device,
+    accessibility: KeychainAccessibility.first_unlock,
     ),
   );
 
@@ -420,9 +421,9 @@ Future<List<Message>> _fetchInboxTwoPagesBg() async {
 Future<String> _fetchMessageContentInBackground(String link) async {
   final storage = const FlutterSecureStorage(
     iOptions: IOSOptions(
-      groupId: 'group.com.blazesmoker.FANotifier',
+       
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device,
+    accessibility: KeychainAccessibility.first_unlock,
     ),
   );
   final cookieA = await storage.read(key: 'fa_cookie_a');
@@ -508,9 +509,9 @@ Future<String> _fetchMessageContentInBackground(String link) async {
 
 Future<void> _markAsUnreadBackground(Message msg) async {
   final storage = const FlutterSecureStorage(
-    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device),
+    accessibility: KeychainAccessibility.first_unlock),
   );
   final cookieA = await storage.read(key: 'fa_cookie_a');
   final cookieB = await storage.read(key: 'fa_cookie_b');

@@ -113,9 +113,9 @@ class NotificationSection {
 class FANotificationService with ChangeNotifier {
   final Dio _dio = Dio();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device),
+    accessibility: KeychainAccessibility.first_unlock),
   );
 
   bool isLoading = true;
@@ -1378,12 +1378,12 @@ class FANotificationService with ChangeNotifier {
 
   static Future<String?> _getCookieHeader() async {
     try {
-      String? cookieA = await const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+      String? cookieA = await const FlutterSecureStorage(iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device)).read(key: 'fa_cookie_a');
-      String? cookieB = await const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    accessibility: KeychainAccessibility.first_unlock)).read(key: 'fa_cookie_a');
+      String? cookieB = await const FlutterSecureStorage(iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device)).read(key: 'fa_cookie_b');
+    accessibility: KeychainAccessibility.first_unlock)).read(key: 'fa_cookie_b');
       final prefs = await SharedPreferences.getInstance();
       bool sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
       String cookieHeader = '';

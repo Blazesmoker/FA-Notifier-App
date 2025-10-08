@@ -21,9 +21,9 @@ class AddJournalCommentScreen extends StatefulWidget {
 class _AddCommentScreenState extends State<AddJournalCommentScreen> {
   final TextEditingController _commentController = TextEditingController();
   bool _isSending = false;
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device));
+    accessibility: KeychainAccessibility.first_unlock));
 
 
   void _sendComment() async {

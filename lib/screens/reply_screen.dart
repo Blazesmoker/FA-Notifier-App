@@ -25,9 +25,9 @@ class _ReplyScreenState extends State<ReplyScreen> {
   final TextEditingController _replyController = TextEditingController();
   bool _isSending = false;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device),
+    accessibility: KeychainAccessibility.first_unlock),
   );
 
   // Extract numeric ID from a classic reply link (e.g. "/replyto/submission/184823275/")

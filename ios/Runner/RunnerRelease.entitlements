@@ -10,8 +10,8 @@
 	</array>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)com.blazesmoker.FANotifier</string>
 		<string>$(AppIdentifierPrefix)group.com.blazesmoker.FANotifier</string>
+		<string>$(AppIdentifierPrefix)com.blazesmoker.FANotifier</string>
 	</array>
 </dict>
 </plist>

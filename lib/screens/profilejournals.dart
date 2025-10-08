@@ -23,9 +23,9 @@ class ProfileJournalsState extends State<ProfileJournals> {
   List<Map<String, dynamic>> journals = [];
   bool hasMore = true;
 
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device));
+    accessibility: KeychainAccessibility.first_unlock));
 
   @override
   void initState() {

@@ -88,9 +88,9 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   final GlobalKey<UserDescriptionWebViewState> _webViewKey = GlobalKey<UserDescriptionWebViewState>();
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device),
+    accessibility: KeychainAccessibility.first_unlock),
   );
 
 

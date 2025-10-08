@@ -40,9 +40,9 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   late Dio _dio;
   final CookieJar _cookieJar = CookieJar();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+    iOptions: IOSOptions( 
         accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock_this_device),
+        accessibility: KeychainAccessibility.first_unlock),
   );
 
   String recipient = 'Loading...';

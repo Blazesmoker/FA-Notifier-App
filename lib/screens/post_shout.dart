@@ -21,9 +21,9 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
   final TextEditingController _shoutController = TextEditingController();
   final Dio _dio = Dio();
   final CookieJar _cookieJar = CookieJar();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device));
+    accessibility: KeychainAccessibility.first_unlock));
 
   int _currentLength = 0;
   final int _maxLength = 222;

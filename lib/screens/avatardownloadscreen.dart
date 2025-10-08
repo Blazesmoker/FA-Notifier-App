@@ -18,6 +18,26 @@ class AvatarDownloadScreen extends StatelessWidget {
   const AvatarDownloadScreen({Key? key, required this.imageUrl}) : super(key: key);
 
 
+  String _extFromUrlOrContentType(String url, String? contentType) {
+    final path = Uri.parse(url).path.toLowerCase();
+    for (final ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']) {
+      if (path.endsWith(ext)) return ext;
+    }
+    switch ((contentType ?? '').toLowerCase()) {
+      case 'image/png':
+        return '.png';
+      case 'image/jpeg':
+        return '.jpg';
+      case 'image/gif':
+        return '.gif';
+      case 'image/webp':
+        return '.webp';
+    }
+    return '.jpg';
+  }
+
+  bool _isJpegExt(String ext) => ext == '.jpg' || ext == '.jpeg';
+
 
   Future<void> _downloadImage(BuildContext context) async {
     try {
@@ -26,61 +46,42 @@ class AvatarDownloadScreen extends StatelessWidget {
       if (Platform.isAndroid) {
         isPermissionGranted = await _requestPermissionAndroid();
       } else if (Platform.isIOS) {
-        if (await Permission.photosAddOnly.request().isGranted) {
-          isPermissionGranted = true;
-        }
+        isPermissionGranted = await Permission.photosAddOnly.request().isGranted;
       }
 
-      if (isPermissionGranted) {
-        Uint8List bytes;
-
-
-        final response = await http.get(Uri.parse(imageUrl));
-        if (response.statusCode == 200) {
-          bytes = response.bodyBytes;
-        } else {
-
-          bytes = await _loadDefaultImageBytes();
-        }
-
-
-        final result = await SaverGallery.saveImage(
-          bytes,
-          quality: 80,
-          fileName: "avatar_${DateTime.now().millisecondsSinceEpoch}.jpg",
-          skipIfExists: false,
-          androidRelativePath: "Pictures/YourAppName/images",
+      if (!isPermissionGranted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Photo permission denied'), backgroundColor: Colors.red),
         );
+        return;
+      }
 
-        if (result.isSuccess) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Image saved to gallery!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to save image to gallery.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+      final response = await http.get(Uri.parse(imageUrl));
+      final bytes = response.statusCode == 200 ? response.bodyBytes : await _loadDefaultImageBytes();
+      final ext = _extFromUrlOrContentType(imageUrl, response.headers['content-type']);
+      final filename = "avatar_${DateTime.now().millisecondsSinceEpoch}$ext";
+
+
+      final result = await SaverGallery.saveImage(
+        bytes,
+        quality: _isJpegExt(ext) ? 100 : 100,
+        fileName: filename,
+        skipIfExists: false,
+        androidRelativePath: "Pictures/YourAppName/images",
+      );
+
+      if (result.isSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Image saved to gallery!'), backgroundColor: Colors.green),
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Photo permission denied'),
-            backgroundColor: Colors.red,
-          ),
+          const SnackBar(content: Text('Failed to save image to gallery.'), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to download image: $e'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('Failed to download image: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -92,50 +93,33 @@ class AvatarDownloadScreen extends StatelessWidget {
       if (Platform.isAndroid) {
         isPermissionGranted = await _requestPermissionAndroid();
       } else if (Platform.isIOS) {
-        if (await Permission.photosAddOnly.request().isGranted) {
-          isPermissionGranted = true;
-        }
+        isPermissionGranted = await Permission.photosAddOnly.request().isGranted;
       }
 
       if (!isPermissionGranted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Permission denied'),
-            backgroundColor: Colors.red,
-          ),
+          const SnackBar(content: Text('Permission denied'), backgroundColor: Colors.red),
         );
         return;
       }
 
-      Uint8List bytes;
-
-
       final response = await http.get(Uri.parse(imageUrl));
-      if (response.statusCode == 200) {
-        bytes = response.bodyBytes;
-      } else {
-        bytes = await _loadDefaultImageBytes();
-      }
-
+      final bytes = response.statusCode == 200 ? response.bodyBytes : await _loadDefaultImageBytes();
+      final ext = _extFromUrlOrContentType(imageUrl, response.headers['content-type']);
+      final filename = 'shared_image_${DateTime.now().millisecondsSinceEpoch}$ext';
 
       final tempDir = Directory.systemTemp;
-      final tempFile = await File('${tempDir.path}/shared_image_${DateTime.now().millisecondsSinceEpoch}.jpg').create();
+      final tempFile = await File('${tempDir.path}/$filename').create(recursive: true);
       await tempFile.writeAsBytes(bytes);
-
 
       await Share.shareXFiles([XFile(tempFile.path)], text: '');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to share image: $e'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('Failed to share image: $e'), backgroundColor: Colors.red),
       );
     }
   }
-
   Future<Uint8List> _loadDefaultImageBytes() async {
-
     final byteData = await rootBundle.load('assets/images/defaultpic.gif');
     return byteData.buffer.asUint8List();
   }
@@ -145,7 +129,6 @@ class AvatarDownloadScreen extends StatelessWidget {
     final sdkInt = androidInfo.version.sdkInt;
 
     if (sdkInt >= 33) {
-      // Android 13+ (API level 33+)
       final status = await Permission.photos.request();
       return status.isGranted;
     } else {
@@ -170,9 +153,8 @@ class AvatarDownloadScreen extends StatelessWidget {
                 _shareImage(context);
               }
             },
-
-            offset: Offset(0, 40),
-            itemBuilder: (context) => [
+            offset: const Offset(0, 40),
+            itemBuilder: (context) => const [
               PopupMenuItem(
                 value: 'download',
                 child: Text('Download'),
@@ -182,7 +164,7 @@ class AvatarDownloadScreen extends StatelessWidget {
                 child: Text('Share image'),
               ),
             ],
-            icon: Icon(Icons.more_vert),
+            icon: const Icon(Icons.more_vert),
           ),
         ],
       ),
@@ -196,8 +178,14 @@ class AvatarDownloadScreen extends StatelessWidget {
             child: CachedNetworkImage(
               imageUrl: imageUrl,
               fit: BoxFit.contain,
-              placeholder: (context, url) => Center(child: PulsatingLoadingIndicator(size: 108.0, assetPath: 'assets/icons/fathemed.png')),
-              errorWidget: (context, url, error) => Image.asset('assets/images/defaultpic.gif'),
+              placeholder: (context, url) => const Center(
+                child: PulsatingLoadingIndicator(
+                  size: 108.0,
+                  assetPath: 'assets/icons/fathemed.png',
+                ),
+              ),
+              errorWidget: (context, url, error) =>
+                  Image.asset('assets/images/defaultpic.gif'),
             ),
           ),
         ),

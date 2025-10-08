@@ -39,9 +39,9 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
 
   final List<Map<String, dynamic>> _normalImagesQueue = [];
 
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions(groupId: 'group.com.blazesmoker.FANotifier',
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock_this_device));
+    accessibility: KeychainAccessibility.first_unlock));
 
 
   final Set<String> _favoritedImages = {};
