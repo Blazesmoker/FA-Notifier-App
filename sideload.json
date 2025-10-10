@@ -1,24 +1,41 @@
 {
+  "$schema": "https://github.com/SideStore/sidestore-source-types/raw/main/schema.json",
   "name": "FA Notifier",
-  "bundleIdentifier": "com.blazesmoker.FANotifier",
-  "developerName": "Blazesmoker",
-  "subtitle": "FA Notifier",
-  "version": "1.1.6",
-  "versionDate": "2025-10-02T12:00:00-07:00",
-  "versionDescription": "Latest version",
-  "downloadURL": "https://blazesmoker.github.io/FA-Notifier-App/FA_Notifier_v116.ipa",
-  "localizedDescription": "FA Notifier",
-  "iconURL": "https://blazesmoker.github.io/FA-Notifier-App/AppIcon.png",
-  "tintColor": "#000000",
-  "size": 13527654,
-  "screenshots": [],
-  "versions": [
+  "identifier": "com.blazesmoker.repo",
+  "apps": [
     {
-      "version": "1.1.6",
-      "date": "2025-10-02T12:00:00-07:00",
-      "downloadURL": "https://blazesmoker.github.io/FA-Notifier-App/FA_Notifier_v116.ipa",
-      "localizedDescription": "Latest version",
-      "size": 13527654
+      "name": "FA Notifier",
+      "bundleIdentifier": "com.blazesmoker.FANotifier",
+      "developerName": "Blazesmoker",
+      "subtitle": "FA Notifier",
+      "localizedDescription": "FA Notifier",
+      "iconURL": "https://raw.githubusercontent.com/Blazesmoker/FA-Notifier-App/main/AppIcon.png",
+      "tintColor": "#000000",
+      "screenshots": [],
+      "downloadURL": "https://raw.githubusercontent.com/Blazesmoker/FA-Notifier-App/main/FA_Notifier_v116.ipa",
+      "versions": [
+        {
+          "version": "1.1.6",
+          "date": "2025-10-04T12:00:00-07:00",
+          "size": 14371840,
+          "downloadURL": "https://raw.githubusercontent.com/Blazesmoker/FA-Notifier-App/main/FA_Notifier_v116.ipa",
+          "localizedDescription": "Latest version"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [
+          "com.apple.security.application-groups",
+          "keychain-access-groups",
+          "get-task-allow"
+        ],
+        "privacy": {
+          "NSUserNotificationUsageDescription": "We use notifications to alert you about new FA notes and activity.",
+          "UNUserNotificationCenterUsageDescription": "We need permission to send you local notifications for new notes and activity.",
+          "NSLocalNotificationUsageDescription": "We use notifications to alert you about new FA notes and activity.",
+          "NSPhotoLibraryAddUsageDescription": "We need access to your photo library to save images.",
+          "NSPhotoLibraryUsageDescription": "We need access to your photo library to save images."
+        }
+      }
     }
   ]
 }
