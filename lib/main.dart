@@ -50,7 +50,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<DrawerUserControllerState> drawerKey = GlobalKey<DrawerUserControllerState>();
 
 const String fetchBackgroundTask = "fetchBackgroundTask";
-const String iOSBackgroundTask = "dev.flutter.backgroundFetch.ios.task";
+const String iOSWorkInitTask = "com.blazesmoker.FANotifier.refresh";
 const String kPreviousSumKey = 'previousSumOfNotifications';
 
 @pragma('vm:entry-point')
@@ -96,11 +96,7 @@ void callbackDispatcher() {
       print('[BG] App is INACTIVE - proceeding with background fetch');
 
       // Check if this is a valid background task
-      if (task == Workmanager.iOSBackgroundTask ||
-          task == iOSBackgroundTask ||
-          task == fetchBackgroundTask ||
-          task.contains("backgroundFetch") ||
-          task.contains("ios.task")) {
+      if (task == fetchBackgroundTask || task == iOSWorkInitTask) {
 
         print('[BG] Valid background task detected: $task');
 
@@ -640,13 +636,6 @@ void main() async {
     );
     print("Android background task registered");
   } else if (Platform.isIOS) {
-    // For iOS, register the task to handle BGTaskScheduler callbacks
-    await Workmanager().registerOneOffTask(
-      "ios-background-init",
-      iOSBackgroundTask,
-      initialDelay: const Duration(seconds: 0),
-      existingWorkPolicy: ExistingWorkPolicy.keep,
-    );
     print("iOS background task handler registered");
   }
 

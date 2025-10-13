@@ -10,6 +10,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:url_launcher/url_launcher_string.dart';
 import 'dart:convert';
 import '../main.dart';
+import '../services/notes_refresh_service.dart';
 import '../utils/notes_notifications_text_edit.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'message_detail_screen.dart';
@@ -48,6 +49,7 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
     accessibility: KeychainAccessibility.first_unlock),
   );
   Timer? _refreshTimer;
+  StreamSubscription<void>? _notesRefreshSub;
 
   // For Inbox
   bool isLoadingInbox = true;
@@ -95,6 +97,11 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
         // If already done => just do normal flows
         _initInboxAndSent();
       }
+    });
+    _notesRefreshSub = NotesRefreshService().stream.listen((_) {
+      if (!mounted) return;
+      _fetchInbox(page: 1, clearOld: true);
+      _fetchSent(page: 1, clearOld: true);
     });
   }
 
@@ -308,6 +315,7 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
     _refreshTimer?.cancel();
     _inboxScrollController.dispose();
     _sentScrollController.dispose();
+    _notesRefreshSub?.cancel();
     super.dispose();
   }
 

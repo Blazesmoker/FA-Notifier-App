@@ -11,6 +11,7 @@ import 'package:FANotifier/screens/search_screen.dart';
 import 'package:FANotifier/screens/submissions_screen.dart';
 import 'package:FANotifier/screens/upload_submission.dart';
 import 'package:FANotifier/services/fa_notification_service.dart';
+import 'package:FANotifier/services/notes_refresh_service.dart';
 import 'package:FANotifier/services/notification_refresh_service.dart';
 import 'package:FANotifier/widgets/PulsatingLoadingIndicator.dart';
 import 'package:badges/badges.dart' as badges;
@@ -164,31 +165,26 @@ class _HomeScreenState extends State<HomeScreen> {
     final String? pendingPayload = prefs.getString('pending_navigation');
 
     if (pendingPayload != null) {
-      final navProvider =
-      Provider.of<NotificationNavigationProvider>(context, listen: false);
+      final navProvider = Provider.of<NotificationNavigationProvider>(context, listen: false);
 
       if (pendingPayload.startsWith('note_')) {
-        print('[HomeScreen] Navigating to Notes section based on new payload.');
         navProvider.setTargetIndex(4);
+        NotesRefreshService().triggerRefresh();
       } else if (pendingPayload.startsWith('activity_')) {
-        print(
-            '[HomeScreen] Navigating to Notifications section based on new payload.');
         navProvider.setTargetIndex(3);
+        NotificationRefreshService().triggerRefresh();
       } else if (pendingPayload.contains("DrawerIndex.Notes")) {
-        print('[HomeScreen] Navigating to Notes section based on legacy payload.');
         navProvider.setTargetIndex(4);
+        NotesRefreshService().triggerRefresh();
       } else if (pendingPayload.contains("DrawerIndex.Notifications")) {
-        print(
-            '[HomeScreen] Navigating to Notifications section based on legacy payload.');
         navProvider.setTargetIndex(3);
-      } else {
-        print('[HomeScreen] Unknown payload format: $pendingPayload');
+        NotificationRefreshService().triggerRefresh();
       }
+
       await prefs.remove('pending_navigation');
-    } else {
-      print('[HomeScreen] No pending navigation payload found.');
     }
   }
+
 
 
   Future<void> _initializeAndLoadLoginState() async {

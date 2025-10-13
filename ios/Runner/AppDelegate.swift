@@ -4,204 +4,248 @@ import workmanager_apple
 import BackgroundTasks
 import flutter_secure_storage
 
+// MARK: - Free function for Workmanager plugin registrant (no captures allowed)
+func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
+    GeneratedPluginRegistrant.register(with: registry)
+    NSLog("[AppDelegate] Background isolate plugins registered")
+}
+
 @main
 @objc class AppDelegate: FlutterAppDelegate {
-    
-    private let backgroundTaskIdentifier = "dev.flutter.backgroundFetch.ios.task"
 
+    // MARK: - IDs
+    private let backgroundTaskIdentifier = "com.blazesmoker.FANotifier.refresh"
+
+    // MARK: - Logging helper (mirrors to NSLog + flutter print so "flutter" filter works)
+    private func fLog(_ msg: String) {
+        let line = "[AppDelegate] \(msg)"
+        NSLog("%@", line)
+        print("flutter: \(line)")
+    }
+
+    // MARK: - MethodChannel to forward notification taps to Dart
+    private var notifChannel: FlutterMethodChannel?
+    private var pendingNotificationPayload: [String: Any]? // hold taps until Dart is ready
+
+    private func setupNotificationChannelIfNeeded() {
+        guard notifChannel == nil,
+              let controller = window?.rootViewController as? FlutterViewController
+        else { return }
+
+        let channel = FlutterMethodChannel(
+            name: "app.notifications",
+            binaryMessenger: controller.binaryMessenger
+        )
+        self.notifChannel = channel
+
+        channel.setMethodCallHandler { [weak self] call, result in
+            guard let self = self else { return }
+            if call.method == "notifications.ready" {
+                self.fLog("Dart confirmed notifications.ready")
+                if let pending = self.pendingNotificationPayload {
+                    self.fLog("Sending pending tapped notification to Dart")
+                    channel.invokeMethod("notificationTapped", arguments: pending)
+                    self.pendingNotificationPayload = nil
+                }
+                result(true)
+            } else {
+                result(FlutterMethodNotImplemented)
+            }
+        }
+
+        self.fLog("MethodChannel 'app.notifications' initialized")
+        if let pending = pendingNotificationPayload {
+            self.fLog("Flushing previously pending tapped notification to Dart")
+            channel.invokeMethod("notificationTapped", arguments: pending)
+            pendingNotificationPayload = nil
+        }
+    }
+
+    // MARK: - Approx next fetch logging
+    private lazy var timeFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .none
+        f.timeStyle = .medium
+        f.timeZone  = .current
+        return f
+    }()
+
+    private func logApproxNextFetch(_ tag: String) {
+        BGTaskScheduler.shared.getPendingTaskRequests { [weak self] requests in
+            guard let self = self else { return }
+            guard let req = requests.first(where: { $0.identifier == self.backgroundTaskIdentifier }) else {
+                self.fLog("[\(tag)] No pending request for \(self.backgroundTaskIdentifier)")
+                return
+            }
+            let when = req.earliestBeginDate ?? Date()
+            let secs = max(0, Int(when.timeIntervalSinceNow))
+            let relFmt = DateComponentsFormatter()
+            relFmt.allowedUnits = [.hour, .minute, .second]
+            relFmt.unitsStyle = .short
+            let rel = relFmt.string(from: TimeInterval(secs)) ?? "now"
+            self.fLog("[\(tag)] Next approx system fetch: \(self.timeFmt.string(from: when)) (~\(rel))")
+        }
+    }
+
+    // MARK: - App lifecycle
     override func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        
-      
 
-        NSLog("[AppDelegate] Application launching...")
-
-        // Register Flutter plugins
+        fLog("Application launching...")
         GeneratedPluginRegistrant.register(with: self)
 
-        // Set notification delegate for handling foreground notifications
+        // Channel ASAP so we can forward any cold-start tap
+        setupNotificationChannelIfNeeded()
+
         UNUserNotificationCenter.current().delegate = self
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+            self.fLog("Notification permission granted: \(granted)")
+            if let error = error { self.fLog("Permission error: \(error)") }
+            if granted { DispatchQueue.main.async { application.registerForRemoteNotifications() } }
+        }
 
-        // Request notification permissions
-        UNUserNotificationCenter.current().requestAuthorization(
-            options: [.alert, .badge, .sound]) { granted, error in
-            NSLog("[AppDelegate] Notification permission granted: \(granted)")
-            if let error = error {
-                NSLog("[AppDelegate] Permission error: \(error)")
-            }
+        // IMPORTANT: pass the free function (no captures) here
+        WorkmanagerPlugin.setPluginRegistrantCallback(registerPluginsForBackgroundIsolate)
 
-            // Register for remote notifications on main thread if granted
-            if granted {
-                DispatchQueue.main.async {
-                    application.registerForRemoteNotifications()
+        if #available(iOS 13.0, *) {
+            BGTaskScheduler.shared.getPendingTaskRequests { reqs in
+                for r in reqs where r.identifier.contains("dev.flutter.backgroundFetch.ios.task") {
+                    self.fLog("Cancelling legacy request: \(r.identifier)")
+                    BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: r.identifier)
                 }
             }
         }
 
-        // CRITICAL: Register Workmanager plugin callback for background isolate
-        WorkmanagerPlugin.setPluginRegistrantCallback { registry in
-            GeneratedPluginRegistrant.register(with: registry)
-            NSLog("[AppDelegate] Background isolate plugins registered")
-        }
-
-        // Register the background task handler with iOS BGTaskScheduler
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: backgroundTaskIdentifier,
             using: nil
         ) { [weak self] task in
-            NSLog("[AppDelegate] ===============================================")
-            NSLog("[AppDelegate] BACKGROUND TASK TRIGGERED BY iOS")
-            NSLog("[AppDelegate] Time: \(Date())")
-            NSLog("[AppDelegate] ===============================================")
-            self?.handleBackgroundFetch(task: task)
+            guard let self = self else { return }
+            self.fLog("===============================================")
+            self.fLog("BACKGROUND TASK TRIGGERED BY iOS (\(task.identifier))")
+            self.fLog("Time: \(Date())")
+            self.fLog("===============================================")
+            self.handleBackgroundFetch(task: task)
         }
 
-        // Schedule the initial background fetch
         scheduleBackgroundFetch()
-
-        // List all pending tasks for debugging
         getPendingBackgroundTasks()
+        logApproxNextFetch("didFinishLaunching")
 
-        NSLog("[AppDelegate] Application initialization complete")
-        NSLog("[AppDelegate] Background task identifier: \(backgroundTaskIdentifier)")
+        self.fLog("Application initialization complete")
+        self.fLog("Background task identifier: \(backgroundTaskIdentifier)")
 
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
 
-    // Handle application entering background
     override func applicationDidEnterBackground(_ application: UIApplication) {
-        NSLog("[AppDelegate] App entering background")
+        fLog("App entering background")
         scheduleBackgroundFetch()
+        logApproxNextFetch("didEnterBackground")
     }
 
-    // Handle application becoming active
     override func applicationDidBecomeActive(_ application: UIApplication) {
-        NSLog("[AppDelegate] App became active")
+        fLog("App became active")
+        setupNotificationChannelIfNeeded()
         getPendingBackgroundTasks()
+        logApproxNextFetch("didBecomeActive")
     }
 
-    // Handle the background task
+    // MARK: - Background task handling
     private func handleBackgroundFetch(task: BGTask) {
-        NSLog("[AppDelegate] handleBackgroundFetch started")
+        fLog("handleBackgroundFetch started")
 
-        // Schedule next fetch immediately
         scheduleBackgroundFetch()
+        logApproxNextFetch("after handle")
 
-        // Track task state
         var isTaskCompleted = false
         let taskStartTime = Date()
 
-        // Set expiration handler
         task.expirationHandler = { [weak task] in
             let duration = Date().timeIntervalSince(taskStartTime)
-            NSLog("[AppDelegate] Task expiration handler called after \(duration)s")
-
+            self.fLog("Task expiration handler called after \(duration)s")
             if !isTaskCompleted {
                 isTaskCompleted = true
                 task?.setTaskCompleted(success: false)
-                NSLog("[AppDelegate] Task marked as failed due to expiration")
+                self.fLog("Task marked as failed due to expiration")
             }
         }
 
-        // Process the task
         if let refreshTask = task as? BGAppRefreshTask {
-            NSLog("[AppDelegate] Task is BGAppRefreshTask, passing to WorkmanagerPlugin")
-
-            // Create a completion handler
-            let completionHandler: (Bool) -> Void = { success in
-                let duration = Date().timeIntervalSince(taskStartTime)
-                NSLog("[AppDelegate] Dart callback completed: success=\(success), duration=\(duration)s")
-
-                if !isTaskCompleted {
-                    isTaskCompleted = true
-                    task.setTaskCompleted(success: success)
-                    NSLog("[AppDelegate] Task marked as \(success ? "successful" : "failed")")
-                }
-            }
-
-            // Pass to Workmanager which will call the Dart callback
+            self.fLog("Task is BGAppRefreshTask, passing to WorkmanagerPlugin")
             WorkmanagerPlugin.handlePeriodicTask(
                 identifier: backgroundTaskIdentifier,
                 task: refreshTask,
-                earliestBeginInSeconds: nil,
-                
+                earliestBeginInSeconds: nil
             )
 
-
-            // Safety timeout (28 seconds - iOS gives 30 seconds max)
             DispatchQueue.global().asyncAfter(deadline: .now() + 28.0) { [weak task] in
                 if !isTaskCompleted {
                     let duration = Date().timeIntervalSince(taskStartTime)
-                    NSLog("[AppDelegate] Safety timeout reached after \(duration)s")
+                    self.fLog("Safety timeout reached after \(duration)s")
                     isTaskCompleted = true
                     task?.setTaskCompleted(success: false)
-                    NSLog("[AppDelegate] Task force-completed due to timeout")
+                    self.fLog("Task force-completed due to timeout")
                 }
             }
         } else {
-            NSLog("[AppDelegate] Task is not BGAppRefreshTask type")
+            fLog("Task is not BGAppRefreshTask type")
             task.setTaskCompleted(success: false)
         }
     }
 
-    // Schedule the next background fetch
+    // MARK: - Scheduling
     private func scheduleBackgroundFetch() {
         let request = BGAppRefreshTaskRequest(identifier: backgroundTaskIdentifier)
-
-        // Set the earliest begin date to 15 minutes from now
         request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
-
         do {
             try BGTaskScheduler.shared.submit(request)
-            NSLog("[AppDelegate] ✓ Background fetch scheduled for \(request.earliestBeginDate?.description ?? "unknown")")
+            fLog("✓ Background fetch scheduled for \(request.earliestBeginDate?.description ?? "unknown")")
+            logApproxNextFetch("after submit")
         } catch {
-            // Check specific error cases
             let errorString = error.localizedDescription
             if errorString.contains("already scheduled") {
-                NSLog("[AppDelegate] ℹ️ Background task already scheduled (this is normal)")
+                fLog("ℹ️ Background task already scheduled (this is normal)")
+                logApproxNextFetch("already scheduled")
             } else if errorString.contains("too many") {
-                NSLog("[AppDelegate] ⚠️ Too many tasks scheduled, will retry later")
+                fLog("⚠️ Too many tasks scheduled, will retry later")
             } else {
-                NSLog("[AppDelegate] ❌ Failed to schedule: \(errorString)")
+                fLog("❌ Failed to schedule: \(errorString)")
             }
         }
     }
 
-    // Cancel all pending background tasks
     private func cancelAllBackgroundTasks() {
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: backgroundTaskIdentifier)
-        NSLog("[AppDelegate] All background tasks cancelled")
+        fLog("All background tasks cancelled")
     }
 
-    // Get pending background tasks (for debugging)
     private func getPendingBackgroundTasks() {
         BGTaskScheduler.shared.getPendingTaskRequests { requests in
-            NSLog("[AppDelegate] ===============================================")
-            NSLog("[AppDelegate] PENDING BACKGROUND TASKS: \(requests.count)")
+            self.fLog("===============================================")
+            self.fLog("PENDING BACKGROUND TASKS: \(requests.count)")
             for request in requests {
-                NSLog("[AppDelegate] - ID: \(request.identifier)")
-                NSLog("[AppDelegate]   Earliest: \(request.earliestBeginDate?.description ?? "immediately")")
+                self.fLog("- ID: \(request.identifier)")
+                self.fLog("  Earliest: \(request.earliestBeginDate?.description ?? "immediately")")
             }
             if requests.isEmpty {
-                NSLog("[AppDelegate] No pending background tasks")
+                self.fLog("No pending background tasks")
             }
-            NSLog("[AppDelegate] ===============================================")
+            self.fLog("===============================================")
         }
+        logApproxNextFetch("getPendingBackgroundTasks")
     }
 
     // MARK: - Notification Handling
-
-    // Handle notifications when app is in foreground
     override func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        NSLog("[AppDelegate] Foreground notification: \(notification.request.content.title)")
-
-        // Show notification even when app is in foreground
+        fLog("Foreground notification: \(notification.request.content.title)")
+        // Show banner while foregrounded so user can tap it
         if #available(iOS 14.0, *) {
             completionHandler([.banner, .sound, .badge, .list])
         } else {
@@ -209,68 +253,105 @@ import flutter_secure_storage
         }
     }
 
-    // Handle notification tap
     override func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        NSLog("[AppDelegate] Notification tapped: \(response.notification.request.content.title)")
+        let content = response.notification.request.content
+        fLog("Notification tapped: \(content.title) (action=\(response.actionIdentifier))")
+
+        // Forward the tap to Dart — this works for foreground/background/cold start
+        let payload = makePayload(from: response)
+        if let channel = notifChannel {
+            fLog("Forwarding tap to Dart via MethodChannel")
+            channel.invokeMethod("notificationTapped", arguments: payload)
+        } else {
+            fLog("MethodChannel not ready yet – caching tapped notification")
+            pendingNotificationPayload = payload
+        }
+
         completionHandler()
     }
 
-    // MARK: - Debug/Test Methods
+    private func makePayload(from response: UNNotificationResponse) -> [String: Any] {
+        let content = response.notification.request.content
+        let info = stringifyUserInfo(content.userInfo)
+        var payload: [String: Any] = [
+            "id": response.notification.request.identifier,
+            "title": content.title,
+            "body": content.body,
+            "actionIdentifier": response.actionIdentifier,
+            "categoryIdentifier": content.categoryIdentifier,
+            "threadIdentifier": content.threadIdentifier,
+            "timestamp": Int(Date().timeIntervalSince1970),
+            "userInfo": info
+        ]
+        if let dartPayload = content.userInfo["payload"] as? String {
+            payload["payload"] = dartPayload
+        }
+        return payload
+    }
 
+    private func stringifyUserInfo(_ userInfo: [AnyHashable: Any]) -> [String: Any] {
+        var out: [String: Any] = [:]
+        for (k, v) in userInfo {
+            let key = String(describing: k)
+            switch v {
+            case let s as String:        out[key] = s
+            case let n as NSNumber:      out[key] = n
+            case let b as Bool:          out[key] = b
+            case let d as Double:        out[key] = d
+            case let i as Int:           out[key] = i
+            case let arr as [Any]:
+                out[key] = arr.map { String(describing: $0) }
+            case let dict as [AnyHashable: Any]:
+                out[key] = stringifyUserInfo(dict)
+            default:
+                out[key] = String(describing: v)
+            }
+        }
+        return out
+    }
+
+    // MARK: - Debug/Test
     #if DEBUG
-    // Method to test background fetch from Flutter (debug only)
     @objc func testBackgroundFetch() {
-        NSLog("[AppDelegate] TEST: Manual background fetch trigger requested")
-
-        // Cancel existing tasks
+        fLog("TEST: Manual background fetch trigger requested")
         cancelAllBackgroundTasks()
-
-        // Schedule with very short interval for testing (60 seconds)
         let request = BGAppRefreshTaskRequest(identifier: backgroundTaskIdentifier)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 60)
-
         do {
             try BGTaskScheduler.shared.submit(request)
-            NSLog("[AppDelegate] TEST: Background fetch scheduled for 60 seconds from now")
+            fLog("TEST: Background fetch scheduled for 60 seconds from now")
             getPendingBackgroundTasks()
+            logApproxNextFetch("testBackgroundFetch")
         } catch {
-            NSLog("[AppDelegate] TEST: Failed to schedule: \(error)")
+            fLog("TEST: Failed to schedule: \(error)")
         }
     }
 
-    // Simulate background fetch immediately (debug only)
     @objc func simulateBackgroundFetchNow() {
-        NSLog("[AppDelegate] TEST: Simulating background fetch NOW")
-
-        // This simulates iOS triggering a background fetch
-        // Note: This may not work in all iOS versions
+        fLog("TEST: Simulating background fetch NOW")
         BGTaskScheduler.shared.getPendingTaskRequests { requests in
-            if let request = requests.first(where: { $0.identifier == self.backgroundTaskIdentifier }) {
-                NSLog("[AppDelegate] TEST: Found pending task, attempting to trigger")
-                // In debug builds, you can use private API to trigger
-                // But it's better to use Xcode's Debug menu
+            if let _ = requests.first(where: { $0.identifier == self.backgroundTaskIdentifier }) {
+                self.fLog("TEST: Found pending task, attempting to trigger")
             } else {
-                NSLog("[AppDelegate] TEST: No pending task found to trigger")
+                self.fLog("TEST: No pending task found to trigger")
             }
         }
+        logApproxNextFetch("simulateBackgroundFetchNow")
     }
     #endif
 
-    // MARK: - Application State Logging
-
+    // MARK: - App state logs
     override func applicationWillResignActive(_ application: UIApplication) {
-        NSLog("[AppDelegate] App will resign active")
+        fLog("App will resign active")
     }
-
     override func applicationWillEnterForeground(_ application: UIApplication) {
-        NSLog("[AppDelegate] App will enter foreground")
+        fLog("App will enter foreground")
     }
-
     override func applicationWillTerminate(_ application: UIApplication) {
-        NSLog("[AppDelegate] App will terminate")
+        fLog("App will terminate")
     }
 }
