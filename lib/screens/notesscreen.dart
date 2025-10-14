@@ -10,7 +10,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:url_launcher/url_launcher_string.dart';
 import 'dart:convert';
 import '../main.dart';
-import '../services/notes_refresh_service.dart';
+import 'package:FANotifier/services/notes_refresh_service.dart';
 import '../utils/notes_notifications_text_edit.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'message_detail_screen.dart';
@@ -32,10 +32,12 @@ import 'openpost.dart';
 /// NotesScreen uses edge-swipe logic to open a side drawer, similar to NotificationsScreen.
 class NotesScreen extends StatefulWidget {
   final GlobalKey<DrawerUserControllerState> drawerKey;
+  final bool forceRefresh;
 
   NotesScreen({
     Key? key,
     required this.drawerKey,
+    this.forceRefresh = false,
   }) : super(key: key);
 
   @override
@@ -85,6 +87,13 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
   @override
   void initState() {
     super.initState();
+    if (widget.forceRefresh) {
+      // Delay slightly to ensure everything is initialized
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _fetchInbox(page: 1, clearOld: true);
+        _fetchSent(page: 1, clearOld: true);
+      });
+    }
     // Checks if the skip had been done
     _checkFirstRunSkip().then((_) {
       // If not done => we do the "two-page fetch & skip" once

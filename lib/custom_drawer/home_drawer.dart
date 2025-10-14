@@ -15,7 +15,7 @@ import '../screens/user_profile_screen.dart';
 import '../services/fa_service.dart';
 import '../model/drawer_list.dart';
 import '../enums/drawer_index.dart';
-import '../services/notification_refresh_service.dart';
+import 'package:FANotifier/services/notification_refresh_service.dart';
 import '../services/notification_service.dart';
 import '../utils/notification_counts.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';

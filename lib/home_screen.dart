@@ -52,6 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   bool isCheckingLoginStatus = true;
   bool isLoggedIn = false;
+  bool _forceNotesRefresh = false;
 
   // Guard to prevent fetching the profile more than once.
   bool _profileFetched = false;
@@ -150,39 +151,48 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _handleNavProviderChange() {
-    final navProvider =
-    Provider.of<NotificationNavigationProvider>(context, listen: false);
-    if (navProvider.targetIndex != _selectedIndex) {
-      setState(() {
-        _selectedIndex = navProvider.targetIndex!;
-      });
-      navProvider.reset();
-    }
+    if (!mounted) return;
+
+    final navProvider = Provider.of<NotificationNavigationProvider>(context, listen: false);
+    final int? next = navProvider.takeTargetIndex();
+    if (next == null) return;
+    if (next == _selectedIndex) return;
+
+    setState(() {
+      _selectedIndex = next;
+      if (next == 4) _forceNotesRefresh = true;
+    });
+
   }
 
   Future<void> _handlePendingNavigation() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     final String? pendingPayload = prefs.getString('pending_navigation');
+    if (pendingPayload == null) return;
 
-    if (pendingPayload != null) {
-      final navProvider = Provider.of<NotificationNavigationProvider>(context, listen: false);
+    final navProvider = Provider.of<NotificationNavigationProvider>(context, listen: false);
+    final bool isNotes = pendingPayload.startsWith('note_') || pendingPayload.contains('DrawerIndex.Notes');
+    final bool isActivities = pendingPayload.startsWith('activity_') || pendingPayload.contains('DrawerIndex.Notifications');
 
-      if (pendingPayload.startsWith('note_')) {
-        navProvider.setTargetIndex(4);
+    if (isNotes) {
+      navProvider.setTargetIndex(4);
+      setState(() => _forceNotesRefresh = true); // keep if you rely on it elsewhere
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         NotesRefreshService().triggerRefresh();
-      } else if (pendingPayload.startsWith('activity_')) {
-        navProvider.setTargetIndex(3);
-        NotificationRefreshService().triggerRefresh();
-      } else if (pendingPayload.contains("DrawerIndex.Notes")) {
-        navProvider.setTargetIndex(4);
-        NotesRefreshService().triggerRefresh();
-      } else if (pendingPayload.contains("DrawerIndex.Notifications")) {
-        navProvider.setTargetIndex(3);
-        NotificationRefreshService().triggerRefresh();
-      }
+        debugPrint("NOTES REFRESH TRIGGERED_home_postframe");
+      });
+    } else if (isActivities) {
+      navProvider.setTargetIndex(3);
 
-      await prefs.remove('pending_navigation');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        NotificationRefreshService().triggerRefresh();
+        debugPrint("ACTIVITIES REFRESH TRIGGERED_home_postframe");
+      });
     }
+
+    await prefs.remove('pending_navigation');
   }
 
 
@@ -264,44 +274,23 @@ class _HomeScreenState extends State<HomeScreen> {
       NotificationSettingsProvider settings,
       FANotificationService faNotificationService,
       ) {
-    int totalSum = 0;
+    // track for debug if you want, but don't trigger anything here
+    _previousSum = faNotificationService.sections.fold<int>(
+      0, (sum, s) => sum + s.items.length,
+    );
 
-    for (var section in faNotificationService.sections) {
-      totalSum += section.items.length; // Always count every notification
+    int visible = 0;
+    for (final section in faNotificationService.sections) {
+      final title = section.title;
+      final n = section.items.length;
+      if (title.contains('Watches') && settings.watchersEnabled)     visible += n;
+      if (title.contains('Journals') && settings.journalsEnabled)    visible += n;
+      if (title.contains('Submission Comments') && settings.commentsEnabled) visible += n;
+      if (title.contains('Journal Comments') && settings.commentsEnabled)    visible += n;
+      if (title.contains('Favorites') && settings.favoritesEnabled)  visible += n;
+      if (title.contains('Shouts') && settings.shoutsEnabled)        visible += n;
     }
-
-    // Trigger refresh only if total count changed
-    if (totalSum != _previousSum) {
-      _previousSum = totalSum;
-      NotificationRefreshService().triggerRefresh();
-    }
-
-    // Return only enabled notifications sum (used for display)
-    int visibleSum = 0;
-    for (var section in faNotificationService.sections) {
-      if (section.title.contains('Watches') && settings.watchersEnabled) {
-        visibleSum += section.items.length;
-      }
-      if (section.title.contains('Journals') && settings.journalsEnabled) {
-        visibleSum += section.items.length;
-      }
-      if (section.title.contains('Submission Comments') &&
-          settings.commentsEnabled) {
-        visibleSum += section.items.length;
-      }
-      if (section.title.contains('Journal Comments') &&
-          settings.commentsEnabled) {
-        visibleSum += section.items.length;
-      }
-      if (section.title.contains('Favorites') && settings.favoritesEnabled) {
-        visibleSum += section.items.length;
-      }
-      if (section.title.contains('Shouts') && settings.shoutsEnabled) {
-        visibleSum += section.items.length;
-      }
-    }
-
-    return visibleSum;
+    return visible;
   }
 
 
@@ -573,6 +562,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSelectedScreen() {
+    bool shouldForceRefresh = _forceNotesRefresh;
+    if (_forceNotesRefresh && _selectedIndex == 4) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _forceNotesRefresh = false;
+          });
+        }
+      });
+    }
     return IndexedStack(
       index: _selectedIndex,
       children: [
@@ -626,7 +625,11 @@ class _HomeScreenState extends State<HomeScreen> {
           initialSection: _notificationsInitialSection,
         ),
         // 4: Notes
-        NotesScreen(drawerKey: _drawerKey),
+        NotesScreen(
+          drawerKey: _drawerKey,
+          forceRefresh: shouldForceRefresh,
+          key: const ValueKey('notes_screen'),
+        ),
       ],
     );
   }

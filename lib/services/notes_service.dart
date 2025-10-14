@@ -1,127 +1,47 @@
-import 'dart:io';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+// lib/services/notes_service.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../custom_drawer/drawer_user_controller.dart';
-import '../main.dart';
-import '../screens/notesscreen.dart';
 
+// Import the main notifications service with an alias to avoid naming clashes
+import 'notification_service.dart' as core;
 
-class NotificationService {
-  static final NotificationService _instance = NotificationService._internal();
+/// Thin helper for sending "notes" notifications.
+/// All initialization, tap handling, channels, etc. are owned by core.NotificationService.
+class NotesNotificationService {
+  static final NotesNotificationService _instance =
+  NotesNotificationService._internal();
+  factory NotesNotificationService() => _instance;
+  NotesNotificationService._internal();
 
-  factory NotificationService() => _instance;
-  final GlobalKey<DrawerUserControllerState> drawerKey = GlobalKey<DrawerUserControllerState>();
+  final GlobalKey<DrawerUserControllerState> drawerKey =
+  GlobalKey<DrawerUserControllerState>();
 
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-  FlutterLocalNotificationsPlugin();
-
-  NotificationService._internal();
-
+  /// Optional helper if you still read this preference elsewhere.
   Future<String?> getNotificationIconBasedOnPreference() async {
     final prefs = await SharedPreferences.getInstance();
-
-
-    final useAdaptiveNotify = prefs.getBool('useAdaptiveNotificationIcon')
-        ?? prefs.getBool('useAdaptiveIcon')
-        ?? false;
-
+    final useAdaptiveNotify =
+        prefs.getBool('useAdaptiveNotificationIcon') ??
+            prefs.getBool('useAdaptiveIcon') ??
+            false;
     return useAdaptiveNotify ? 'ic_stat_notify' : null;
   }
 
-
-  Future<void> init() async {
-    const AndroidInitializationSettings initializationSettingsAndroid =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const DarwinInitializationSettings initializationSettingsDarwin =
-    DarwinInitializationSettings(
-      requestSoundPermission: false,
-      requestBadgePermission: false,
-      requestAlertPermission: false,
-    );
-
-    const InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsDarwin,
-    );
-
-    await flutterLocalNotificationsPlugin.initialize(
-      initializationSettings,
-      onDidReceiveNotificationResponse: onDidReceiveNotificationResponse,
-    );
-
-    // On iOS, request permission
-    if (!Platform.isAndroid) {
-      await _requestIOSPermissions();
-    }
-  }
-
-  Future<void> _requestIOSPermissions() async {
-    final implementation = flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>();
-    if (implementation != null) {
-      final result = await implementation.requestPermissions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-      debugPrint('iOS notification permission: $result');
-    }
-  }
-
-  void onDidReceiveNotificationResponse(NotificationResponse response) {
-    final String? payload = response.payload;
-    navigatorKey.currentState?.push(
-      MaterialPageRoute(
-        builder: (context) => NotesScreen(drawerKey: drawerKey,),
-      ),
-    );
-  }
-
-  Future<void> showNotesNotification(int id, String title, String body, String payload) async {
-    debugPrint('NotificationService.showNotification called with id=$id, title=$title');
-
-    final icon = await getNotificationIconBasedOnPreference();
-
-    // BigTextStyleInformation to display long text on Android
-    final AndroidNotificationDetails androidPlatformChannelSpecifics =
-    AndroidNotificationDetails(
-      'new_message_channel_id',
-      'New Messages',
-      channelDescription: 'Channel for new message notifications',
-      importance: Importance.max,
-      priority: Priority.high,
-      icon: icon, // adaptive-aware icon
-      showWhen: true,
-      styleInformation: BigTextStyleInformation(
-        body,
-        contentTitle: title,
-        // summaryText: 'Optional summary text',
-      ),
-    );
-
-
-    const DarwinNotificationDetails iOSPlatformChannelSpecifics =
-    DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    );
-
-    final NotificationDetails platformChannelSpecifics = NotificationDetails(
-      android: androidPlatformChannelSpecifics,
-      iOS: iOSPlatformChannelSpecifics,
-    );
-
-    await flutterLocalNotificationsPlugin.show(
+  /// Show a Notes notification by delegating to the main service.
+  /// No plugin initialization or tap handling here.
+  Future<void> showNotesNotification(
+      int id,
+      String title,
+      String body,
+      String payload,
+      ) async {
+    // Reuse the core service (this sets the proper channel & icon internally).
+    await core.NotificationService().showNotification(
       id,
       title,
       body,
-      platformChannelSpecifics,
-      payload: payload,
+      payload,
+      'notes',
     );
-    debugPrint('flutterLocalNotificationsPlugin.show completed');
   }
 }

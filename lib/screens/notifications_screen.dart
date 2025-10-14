@@ -16,11 +16,12 @@ import '../../model/notifications.dart';
 import '../../providers/notification_settings_provider.dart';
 import '../../enums/drawer_index.dart';
 import '../custom_drawer/drawer_user_controller.dart';
+import '../services/notification_refresh_service.dart';
 import '../utils/specialTextSpanBuilder.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'openjournal.dart';
 import 'openpost.dart';
-
+StreamSubscription<void>? _notifRefreshSub;
 /// A widget that toggles between relative and absolute date formats when tapped.
 class ToggleableDate extends StatefulWidget {
   final String relativeDate;
@@ -850,11 +851,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   @override
   void initState() {
     super.initState();
-
+    _notifRefreshSub = NotificationRefreshService().onRefresh.listen((_) async {
+      if (!mounted) return;
+      await context.read<FANotificationService>().fetchNotifications();
+    });
   }
 
   @override
   void dispose() {
+    _notifRefreshSub?.cancel();
     _tabController?.dispose();
     super.dispose();
   }

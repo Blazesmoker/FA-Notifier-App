@@ -1,17 +1,25 @@
 import 'package:flutter/foundation.dart';
 
-class NotificationNavigationProvider with ChangeNotifier {
+class NotificationNavigationProvider extends ChangeNotifier {
   int? _targetIndex;
 
   int? get targetIndex => _targetIndex;
 
+  /// Set a target tab, notifying listeners once.
   void setTargetIndex(int index) {
     _targetIndex = index;
     notifyListeners();
   }
 
-  void reset() {
+  /// Consume the pending target without notifying again.
+  int? takeTargetIndex() {
+    final v = _targetIndex;
     _targetIndex = null;
-    notifyListeners();
+    return v;
+  }
+
+  /// Optional: clear silently (no notify).
+  void clear() {
+    _targetIndex = null;
   }
 }

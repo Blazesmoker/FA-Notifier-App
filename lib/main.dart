@@ -6,6 +6,7 @@ import 'package:FANotifier/screens/message_model.dart';
 import 'package:FANotifier/screens/notifications_provider.dart';
 import 'package:FANotifier/services/CacheMonitorService.dart';
 import 'package:FANotifier/services/fa_notification_service.dart';
+import 'package:FANotifier/services/pending_navigation.dart';
 import 'package:FANotifier/utils/notes_notifications_text_edit.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/io.dart';
@@ -69,7 +70,6 @@ void callbackDispatcher() {
     try {
       // Initialize notification service first
       final notificationService = NotificationService();
-      await notificationService.init();
       print("[BG] NotificationService initialized");
 
       // Get SharedPreferences with reload
@@ -579,9 +579,19 @@ Future<void> requestIOSNotificationPermission() async {
   }
 }
 
+class NoKeepAliveHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    final client = super.createHttpClient(context);
+    client.idleTimeout = Duration.zero;
+    client.connectionTimeout = const Duration(seconds: 30);
+    return client;
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
+  HttpOverrides.global = NoKeepAliveHttpOverrides();
   print("===============================================");
   print("APP STARTING: ${DateTime.now()}");
   print("===============================================");
@@ -601,18 +611,7 @@ void main() async {
   await requestAndroidNotificationPermission();
   await requestIOSNotificationPermission();
 
-  // Handle notification launch
-  final NotificationAppLaunchDetails? notificationAppLaunchDetails =
-  await notificationService.flutterLocalNotificationsPlugin
-      .getNotificationAppLaunchDetails();
 
-  if (notificationAppLaunchDetails?.didNotificationLaunchApp ?? false) {
-    final payload = notificationAppLaunchDetails!.notificationResponse?.payload;
-    if (payload != null) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('pending_navigation', payload);
-    }
-  }
 
   // Initialize cache manager
   final cacheManager = CustomCacheManager();
@@ -702,10 +701,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     switch (state) {
       case AppLifecycleState.resumed:
         _setAppActive(true);
+        // <-- add this:
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await processPendingNavigation(from: 'app_lifecycle_resumed');
+        });
         print('→ App RESUMED - Background fetch DISABLED');
         break;
       case AppLifecycleState.inactive:
-      // Don't change state on inactive - it's transitional
         print('→ App INACTIVE (transitional state)');
         break;
       case AppLifecycleState.paused:
