@@ -4,7 +4,6 @@ import workmanager_apple
 import BackgroundTasks
 import flutter_secure_storage
 
-// MARK: - Free function for Workmanager plugin registrant (no captures allowed)
 func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     GeneratedPluginRegistrant.register(with: registry)
     NSLog("[AppDelegate] Background isolate plugins registered")
@@ -13,19 +12,16 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 @main
 @objc class AppDelegate: FlutterAppDelegate {
 
-    // MARK: - IDs
     private let backgroundTaskIdentifier = "com.blazesmoker.FANotifier.refresh"
 
-    // MARK: - Logging helper (mirrors to NSLog + flutter print so "flutter" filter works)
     private func fLog(_ msg: String) {
         let line = "[AppDelegate] \(msg)"
         NSLog("%@", line)
         print("flutter: \(line)")
     }
 
-    // MARK: - MethodChannel to forward notification taps to Dart
     private var notifChannel: FlutterMethodChannel?
-    private var pendingNotificationPayload: [String: Any]? // hold taps until Dart is ready
+    private var pendingNotificationPayload: [String: Any]?
 
     private func setupNotificationChannelIfNeeded() {
         guard notifChannel == nil,
@@ -61,7 +57,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         }
     }
 
-    // MARK: - Approx next fetch logging
     private lazy var timeFmt: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .none
@@ -87,7 +82,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         }
     }
 
-    // MARK: - App lifecycle
     override func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -95,18 +89,8 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 
         fLog("Application launching...")
         GeneratedPluginRegistrant.register(with: self)
-
-        // Channel ASAP so we can forward any cold-start tap
         setupNotificationChannelIfNeeded()
-
         UNUserNotificationCenter.current().delegate = self
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
-            self.fLog("Notification permission granted: \(granted)")
-            if let error = error { self.fLog("Permission error: \(error)") }
-            if granted { DispatchQueue.main.async { application.registerForRemoteNotifications() } }
-        }
-
-        // IMPORTANT: pass the free function (no captures) here
         WorkmanagerPlugin.setPluginRegistrantCallback(registerPluginsForBackgroundIsolate)
 
         if #available(iOS 13.0, *) {
@@ -153,16 +137,12 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         logApproxNextFetch("didBecomeActive")
     }
 
-    // MARK: - Background task handling
     private func handleBackgroundFetch(task: BGTask) {
         fLog("handleBackgroundFetch started")
-
         scheduleBackgroundFetch()
         logApproxNextFetch("after handle")
-
         var isTaskCompleted = false
         let taskStartTime = Date()
-
         task.expirationHandler = { [weak task] in
             let duration = Date().timeIntervalSince(taskStartTime)
             self.fLog("Task expiration handler called after \(duration)s")
@@ -172,7 +152,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
                 self.fLog("Task marked as failed due to expiration")
             }
         }
-
         if let refreshTask = task as? BGAppRefreshTask {
             self.fLog("Task is BGAppRefreshTask, passing to WorkmanagerPlugin")
             WorkmanagerPlugin.handlePeriodicTask(
@@ -180,7 +159,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
                 task: refreshTask,
                 earliestBeginInSeconds: nil
             )
-
             DispatchQueue.global().asyncAfter(deadline: .now() + 28.0) { [weak task] in
                 if !isTaskCompleted {
                     let duration = Date().timeIntervalSince(taskStartTime)
@@ -196,7 +174,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         }
     }
 
-    // MARK: - Scheduling
     private func scheduleBackgroundFetch() {
         let request = BGAppRefreshTaskRequest(identifier: backgroundTaskIdentifier)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
@@ -238,14 +215,12 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         logApproxNextFetch("getPendingBackgroundTasks")
     }
 
-    // MARK: - Notification Handling
     override func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         fLog("Foreground notification: \(notification.request.content.title)")
-        // Show banner while foregrounded so user can tap it
         if #available(iOS 14.0, *) {
             completionHandler([.banner, .sound, .badge, .list])
         } else {
@@ -260,8 +235,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     ) {
         let content = response.notification.request.content
         fLog("Notification tapped: \(content.title) (action=\(response.actionIdentifier))")
-
-        // Forward the tap to Dart — this works for foreground/background/cold start
         let payload = makePayload(from: response)
         if let channel = notifChannel {
             fLog("Forwarding tap to Dart via MethodChannel")
@@ -270,7 +243,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
             fLog("MethodChannel not ready yet – caching tapped notification")
             pendingNotificationPayload = payload
         }
-
         completionHandler()
     }
 
@@ -314,7 +286,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         return out
     }
 
-    // MARK: - Debug/Test
     #if DEBUG
     @objc func testBackgroundFetch() {
         fLog("TEST: Manual background fetch trigger requested")
@@ -344,7 +315,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     }
     #endif
 
-    // MARK: - App state logs
     override func applicationWillResignActive(_ application: UIApplication) {
         fLog("App will resign active")
     }
