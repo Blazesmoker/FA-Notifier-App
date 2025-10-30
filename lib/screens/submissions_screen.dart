@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -9,6 +10,8 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import '../services/app_refetch_bus.dart';
+import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'heart_animation_optimized.dart';
@@ -60,6 +63,11 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
   bool _hasMore = true;
+
+  bool _isError = false;
+  String? _errorMessage;
+  late final StreamSubscription _resumeSub;
+
   String? _nextPageUrl;
   /// Base URL for delete/nuke actions
   String? _baseSubmissionsUrl;
@@ -84,16 +92,22 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   bool get wantKeepAlive => true;
 
   @override
+  @override
   void initState() {
     super.initState();
     _scrollController.addListener(_scrollListenerForPagination);
     _loadSfwEnabled().then((_) => _refreshSubmissions());
+
+    _resumeSub = AppRefetchBus.stream.listen((_) {
+      if (mounted) _refreshSubmissions();
+    });
   }
 
   @override
   void dispose() {
     _scrollController.removeListener(_scrollListenerForPagination);
     _scrollController.dispose();
+    _resumeSub.cancel();
     super.dispose();
   }
 
@@ -141,54 +155,71 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       _submissionQueue.clear();
       _activeFetches = 0;
       _baseSubmissionsUrl = null;
+      _isError = false;
+      _errorMessage = null;
     });
     await _fetchSubmissions();
   }
 
   Future<void> _fetchSubmissions() async {
     if (_isLoading || !_hasMore) return;
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _isError = false;
+      _errorMessage = null;
+    });
 
     try {
-      String cookieHeader = await _getAuthCookies();
-      if (cookieHeader.isEmpty) {
+      String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+      String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+      if (cookieA == null || cookieB == null) {
         debugPrint('[Submissions] Missing FA cookies, abort fetch.');
-        setState(() => _isLoading = false);
+        setState(() { _isLoading = false; _isError = true; _errorMessage = 'Not logged in'; });
         return;
       }
-      if (_sfwEnabled) {
-        cookieHeader += '; sfw=1';
-      }
+      var cookieHeader = 'a=$cookieA; b=$cookieB';
+      if (_sfwEnabled) cookieHeader += '; sfw=1';
 
       final url = _nextPageUrl ??
           _baseSubmissionsUrl ??
           'https://www.furaffinity.net/msg/submissions/';
       debugPrint('[Submissions] GET $url');
 
-      final response = await http.get(Uri.parse(url), headers: {
-        'Cookie': cookieHeader,
-        'User-Agent': 'Mozilla/5.0',
+      final resp = await FAHttp.get(
+        Uri.parse(url),
+        headers: {
+          HttpHeaders.cookieHeader: cookieHeader,
+          'User-Agent': 'Mozilla/5.0',
+        },
+      );
+
+      if (resp.statusCode != 200) {
+        throw HttpException('HTTP ${resp.statusCode}');
+      }
+
+      _parseListing(resp.body);
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        for (var item in _flatSubmissionsList) {
+          final url = item['thumbnailUrl'];
+          if (url != null) {
+            precacheImage(CachedNetworkImageProvider(url), context);
+          }
+        }
       });
 
-      if (response.statusCode == 200) {
-        _parseListing(response.body);
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          for (var item in _flatSubmissionsList) {
-            precacheImage(
-              CachedNetworkImageProvider(item['thumbnailUrl']),
-              context,
-            );
-          }
-        });
-      } else {
-        debugPrint('[Submissions] HTTP ${response.statusCode}');
-      }
+      setState(() => _isLoading = false);
     } catch (e) {
-      debugPrint('[Submissions] Exception: $e');
+      debugPrint('[Submissions] fetch failed: $e');
+      setState(() {
+        _isLoading = false;
+        _isError = true;
+        _errorMessage = e.toString();
+      });
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) _refreshSubmissions();
+      });
     }
-
-    setState(() => _isLoading = false);
   }
 
   void _parseListing(String html) {
@@ -731,10 +762,26 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
         ),
         body: RefreshIndicator(
           onRefresh: _refreshSubmissions,
-          child: _listItems.isEmpty && !_isLoading
+          child: (_isLoading && _listItems.isEmpty)
+              ? const Center(child: CircularProgressIndicator())
+              : (_isError && _listItems.isEmpty)
+              ? Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Network error. Pull to retry.'),
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
+                  ),
+              ],
+            ),
+          )
+              : (_listItems.isEmpty)
               ? const Center(child: Text('No new submissions found.'))
               : ListView.builder(
-            controller: _scrollController,
+          controller: _scrollController,
             itemCount: _listItems.length + (_isLoading ? 1 : 0),
             itemBuilder: (context, index) {
               if (index == _listItems.length) {

@@ -5,6 +5,7 @@ import 'package:FANotifier/providers/timezone_provider.dart';
 import 'package:FANotifier/screens/message_model.dart';
 import 'package:FANotifier/screens/notifications_provider.dart';
 import 'package:FANotifier/services/CacheMonitorService.dart';
+import 'package:FANotifier/services/app_refetch_bus.dart';
 import 'package:FANotifier/services/fa_notification_service.dart';
 import 'package:FANotifier/services/pending_navigation.dart';
 import 'package:FANotifier/utils/notes_notifications_text_edit.dart';
@@ -46,6 +47,31 @@ import 'network.dart';
 import 'utils/fa_link_handler.dart';
 import 'package:app_links/app_links.dart';
 import 'dart:async';
+
+class _LifecycleRefetch extends StatefulWidget {
+  final Widget child;
+  const _LifecycleRefetch({required this.child, Key? key}) : super(key: key);
+  @override
+  State<_LifecycleRefetch> createState() => _LifecycleRefetchState();
+}
+
+class _LifecycleRefetchState extends State<_LifecycleRefetch> with WidgetsBindingObserver {
+  @override
+  void initState() { super.initState(); WidgetsBinding.instance.addObserver(this); }
+  @override
+  void dispose() { WidgetsBinding.instance.removeObserver(this); super.dispose(); }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      AppRefetchBus.trigger();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 
 class FreshHttpOverrides extends HttpOverrides {
   @override
@@ -664,7 +690,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       theme: AppTheme.darkTheme,
       navigatorKey: navigatorKey,
       navigatorObservers: [routeObserver],
-      home: const HomeScreen(),
+      home: _LifecycleRefetch(child: const HomeScreen()),
     );
   }
 }

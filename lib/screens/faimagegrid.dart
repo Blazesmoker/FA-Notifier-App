@@ -1,19 +1,17 @@
 // lib/fa_image_grid.dart
-
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart';
-import 'package:http/http.dart' as http;
-import 'dart:math';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../widgets/PulsatingLoadingIndicator.dart';
-import 'openpost.dart';
+
+import '../services/app_refetch_bus.dart';
+import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
+import '../widgets/PulsatingLoadingIndicator.dart';
 import '../widgets/heart_animation.dart';
+import 'openpost.dart';
 
 class FAImageGrid extends StatefulWidget {
   final Map<String, String> selectedFilters;
@@ -27,13 +25,13 @@ class _FAImageGridState extends State<FAImageGrid> {
   int currentPage = 1;
   bool isLoading = false;
   bool hasMore = true;
+  late final StreamSubscription _resumeSub;
 
   /// Each image is a Map with:
   ///   - 'url': thumbnail URL
   ///   - 'width': double
   ///   - 'height': double
   ///   - 'uniqueNumber': string
-  ///
   List<Map<String, dynamic>> images = [];
   List<List<Map<String, dynamic>>> imageRows = [];
   List<Map<String, dynamic>> normalImagesQueue = [];
@@ -41,21 +39,16 @@ class _FAImageGridState extends State<FAImageGrid> {
   final Set<String> imageUrls = <String>{}; // For de-duping
   final ScrollController _scrollController = ScrollController();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock),
+    iOptions: IOSOptions(
+      accountName: 'flutter_secure_storage_service',
+      accessibility: KeychainAccessibility.first_unlock,
+    ),
   );
 
-
   final Set<String> _favoritedImages = {};
-
-
   final Map<String, String> _favUrls = {};
   final Map<String, String> _unfavUrls = {};
-
-
   final FavoriteService _favoriteService = FavoriteService();
-
 
   bool _sfwEnabled = true;
 
@@ -65,6 +58,10 @@ class _FAImageGridState extends State<FAImageGrid> {
     _loadSfwEnabled();
     _fetchImages(currentPage);
     _scrollController.addListener(_scrollListener);
+
+    _resumeSub = AppRefetchBus.stream.listen((_) {
+      if (mounted) _refreshImages();
+    });
   }
 
   Future<void> _loadSfwEnabled() async {
@@ -85,6 +82,7 @@ class _FAImageGridState extends State<FAImageGrid> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _resumeSub.cancel();
     super.dispose();
   }
 
@@ -119,15 +117,19 @@ class _FAImageGridState extends State<FAImageGrid> {
 
     try {
       if (isRefresh) {
-        images.clear(); imageUrls.clear(); imageRows.clear(); normalImagesQueue.clear();
-        currentPage = 1; hasMore = true;
+        images.clear();
+        imageUrls.clear();
+        imageRows.clear();
+        normalImagesQueue.clear();
+        currentPage = 1;
+        hasMore = true;
       }
 
       final cookieHeader = await _getAllCookies();
       final uri = Uri.parse('https://www.furaffinity.net/browse/$pageNumber');
 
       final headers = {
-        'Cookie': cookieHeader,
+        HttpHeaders.cookieHeader: cookieHeader,
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         'Referer': 'https://www.furaffinity.net/browse/',
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -145,20 +147,20 @@ class _FAImageGridState extends State<FAImageGrid> {
         'btn': 'Next',
       };
 
-      http.Response resp = await http.post(uri, headers: headers, body: body);
+      // POST browse filters (FA may redirect to /search/… depending on filters)
+      var resp = await FAHttp.post(uri, headers: headers, body: body);
 
-      // If gender is selected, FA redirects Browse -> Search via 302/303.
+      // Follow redirect if present
       if (resp.isRedirect || (resp.statusCode >= 300 && resp.statusCode < 400)) {
         final loc = resp.headers['location'];
         if (loc == null || loc.isEmpty) {
           throw Exception('Redirect without Location header');
         }
-        final redirectUri = uri.resolve(loc); // handles relative paths
-        // Use GET for the redirected Search page.
-        resp = await http.get(
+        final redirectUri = uri.resolve(loc);
+        resp = await FAHttp.get(
           redirectUri,
           headers: {
-            'Cookie': cookieHeader,
+            HttpHeaders.cookieHeader: cookieHeader,
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
             'Referer': uri.toString(),
           },
@@ -169,8 +171,11 @@ class _FAImageGridState extends State<FAImageGrid> {
         final newImages = await parseHtml(resp.body);
         if (newImages.isEmpty) setState(() => hasMore = false);
 
-        final filtered = newImages.where((img) => !imageUrls.contains(img['url'])).toList();
-        for (final img in filtered) { imageUrls.add(img['url']); }
+        final filtered =
+        newImages.where((img) => !imageUrls.contains(img['url'])).toList();
+        for (final img in filtered) {
+          imageUrls.add(img['url']);
+        }
 
         setState(() {
           images.addAll(filtered);
@@ -185,20 +190,17 @@ class _FAImageGridState extends State<FAImageGrid> {
     } catch (e) {
       setState(() => isLoading = false);
       debugPrint('FAImageGrid: Error fetching images => $e');
+
+      // Auto-heal once after resume/stale socket
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) _refreshImages();
+      });
     }
   }
 
-
   Future<String> _getAllCookies() async {
-    List<String> cookieNames = [
-      'a',
-      'b',
-      'cc',
-      'folder',
-      'nodesc',
-      'sz',
-    ];
-    List<String> cookies = [];
+    final cookieNames = ['a', 'b', 'cc', 'folder', 'nodesc', 'sz'];
+    final cookies = <String>[];
     for (var name in cookieNames) {
       final storageKey = 'fa_cookie_$name';
       final value = await _secureStorage.read(key: storageKey);
@@ -206,7 +208,6 @@ class _FAImageGridState extends State<FAImageGrid> {
         cookies.add('$name=$value');
       }
     }
-
     cookies.add('sfw=${_sfwEnabled ? '1' : '0'}');
     return cookies.join('; ');
   }
@@ -218,9 +219,10 @@ class _FAImageGridState extends State<FAImageGrid> {
   /// Parses the browse page HTML for the thumbnail images
   Future<List<Map<String, dynamic>>> parseHtml(String html) async {
     final document = parse(html);
-    final imageElements = document.querySelectorAll('img[src^="//t.furaffinity.net/"]');
+    final imageElements =
+    document.querySelectorAll('img[src^="//t.furaffinity.net/"]');
 
-    final List<Map<String, dynamic>> imageMetadata = [];
+    final imageMetadata = <Map<String, dynamic>>[];
 
     for (var element in imageElements) {
       final thumbnailUrl = element.attributes['src'];
@@ -294,10 +296,10 @@ class _FAImageGridState extends State<FAImageGrid> {
     final postUrl = 'https://www.furaffinity.net/view/$uniqueNumber/';
     try {
       final cookieHeader = await _getAllCookies();
-      final response = await http.get(
+      final response = await FAHttp.get(
         Uri.parse(postUrl),
         headers: {
-          'Cookie': cookieHeader,
+          HttpHeaders.cookieHeader: cookieHeader,
           'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
         },
       );
@@ -312,14 +314,12 @@ class _FAImageGridState extends State<FAImageGrid> {
           for (var aTag in anchors) {
             final href = aTag.attributes['href'] ?? '';
             if (href.contains('/fav/')) {
-              _favUrls[uniqueNumber] = href.startsWith('http')
-                  ? href
-                  : 'https://www.furaffinity.net$href';
+              _favUrls[uniqueNumber] =
+              href.startsWith('http') ? href : 'https://www.furaffinity.net$href';
               foundFav = true;
             } else if (href.contains('/unfav/')) {
-              _unfavUrls[uniqueNumber] = href.startsWith('http')
-                  ? href
-                  : 'https://www.furaffinity.net$href';
+              _unfavUrls[uniqueNumber] =
+              href.startsWith('http') ? href : 'https://www.furaffinity.net$href';
               foundUnfav = true;
             }
           }
@@ -346,9 +346,7 @@ class _FAImageGridState extends State<FAImageGrid> {
     await _fetchPostDetails(uniqueNumber);
   }
 
-
   Future<void> _toggleFavorite(String uniqueNumber, bool wantFavorite) async {
-
     bool hasFavUrl =
         _favUrls.containsKey(uniqueNumber) && _favUrls[uniqueNumber]!.isNotEmpty;
     bool hasUnfavUrl = _unfavUrls.containsKey(uniqueNumber) &&
@@ -371,14 +369,13 @@ class _FAImageGridState extends State<FAImageGrid> {
       return;
     }
 
-
     final urlToUse = wantFavorite ? _favUrls[uniqueNumber] : _unfavUrls[uniqueNumber];
     if (urlToUse == null || urlToUse.isEmpty) {
       debugPrint('DEBUG: No URL found for fav/unfav operation on $uniqueNumber.');
       return;
     }
 
-
+    // optimistic UI
     if (wantFavorite) {
       _favoritedImages.add(uniqueNumber);
     } else {
@@ -386,13 +383,12 @@ class _FAImageGridState extends State<FAImageGrid> {
     }
     setState(() {});
 
-
     final success = await _favoriteService.executePostWithRetry(urlToUse);
     if (success) {
       await _refetchFavLinks(uniqueNumber); // re-parse the page to see updated state
       setState(() {});
     } else {
-
+      // rollback
       if (wantFavorite) {
         _favoritedImages.remove(uniqueNumber);
       } else {
@@ -412,7 +408,12 @@ class _FAImageGridState extends State<FAImageGrid> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
         child: imageRows.isEmpty && isLoading
-            ? const Center(child: PulsatingLoadingIndicator(size: 88.0, assetPath: 'assets/icons/fathemed.png'))
+            ? const Center(
+          child: PulsatingLoadingIndicator(
+            size: 88.0,
+            assetPath: 'assets/icons/fathemed.png',
+          ),
+        )
             : ListView.builder(
           controller: _scrollController,
           itemCount: imageRows.length + (isLoading ? 1 : 0),
@@ -420,7 +421,12 @@ class _FAImageGridState extends State<FAImageGrid> {
             if (index == imageRows.length) {
               return const Padding(
                 padding: EdgeInsets.all(16.0),
-                child: Center(child: PulsatingLoadingIndicator(size: 58.0, assetPath: 'assets/icons/fathemed.png')),
+                child: Center(
+                  child: PulsatingLoadingIndicator(
+                    size: 58.0,
+                    assetPath: 'assets/icons/fathemed.png',
+                  ),
+                ),
               );
             }
 
@@ -460,17 +466,13 @@ class _FAImageGridState extends State<FAImageGrid> {
 
         return Center(
           child: Container(
-            margin: const EdgeInsets.symmetric(
-              horizontal: 4.0,
-              vertical: 2.0,
-            ),
+            margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
             child: _FavImageTile(
               image: image,
               width: width,
               height: height,
               isFav: _favoritedImages.contains(image['uniqueNumber']),
-              onToggle: (wantFav) =>
-                  _toggleFavorite(image['uniqueNumber'], wantFav),
+              onToggle: (wantFav) => _toggleFavorite(image['uniqueNumber'], wantFav),
               onTap: () {
                 Navigator.push(
                   context,
@@ -520,8 +522,7 @@ class _FAImageGridState extends State<FAImageGrid> {
               width: wL,
               height: h,
               isFav: _favoritedImages.contains(left['uniqueNumber']),
-              onToggle: (wantFav) =>
-                  _toggleFavorite(left['uniqueNumber'], wantFav),
+              onToggle: (wantFav) => _toggleFavorite(left['uniqueNumber'], wantFav),
               onTap: () {
                 Navigator.push(
                   context,
@@ -540,8 +541,7 @@ class _FAImageGridState extends State<FAImageGrid> {
               width: wR,
               height: h,
               isFav: _favoritedImages.contains(right['uniqueNumber']),
-              onToggle: (wantFav) =>
-                  _toggleFavorite(right['uniqueNumber'], wantFav),
+              onToggle: (wantFav) => _toggleFavorite(right['uniqueNumber'], wantFav),
               onTap: () {
                 Navigator.push(
                   context,
@@ -561,16 +561,12 @@ class _FAImageGridState extends State<FAImageGrid> {
   }
 }
 
-
 class _FavImageTile extends StatefulWidget {
   final Map<String, dynamic> image;
   final double width;
   final double height;
   final bool isFav;
-
-
   final ValueChanged<bool> onToggle;
-
   final VoidCallback onTap;
 
   const _FavImageTile({
@@ -617,7 +613,6 @@ class _FavImageTileState extends State<_FavImageTile> {
         isFavorite: _localFav,
         containerWidth: widget.width,
         containerHeight: widget.height,
-
         onDebounceComplete: (finalVal) {
           widget.onToggle(finalVal);
         },

@@ -1,19 +1,19 @@
 // lib/fasearchimage.dart
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:html/parser.dart' as html_parser;
-import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../widgets/PulsatingLoadingIndicator.dart';
-import 'openpost.dart';
+
+import '../services/app_refetch_bus.dart';
+import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
+import '../widgets/PulsatingLoadingIndicator.dart';
 import '../widgets/heart_animation.dart';
+import 'openpost.dart';
 
 class FASearchImage extends StatefulWidget {
   final Map<String, String> selectedFilters;
@@ -37,20 +37,20 @@ class _FASearchImageState extends State<FASearchImage> {
   List<Map<String, dynamic>> normalImagesQueue = [];
   final Set<String> imageUrls = <String>{};
   final ScrollController _scrollController = ScrollController();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock));
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(
+      accountName: 'flutter_secure_storage_service',
+      accessibility: KeychainAccessibility.first_unlock,
+    ),
+  );
   final FavoriteService _favoriteService = FavoriteService();
 
-
   final Set<String> _favoritedImages = {};
-
-
   final Map<String, String> _favUrls = {};
   final Map<String, String> _unfavUrls = {};
 
-
   bool _sfwEnabled = true;
+  late final StreamSubscription _resumeSub;
 
   @override
   void initState() {
@@ -58,12 +58,15 @@ class _FASearchImageState extends State<FASearchImage> {
     _loadSfwEnabled();
     _fetchImages(currentPage);
     _scrollController.addListener(_scrollListener);
+
+    _resumeSub = AppRefetchBus.stream.listen((_) {
+      if (mounted) _refreshImages();
+    });
   }
 
   Future<void> _loadSfwEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-
       _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
     });
   }
@@ -71,6 +74,7 @@ class _FASearchImageState extends State<FASearchImage> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _resumeSub.cancel();
     super.dispose();
   }
 
@@ -98,31 +102,19 @@ class _FASearchImageState extends State<FASearchImage> {
   }
 
   Future<String> _getAllCookies() async {
-    List<String> cookieNames = [
-      'a',
-      'b',
-      'cc',
-      'folder',
-      'nodesc',
-      'sz',
-    ];
-
-    List<String> cookies = [];
+    final cookieNames = ['a', 'b', 'cc', 'folder', 'nodesc', 'sz'];
+    final cookies = <String>[];
 
     for (var name in cookieNames) {
-      String storageKey = 'fa_cookie_$name';
-      String? value = await _secureStorage.read(key: storageKey);
+      final storageKey = 'fa_cookie_$name';
+      final value = await _secureStorage.read(key: storageKey);
       if (value != null && value.isNotEmpty) {
         cookies.add('$name=$value');
       }
     }
 
-
     cookies.add('sfw=${_sfwEnabled ? '1' : '0'}');
-
-    String cookieHeader = cookies.join('; ');
-
-    return cookieHeader;
+    return cookies.join('; ');
   }
 
   Future<void> _fetchImages(int pageNumber, {bool isRefresh = false}) async {
@@ -138,10 +130,10 @@ class _FASearchImageState extends State<FASearchImage> {
         currentPage = 1;
       }
 
-      String cookieHeader = await _getAllCookies();
+      final cookieHeader = await _getAllCookies();
 
       final newImages = await fetchImagesWithFilters(pageNumber, cookieHeader);
-      List<Map<String, dynamic>> filteredImages =
+      final filteredImages =
       newImages.where((image) => !imageUrls.contains(image['url'])).toList();
 
       for (var image in filteredImages) {
@@ -155,7 +147,7 @@ class _FASearchImageState extends State<FASearchImage> {
         isLoading = false;
       });
 
-
+      // Pre-fetch details (fav/unfav) lazily
       for (int i = 0; i < filteredImages.length; i++) {
         _prefetchItemDetails(images.length - filteredImages.length + i);
       }
@@ -163,6 +155,11 @@ class _FASearchImageState extends State<FASearchImage> {
       debugPrint('Error fetching images: $e');
       setState(() {
         isLoading = false;
+      });
+
+      // Heal once after resume/stale socket
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) _refreshImages();
       });
     }
   }
@@ -187,24 +184,17 @@ class _FASearchImageState extends State<FASearchImage> {
     return selected.join(glue);
   }
 
-
   Future<List<Map<String, dynamic>>> fetchImagesWithFilters(
       int pageNumber, String cookieHeader) async {
-
     final filters = widget.selectedFilters;
-
-
     final baseQ = (widget.searchQuery).trim();
-
 
     final genderQ = _buildGenderQuery(
       filters,
       useOr: (filters['mode'] ?? 'extended') == 'any',
     );
 
-
     final needsExtended = genderQ.contains('|') || genderQ.contains('"');
-
     final q = [baseQ, genderQ].where((s) => s.isNotEmpty).join(' ').trim();
 
     final queryParams = {
@@ -215,28 +205,28 @@ class _FASearchImageState extends State<FASearchImage> {
       'range': filters['range'] ?? '5years',
       'mode': needsExtended ? 'extended' : (filters['mode'] ?? 'extended'),
       'rating-general': filters['rating-general'] ?? '1',
-      'rating-mature':  filters['rating-mature']  ?? '1',
-      'rating-adult':   filters['rating-adult']   ?? '1',
-      'type-art':   filters['type-art']   ?? '1',
+      'rating-mature': filters['rating-mature'] ?? '1',
+      'rating-adult': filters['rating-adult'] ?? '1',
+      'type-art': filters['type-art'] ?? '1',
       'type-music': filters['type-music'] ?? '1',
       'type-flash': filters['type-flash'] ?? '1',
       'type-story': filters['type-story'] ?? '1',
       'type-photo': filters['type-photo'] ?? '1',
-      'type-poetry':filters['type-poetry']?? '1',
+      'type-poetry': filters['type-poetry'] ?? '1',
       'perpage': filters['perpage'] ?? '72',
     };
 
     if (filters['range'] == 'manual') {
       queryParams['range_from'] = filters['range_from'] ?? '';
-      queryParams['range_to']   = filters['range_to'] ?? '';
+      queryParams['range_to'] = filters['range_to'] ?? '';
     }
 
     final uri = Uri.https('www.furaffinity.net', '/search/', queryParams);
 
-    final response = await http.get(
+    final response = await FAHttp.get(
       uri,
       headers: {
-        'Cookie': cookieHeader,
+        HttpHeaders.cookieHeader: cookieHeader,
         'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36',
         'Referer': 'https://www.furaffinity.net/search/',
@@ -253,14 +243,15 @@ class _FASearchImageState extends State<FASearchImage> {
   }
 
   Future<List<Map<String, dynamic>>> parseHtml(String html) async {
-    var document = html_parser.parse(html);
-    var figureElements = document.querySelectorAll('figure.t-image');
+    final document = html_parser.parse(html);
+    final figureElements = document.querySelectorAll('figure.t-image');
 
-    List<Map<String, dynamic>> imageMetadata = [];
+    final imageMetadata = <Map<String, dynamic>>[];
 
     for (var figure in figureElements) {
-      var aTag = figure.querySelector('a');
-      var imgElement = figure.querySelector('img[src^="//t.furaffinity.net/"]');
+      final aTag = figure.querySelector('a');
+      final imgElement =
+      figure.querySelector('img[src^="//t.furaffinity.net/"]');
 
       if (aTag != null && imgElement != null) {
         final String? postUrl = aTag.attributes['href'];
@@ -268,16 +259,18 @@ class _FASearchImageState extends State<FASearchImage> {
         final String? dataWidth = imgElement.attributes['data-width'];
         final String? dataHeight = imgElement.attributes['data-height'];
 
-        if (postUrl != null && thumbnailUrl != null && dataWidth != null && dataHeight != null) {
-          double? width = double.tryParse(dataWidth);
-          double? height = double.tryParse(dataHeight);
+        if (postUrl != null &&
+            thumbnailUrl != null &&
+            dataWidth != null &&
+            dataHeight != null) {
+          final width = double.tryParse(dataWidth);
+          final height = double.tryParse(dataHeight);
 
           if (width != null && height != null) {
-            final RegExp regex = RegExp(r'/view/(\d+)/');
-            final RegExpMatch? match = regex.firstMatch(postUrl);
-            final String uniqueNumber = match != null && match.groupCount >= 1
-                ? match.group(1)!
-                : 'Unknown';
+            final regex = RegExp(r'/view/(\d+)/');
+            final match = regex.firstMatch(postUrl);
+            final uniqueNumber =
+            match != null && match.groupCount >= 1 ? match.group(1)! : 'Unknown';
 
             imageMetadata.add({
               'url': 'https:$thumbnailUrl',
@@ -295,9 +288,9 @@ class _FASearchImageState extends State<FASearchImage> {
   }
 
   bool isWideImage(Map<String, dynamic> image) {
-    double width = image['width'];
-    double height = image['height'];
-    double aspectRatio = width / height;
+    final width = image['width'];
+    final height = image['height'];
+    final aspectRatio = width / height;
     return aspectRatio > 1.5;
   }
 
@@ -338,7 +331,6 @@ class _FASearchImageState extends State<FASearchImage> {
     }
   }
 
-
   Future<void> _prefetchItemDetails(int index) async {
     if (index < 0 || index >= images.length) return;
 
@@ -351,7 +343,6 @@ class _FASearchImageState extends State<FASearchImage> {
       setState(() {
         _favUrls[uniqueNumber] = details['favUrl']!;
         _unfavUrls[uniqueNumber] = details['unfavUrl']!;
-
         if ((details['unfavUrl'] ?? '').isNotEmpty) {
           _favoritedImages.add(uniqueNumber);
         }
@@ -359,19 +350,17 @@ class _FASearchImageState extends State<FASearchImage> {
     }
   }
 
-
   Future<Map<String, String>?> _fetchPostDetails(String postUrl) async {
-    final absolute = postUrl.startsWith('http')
-        ? postUrl
-        : 'https://www.furaffinity.net$postUrl';
+    final absolute =
+    postUrl.startsWith('http') ? postUrl : 'https://www.furaffinity.net$postUrl';
     final cookie = await _getAllCookies();
     if (cookie.isEmpty) return null;
 
     try {
-      final response = await http.get(
+      final response = await FAHttp.get(
         Uri.parse(absolute),
         headers: {
-          'Cookie': cookie,
+          HttpHeaders.cookieHeader: cookie,
           'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
         },
       );
@@ -417,10 +406,11 @@ class _FASearchImageState extends State<FASearchImage> {
     }
   }
 
-
   Future<void> _toggleFavorite(String uniqueNumber, bool wantFavorite) async {
-    bool hasFav = _favUrls.containsKey(uniqueNumber) && _favUrls[uniqueNumber]!.isNotEmpty;
-    bool hasUnfav = _unfavUrls.containsKey(uniqueNumber) && _unfavUrls[uniqueNumber]!.isNotEmpty;
+    bool hasFav =
+        _favUrls.containsKey(uniqueNumber) && _favUrls[uniqueNumber]!.isNotEmpty;
+    bool hasUnfav =
+        _unfavUrls.containsKey(uniqueNumber) && _unfavUrls[uniqueNumber]!.isNotEmpty;
 
     if (!hasFav && !hasUnfav) {
       final idx = images.indexWhere((e) => e['uniqueNumber'] == uniqueNumber);
@@ -448,6 +438,7 @@ class _FASearchImageState extends State<FASearchImage> {
       return;
     }
 
+    // optimistic UI
     setState(() {
       if (wantFavorite) {
         _favoritedImages.add(uniqueNumber);
@@ -458,6 +449,7 @@ class _FASearchImageState extends State<FASearchImage> {
 
     final success = await _favoriteService.executePostWithRetry(urlToUse);
     if (!success) {
+      // rollback
       setState(() {
         if (wantFavorite) {
           _favoritedImages.remove(uniqueNumber);
@@ -477,15 +469,20 @@ class _FASearchImageState extends State<FASearchImage> {
 
   @override
   Widget build(BuildContext context) {
-    double screenHeight = MediaQuery.of(context).size.height;
-    double maxHeight = screenHeight * 0.4;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final maxHeight = screenHeight * 0.4;
 
     return RefreshIndicator(
       onRefresh: _refreshImages,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
         child: imageRows.isEmpty && isLoading
-            ? Center(child: PulsatingLoadingIndicator(size: 88.0, assetPath: 'assets/icons/fathemed.png'))
+            ? Center(
+          child: PulsatingLoadingIndicator(
+            size: 88.0,
+            assetPath: 'assets/icons/fathemed.png',
+          ),
+        )
             : ListView.builder(
           controller: _scrollController,
           itemCount: imageRows.length + (isLoading ? 1 : 0),
@@ -493,7 +490,12 @@ class _FASearchImageState extends State<FASearchImage> {
             if (index == imageRows.length) {
               return const Padding(
                 padding: EdgeInsets.all(16.0),
-                child: Center(child: PulsatingLoadingIndicator(size: 58.0, assetPath: 'assets/icons/fathemed.png')),
+                child: Center(
+                  child: PulsatingLoadingIndicator(
+                    size: 58.0,
+                    assetPath: 'assets/icons/fathemed.png',
+                  ),
+                ),
               );
             }
 
@@ -513,13 +515,13 @@ class _FASearchImageState extends State<FASearchImage> {
   Widget _buildSingleImage(Map<String, dynamic> image, double maxHeight) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        double aspectRatio = image['width'] / image['height'];
-        double rowWidth = constraints.maxWidth - 16.0;
+        final aspectRatio = image['width'] / image['height'];
+        final rowWidth = constraints.maxWidth - 16.0;
         double width = rowWidth;
         double height = width / aspectRatio;
 
         if (height > maxHeight) {
-          double scalingFactor = maxHeight / height;
+          final scalingFactor = maxHeight / height;
           width *= scalingFactor;
           height = maxHeight;
         }
@@ -532,7 +534,8 @@ class _FASearchImageState extends State<FASearchImage> {
               width: width,
               height: height,
               isFavorited: _favoritedImages.contains(image['uniqueNumber']),
-              onFinalFavState: (finalVal) => _toggleFavorite(image['uniqueNumber'], finalVal),
+              onFinalFavState: (finalVal) =>
+                  _toggleFavorite(image['uniqueNumber'], finalVal),
               onTap: () {
                 Navigator.push(
                   context,
@@ -551,7 +554,8 @@ class _FASearchImageState extends State<FASearchImage> {
     );
   }
 
-  Widget _buildDoubleImage(Map<String, dynamic> left, Map<String, dynamic> right, double maxHeight) {
+  Widget _buildDoubleImage(
+      Map<String, dynamic> left, Map<String, dynamic> right, double maxHeight) {
     return LayoutBuilder(
       builder: (context, constraints) {
         const margin = 4.0;
@@ -578,7 +582,8 @@ class _FASearchImageState extends State<FASearchImage> {
               width: wL,
               height: h,
               isFavorited: _favoritedImages.contains(left['uniqueNumber']),
-              onFinalFavState: (finalVal) => _toggleFavorite(left['uniqueNumber'], finalVal),
+              onFinalFavState: (finalVal) =>
+                  _toggleFavorite(left['uniqueNumber'], finalVal),
               onTap: () {
                 Navigator.push(
                   context,
@@ -597,7 +602,8 @@ class _FASearchImageState extends State<FASearchImage> {
               width: wR,
               height: h,
               isFavorited: _favoritedImages.contains(right['uniqueNumber']),
-              onFinalFavState: (finalVal) => _toggleFavorite(right['uniqueNumber'], finalVal),
+              onFinalFavState: (finalVal) =>
+                  _toggleFavorite(right['uniqueNumber'], finalVal),
               onTap: () {
                 Navigator.push(
                   context,
@@ -617,14 +623,11 @@ class _FASearchImageState extends State<FASearchImage> {
   }
 }
 
-
 class _FavSearchTile extends StatefulWidget {
   final Map<String, dynamic> item;
   final double width;
   final double height;
   final bool isFavorited;
-
-
   final ValueChanged<bool> onFinalFavState;
   final VoidCallback onTap;
 
@@ -662,7 +665,6 @@ class _FavSearchTileState extends State<_FavSearchTile> {
   @override
   Widget build(BuildContext context) {
     final imageUrl = widget.item['url'] as String;
-    final uniqueNumber = widget.item['uniqueNumber'] as String;
 
     return GestureDetector(
       onTap: widget.onTap,
