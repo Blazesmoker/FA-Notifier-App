@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:url_launcher/url_launcher_string.dart';
@@ -29,7 +30,6 @@ import '../../custom_drawer/drawer_user_controller.dart';
 import 'openjournal.dart';
 import 'openpost.dart';
 
-/// NotesScreen uses edge-swipe logic to open a side drawer, similar to NotificationsScreen.
 class NotesScreen extends StatefulWidget {
   final GlobalKey<DrawerUserControllerState> drawerKey;
   final bool forceRefresh;
@@ -44,16 +44,16 @@ class NotesScreen extends StatefulWidget {
   _NotesScreenState createState() => _NotesScreenState();
 }
 
-class _NotesScreenState extends State<NotesScreen> with RouteAware {
+class _NotesScreenState extends State<NotesScreen>
+    with RouteAware, WidgetsBindingObserver {
   final _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock),
+    iOptions: IOSOptions(
+        accountName: 'flutter_secure_storage_service',
+        accessibility: KeychainAccessibility.first_unlock),
   );
   Timer? _refreshTimer;
   StreamSubscription<void>? _notesRefreshSub;
 
-  // For Inbox
   bool isLoadingInbox = true;
   bool isLoadingMoreInbox = false;
   String errorInbox = '';
@@ -62,7 +62,6 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
   int _currentInboxPage = 1;
   bool _hasMoreInbox = true;
 
-  // For Sent
   bool isLoadingSent = true;
   bool isLoadingMoreSent = false;
   String errorSent = '';
@@ -76,37 +75,34 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
   final ScrollController _inboxScrollController = ScrollController();
   final ScrollController _sentScrollController = ScrollController();
 
-  // Key to track if the "skip older unread" on first run is done
   static const _didFirstRunKey = 'did_first_run_skip';
   bool _didFirstRunSkip = false;
 
-  // Variables for implementing an edge swipe to open the drawer
   bool _isDraggingFromEdge = false;
   double _startDragX = 0.0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     if (widget.forceRefresh) {
-      // Delay slightly to ensure everything is initialized
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _fetchInbox(page: 1, clearOld: true);
         _fetchSent(page: 1, clearOld: true);
       });
     }
-    // Checks if the skip had been done
+
     _checkFirstRunSkip().then((_) {
-      // If not done => we do the "two-page fetch & skip" once
       if (!_didFirstRunSkip) {
         _fetchTwoPagesAndSkip().then((_) {
-          // After that, load normal initial data
           _initInboxAndSent();
         });
       } else {
-        // If already done => just do normal flows
         _initInboxAndSent();
       }
     });
+
     _notesRefreshSub = NotesRefreshService().stream.listen((_) {
       if (!mounted) return;
       _fetchInbox(page: 1, clearOld: true);
@@ -114,170 +110,75 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
     });
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    routeObserver.unsubscribe(this);
+    _refreshTimer?.cancel();
+    _inboxScrollController.dispose();
+    _sentScrollController.dispose();
+    _notesRefreshSub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void didPopNext() {
+    if (!_isDialogOpen) {
+      _fetchInboxTwoPagesOnly();
+      _fetchSent(page: 1, clearOld: true);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted && !_isDialogOpen) {
+      errorInbox = '';
+      errorSent = '';
+      _currentInboxPage = 1;
+      _currentSentPage = 1;
+      _hasMoreInbox = true;
+      _hasMoreSent = true;
+      _fetchInbox(page: 1, clearOld: true);
+      _fetchSent(page: 1, clearOld: true);
+      _startPeriodicFetch();
+    }
+  }
+
   Future<void> _checkFirstRunSkip() async {
     final prefs = await SharedPreferences.getInstance();
     _didFirstRunSkip = prefs.getBool(_didFirstRunKey) ?? false;
-    print('[NotesScreen] _didFirstRunSkip? $_didFirstRunSkip');
   }
 
   Future<void> _setFirstRunSkipDone() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_didFirstRunKey, true);
     _didFirstRunSkip = true;
-    print('[NotesScreen] setFirstRunSkipDone => true');
   }
 
-
-  // On first run, fetch up to 2 pages of "inbox" => skip them
   Future<void> _fetchTwoPagesAndSkip() async {
     try {
-      print('[NotesScreen] _fetchTwoPagesAndSkip => first run');
       final combined = <Message>[];
-
-      // fetch 2 pages
       final page1 = await _fetchNotesPageWithoutUI('inbox', 1);
       combined.addAll(page1);
-
       final page2 = await _fetchNotesPageWithoutUI('inbox', 2);
       combined.addAll(page2);
 
-      // gather unread
       final unread = combined.where((m) => m.isUnread).toList();
       if (unread.isNotEmpty) {
         final unreadIds = unread.map((e) => e.id).toList();
         await MessageStorage.addShownNoteIds(unreadIds);
-        print(
-          '[NotesScreen] first-run skip => added ${unreadIds.length} '
-              'unread IDs to shown set',
-        );
       }
-      // Mark the skip done
       await _setFirstRunSkipDone();
-    } catch (e) {
-      print('[NotesScreen] _fetchTwoPagesAndSkip error => $e');
-    }
+    } catch (_) {}
   }
 
-  // A helper that fetches page without messing with UI state
-  Future<List<Message>> _fetchNotesPageWithoutUI(String folder, int page) async {
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    if (cookieA == null || cookieB == null) {
-      throw Exception('No cookies => user not logged in?');
-    }
-
-    const int maxRetries = 10;
-    int retryCount = 0;
-
-    while (retryCount < maxRetries) {
-      try {
-        // Show the "Trying again..." dialog if retrying
-        if (retryCount > 0) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (BuildContext context) => AlertDialog(
-              content: Row(
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(width: 16),
-                  Flexible(
-                    child: Text(
-                      'Trying again... (Attempt ${retryCount + 1}/$maxRetries)',
-                      softWrap: true,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        // Performs the fetch
-        final resp = await http.get(
-          Uri.parse('https://www.furaffinity.net/msg/pms/$page/'),
-          headers: {
-            'Cookie': 'a=$cookieA; b=$cookieB; folder=$folder',
-            'User-Agent': 'MyApp1.0',
-          },
-        );
-
-        // Close the dialog if open
-        if (retryCount > 0) Navigator.of(context).pop();
-
-        // Check response status
-        if (resp.statusCode == 200) {
-          final decoded = utf8.decode(resp.bodyBytes, allowMalformed: true);
-          final doc = html_parser.parse(decoded);
-          final bool isClassic = doc.querySelector('body[data-static-path="/themes/classic"]') != null;
-
-          var noteElements = doc.querySelectorAll('#notes-list .note-list-container');
-          if (noteElements.isEmpty) {
-            if (isClassic) {
-
-              List<dom.Element> classicRows = List.from(doc.querySelectorAll('#notes-list tr.note'));
-              // Check if the last element is not a note (e.g. it doesn't have an input checkbox).
-              if (classicRows.isNotEmpty && classicRows.last.querySelector('input[type="checkbox"]') == null) {
-                classicRows.removeLast();
-              }
-              noteElements = classicRows;
-            }
-
-          }
-
-
-          final List<Message> fetched = [];
-          for (var noteEl in noteElements) {
-            final subject = noteEl.querySelector('.note-list-subject-container .c-noteListItem__subject')?.text.trim()
-                ?? noteEl.querySelector('a.notelink.note-read.read')?.text.trim()
-                ?? noteEl.querySelector('a.notelink.note-unread.unread')?.text.trim()
-                ?? 'No subject';
-
-            final sender = noteEl.querySelector('.c-usernameBlock__displayName .js-displayName')?.text.trim() ??
-                noteEl.querySelector('div.c-usernameBlock.marquee-container a.c-usernameBlock__displayName.js-displayName-block span.js-displayName')?.text.trim() ??
-                'Unknown sender';
-            final date = noteEl.querySelector('.note-list-senddate span')?.attributes['title'] ??
-                noteEl.querySelector('td.alt1.nowrap span.popup_date')?.attributes['title'] ??
-                '';
-            final link = noteEl.querySelector('.note-list-subject-container a')?.attributes['href'] ??
-                noteEl.querySelector('a.notelink.note-unread.unread')?.attributes['href'] ??
-                noteEl.querySelector('a.notelink.note-read.read')?.attributes['href'] ??
-                '';
-
-            final isUnread = (noteEl.querySelector('img.unread') != null ||
-                noteEl.querySelector('img[src*="pms-unread.png"]') != null);
-
-            final id = extractMessageId(link);
-
-            fetched.add(Message(
-              id: id,
-              subject: subject,
-              sender: sender,
-              date: date,
-              link: link,
-              isUnread: isUnread,
-            ));
-          }
-          return fetched;
-        } else if (resp.statusCode == 503) {
-          retryCount++;
-          print('503 error, retrying in 3 seconds... Attempt: $retryCount');
-          await Future.delayed(const Duration(seconds: 3));
-        } else {
-          throw Exception('HTTP error ${resp.statusCode} for page=$page');
-        }
-      } catch (e) {
-        if (retryCount > 0) Navigator.of(context).pop();
-        throw Exception('Error fetching page $page: $e');
-      }
-    }
-
-    throw Exception('Max retries ($maxRetries) exceeded for page=$page');
-  }
-
-  // Normal initialization
   void _initInboxAndSent() {
-    // Listen for scroll
     _inboxScrollController.addListener(() {
       if (_inboxScrollController.position.pixels ==
           _inboxScrollController.position.maxScrollExtent &&
@@ -295,10 +196,8 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
       }
     });
 
-    // Load first page
     _fetchInbox(page: 1);
     _fetchSent(page: 1);
-
     _startPeriodicFetch();
   }
 
@@ -306,54 +205,23 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(const Duration(seconds: 80), (_) {
       if (mounted && !_isDialogOpen) {
-        print('Periodic fetch => ${DateTime.now()}');
         _fetchInboxTwoPagesOnly();
       }
     });
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    routeObserver.subscribe(this, ModalRoute.of(context)!);
-  }
-
-  @override
-  void dispose() {
-    routeObserver.unsubscribe(this);
-    _refreshTimer?.cancel();
-    _inboxScrollController.dispose();
-    _sentScrollController.dispose();
-    _notesRefreshSub?.cancel();
-    super.dispose();
-  }
-
-  @override
-  void didPopNext() {
-    if (!_isDialogOpen) {
-      _fetchInboxTwoPagesOnly();
-      _fetchSent(page: 1, clearOld: true);
-    }
-  }
-
-
-  // 2-page fetch for quick new unread check
   Future<void> _fetchInboxTwoPagesOnly() async {
     try {
       List<Message> newFetched = [];
       newFetched.addAll(await _fetchNotesPageWithoutUI('inbox', 1));
       newFetched.addAll(await _fetchNotesPageWithoutUI('inbox', 2));
-
       await _handleNewUnreadMessages(newFetched);
     } catch (e) {
-      print('[Foreground fetchInboxTwoPagesOnly] error => $e');
+      debugPrint('[Foreground fetchInboxTwoPagesOnly] error => $e');
     }
   }
 
-
-  // Normal pagination
   Future<void> _fetchInbox({int page = 1, bool clearOld = false}) async {
-    print('[_fetchInbox] page=$page');
     if (page == 1) {
       setState(() {
         if (clearOld) inboxMessages.clear();
@@ -383,16 +251,13 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
         });
       }
 
-      // If the page is beyond the initial ones, marks unread messages as shown silently.
       if (page > 2) {
         final unread = newMessages.where((m) => m.isUnread).toList();
         if (unread.isNotEmpty) {
           final unreadIds = unread.map((m) => m.id).toList();
           await MessageStorage.addShownNoteIds(unreadIds);
-          print('[handleNewUnreadMessages] Silently marked unread messages for page $page as shown: $unreadIds');
         }
       } else {
-        // For pages 1 and 2, proceeds with normal notification handling.
         await _handleNewUnreadMessages(newMessages);
       }
     } catch (e) {
@@ -418,7 +283,6 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
   }
 
   Future<void> _fetchSent({int page = 1, bool clearOld = false}) async {
-    print('[_fetchSent] page=$page');
     if (page == 1) {
       setState(() {
         if (clearOld) sentMessages.clear();
@@ -431,11 +295,7 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
       final newMessages = await _fetchNotesPageWithoutUI('sent', page);
       if (page == 1) {
         setState(() {
-          if (clearOld) {
-            sentMessages = newMessages;
-          } else {
-            sentMessages = newMessages;
-          }
+          sentMessages = newMessages;
         });
       } else {
         setState(() {
@@ -473,8 +333,175 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
     _isFetchingMoreSent = false;
   }
 
+  Future<http.Response> _faGet({
+    required String url,
+    required String cookieA,
+    required String cookieB,
+    required String folder,
+  }) async {
+    final ioHttp = HttpClient()
+      ..idleTimeout = Duration.zero
+      ..connectionTimeout = const Duration(seconds: 20);
+    final client = IOClient(ioHttp);
+    try {
+    final resp = await client
+        .get(
+    Uri.parse(url),
+    headers: {
+    'Cookie': 'a=$cookieA; b=$cookieB; folder=$folder',
+    'User-Agent': 'FANotifier1.0',
+    HttpHeaders.connectionHeader: 'close',
+    'Accept':
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    },
+    )
+        .timeout(const Duration(seconds: 30));
+    return resp;
+    } finally {
+    client.close();
+    ioHttp.close(force: true);
+    }
+  }
 
-  // Single note content
+  Future<List<Message>> _fetchNotesPageWithoutUI(String folder, int page) async {
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    if (cookieA == null || cookieB == null) {
+      throw Exception('No cookies => user not logged in?');
+    }
+
+    const int maxRetries = 4;
+    int retry = 0;
+    Duration backoff = const Duration(seconds: 2);
+
+    while (true) {
+      try {
+        final resp = await _faGet(
+          url: 'https://www.furaffinity.net/msg/pms/$page/',
+          cookieA: cookieA,
+          cookieB: cookieB,
+          folder: folder,
+        );
+
+        if (resp.statusCode == 200) {
+          final decoded = utf8.decode(resp.bodyBytes, allowMalformed: true);
+          final doc = html_parser.parse(decoded);
+          final bool isClassic =
+              doc.querySelector('body[data-static-path="/themes/classic"]') !=
+                  null;
+
+          var noteElements =
+          doc.querySelectorAll('#notes-list .note-list-container');
+          if (noteElements.isEmpty) {
+            if (isClassic) {
+              List<dom.Element> classicRows =
+              List.from(doc.querySelectorAll('#notes-list tr.note'));
+              if (classicRows.isNotEmpty &&
+                  classicRows.last
+                      .querySelector('input[type="checkbox"]') ==
+                      null) {
+                classicRows.removeLast();
+              }
+              noteElements = classicRows;
+            }
+          }
+
+          final List<Message> fetched = [];
+          for (var noteEl in noteElements) {
+            final subject = noteEl
+                .querySelector(
+                '.note-list-subject-container .c-noteListItem__subject')
+                ?.text
+                .trim() ??
+                noteEl
+                    .querySelector('a.notelink.note-read.read')
+                    ?.text
+                    .trim() ??
+                noteEl
+                    .querySelector('a.notelink.note-unread.unread')
+                    ?.text
+                    .trim() ??
+                'No subject';
+
+            final sender = noteEl
+                .querySelector(
+                '.c-usernameBlock__displayName .js-displayName')
+                ?.text
+                .trim() ??
+                noteEl
+                    .querySelector(
+                    'div.c-usernameBlock.marquee-container a.c-usernameBlock__displayName.js-displayName-block span.js-displayName')
+                    ?.text
+                    .trim() ??
+                'Unknown sender';
+
+            final date = noteEl
+                .querySelector('.note-list-senddate span')
+                ?.attributes['title'] ??
+                noteEl
+                    .querySelector('td.alt1.nowrap span.popup_date')
+                    ?.attributes['title'] ??
+                '';
+
+            final link = noteEl
+                .querySelector('.note-list-subject-container a')
+                ?.attributes['href'] ??
+                noteEl
+                    .querySelector('a.notelink.note-unread.unread')
+                    ?.attributes['href'] ??
+                noteEl
+                    .querySelector('a.notelink.note-read.read')
+                    ?.attributes['href'] ??
+                '';
+
+            final isUnread = (noteEl.querySelector('img.unread') != null ||
+                noteEl.querySelector('img[src*="pms-unread.png"]') != null);
+
+            final id = extractMessageId(link);
+
+            fetched.add(Message(
+              id: id,
+              subject: subject,
+              sender: sender,
+              date: date,
+              link: link,
+              isUnread: isUnread,
+            ));
+          }
+          return fetched;
+        } else if (resp.statusCode == 503) {
+          retry++;
+          if (retry > maxRetries) {
+            throw Exception('HTTP 503 after $maxRetries retries');
+          }
+          await Future.delayed(backoff);
+          backoff *= 2;
+          continue;
+        } else {
+          throw Exception('HTTP error ${resp.statusCode} for page=$page');
+        }
+      } on TimeoutException catch (e) {
+        retry++;
+        if (retry > maxRetries) {
+          throw Exception('Timeout after $maxRetries retries: $e');
+        }
+        await Future.delayed(backoff);
+        backoff *= 2;
+        continue;
+      } on SocketException catch (e) {
+        retry++;
+        if (retry > maxRetries) {
+          throw Exception('SocketException after $maxRetries retries: $e');
+        }
+        await Future.delayed(backoff);
+        backoff *= 2;
+        continue;
+      } catch (e) {
+        throw Exception('Error fetching page $page: $e');
+      }
+    }
+  }
+
   Future<String> _fetchMessageContent(String link) async {
     final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
@@ -494,25 +521,27 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
         responseType: ResponseType.plain,
         headers: {
           'User-Agent': 'FANotifier1.0',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept':
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          HttpHeaders.connectionHeader: 'close',
         },
-        validateStatus: (status) => status != null && status >= 200 && status < 400,
+        validateStatus: (status) =>
+        status != null && status >= 200 && status < 400,
       ),
     );
     if (resp.statusCode == 200) {
       final doc = html_parser.parse(resp.data);
 
-      // Check for modern layout
-      final modernContentElement = doc.querySelector('.section-body .user-submitted-links');
+      final modernContentElement =
+      doc.querySelector('.section-body .user-submitted-links');
       if (modernContentElement != null) {
-        // Remove scam warning
-        modernContentElement.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
+        modernContentElement
+            .querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
             .forEach((e) => e.remove());
 
         final rawHtml = modernContentElement.innerHtml;
         final innerDoc = html_parser.parse(rawHtml);
 
-        // Replace truncated links
         innerDoc.querySelectorAll('a.auto_link_shortened').forEach((anchor) {
           final fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
           if (fullLink != null) {
@@ -520,25 +549,22 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
           }
         });
 
-        // Convert to plain text
         final updatedText = innerDoc.body?.text.trim() ?? '';
         final newestContent = extractNewestContent(updatedText);
         return newestContent.isNotEmpty ? newestContent : 'No content';
       } else {
-        // Classic layout approach:
         final classicContentElement = doc.querySelector('td.noteContent.alt1');
         if (classicContentElement != null) {
-          // Remove scam warning
-          classicContentElement.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
+          classicContentElement
+              .querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
               .forEach((e) => e.remove());
-
-          // Remove the header block (e.g., "Sent By:")
-          classicContentElement.querySelector('span[style*="color: #999999"]')?.remove();
+          classicContentElement
+              .querySelector('span[style*="color: #999999"]')
+              ?.remove();
 
           final rawHtml = classicContentElement.innerHtml;
           final innerDoc = html_parser.parse(rawHtml);
 
-          // Replace truncated links
           innerDoc.querySelectorAll('a.auto_link_shortened').forEach((anchor) {
             final fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
             if (fullLink != null) {
@@ -546,7 +572,6 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
             }
           });
 
-          // Convert to plain text
           final updatedText = innerDoc.body?.text.trim() ?? '';
           final newestContent = extractNewestContent(updatedText);
           return newestContent.isNotEmpty ? newestContent : 'No content';
@@ -558,9 +583,6 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
     }
   }
 
-
-
-  // handle new unread => notifications
   Future<void> _handleNewUnreadMessages(List<Message> fetchedInbox) async {
     try {
       final shownIds = await MessageStorage.getShownNoteIds();
@@ -568,13 +590,11 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
       if (unread.isEmpty) return;
 
       if (!_didFirstRunSkip) {
-        // We have not done the skip => do not show anything
-        print('[handleNewUnreadMessages] _didFirstRunSkip=false => ignoring');
         return;
       }
 
-      // normal run
-      final newUnread = unread.where((m) => !shownIds.contains(m.id)).toList();
+      final newUnread =
+      unread.where((m) => !shownIds.contains(m.id)).toList();
       if (newUnread.isEmpty) return;
 
       for (var msg in newUnread) {
@@ -588,29 +608,18 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
             "notes",
           );
 
-          // re-mark unread
           await _markAsUnreadWithoutRefetch(msg);
-        } catch (e) {
-          print('[handleNewUnreadMessages] err => $e');
-        }
+        } catch (_) {}
       }
-      // add them to shown
       final newIds = newUnread.map((m) => m.id).toList();
       await MessageStorage.addShownNoteIds(newIds);
-      print('[handleNewUnreadMessages] Notified => $newIds');
-    } catch (e) {
-      print('Error handleNewUnreadMessages => $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> _markAsUnreadWithoutRefetch(Message msg) async {
     final String msgId = msg.id;
-    if (msgId.isEmpty) {
-      print('Invalid message ID');
-      return;
-    }
+    if (msgId.isEmpty) return;
 
-    // Determine page number: classic URLs always use page 1, and for modern URLs it extracts the page number from the URL.
     int pageNum;
     if (msg.link.contains('/viewmessage/')) {
       pageNum = 1;
@@ -622,14 +631,11 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
         pageNum = 1;
       }
     }
-    print("Marking message as unread using id: $msgId on page: $pageNum");
 
     try {
       final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
       final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-      if (cookieA == null || cookieB == null) {
-        throw Exception('No cookies => markAsUnreadWithoutRefetch fail');
-      }
+      if (cookieA == null || cookieB == null) return;
 
       final dio = Dio();
       final cookieJar = CookieJar();
@@ -639,13 +645,11 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
         [Cookie('a', cookieA), Cookie('b', cookieB)],
       );
 
-
       final Map<String, dynamic> formData = {
         'manage_notes': '1',
         'items[]': msgId,
         'move_to': 'unread',
       };
-
 
       final response = await dio.post(
         'https://www.furaffinity.net/msg/pms/$pageNum/$msgId/',
@@ -653,32 +657,29 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
         options: Options(
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            'Referer': 'https://www.furaffinity.net/msg/pms/$pageNum/$msgId/',
+            'Referer':
+            'https://www.furaffinity.net/msg/pms/$pageNum/$msgId/',
             'Origin': 'https://www.furaffinity.net',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept':
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8',
+            HttpHeaders.connectionHeader: 'close',
             'Cache-Control': 'max-age=0',
             'DNT': '1',
             'Upgrade-Insecure-Requests': '1',
           },
           followRedirects: false,
-          validateStatus: (s) => s != null && ((s >= 200 && s < 400) || s == 302),
+          validateStatus: (s) =>
+          s != null && ((s >= 200 && s < 400) || s == 302),
         ),
       );
 
-      if (response.statusCode == 302 || response.statusCode == 200) {
-        print('[_markAsUnreadWithoutRefetch] success for $msgId');
-      } else {
+      if (response.statusCode != 302 && response.statusCode != 200) {
         throw Exception('Failed to mark as unread: ${response.statusCode}');
       }
-    } catch (e) {
-      print('Error in _markAsUnreadWithoutRefetch: $e');
-    }
+    } catch (_) {}
   }
 
-
-
-  // UI BUILD
   Widget _buildMessageList({
     required bool isLoading,
     required bool isLoadingMore,
@@ -690,7 +691,9 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
     required Function loadMore,
   }) {
     if (isLoading && messages.isEmpty) {
-      return const Center(child: PulsatingLoadingIndicator(size: 108.0, assetPath: 'assets/icons/fathemed.png'));
+      return const Center(
+          child: PulsatingLoadingIndicator(
+              size: 108.0, assetPath: 'assets/icons/fathemed.png'));
     } else if (errorMessage.isNotEmpty && messages.isEmpty) {
       return Center(
         child: Text(
@@ -725,7 +728,6 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
           itemCount: messages.length + (hasMore ? 1 : 0),
           itemBuilder: (context, index) {
             if (index == messages.length) {
-              // Shows loading indicator at the end with extra padding
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 44.0),
                 child: Center(
@@ -739,7 +741,6 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
             final msg = messages[index];
             return GestureDetector(
               onTap: () {
-                // Now captures the pop result when returning from MessageDetailScreen
                 Navigator.of(context)
                     .push(MaterialPageRoute(
                   builder: (_) => MessageDetailScreen(
@@ -850,21 +851,21 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
   Widget build(BuildContext context) {
     final isLoading = isLoadingInbox || isLoadingSent;
 
-    // Shows a loading indicator if both inbox and sent messages are loading
     if (isLoading) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Notes'),
-          centerTitle: true,
+          appBar: AppBar(
+            title: const Text('Notes'),
+            centerTitle: true,
+            backgroundColor: Colors.black,
+          ),
           backgroundColor: Colors.black,
-        ),
-        backgroundColor: Colors.black,
-        body: const Center(child: PulsatingLoadingIndicator(size: 88.0, assetPath: 'assets/icons/fathemed.png'))
-      );
+          body: const Center(
+              child: PulsatingLoadingIndicator(
+                  size: 88.0, assetPath: 'assets/icons/fathemed.png')));
     }
 
     return DefaultTabController(
-      length: 2, // Number of tabs
+      length: 2,
       child: Stack(
         children: [
           Scaffold(
@@ -893,47 +894,49 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
             body: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 0.0),
               child: Builder(
-                builder: (innerContext) => NotificationListener<OverscrollNotification>(
-                  onNotification: (OverscrollNotification notification) {
-                    final tabIndex = DefaultTabController.of(innerContext)?.index ?? 0;
-                    if (tabIndex == 0 &&
-                        notification.metrics.axis == Axis.horizontal &&
-                        notification.overscroll < 0) {
-                      widget.drawerKey.currentState?.openDrawer();
-                      return true;
-                    }
+                builder: (innerContext) =>
+                    NotificationListener<OverscrollNotification>(
+                      onNotification: (OverscrollNotification notification) {
+                        final tabIndex =
+                            DefaultTabController.of(innerContext)?.index ?? 0;
+                        if (tabIndex == 0 &&
+                            notification.metrics.axis == Axis.horizontal &&
+                            notification.overscroll < 0) {
+                          widget.drawerKey.currentState?.openDrawer();
+                          return true;
+                        }
 
-                    return false;
-                  },
-                  child: TabBarView(
-                    children: [
-                      _buildMessageList(
-                        isLoading: isLoadingInbox,
-                        isLoadingMore: isLoadingMoreInbox,
-                        errorMessage: errorInbox,
-                        messages: inboxMessages,
-                        folder: 'inbox',
-                        scrollController: _inboxScrollController,
-                        hasMore: _hasMoreInbox,
-                        loadMore: _loadMoreInbox,
+                        return false;
+                      },
+                      child: TabBarView(
+                        children: [
+                          _buildMessageList(
+                            isLoading: isLoadingInbox,
+                            isLoadingMore: isLoadingMoreInbox,
+                            errorMessage: errorInbox,
+                            messages: inboxMessages,
+                            folder: 'inbox',
+                            scrollController: _inboxScrollController,
+                            hasMore: _hasMoreInbox,
+                            loadMore: _loadMoreInbox,
+                          ),
+                          _buildMessageList(
+                            isLoading: isLoadingSent,
+                            isLoadingMore: isLoadingMoreSent,
+                            errorMessage: errorSent,
+                            messages: sentMessages,
+                            folder: 'sent',
+                            scrollController: _sentScrollController,
+                            hasMore: _hasMoreSent,
+                            loadMore: _loadMoreSent,
+                          ),
+                        ],
                       ),
-                      _buildMessageList(
-                        isLoading: isLoadingSent,
-                        isLoadingMore: isLoadingMoreSent,
-                        errorMessage: errorSent,
-                        messages: sentMessages,
-                        folder: 'sent',
-                        scrollController: _sentScrollController,
-                        hasMore: _hasMoreSent,
-                        loadMore: _loadMoreSent,
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
               ),
             ),
             floatingActionButton: FloatingActionButton(
-              backgroundColor: Color(0xFFE09321),
+              backgroundColor: const Color(0xFFE09321),
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => NewMessageScreen()),
@@ -944,8 +947,6 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
             ),
             backgroundColor: Colors.black,
           ),
-
-          // Positioned GestureDetector for manual dragging from left edge
           Positioned(
             left: 0,
             top: 0,
@@ -1001,10 +1002,8 @@ class _NotesScreenState extends State<NotesScreen> with RouteAware {
       ),
     );
   }
-
 }
 
-// PREVIEW DIALOG
 class PreviewDialogContent extends StatefulWidget {
   final Message message;
   final String folder;
@@ -1023,9 +1022,9 @@ class PreviewDialogContent extends StatefulWidget {
 
 class _PreviewDialogContentState extends State<PreviewDialogContent> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock),
+    iOptions: IOSOptions(
+        accountName: 'flutter_secure_storage_service',
+        accessibility: KeychainAccessibility.first_unlock),
   );
   late Dio _dio;
   final CookieJar _cookieJar = CookieJar();
@@ -1049,15 +1048,13 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
     super.initState();
     _initializeDio();
     _fetchMessageDetails();
-
   }
 
   void _initializeDio() {
     _dio = Dio();
     _dio.interceptors.add(CookieManager(_cookieJar));
     _dio.options.headers['User-Agent'] =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-        'Chrome/130.0.0.0 Safari/537.36';
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
     _dio.options.followRedirects = true;
     _dio.options.validateStatus =
         (status) => status != null && status >= 200 && status < 400;
@@ -1069,9 +1066,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
     final cookies = <Cookie>[];
     if (cookieA != null) cookies.add(Cookie('a', cookieA));
     if (cookieB != null) cookies.add(Cookie('b', cookieB));
-
     cookies.add(Cookie('folder', widget.folder));
-
     final uri = Uri.parse('https://www.furaffinity.net');
     _cookieJar.saveFromResponse(uri, cookies);
   }
@@ -1079,13 +1074,14 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
   Future<void> _fetchMessageDetails() async {
     try {
       await _loadCookies();
-      print("preview debug link: ${widget.message.link}");
       final response = await _dio.get(
         'https://www.furaffinity.net${widget.message.link}',
         options: Options(
           responseType: ResponseType.plain,
           headers: {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept':
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            HttpHeaders.connectionHeader: 'close',
           },
         ),
       );
@@ -1094,43 +1090,40 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
         final decodedBody = response.data;
         final document = html_parser.parse(decodedBody);
 
-
         _isClassic = document.querySelector(
           'body[data-static-path="/themes/classic"][id="pageid-messagecenter-pms-view"]',
-        ) != null;
-        print("Layout detected: ${_isClassic ? 'Classic' : 'Modern'}");
-
-
+        ) !=
+            null;
 
         String extractedId;
         if (_isClassic) {
-          final match = RegExp(r'/viewmessage/(\d+)/').firstMatch(widget.message.link);
-          print("Classic URL match: $match");
+          final match =
+          RegExp(r'/viewmessage/(\d+)/').firstMatch(widget.message.link);
           if (match != null) {
             extractedId = match.group(1)!;
             pageNumber = 1;
           } else {
-            throw Exception("Message ID could not be extracted from classic URL.");
+            throw Exception(
+                "Message ID could not be extracted from classic URL.");
           }
         } else {
-          final match = RegExp(r'/msg/pms/(\d+)/(\d+)/').firstMatch(widget.message.link);
-          print("Modern URL match: $match");
+          final match =
+          RegExp(r'/msg/pms/(\d+)/(\d+)/').firstMatch(widget.message.link);
           if (match != null) {
             pageNumber = int.parse(match.group(1)!);
             extractedId = match.group(2)!;
           } else {
-            throw Exception("Message ID could not be extracted from modern URL.");
+            throw Exception(
+                "Message ID could not be extracted from modern URL.");
           }
         }
-        print("Extracted messageId: $extractedId, pageNumber: $pageNumber");
 
-
-        // Extracting sender link and username.
         final tempSenderLink = document
             .querySelector('.message-center-note-information .addresses a')
             ?.attributes['href'] ??
             document
-                .querySelector('div.message-center-note-information.addresses a')
+                .querySelector(
+                'div.message-center-note-information.addresses a')
                 ?.attributes['href'];
         if (tempSenderLink != null && tempSenderLink.isNotEmpty) {
           senderLink = tempSenderLink;
@@ -1140,19 +1133,20 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
         } else {
           senderUsername = 'Unknown';
         }
-        print("Sender: $senderUsername, senderLink: $senderLink");
-
 
         setState(() {
           subject = document.querySelector('#message h2')?.text.trim() ??
               document.querySelector('td.cat font b')?.text.trim() ??
               'No subject';
 
-          sender = document.querySelector('.message-center-note-information .addresses a')
+          sender = document
+              .querySelector(
+              '.message-center-note-information .addresses a')
               ?.text
               .trim() ??
               document
-                  .querySelector('a.c-usernameBlock__displayName.js-displayName-block span.js-displayName')
+                  .querySelector(
+                  'a.c-usernameBlock__displayName.js-displayName-block span.js-displayName')
                   ?.text
                   .trim() ??
               'Unknown sender';
@@ -1181,28 +1175,35 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
                 'Unknown recipient';
           }
 
-          sentDate = document.querySelector('.popup_date')?.attributes['title'] ?? 'Unknown date';
-          avatarUrl = document.querySelector('.message-center-note-information.avatar img')
+          sentDate = document
+              .querySelector('.popup_date')
+              ?.attributes['title'] ??
+              'Unknown date';
+          avatarUrl = document
+              .querySelector(
+              '.message-center-note-information.avatar img')
               ?.attributes['src'] ??
               '';
 
-          // Untruncates the note content.
-          final modernElem = document.querySelector('.section-body .user-submitted-links');
-          final classicContentElement = document.querySelector('td.noteContent.alt1');
+          final modernElem =
+          document.querySelector('.section-body .user-submitted-links');
+          final classicContentElement =
+          document.querySelector('td.noteContent.alt1');
           String? modernHtml;
           String? classicHtml;
           if (modernElem != null) {
-            // Remove scam warning from modern layout content
-            modernElem.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
+            modernElem
+                .querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
                 .forEach((e) => e.remove());
             modernHtml = modernElem.innerHtml;
           }
           if (classicContentElement != null) {
-            // Remove scam warning from classic layout content
-            classicContentElement.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
+            classicContentElement
+                .querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
                 .forEach((e) => e.remove());
-            // Removes the header block
-            classicContentElement.querySelector('span[style*="color: #999999"]')?.remove();
+            classicContentElement
+                .querySelector('span[style*="color: #999999"]')
+                ?.remove();
             classicHtml = classicContentElement.innerHtml;
           }
           final rawHtml = modernHtml ?? classicHtml;
@@ -1211,51 +1212,40 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
           } else {
             final innerDoc = html_parser.parse(rawHtml);
             innerDoc.querySelectorAll('a.auto_link_shortened').forEach((anchor) {
-              final fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
+              final fullLink =
+                  anchor.attributes['title'] ?? anchor.attributes['href'];
               if (fullLink != null) {
                 anchor.innerHtml = fullLink;
               }
             });
             final updatedText = innerDoc.body?.text.trim() ?? '';
-            messageContent = updatedText.isNotEmpty ? updatedText : 'No content';
+            messageContent =
+            updatedText.isNotEmpty ? updatedText : 'No content';
           }
           isLoading = false;
         });
 
-        print("Fetched details: subject: $subject, sender: $sender, recipient: $recipient, "
-            "sentDate: $sentDate, avatarUrl: $avatarUrl, content (first 50 chars): "
-            "${messageContent.substring(0, messageContent.length > 50 ? 50 : messageContent.length)}");
-
         if (widget.onMarkedUnread != null) {
-          print("onMarkedUnread callback is provided. Invoking callback now...");
           widget.onMarkedUnread!();
-        } else {
-          print("No onMarkedUnread callback provided.");
         }
       } else {
         setState(() {
           errorMessage = 'Failed to fetch message: ${response.statusCode}';
           isLoading = false;
         });
-        print("Response status code: ${response.statusCode}");
       }
     } catch (e) {
       setState(() {
         errorMessage = 'An error occurred: $e';
         isLoading = false;
       });
-      print("Error in _fetchMessageDetails: $e");
     }
   }
-
-
-
 
   Future<void> _handleFALink(BuildContext context, String url) async {
     final Uri uri = Uri.parse(url);
     final String urlToMatch = uri.toString();
 
-    // 1. Gallery Folder Link
     final RegExp galleryFolderRegex = RegExp(
       r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
     );
@@ -1281,12 +1271,12 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
       return;
     }
 
-    // 2. User Link
     final RegExp userRegex = RegExp(
       r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$',
     );
     if (userRegex.hasMatch(urlToMatch)) {
-      final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
+      final String tappedUsername =
+      userRegex.firstMatch(urlToMatch)!.group(1)!;
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -1296,7 +1286,6 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
       return;
     }
 
-    // 3. Journal Link:
     final RegExp journalRegex = RegExp(
       r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
     );
@@ -1307,7 +1296,6 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
       final String? journalId = match.group(2);
 
       if (username != null) {
-        // Matched: /journals/username/
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -1318,7 +1306,6 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
           ),
         );
       } else if (journalId != null) {
-        // Matched: /journal/12345/
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -1330,7 +1317,6 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
       return;
     }
 
-    // 4. Submission/View Link
     final RegExp viewRegex = RegExp(
       r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$',
     );
@@ -1348,7 +1334,6 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
       return;
     }
 
-    // 5. Fallback: external link
     await launchUrlString(url, mode: LaunchMode.externalApplication);
   }
 
@@ -1368,7 +1353,8 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
         child: Center(
           child: Text(
             errorMessage,
-            style: const TextStyle(color: Colors.red, fontSize: 16),
+            style:
+            const TextStyle(color: Colors.red, fontSize: 16),
             textAlign: TextAlign.center,
           ),
         ),
@@ -1381,38 +1367,37 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
           children: [
             Row(
               children: [
-                // hide avatar if page is Classic
                 if (!_isClassic)
-          GestureDetector(
-          onTap: () {
-    if (senderLink.isNotEmpty) {
-    _handleFALink(context, senderLink);
-    }
-    },
-      child: Container(
-        width: 60,
-        height: 60,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade700,
-          borderRadius: BorderRadius.zero,
-        ),
-        child: avatarUrl.isNotEmpty
-            ? CachedNetworkImage(
-          imageUrl: 'https:$avatarUrl',
-          fit: BoxFit.cover,
-          errorWidget: (ctx, url, error) => Image.asset(
-            'assets/images/defaultpic.gif',
-            fit: BoxFit.cover,
-          ),
-        )
-            : Image.asset(
-          'assets/images/defaultpic.gif',
-          fit: BoxFit.cover,
-        ),
-      ),
-    )
-
-    else
+                  GestureDetector(
+                    onTap: () {
+                      if (senderLink.isNotEmpty) {
+                        _handleFALink(context, senderLink);
+                      }
+                    },
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade700,
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      child: avatarUrl.isNotEmpty
+                          ? CachedNetworkImage(
+                        imageUrl: 'https:$avatarUrl',
+                        fit: BoxFit.cover,
+                        errorWidget: (ctx, url, error) =>
+                            Image.asset(
+                              'assets/images/defaultpic.gif',
+                              fit: BoxFit.cover,
+                            ),
+                      )
+                          : Image.asset(
+                        'assets/images/defaultpic.gif',
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  )
+                else
                   const SizedBox.shrink(),
                 const SizedBox(width: 16),
                 Expanded(
@@ -1476,7 +1461,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
               children: [
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFFE09321),
+                    backgroundColor: const Color(0xFFE09321),
                   ),
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('Close'),

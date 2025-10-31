@@ -54,7 +54,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isLoggedIn = false;
   bool _forceNotesRefresh = false;
 
-  // Guard to prevent fetching the profile more than once.
   bool _profileFetched = false;
 
   Timer? _elementCheckTimer;
@@ -66,14 +65,12 @@ class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey<DrawerUserControllerState> _drawerKey =
   GlobalKey<DrawerUserControllerState>();
 
-
   Map<String, String> browseFilters = {
     'cat': '1',
     'atype': '1',
     'species': '1',
     'gender': '0',
   };
-
 
   Map<String, String> searchFilters = {
     'order-by': 'relevancy',
@@ -98,9 +95,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   InAppWebViewController? _webViewController;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock),
+    iOptions: IOSOptions(
+        accountName: 'flutter_secure_storage_service',
+        accessibility: KeychainAccessibility.first_unlock),
   );
 
   final String loginUrl = 'https://www.furaffinity.net/login';
@@ -118,6 +115,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final GlobalKey<SubmissionsScreenState> _submissionsKey =
   GlobalKey<SubmissionsScreenState>();
+
+  // Gate login SnackBar to only show once per real login
+  bool _loginSnackShownThisRun = false;
 
   @override
   void initState() {
@@ -153,7 +153,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _handleNavProviderChange() {
     if (!mounted) return;
 
-    final navProvider = Provider.of<NotificationNavigationProvider>(context, listen: false);
+    final navProvider =
+    Provider.of<NotificationNavigationProvider>(context, listen: false);
     final int? next = navProvider.takeTargetIndex();
     if (next == null) return;
     if (next == _selectedIndex) return;
@@ -162,7 +163,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectedIndex = next;
       if (next == 4) _forceNotesRefresh = true;
     });
-
   }
 
   Future<void> _handlePendingNavigation() async {
@@ -171,9 +171,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final String? pendingPayload = prefs.getString('pending_navigation');
     if (pendingPayload == null) return;
 
-    final navProvider = Provider.of<NotificationNavigationProvider>(context, listen: false);
-    final bool isNotes = pendingPayload.startsWith('note_') || pendingPayload.contains('DrawerIndex.Notes');
-    final bool isActivities = pendingPayload.startsWith('activity_') || pendingPayload.contains('DrawerIndex.Notifications');
+    final navProvider =
+    Provider.of<NotificationNavigationProvider>(context, listen: false);
+    final bool isNotes = pendingPayload.startsWith('note_') ||
+        pendingPayload.contains('DrawerIndex.Notes');
+    final bool isActivities = pendingPayload.startsWith('activity_') ||
+        pendingPayload.contains('DrawerIndex.Notifications');
 
     if (isNotes) {
       navProvider.setTargetIndex(4);
@@ -195,23 +198,16 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.remove('pending_navigation');
   }
 
-
-
   Future<void> _initializeAndLoadLoginState() async {
     await _loadLoginState();
     if (isLoggedIn) {
       await _setCookiesFromPrefs();
       bool validSession = await _validateSession();
-      if (!validSession) {
-        await _saveLoginState(false);
-        setState(() {
-          isLoggedIn = false;
-        });
-        return;
-      }
+
       setState(() {
         isCheckingLoginStatus = false;
       });
+
       if (!_profileFetched) {
         await _fetchUserProfile();
         _profileFetched = true;
@@ -223,32 +219,38 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+
   Future<bool> _validateSession() async {
     try {
       final profile = await _faService.fetchUserProfile();
       return profile != null;
+    } on SocketException catch (_) {
+      debugPrint('[Session] SocketException → assume still logged in');
+      return true;
+    } on TimeoutException catch (_) {
+      debugPrint('[Session] TimeoutException → assume still logged in');
+      return true;
     } catch (e) {
-      return false;
+      debugPrint('[Session] Unknown error "$e" → assume still logged in');
+      return true;
     }
   }
 
   Future<void> _fetchUserProfile() async {
     try {
-      UserProfile? profile = await _faService.fetchUserProfile(context: context);
+      UserProfile? profile =
+      await _faService.fetchUserProfile(context: context);
       setState(() {
         _userProfile = profile;
         isLoadingProfile = false;
       });
     } catch (e) {
-      print("Error fetching user profile: $e");
-      await _saveLoginState(false);
+      debugPrint("Error fetching user profile: $e");
       setState(() {
-        isLoggedIn = false;
         isLoadingProfile = false;
       });
     }
   }
-
 
   Future<void> _saveLoginState(bool value) async {
     final prefs = await SharedPreferences.getInstance();
@@ -274,25 +276,25 @@ class _HomeScreenState extends State<HomeScreen> {
       NotificationSettingsProvider settings,
       FANotificationService faNotificationService,
       ) {
-    // track for debug if you want, but don't trigger anything here
     _previousSum = faNotificationService.sections.fold<int>(
-      0, (sum, s) => sum + s.items.length,
+      0,
+          (sum, s) => sum + s.items.length,
     );
 
     int visible = 0;
     for (final section in faNotificationService.sections) {
       final title = section.title;
       final n = section.items.length;
-      if (title.contains('Watches') && settings.watchersEnabled)     visible += n;
-      if (title.contains('Journals') && settings.journalsEnabled)    visible += n;
-      if (title.contains('Submission Comments') && settings.commentsEnabled) visible += n;
-      if (title.contains('Journal Comments') && settings.commentsEnabled)    visible += n;
-      if (title.contains('Favorites') && settings.favoritesEnabled)  visible += n;
-      if (title.contains('Shouts') && settings.shoutsEnabled)        visible += n;
+      if (title.contains('Watches') && settings.watchersEnabled) visible += n;
+      if (title.contains('Journals') && settings.journalsEnabled) visible += n;
+      if (title.contains('Submission Comments') &&
+          settings.commentsEnabled) visible += n;
+      if (title.contains('Journal Comments') && settings.commentsEnabled) visible += n;
+      if (title.contains('Favorites') && settings.favoritesEnabled) visible += n;
+      if (title.contains('Shouts') && settings.shoutsEnabled) visible += n;
     }
     return visible;
   }
-
 
   void _onNotificationsUpdated(Notifications notifications) {
     setState(() {
@@ -300,12 +302,8 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-
-
   void _onBottomNavigationItemTapped(int index) {
-
     _drawerKey.currentState?.closeDrawer();
-
 
     setState(() {
       _selectedIndex = index;
@@ -339,7 +337,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       onWebViewCreated: (InAppWebViewController controller) {
         _webViewController = controller;
-
       },
       onLoadStart: (InAppWebViewController controller, WebUri? url) async {
         print('WebView Loading Started: ${url?.toString() ?? "Unknown URL"}');
@@ -348,10 +345,10 @@ class _HomeScreenState extends State<HomeScreen> {
           await _injectLoginCss();
         }
       },
-      onReceivedHttpError:
-          (InAppWebViewController controller, WebResourceRequest request,
-          WebResourceResponse response) async {
-        print("Received HTTP ${response.statusCode} error: ${response.reasonPhrase}");
+      onReceivedHttpError: (InAppWebViewController controller,
+          WebResourceRequest request, WebResourceResponse response) async {
+        print(
+            "Received HTTP ${response.statusCode} error: ${response.reasonPhrase}");
         if (response.statusCode == 403) {
           _cancelStabilityTimer();
           return;
@@ -364,7 +361,6 @@ class _HomeScreenState extends State<HomeScreen> {
           await _injectLoginCss();
         }
 
-
         if (pageUrl.startsWith("https://www.furaffinity.net/") ||
             pageUrl == "https://www.furaffinity.net") {
           final cookies = await CookieManager.instance().getCookies(
@@ -373,17 +369,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
           final aCookie = cookies.firstWhereOrNull((c) => c.name == 'a');
           if (aCookie != null && aCookie.value.isNotEmpty) {
-
-
             for (var c in cookies) {
-              await _secureStorage.write(key: 'fa_cookie_${c.name}', value: c.value);
+              await _secureStorage.write(
+                  key: 'fa_cookie_${c.name}', value: c.value);
             }
+
+            // Read previous login state BEFORE we set true
+            final prefs = await SharedPreferences.getInstance();
+            final wasLoggedIn = prefs.getBool('isLoggedIn') ?? false;
 
             await _saveLoginState(true);
             setState(() => isLoggedIn = true);
 
             await _setSfwCookieToNSFW();
-
 
             _cancelStabilityTimer();
 
@@ -391,17 +389,18 @@ class _HomeScreenState extends State<HomeScreen> {
               _profileFetched = true;
               await _fetchUserProfile();
             }
-            ScaffoldMessenger.of(context).clearSnackBars();
 
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Logged in successfully!'),
-                backgroundColor: Colors.green,
-              ),
-            );
-
+            if (!wasLoggedIn && !_loginSnackShownThisRun && mounted) {
+              _loginSnackShownThisRun = true;
+              ScaffoldMessenger.of(context).clearSnackBars();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Logged in successfully!'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
           } else {
-
             if (!isLoggedIn) {
               _startElementStabilityCheck();
             }
@@ -410,8 +409,6 @@ class _HomeScreenState extends State<HomeScreen> {
           _cancelStabilityTimer();
         }
       },
-
-
       shouldOverrideUrlLoading: (controller, navigationAction) async {
         var uri = navigationAction.request.url;
         print("Navigating to: $uri");
@@ -427,7 +424,8 @@ class _HomeScreenState extends State<HomeScreen> {
           } else {
             print('Could not launch $uri');
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Could not open link. Please try again.')),
+              const SnackBar(
+                  content: Text('Could not open link. Please try again.')),
             );
           }
         }
@@ -439,73 +437,75 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-
   void _startElementStabilityCheck() {
     _cancelStabilityTimer();
-    _elementCheckTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) async {
-      if (_webViewController == null) return;
+    _elementCheckTimer =
+        Timer.periodic(const Duration(milliseconds: 500), (timer) async {
+          if (_webViewController == null) return;
 
+          String? html = await _webViewController!
+              .evaluateJavascript(source: "document.documentElement.outerHTML;");
 
-      String? html = await _webViewController!
-          .evaluateJavascript(source: "document.documentElement.outerHTML;");
+          bool isClassicTheme =
+              html != null && html.contains('data-static-path=\"/themes/classic\"');
 
+          bool usernameElementFound = isClassicTheme &&
+              RegExp(r'<(?:a|span) id="my-username"').hasMatch(html);
 
-      bool isClassicTheme = html != null && html.contains('data-static-path=\"/themes/classic\"');
+          bool avatarElementFound =
+              !isClassicTheme && html != null && html.contains('loggedin_user_avatar');
 
+          bool elementFound = usernameElementFound || avatarElementFound;
 
-      bool usernameElementFound = isClassicTheme && RegExp(r'<(?:a|span) id="my-username"').hasMatch(html);
+          if (elementFound) {
+            if (_firstTimeElementFound == null) {
+              _firstTimeElementFound = DateTime.now();
+            } else {
+              final elapsed =
+              DateTime.now().difference(_firstTimeElementFound!);
+              if (elapsed >= const Duration(seconds: 1)) {
+                setState(() {
+                  _mainPageStable = true;
+                  isLoggedIn = true;
+                });
+                _cancelStabilityTimer();
 
+                final cookies = await CookieManager.instance().getCookies(
+                  url: WebUri("https://www.furaffinity.net"),
+                );
+                for (var c in cookies) {
+                  await _secureStorage.write(
+                      key: 'fa_cookie_${c.name}', value: c.value);
+                }
 
+                final prefs = await SharedPreferences.getInstance();
+                final wasLoggedIn = prefs.getBool('isLoggedIn') ?? false;
 
-      bool avatarElementFound = !isClassicTheme && html != null && html.contains('loggedin_user_avatar');
+                await _saveLoginState(true);
+                await _setSfwCookieToNSFW();
 
-      bool elementFound = usernameElementFound || avatarElementFound;
+                if (!_profileFetched) {
+                  _profileFetched = true;
+                  await _fetchUserProfile();
+                }
 
-      if (elementFound) {
-        if (_firstTimeElementFound == null) {
-          _firstTimeElementFound = DateTime.now();
-        } else {
-          final elapsed = DateTime.now().difference(_firstTimeElementFound!);
-          if (elapsed >= const Duration(seconds: 1)) {
-            setState(() {
-              _mainPageStable = true;
-              isLoggedIn = true;
-            });
-            _cancelStabilityTimer();
-
-            final cookies = await CookieManager.instance().getCookies(
-              url: WebUri("https://www.furaffinity.net"),
-            );
-            for (var c in cookies) {
-              await _secureStorage.write(key: 'fa_cookie_${c.name}', value: c.value);
+                if (!wasLoggedIn && !_loginSnackShownThisRun && mounted) {
+                  _loginSnackShownThisRun = true;
+                  ScaffoldMessenger.of(context).clearSnackBars();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Logged in successfully!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              }
             }
-
-            await _saveLoginState(true);
-
-            await _setSfwCookieToNSFW();
-
-            if (!_profileFetched) {
-              _profileFetched = true;
-              await _fetchUserProfile();
-            }
-            ScaffoldMessenger.of(context).clearSnackBars();
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Logged in successfully!'),
-                backgroundColor: Colors.green,
-              ),
-            );
+          } else {
+            _firstTimeElementFound = null;
           }
-        }
-      } else {
-
-        _firstTimeElementFound = null;
-      }
-    });
+        });
   }
-
-
 
   void _cancelStabilityTimer() {
     _elementCheckTimer?.cancel();
@@ -515,7 +515,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildMainAppScreen(BuildContext context) {
     if (isLoadingProfile || _userProfile == null) {
-      return const Center(child: PulsatingLoadingIndicator(size: 108.0, assetPath: 'assets/icons/fathemed.png'));
+      return const Center(
+          child: PulsatingLoadingIndicator(
+              size: 108.0, assetPath: 'assets/icons/fathemed.png'));
     }
     return DrawerUserController(
       key: _drawerKey,
@@ -558,7 +560,6 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     }
-
   }
 
   Widget _buildSelectedScreen() {
@@ -590,7 +591,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     MaterialPageRoute(
                       builder: (context) => FiltersScreen(
                         selectedFilters: browseFilters,
-
                       ),
                     ),
                   );
@@ -641,7 +641,8 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => const UploadSubmissionScreen()),
+        MaterialPageRoute(
+            builder: (context) => const UploadSubmissionScreen()),
       ).then((_) {
         if (!mounted) return;
         setState(() {
@@ -686,7 +687,9 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: PulsatingLoadingIndicator(size: 108.0, assetPath: 'assets/icons/fathemed.png')),
+      builder: (context) => const Center(
+          child: PulsatingLoadingIndicator(
+              size: 108.0, assetPath: 'assets/icons/fathemed.png')),
     );
 
     try {
@@ -702,7 +705,8 @@ class _HomeScreenState extends State<HomeScreen> {
       await DefaultCacheManager().emptyCache();
       debugPrint('[Logout] Image cache cleared.');
 
-      final faNotificationService = Provider.of<FANotificationService>(context, listen: false);
+      final faNotificationService =
+      Provider.of<FANotificationService>(context, listen: false);
       faNotificationService.clearAllNotifications();
 
       setState(() {
@@ -719,15 +723,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (BuildContext context) => const HomeScreen()),
+        MaterialPageRoute(
+            builder: (BuildContext context) => const HomeScreen()),
             (route) => false,
       );
-
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Logged out successfully')),
       );
-
     } catch (e) {
       Navigator.of(context).pop();
       debugPrint('[Logout] Error: $e');
@@ -736,8 +739,6 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
   }
-
-
 
   Future<void> _injectLoginCss() async {
     await _webViewController?.injectCSSCode(
@@ -851,14 +852,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Center(
                             child: FittedBox(
                               child: Text(
-                                _getNotificationsEnabledSum(settings, faNotificationService)
+                                _getNotificationsEnabledSum(
+                                    settings, faNotificationService)
                                     .toString(),
                                 style: const TextStyle(color: Colors.white),
                               ),
                             ),
                           ),
                         ),
-                        showBadge: _getNotificationsEnabledSum(settings, faNotificationService) > 0,
+                        showBadge:
+                        _getNotificationsEnabledSum(settings, faNotificationService) >
+                            0,
                         child: const Icon(Icons.notifications),
                         position: badges.BadgePosition.topEnd(top: -5, end: -7),
                         padding: const EdgeInsets.all(2),
@@ -901,10 +905,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-
         );
       },
     );
   }
-
 }
