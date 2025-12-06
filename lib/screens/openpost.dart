@@ -238,9 +238,25 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       final ct = (response.headers['content-type'] ?? '').toLowerCase();
       if (ct.contains('text/html') || ct.contains('application/xhtml')) {
         final document = html_parser.parse(decodedBody);
-        final body = document.querySelector('body');
 
-        if (body?.attributes['id'] == 'pageid-matureimage-error') {
+        final body = document.querySelector('body');
+        final isOldMatureError =
+            body?.attributes['id'] == 'pageid-matureimage-error';
+
+        final noticeSection =
+            document.querySelector('section.notice-message') ??
+                document.querySelector('.notice-message');
+
+        bool isNewMatureError = false;
+        if (noticeSection != null) {
+          final noticeText = noticeSection.text.toLowerCase();
+          isNewMatureError =
+              noticeText.contains('this content is rated mature or adult') ||
+                  (noticeText.contains('mature or adult') &&
+                      noticeText.contains('account settings'));
+        }
+
+        if (isOldMatureError || isNewMatureError) {
           final userAgreed = await _showNSFWConfirmationDialog();
           if (userAgreed) {
             setState(() => _nsfwAllowed = true);
@@ -255,6 +271,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         }
       }
     }
+
 
     return response;
   }

@@ -1,10 +1,10 @@
-// lib/profilejournals.dart
 import 'package:flutter/material.dart';
 import 'package:html/parser.dart';
 import 'package:http/http.dart' as http;
 import 'dart:async';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_html/flutter_html.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'openjournal.dart';
 
@@ -23,27 +23,40 @@ class ProfileJournalsState extends State<ProfileJournals> {
   List<Map<String, dynamic>> journals = [];
   bool hasMore = true;
 
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock));
+  bool _sfwEnabled = true;
+
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(
+      accountName: 'flutter_secure_storage_service',
+      accessibility: KeychainAccessibility.first_unlock,
+    ),
+  );
 
   @override
   void initState() {
     super.initState();
-    _fetchJournals(currentPage);
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await _loadSfwEnabled();
+    if (mounted) {
+      await _fetchJournals(currentPage);
+    }
+  }
+
+  Future<void> _loadSfwEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool('sfwEnabled') ?? true;
+    if (!mounted) return;
+    setState(() {
+      _sfwEnabled = enabled;
+    });
   }
 
   @override
   void dispose() {
     super.dispose();
-  }
-
-
-  Future<void> _setSfwCookieToNSFW() async {
-    String? currentSfw = await _secureStorage.read(key: 'fa_cookie_sfw');
-    if (currentSfw != '0') {
-      await _secureStorage.write(key: 'fa_cookie_sfw', value: '0');
-    }
   }
 
   Future<void> refreshJournals() async {
@@ -52,12 +65,11 @@ class ProfileJournalsState extends State<ProfileJournals> {
       currentPage = 1;
       hasMore = true;
     });
+    await _loadSfwEnabled();
     await _fetchJournals(currentPage);
   }
 
-
   Future<String> _getAllCookies() async {
-
     List<String> cookieNames = [
       'a',
       'b',
@@ -65,8 +77,6 @@ class ProfileJournalsState extends State<ProfileJournals> {
       'folder',
       'nodesc',
       'sz',
-      'sfw',
-
     ];
 
     List<String> cookies = [];
@@ -79,31 +89,28 @@ class ProfileJournalsState extends State<ProfileJournals> {
       }
     }
 
+    if (_sfwEnabled) {
+      cookies.add('sfw=1');
+    }
+
     String cookieHeader = cookies.join('; ');
     return cookieHeader;
   }
 
   Future<void> _fetchJournals(int pageNumber) async {
     if (isLoading || !hasMore) {
-
-      return; // Prevent multiple simultaneous fetches or fetching when no more pages
+      return;
     }
     setState(() {
       isLoading = true;
     });
-    print('Fetching journals for page $pageNumber');
     try {
       final newJournals = await fetchJournals(pageNumber);
-
-      print('Fetched ${newJournals.length} journals from page $pageNumber');
-
 
       setState(() {
         journals.addAll(newJournals);
         isLoading = false;
         currentPage = pageNumber + 1;
-        print('Current page incremented to $currentPage');
-        print('Has more pages: $hasMore');
       });
     } catch (e, stackTrace) {
       setState(() {
@@ -114,12 +121,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
     }
   }
 
-
   Future<List<Map<String, dynamic>>> fetchJournals(int pageNumber) async {
-
-    await _setSfwCookieToNSFW();
-
-
     String cookieHeader = await _getAllCookies();
 
     String url;
@@ -128,8 +130,6 @@ class ProfileJournalsState extends State<ProfileJournals> {
     } else {
       url = 'https://www.furaffinity.net/journals/${widget.username}/$pageNumber/';
     }
-
-
 
     final response = await http.get(
       Uri.parse(url),
@@ -141,8 +141,6 @@ class ProfileJournalsState extends State<ProfileJournals> {
       },
     );
 
-    print('Response status code: ${response.statusCode}');
-
     if (response.statusCode == 200) {
       return await parseHtmlJournals(response.body);
     } else {
@@ -153,9 +151,9 @@ class ProfileJournalsState extends State<ProfileJournals> {
 
   Future<List<Map<String, dynamic>>> parseHtmlJournals(String html) async {
     var document = parse(html);
-    var journalElements = document.querySelectorAll('section[id^="jid:"], table[id^="jid:"]');
+    var journalElements =
+    document.querySelectorAll('section[id^="jid:"], table[id^="jid:"]');
 
-    // Check for next page using both button.standard and button.older classes.
     var buttonElements = document.querySelectorAll('a.button.standard, a.button.older');
     hasMore = false;
     for (var button in buttonElements) {
@@ -164,51 +162,49 @@ class ProfileJournalsState extends State<ProfileJournals> {
         break;
       }
     }
-    print('Has more pages: $hasMore');
 
     List<Map<String, dynamic>> journalMetadata = [];
 
     for (var element in journalElements) {
-      String? sectionId = element.attributes['id']; // e.g. 'jid:14913939'
+      String? sectionId = element.attributes['id'];
       String? uniqueNumber = sectionId?.replaceFirst('jid:', '');
       String? journalId = uniqueNumber;
 
-      // Title extraction
-      String? title = element.querySelector('div.section-header > h2')?.text.trim();
-      // Fallback for classic layout.
+      String? title =
+      element.querySelector('div.section-header > h2')?.text.trim();
       if (title == null || title.isEmpty) {
         title = element.querySelector('td.cat a')?.text.trim();
       }
 
-      // Date posted extraction
       String? datePosted = element
-          .querySelector('div.section-header > span.font-small > strong > span.popup_date')
+          .querySelector(
+          'div.section-header > span.font-small > strong > span.popup_date')
           ?.attributes['title'];
       if (datePosted == null || datePosted.isEmpty) {
         datePosted = element.querySelector('span.popup_date')?.attributes['title'];
       }
 
-      // Content extraction
       String? contentHtml = element
-          .querySelector('div.section-body > div.journal-body.user-submitted-links')
+          .querySelector(
+          'div.section-body > div.journal-body.user-submitted-links')
           ?.innerHtml
           .trim();
-      // Fallback for classic layout.
       if (contentHtml == null || contentHtml.isEmpty) {
-        contentHtml = element.querySelector('td.addpad div.no_overflow')?.innerHtml.trim();
+        contentHtml =
+            element.querySelector('td.addpad div.no_overflow')?.innerHtml.trim();
       }
 
-      // Comments extraction
       String? commentsLink = element
           .querySelector('div.section-footer a[href^="/journal/"]')
           ?.attributes['href'];
       String? commentsText = element
-          .querySelector('div.section-footer a[href^="/journal/"] > span.font-large')
+          .querySelector(
+          'div.section-footer a[href^="/journal/"] > span.font-large')
           ?.text
           .trim();
-      // Fallback for classic layout.
       if (commentsLink == null || commentsText == null || commentsText.isEmpty) {
-        var commentAnchor = element.querySelector('td[align="right"] a[href^="/journal/"]');
+        var commentAnchor =
+        element.querySelector('td[align="right"] a[href^="/journal/"]');
         if (commentAnchor != null) {
           commentsLink = commentAnchor.attributes['href'];
           final regex = RegExp(r'Comments\s*\((\d+)\)');
@@ -238,14 +234,18 @@ class ProfileJournalsState extends State<ProfileJournals> {
     return journalMetadata;
   }
 
-
   @override
   Widget build(BuildContext context) {
     const int threshold = 5;
 
     if (journals.isEmpty && isLoading) {
-      return SliverFillRemaining(
-        child: const Center(child: PulsatingLoadingIndicator(size: 68.0, assetPath: 'assets/icons/fathemed.png')),
+      return const SliverFillRemaining(
+        child: Center(
+          child: PulsatingLoadingIndicator(
+            size: 68.0,
+            assetPath: 'assets/icons/fathemed.png',
+          ),
+        ),
       );
     }
 
@@ -256,7 +256,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
             'No journals found.',
             style: TextStyle(
               fontSize: 16.0,
-              color: Colors.grey[700],
+              color: Colors.grey,
             ),
           ),
         ),
@@ -269,16 +269,15 @@ class ProfileJournalsState extends State<ProfileJournals> {
           if (index < journals.length) {
             final journal = journals[index];
 
-            // Check if need to fetch more journals
             if (index >= journals.length - threshold && !isLoading && hasMore) {
-              print('Threshold reached at index $index. Fetching next page.');
               Future.delayed(Duration.zero, () {
                 _fetchJournals(currentPage);
               });
             }
 
             return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 1.0, horizontal: 8.0),
+              padding:
+              const EdgeInsets.symmetric(vertical: 1.0, horizontal: 8.0),
               child: Card(
                 child: ListTile(
                   title: Text(journal['title']),
@@ -292,7 +291,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
                         style: {
                           "a": Style(
                             textDecoration: TextDecoration.none,
-                            color: Color(0xFFE09321),
+                            color: const Color(0xFFE09321),
                           ),
                           "hr": Style(
                             padding: HtmlPaddings.symmetric(vertical: 8),
@@ -347,29 +346,41 @@ class ProfileJournalsState extends State<ProfileJournals> {
                                   return Image.asset('assets/emojis/coffee.png',
                                       width: 20, height: 20);
                                 case 'smilie sarcastic':
-                                  return Image.asset('assets/emojis/sarcastic.png',
-                                      width: 20, height: 20);
+                                  return Image.asset(
+                                      'assets/emojis/sarcastic.png',
+                                      width: 20,
+                                      height: 20);
                                 case 'smilie veryhappy':
-                                  return Image.asset('assets/emojis/veryhappy.png',
-                                      width: 20, height: 20);
+                                  return Image.asset(
+                                      'assets/emojis/veryhappy.png',
+                                      width: 20,
+                                      height: 20);
                                 case 'smilie wink':
                                   return Image.asset('assets/emojis/wink.png',
                                       width: 20, height: 20);
                                 case 'smilie whatever':
-                                  return Image.asset('assets/emojis/whatever.png',
-                                      width: 20, height: 20);
+                                  return Image.asset(
+                                      'assets/emojis/whatever.png',
+                                      width: 20,
+                                      height: 20);
                                 case 'smilie crying':
-                                  return Image.asset('assets/emojis/crying.png',
-                                      width: 20, height: 20);
+                                  return Image.asset(
+                                      'assets/emojis/crying.png',
+                                      width: 20,
+                                      height: 20);
                                 case 'smilie love':
                                   return Image.asset('assets/emojis/love.png',
                                       width: 20, height: 20);
                                 case 'smilie serious':
-                                  return Image.asset('assets/emojis/serious.png',
-                                      width: 20, height: 20);
+                                  return Image.asset(
+                                      'assets/emojis/serious.png',
+                                      width: 20,
+                                      height: 20);
                                 case 'smilie yelling':
-                                  return Image.asset('assets/emojis/yelling.png',
-                                      width: 20, height: 20);
+                                  return Image.asset(
+                                      'assets/emojis/yelling.png',
+                                      width: 20,
+                                      height: 20);
                                 case 'smilie oooh':
                                   return Image.asset('assets/emojis/oooh.png',
                                       width: 20, height: 20);
@@ -386,23 +397,33 @@ class ProfileJournalsState extends State<ProfileJournals> {
                                   return Image.asset('assets/emojis/sad.png',
                                       width: 20, height: 20);
                                 case 'smilie zipped':
-                                  return Image.asset('assets/emojis/zipped.png',
-                                      width: 20, height: 20);
+                                  return Image.asset(
+                                      'assets/emojis/zipped.png',
+                                      width: 20,
+                                      height: 20);
                                 case 'smilie smile':
-                                  return Image.asset('assets/emojis/smile.png',
-                                      width: 20, height: 20);
+                                  return Image.asset(
+                                      'assets/emojis/smile.png',
+                                      width: 20,
+                                      height: 20);
                                 case 'smilie badhairday':
-                                  return Image.asset('assets/emojis/badhairday.png',
-                                      width: 20, height: 20);
+                                  return Image.asset(
+                                      'assets/emojis/badhairday.png',
+                                      width: 20,
+                                      height: 20);
                                 case 'smilie embarrassed':
-                                  return Image.asset('assets/emojis/embarrassed.png',
-                                      width: 20, height: 20);
+                                  return Image.asset(
+                                      'assets/emojis/embarrassed.png',
+                                      width: 20,
+                                      height: 20);
                                 case 'smilie note':
                                   return Image.asset('assets/emojis/note.png',
                                       width: 20, height: 20);
                                 case 'smilie sleepy':
-                                  return Image.asset('assets/emojis/sleepy.png',
-                                      width: 20, height: 20);
+                                  return Image.asset(
+                                      'assets/emojis/sleepy.png',
+                                      width: 20,
+                                      height: 20);
                                 default:
                                   return const SizedBox.shrink();
                               }
@@ -411,11 +432,11 @@ class ProfileJournalsState extends State<ProfileJournals> {
                         ],
                       ),
                       const SizedBox(height: 8.0),
-
                       Align(
                         alignment: Alignment.bottomRight,
                         child: Padding(
-                          padding: const EdgeInsets.only(right: 0.0, top: 0.0,bottom: 4.0),
+                          padding: const EdgeInsets.only(
+                              right: 0.0, top: 0.0, bottom: 4.0),
                           child: GestureDetector(
                             onTap: () {
                               Navigator.push(
@@ -450,14 +471,13 @@ class ProfileJournalsState extends State<ProfileJournals> {
               ),
             );
           } else {
-            // Loader item at the end of the list
             if (hasMore) {
               return const Padding(
                 padding: EdgeInsets.all(16.0),
                 child: Center(child: CircularProgressIndicator()),
               );
             } else {
-              return const SizedBox.shrink(); // No more items to load
+              return const SizedBox.shrink();
             }
           }
         },

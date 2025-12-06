@@ -187,7 +187,7 @@ SPEC CHECKSUMS:
   sqflite_darwin: 44bb54cc302bff1fbe5752293aba1820b157cf1c
   SwiftyGif: 706c60cf65fa2bc5ee0313beece843c8eb8194d4
   url_launcher_ios: 694010445543906933d732453a59da0a173ae33d
-  webview_flutter_wkwebview: 44d4dee7d7056d5ad185d25b38404436d56c547c
+  webview_flutter_wkwebview: 8ebf4fded22593026f7dbff1fbff31ea98573c8d
   workmanager_apple: 904529ae31e97fc5be632cf628507652294a0778
 
 PODFILE CHECKSUM: 71dd309ff83d8f66288cee02aec4211fb9e442dc

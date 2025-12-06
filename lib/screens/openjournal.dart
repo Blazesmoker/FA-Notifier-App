@@ -86,6 +86,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   String? submissionTitle;
   String? submissionDescription;
   DateTime? publicationTime;
+  String? publicationTimeRaw;
   int commentsCount = 0;
   List<Map<String, dynamic>> comments = [];
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
@@ -410,9 +411,11 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
           .querySelectorAll('a.owner_edit_journal.action-link')
           .forEach((el) => el.remove());
 
+      var titleElem =
+          document.querySelector('#c-journalTitleTop__subject h3') ??
+              document.querySelector('div.no_overflow') ??
+              document.querySelector('h2.journal-title');
 
-      var titleElem = document.querySelector('div.no_overflow') ??
-          document.querySelector('h2.journal-title');
       var descriptionElem = document.querySelector('div.journal-content.user-submitted-links') ??
           document.querySelector('div.journal-body');
       var publicationTimeElem = document.querySelector('div.section-header span.popup_date') ??
@@ -452,8 +455,12 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
 
         if (publicationTimeElem != null) {
           final rawTime = publicationTimeElem.attributes['title']?.trim();
-          if (rawTime != null && rawTime.isNotEmpty) _parsePublicationTime(rawTime);
+          if (rawTime != null && rawTime.isNotEmpty) {
+            publicationTimeRaw = rawTime;
+            _parsePublicationTime(rawTime);
+          }
         }
+
       });
       if (isOwner) {
         await _fetchDeleteLink(cookieA, cookieB);
@@ -645,10 +652,14 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   }
 
   String? getFormattedPublicationTime() {
+    if (publicationTimeRaw != null && publicationTimeRaw!.isNotEmpty) {
+      return publicationTimeRaw;
+    }
     if (publicationTime == null) return null;
     final localTime = publicationTime!.toLocal();
     return DateFormat.yMMMd().add_jm().format(localTime);
   }
+
 
   Future<void> _sendWatchUnwatchRequest(String urlPath, {required bool shouldWatch}) async {
     String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
