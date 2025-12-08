@@ -9,7 +9,6 @@ typedef _Call<T> = Future<T> Function();
 class FAHttp {
   static const Duration _defaultTimeout = Duration(seconds: 20);
 
-  // Heuristics for stale/broken sockets after backgrounding
   static bool _looksLikeStaleSocket(Object e) {
     final s = e.toString();
     return e is SocketException ||
@@ -24,7 +23,6 @@ class FAHttp {
       return await call();
     } catch (e) {
       if (_looksLikeStaleSocket(e)) {
-        // Give iOS a breath to re-warm radios, then try once fresh
         await Future.delayed(const Duration(milliseconds: 250));
         return await call();
       }
@@ -35,7 +33,7 @@ class FAHttp {
   static HttpClient _newClientBase({Duration? timeout}) {
     final c = HttpClient();
     c.connectionTimeout = timeout ?? _defaultTimeout;
-    c.idleTimeout = Duration.zero; // don't keep sockets around
+    c.idleTimeout = Duration.zero;
     c.userAgent = 'FANotifier/1.0 (+dart:io)';
     return c;
   }
@@ -55,7 +53,7 @@ class FAHttp {
         final resp = await client.get(uri, headers: merged).timeout(timeout ?? _defaultTimeout);
         return resp;
       } finally {
-        client.close(); // drop the socket pool every time
+        client.close();
       }
     });
   }

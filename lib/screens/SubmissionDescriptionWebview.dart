@@ -12,6 +12,8 @@ import '../widgets/PulsatingLoadingIndicator.dart';
 import 'openjournal.dart';
 import 'openpost.dart';
 import 'user_profile_screen.dart';
+import '../utils/fa_link_handler.dart';
+import '../utils/utils.dart';
 
 class SubmissionDescriptionWebView extends StatefulWidget {
   final String submissionId;
@@ -270,17 +272,19 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
   }
 
   /// Searches the provided HTML for a truncated URL and returns the full URL.
-  String? _getFullLinkFromFetchedHtml(String truncatedUrl, {String? htmlSource}) {
+  /// Returns the original truncated URL when a better match is not found to
+  /// satisfy non-null callbacks passed to `handleFALink`.
+  String _getFullLinkFromFetchedHtml(String truncatedUrl, {String? htmlSource}) {
     final String? source = htmlSource ?? _submissionDescriptionHtml;
-    if (source == null) return null;
+    if (source == null) return truncatedUrl;
 
     final document = html_parser.parse(source);
     for (var anchor in document.querySelectorAll('a.auto_link_shortened')) {
       if (anchor.text.trim() == truncatedUrl) {
-        return anchor.attributes['title'] ?? anchor.attributes['href'];
+        return anchor.attributes['title'] ?? anchor.attributes['href'] ?? truncatedUrl;
       }
     }
-    return null;
+    return truncatedUrl;
   }
 
 
@@ -456,7 +460,7 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
               onCreateWindow: (controller, createWindowReq) async {
                 final url = createWindowReq.request.url?.toString() ?? '';
                 if (url.isNotEmpty) {
-                  await _handleFALink(context, url);
+                  await handleFALink(context, url, htmlSource: url, getFullUrl: _getFullLinkFromFetchedHtml);
                 }
                 return true;
               },
@@ -479,7 +483,7 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
                 final url = navAction.request.url.toString();
                 if (Platform.isAndroid) {
                   if (navAction.isForMainFrame) {
-                    await _handleFALink(context, url);
+                    await handleFALink(context, url, htmlSource: url, getFullUrl: _getFullLinkFromFetchedHtml);
                     return NavigationActionPolicy.CANCEL;
                   }
                   return NavigationActionPolicy.ALLOW;
@@ -488,7 +492,7 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
                     if (url == "https://www.furaffinity.net/") {
                       return NavigationActionPolicy.ALLOW;
                     }
-                    await _handleFALink(context, url);
+                    await handleFALink(context, url, htmlSource: url, getFullUrl: _getFullLinkFromFetchedHtml);
                     return NavigationActionPolicy.CANCEL;
                   }
                   return NavigationActionPolicy.ALLOW;
@@ -496,12 +500,7 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
                 return NavigationActionPolicy.ALLOW;
               },
               onLoadError: (controller, url, code, message) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Failed to load content: $message'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                showAppSnackBar(context, 'Failed to load content: $message', backgroundColor: Colors.red);
               },
               onLoadHttpError: (controller, url, statusCode, description) {
                 ScaffoldMessenger.of(context).showSnackBar(

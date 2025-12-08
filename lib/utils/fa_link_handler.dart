@@ -1,102 +1,121 @@
 // lib/utils/fa_link_handler.dart
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../home_screen.dart';
-import '../main.dart';
-import '../providers/NotificationNavigationProvider.dart';
-import '../screens/notesscreen.dart';
-import '../screens/submissions_screen.dart';
-import '../screens/user_profile_screen.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 import '../screens/openpost.dart';
 import '../screens/openjournal.dart';
-import '../screens/notifications_screen.dart';
+import '../screens/user_profile_screen.dart';
 
-Future<void> handleFALink(BuildContext context, String url) async {
-  final Uri uri       = Uri.parse(url);
-  final List<String> segments = uri.pathSegments;
-  final String? anchor        = uri.fragment.isEmpty ? null : uri.fragment;
+/// Centralized FA link handler.
+Future<void> handleFALink(
+  BuildContext context,
+  String url, {
+  String? htmlSource,
+  String Function(String url, {String? htmlSource})? getFullUrl,
+}) async {
+  // 1. Recover full/truncated URL if possible (for html rewritten links)
+  String fullUrlToMatch = url;
+  if (url.contains('.....')) {
+    if (getFullUrl != null) {
+      final recovered = getFullUrl(url, htmlSource: htmlSource);
+      if (recovered != null) fullUrlToMatch = recovered;
+    }
+    // Fallback to htmlSource parsing if available (legacy screens)
+    else if (htmlSource != null) {
+      // This block can be specialized with custom recovery code if required
+    }
+  }
+  final Uri uri = Uri.parse(fullUrlToMatch);
+  final String urlToMatch = uri.toString();
 
-
-
-  // 1) Gallery folder
-
-  if (segments.length >= 5 &&
-      segments[0] == 'gallery' &&
-      segments[2] == 'folder') {
-    final tappedUser = segments[1];
-    final folderId   = segments[3];
-    final folderName = segments[4];
-    final folderUrl  =
-        'https://www.furaffinity.net/gallery/$tappedUser/folder/$folderId/$folderName/';
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => UserProfileScreen(
-          nickname: tappedUser,
-          initialSection: ProfileSection.Gallery,
-          initialFolderUrl: folderUrl,
-          initialFolderName: folderName,
+  // Gallery folder with or without folder segments
+  final RegExp galleryFolderRegex = RegExp(
+      r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)(?:/folder/(\d+)/([a-zA-Z0-9\-_.~]+))?/?$');
+  final matchGallery = galleryFolderRegex.firstMatch(urlToMatch);
+  if (matchGallery != null) {
+    final String tappedUsername = matchGallery.group(1)!;
+    final String? folderNumber = matchGallery.group(2);
+    final String? folderName = matchGallery.group(3);
+    if (folderNumber != null && folderName != null) {
+      // specific folder
+      final String folderUrl =
+        'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => UserProfileScreen(
+            nickname: tappedUsername,
+            initialSection: ProfileSection.Gallery,
+            initialFolderUrl: folderUrl,
+            initialFolderName: folderName,
+          ),
         ),
-      ),
-    );
-    return;
-  }
-
-
-  // 2) User profile:
-
-  if (segments.length >= 2 && segments[0] == 'user') {
-    final tappedUser = segments[1];
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => UserProfileScreen(nickname: tappedUser),
-      ),
-    );
-    return;
-  }
-
-
-  // 3) Journal list:
-
-  if (segments.length >= 2 && segments[0] == 'journals') {
-    final tappedUser = segments[1];
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => UserProfileScreen(
-          nickname: tappedUser,
-          initialSection: ProfileSection.Journals,
+      );
+    } else {
+      // just the gallery
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => UserProfileScreen(
+            nickname: tappedUsername,
+            initialSection: ProfileSection.Gallery,
+          ),
         ),
+      );
+    }
+    return;
+  }
+
+  // User profile
+  final RegExp userRegex = RegExp(r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$');
+  final matchUser = userRegex.firstMatch(urlToMatch);
+  if (matchUser != null) {
+    final tappedUsername = matchUser.group(1)!;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserProfileScreen(nickname: tappedUsername),
       ),
     );
     return;
   }
 
-
-  // 4) Single journal:
-
-  if (segments.length >= 2 && segments[0] == 'journal') {
-    final journalId = segments[1];
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OpenJournal(uniqueNumber: journalId),
-      ),
-    );
+  // Journals: /journals/username or /journal/id
+  final RegExp journalRegex = RegExp(r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$');
+  final matchJournal = journalRegex.firstMatch(urlToMatch);
+  if (matchJournal != null) {
+    final String? username = matchJournal.group(1);
+    final String? journalId = matchJournal.group(2);
+    if (username != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => UserProfileScreen(
+            nickname: username,
+            initialSection: ProfileSection.Journals,
+          ),
+        ),
+      );
+    } else if (journalId != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OpenJournal(uniqueNumber: journalId),
+        ),
+      );
+    }
     return;
   }
 
-
-  // 5) Submission screen:
-
-  if (segments.length >= 2 && segments[0] == 'view') {
-    final submissionId = segments[1];
+  // Submission/view
+  final RegExp viewRegex = RegExp(r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$');
+  final matchView = viewRegex.firstMatch(urlToMatch);
+  if (matchView != null) {
+    final submissionId = matchView.group(1)!;
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => OpenPost(
+        builder: (context) => OpenPost(
           uniqueNumber: submissionId,
           imageUrl: '',
         ),
@@ -105,43 +124,6 @@ Future<void> handleFALink(BuildContext context, String url) async {
     return;
   }
 
-
-  // 6) Submissions screen:
-
-  if (segments.length >= 2 && segments[0] == 'msg' && segments[1] == 'submissions') {
-    Navigator.of(context).popUntil((r) => r.isFirst);
-    Provider.of<NotificationNavigationProvider>(context, listen: false)
-        .setTargetIndex(2);
-    return;
-  }
-
-
-  // 7) Notifications screen:
-
-  if (segments.length >= 2 &&
-      segments[0] == 'msg' &&
-      segments[1] == 'others' &&
-      (anchor == 'watches' || anchor == 'comments' || anchor == 'favorites')) {
-    Navigator.of(context).popUntil((r) => r.isFirst);
-    Provider.of<NotificationNavigationProvider>(context, listen: false)
-        .setTargetIndex(3);
-    return;
-  }
-
-  // 8) Notes screen:
-
-  if (segments.length >= 2 && segments[0] == 'msg' && segments[1] == 'pms') {
-    Navigator.of(context).popUntil((r) => r.isFirst);
-    Provider.of<NotificationNavigationProvider>(context, listen: false)
-        .setTargetIndex(4);
-    return;
-  }
-
-
-  // 7) Fallback: default screen
-
-  Navigator.of(context).popUntil((r) => r.isFirst);
-  Provider.of<NotificationNavigationProvider>(context, listen: false)
-      .setTargetIndex(0);
-
+  // fallback: open externally
+  await launchUrlString(fullUrlToMatch, mode: LaunchMode.externalApplication);
 }

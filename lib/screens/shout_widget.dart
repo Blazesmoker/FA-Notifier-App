@@ -7,6 +7,7 @@ import 'openjournal.dart';
 import 'openpost.dart';
 import 'user_profile_screen.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+import '../utils/fa_link_handler.dart';
 
 class ShoutWidget extends StatefulWidget {
   final Shout shout;
@@ -26,115 +27,6 @@ class _ShoutWidgetState extends State<ShoutWidget> {
   void initState() {
     super.initState();
     showFullDate = false;
-  }
-
-  Future<void> _handleFALink(BuildContext context, String url) async {
-    final Uri uri = Uri.parse(url);
-    final String urlToMatch = uri.toString();
-
-    // 1. Gallery Folder Link:
-    final RegExp galleryFolderRegex = RegExp(
-        r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)(?:/folder/(\d+)/([a-zA-Z0-9\-_.~]+))?/?$');
-    if (galleryFolderRegex.hasMatch(urlToMatch)) {
-      final match = galleryFolderRegex.firstMatch(urlToMatch)!;
-      final String tappedUsername = match.group(1)!;
-      final String? folderNumber = match.group(2); // Optional
-      final String? folderName = match.group(3); // Optional
-
-      if (folderNumber != null && folderName != null) {
-        // Navigate to specific folder
-        final String folderUrl =
-            'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => UserProfileScreen(
-              nickname: tappedUsername,
-              initialSection: ProfileSection.Gallery,
-              initialFolderUrl: folderUrl,
-              initialFolderName: folderName,
-            ),
-          ),
-        );
-      } else {
-        // Navigate to main gallery (no folder specified)
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => UserProfileScreen(
-              nickname: tappedUsername,
-              initialSection: ProfileSection.Gallery,
-            ),
-          ),
-        );
-      }
-      return;
-    }
-
-    // 2. User Link:
-    final RegExp userRegex =
-    RegExp(r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$');
-    if (userRegex.hasMatch(urlToMatch)) {
-      final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(nickname: tappedUsername),
-        ),
-      );
-      return;
-    }
-
-    // 3. Journal Link:
-    final RegExp journalRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
-    );
-
-    if (journalRegex.hasMatch(urlToMatch)) {
-      final Match match = journalRegex.firstMatch(urlToMatch)!;
-      final String? username = match.group(1);
-      final String? journalId = match.group(2);
-
-      if (username != null) {
-        // Matched: /journals/username/
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => UserProfileScreen(
-              nickname: username,
-              initialSection: ProfileSection.Journals,
-            ),
-          ),
-        );
-      } else if (journalId != null) {
-        // Matched: /journal/12345/
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OpenJournal(uniqueNumber: journalId),
-          ),
-        );
-      }
-
-      return;
-    }
-
-    // 4. Submission/View Link:
-    final RegExp viewRegex = RegExp(
-        r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$');
-    if (viewRegex.hasMatch(urlToMatch)) {
-      final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OpenPost(uniqueNumber: submissionId, imageUrl: ''),
-        ),
-      );
-      return;
-    }
-
-    // 5. Fallback: open externally.
-    await launchUrlString(url, mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -297,7 +189,7 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                     textAlign: TextAlign.left,
                   ),
                 },
-                onLinkTap: (url, _, __) => _handleFALink(context, url!),
+                onLinkTap: (url, _, __) => handleFALink(context, url!),
                 extensions: [
                   html_pkg.TagExtension(
                     tagsToExtend: {"i"},

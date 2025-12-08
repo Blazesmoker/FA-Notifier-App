@@ -1,0 +1,649 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:intl/intl.dart';
+import 'package:html/dom.dart' as dom;
+import 'package:html/parser.dart' as html_parser;
+import 'package:http/http.dart' as http;
+
+import '../network.dart';
+import '../parsing_utils.dart';
+
+class OpenJournalFetchResult {
+  OpenJournalFetchResult({
+    required this.profileImageUrl,
+    required this.displayName,
+    required this.authorSlug,
+    required this.symbol,
+    required this.userTitle,
+    required this.isJournalClassic,
+    required this.ownerEditLink,
+    required this.favoriteLink,
+    required this.unfavoriteLink,
+    required this.isFavorited,
+    required this.watchLink,
+    required this.unwatchLink,
+    required this.isWatching,
+    required this.blockLink,
+    required this.unblockLink,
+    required this.isBlocked,
+    required this.title,
+    required this.dateTime,
+    required this.dateTimeRaw,
+    required this.submissionDescription,
+    required this.commentsCount,
+    required this.fullViewImageUrl,
+    required this.fileLink,
+    required this.category,
+    required this.type,
+    required this.species,
+    required this.gender,
+    required this.keywords,
+    required this.deleteLink,
+    required this.commentBodies,
+  });
+
+  final String? profileImageUrl;
+  final String? displayName;
+  final String? authorSlug;
+  final String? symbol;
+  final String? userTitle;
+  final bool isJournalClassic;
+
+  final String? ownerEditLink;
+  final String? favoriteLink;
+  final String? unfavoriteLink;
+  final bool isFavorited;
+  final String? watchLink;
+  final String? unwatchLink;
+  final bool isWatching;
+  final String? blockLink;
+  final String? unblockLink;
+  final bool isBlocked;
+
+  final String? title;
+  final DateTime? dateTime;
+  final String? dateTimeRaw;
+  final String? submissionDescription;
+  final int commentsCount;
+  final String? fullViewImageUrl;
+  final String? fileLink;
+  final String? category;
+  final String? type;
+  final String? species;
+  final String? gender;
+  final List<String> keywords;
+
+  final String? deleteLink;
+  final List<Map<String, dynamic>> commentBodies;
+}
+
+class OpenJournalApiService {
+  OpenJournalApiService(this._secureStorage);
+
+  final FlutterSecureStorage _secureStorage;
+
+  Future<_Cookies> _getCookies() async {
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    if (cookieA == null || cookieB == null) {
+      throw Exception('Not logged in: missing cookies');
+    }
+    return _Cookies(cookieA: cookieA, cookieB: cookieB);
+  }
+
+  Future<OpenJournalFetchResult> fetchJournal(String uniqueNumber) async {
+    final cookies = await _getCookies();
+    final journalUrl = 'https://www.furaffinity.net/journal/$uniqueNumber/';
+    final response = await httpClient.get(
+      Uri.parse(journalUrl),
+      headers: {
+        'Cookie': 'a=${cookies.cookieA}; b=${cookies.cookieB}',
+        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        'Accept-Encoding': 'gzip',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to fetch journal ($uniqueNumber): ${response.statusCode}');
+    }
+
+    final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
+    final document = html_parser.parse(decodedBody);
+
+    final modernDetails = document.querySelector('userpage-nav-user-details');
+    final classicTitleBox = document.querySelector('td.journal-title-box');
+    final isJournalClassic = (modernDetails == null) && (classicTitleBox != null);
+
+    dom.Element? profileImgEl;
+    String? profileImageUrl;
+    String? displayName;
+    String? authorSlug;
+    String? symbol;
+    String? userTitle;
+
+    profileImgEl = document.querySelector('userpage-nav-avatar img');
+    dom.Element? profileAvatarAnchor = document.querySelector('userpage-nav-avatar a');
+
+    if (!isJournalClassic && modernDetails != null) {
+      final modernHeader = modernDetails.parent;
+      profileImgEl = profileImgEl ?? modernHeader?.querySelector('userpage-nav-avatar img');
+
+      displayName = modernDetails
+          .querySelector('a.c-usernameBlock__displayName span.js-displayName')
+          ?.text
+          .trim();
+
+      final userNameA = modernDetails.querySelector('a.c-usernameBlock__userName') ??
+          modernDetails.querySelector('a.c-usernameBlock__displayName');
+      symbol = userNameA?.querySelector('span.c-usernameBlock__symbol')?.text.trim();
+
+      final href = userNameA?.attributes['href'];
+      if (href != null) {
+        final path = Uri.parse(href).path.toLowerCase();
+        final m = RegExp(r'^/user/([^/]+)/?$').firstMatch(path);
+        if (m != null) authorSlug = m.group(1);
+      }
+
+      dom.Element? utSpan =
+          modernDetails.querySelector('span.user-title') ??
+              modernHeader?.querySelector('span.user-title') ??
+              document.querySelector('userpage-nav-header span.user-title');
+
+      if (utSpan != null) {
+        final cleaned = utSpan.clone(true) as dom.Element;
+
+        cleaned.querySelectorAll('.hideonmobile, .popup_date').forEach((e) => e.remove());
+
+        var t = cleaned.text
+            .replaceAll('\u00A0', ' ')
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
+
+        if (t.isNotEmpty) {
+          var titlePart = t.split('|').first.trim();
+          final looksLikeDate = RegExp(r'\d{4}').hasMatch(titlePart) &&
+              RegExp(r'\d{1,2}:\d{2}').hasMatch(titlePart);
+
+          if (titlePart.isNotEmpty && !looksLikeDate) {
+            userTitle = titlePart;
+          }
+        }
+      }
+
+    } else if (isJournalClassic && classicTitleBox != null) {
+      dom.Element? classicTable;
+      dom.Node? cur = classicTitleBox;
+      while (cur != null && (cur is! dom.Element || cur.localName != 'table')) {
+        cur = cur.parent;
+      }
+      classicTable = cur is dom.Element ? cur : null;
+
+      profileImgEl = profileImgEl ??
+          classicTable?.querySelector('td.avatar-box img.avatar') ??
+          document.querySelector('td.avatar-box img.avatar');
+
+      displayName = classicTitleBox
+          .querySelector('a.c-usernameBlock__displayName span.js-displayName')
+          ?.text
+          ?.trim();
+
+      final userNameA = classicTitleBox.querySelector('a.c-usernameBlock__userName') ??
+          classicTitleBox.querySelector('a.c-usernameBlock__displayName');
+      symbol = userNameA?.querySelector('span.c-usernameBlock__symbol')?.text.trim();
+
+      final href = userNameA?.attributes['href'];
+      if (href != null) {
+        final path = Uri.parse(href).path.toLowerCase();
+        final m = RegExp(r'^/user/([^/]+)/?$').firstMatch(path);
+        if (m != null) authorSlug = m.group(1);
+      }
+    }
+
+    // Fallback: derive author slug from the avatar anchor if we still don't have it.
+    if (authorSlug == null && profileAvatarAnchor != null) {
+      final href = profileAvatarAnchor.attributes['href'];
+      if (href != null) {
+        final m = RegExp(r'^/user/([^/]+)/?').firstMatch(href.toLowerCase());
+        if (m != null) authorSlug = m.group(1);
+      }
+    }
+
+    if (profileImgEl == null) {
+      // Fallback to og:image if avatar wasn't found
+      final ogImage = document.querySelector('meta[property="og:image"]')?.attributes['content'];
+      if (ogImage != null && ogImage.isNotEmpty) {
+        profileImageUrl = ogImage.startsWith('//')
+            ? 'https:$ogImage'
+            : (ogImage.startsWith('http') ? ogImage : 'https://www.furaffinity.net$ogImage');
+      }
+    }
+
+    if (profileImgEl != null && profileImageUrl == null) {
+      var src = profileImgEl.attributes['src'];
+      if (src != null && src.isNotEmpty) {
+        if (src.startsWith('//')) {
+          src = 'https:$src';
+        } else if (src.startsWith('/')) {
+          src = 'https://www.furaffinity.net$src';
+        }
+      }
+      profileImageUrl = src;
+    }
+
+    final ownerEditLink =
+    document.querySelector('a.owner_edit_journal.action-link')?.attributes['href'];
+
+    String? favoriteLink;
+    String? unfavoriteLink;
+    bool isFavorited = false;
+    final favLinks = document.querySelectorAll('a.fav');
+    for (var favLink in favLinks) {
+      final href = favLink.attributes['href'] ?? '';
+      if (href.contains('/fav/')) {
+        favoriteLink = href;
+        isFavorited = favLink.classes.contains('active');
+      } else if (href.contains('/unfav/')) {
+        unfavoriteLink = href;
+      }
+    }
+
+    String? watchLink;
+    String? unwatchLink;
+    bool isWatching = false;
+    final watchLinks = document.querySelectorAll('a.watch');
+    for (var wl in watchLinks) {
+      final href = wl.attributes['href'] ?? '';
+      if (href.contains('/watch/')) {
+        watchLink = href;
+        isWatching = wl.classes.contains('active');
+      } else if (href.contains('/unwatch/')) {
+        unwatchLink = href;
+      }
+    }
+
+    String? blockLink;
+    String? unblockLink;
+    bool isBlocked = false;
+    final blockLinks = document.querySelectorAll('a.block');
+    for (var bl in blockLinks) {
+      final href = bl.attributes['href'] ?? '';
+      if (href.contains('/block/')) {
+        blockLink = href;
+      } else if (href.contains('/unblock/')) {
+        unblockLink = href;
+        isBlocked = bl.classes.contains('active');
+      }
+    }
+
+    String? title;
+    String? submissionDescription;
+    DateTime? publicationTime;
+    String? publicationTimeRaw;
+
+    title = document.querySelector('#c-journalTitleTop__subject h3')?.text.trim();
+    title ??= document.querySelector('td.journal-title-box h2')?.text.trim();
+    title ??= document.querySelector('title')?.text.trim();
+
+    final dateElem =
+    document.querySelector('#c-journalTitleTop__date .popup_date');
+    if (dateElem != null) {
+      final unix = int.tryParse(dateElem.attributes['data-time'] ?? '');
+      if (unix != null) {
+        publicationTime =
+            DateTime.fromMillisecondsSinceEpoch(unix * 1000, isUtc: true);
+      }
+
+      publicationTimeRaw = dateElem.attributes['title'];
+
+      if (publicationTime == null && publicationTimeRaw != null) {
+        publicationTime = DateFormat('MMMM d, yyyy hh:mm:ss a')
+            .parseUtc(publicationTimeRaw);
+      }
+    }
+
+
+    if (publicationTime == null && publicationTimeRaw != null) {
+      publicationTime = tryParseDate(publicationTimeRaw);
+    }
+
+    final descElem = document.querySelector('.journal-content') ??
+        document.querySelector('.journal-body') ??
+        document.querySelector('.journal-message');
+    submissionDescription = descElem?.innerHtml;
+
+    String? fullViewImageUrl;
+    String? fileLink;
+    String? category;
+    String? type;
+    String? species;
+    String? gender;
+    final keywords = <String>[];
+
+    final statsTable = document.querySelector('table.maintable table.stats-container');
+    if (statsTable != null) {
+      final rows = statsTable.querySelectorAll('tr');
+      for (var row in rows) {
+        final label = row.querySelector('td:nth-child(1)')?.text.toLowerCase().trim() ?? '';
+        final value = row.querySelector('td:nth-child(2)')?.text.trim() ?? '';
+        switch (label) {
+          case 'category':
+            category = value;
+            break;
+          case 'type':
+            type = value;
+            break;
+          case 'species':
+            species = value;
+            break;
+          case 'gender':
+            gender = value;
+            break;
+        }
+      }
+    }
+
+    document.querySelectorAll('a.keyword').forEach((a) {
+      final kw = a.text.trim();
+      if (kw.isNotEmpty) keywords.add(kw);
+    });
+
+    fullViewImageUrl =
+    document.querySelector('a.fullview')?.attributes['href'];
+    fileLink = document.querySelector('a.download')?.attributes['href'];
+
+    final commentBodies = <Map<String, dynamic>>[];
+
+    final commentBlocks = document.querySelectorAll(
+      '#comments-journal .comment_container, .comments-list .comment_container, .comment_container, div.comment_container, div.comment-container',
+    );
+
+    for (var c in commentBlocks) {
+      final comment = <String, dynamic>{};
+
+      final anchorId = c.querySelector('a.comment_anchor')?.attributes['id'] ?? '';
+      comment['commentId'] = anchorId.isNotEmpty
+          ? anchorId
+          : (c.attributes['data-id'] ?? c.attributes['id'] ?? '');
+
+      final avatarImg = c.querySelector('img.comment_useravatar') ??
+          c.querySelector('img.avatar');
+      String? avatarSrc = avatarImg?.attributes['src'];
+      if (avatarSrc != null && avatarSrc.isNotEmpty) {
+        if (avatarSrc.startsWith('//')) {
+          avatarSrc = 'https:$avatarSrc';
+        } else if (avatarSrc.startsWith('/')) {
+          avatarSrc = 'https://www.furaffinity.net$avatarSrc';
+        }
+      }
+      comment['profileImage'] = avatarSrc;
+
+      final usernameBlock = c.querySelector('.c-usernameBlock');
+      final displayNameSpan = usernameBlock?.querySelector('.js-displayName');
+      final userNameA = usernameBlock?.querySelector('.c-usernameBlock__userName');
+      String? username;
+      if (userNameA != null) {
+        final fullUserText = userNameA.text.trim();
+        final parts = fullUserText.split('~');
+        username = (parts.length > 1 ? parts.last : fullUserText).trim();
+      }
+      comment['username'] = username ?? displayNameSpan?.text.trim() ?? '';
+      comment['displayName'] =
+          displayNameSpan?.text.trim() ?? (comment['username'] as String? ?? '');
+      comment['symbol'] =
+          usernameBlock?.querySelector('.c-usernameBlock__symbol')?.text.trim() ?? '';
+      comment['userTitle'] =
+          c.querySelector('comment-title')?.text.trim() ?? '';
+
+      comment['isOP'] = c.querySelector('.comment_op_marker') != null;
+
+      final popup = c.querySelector('.popup_date');
+      comment['popupDateRelative'] = popup?.text.trim() ?? '';
+      comment['popupDateFull'] = popup?.attributes['title'] ?? '';
+
+      final textContainer = c.querySelector('comment-user-text .user-submitted-links') ??
+          c.querySelector('.comment_text .user-submitted-links') ??
+          c.querySelector('.comment_text');
+      comment['text'] = textContainer?.text.trim() ?? '';
+
+      comment['hideLink'] =
+      c.querySelector('a.hide_comment')?.attributes['href'];
+      comment['editLink'] =
+      c.querySelector('a.edit_comment')?.attributes['href'];
+      comment['deleteLink'] =
+      c.querySelector('a.delete_comment')?.attributes['href'];
+
+      comment['commentHtml'] = c.innerHtml;
+
+      double width = 100.0;
+      final style = c.attributes['style'] ?? '';
+      final m = RegExp(r'width\s*:\s*([0-9.]+)%').firstMatch(style);
+      if (m != null) {
+        width = double.tryParse(m.group(1)!) ?? 100.0;
+      }
+      comment['width'] = width;
+
+      commentBodies.add(comment);
+    }
+
+    int commentsCount = 0;
+    String? footerCountText;
+    final footerCountElem = document.querySelector('#comments-journal .section-footer .font-large') ??
+        document.querySelector('.section-footer.aligncenter .font-large') ??
+        document.querySelector('.section-footer .font-large');
+    footerCountText = footerCountElem?.text.trim();
+    if (footerCountText != null && footerCountText.isNotEmpty) {
+      commentsCount = int.tryParse(footerCountText) ?? 0;
+    }
+    if (commentsCount == 0 && commentBodies.isNotEmpty) {
+      commentsCount = commentBodies.length;
+    }
+
+    final deleteLink = document.querySelector('a.delete_journal')?.attributes['href'];
+
+    return OpenJournalFetchResult(
+      profileImageUrl: profileImageUrl,
+      displayName: displayName,
+      authorSlug: authorSlug,
+      symbol: symbol,
+      userTitle: userTitle,
+      isJournalClassic: isJournalClassic,
+      ownerEditLink: ownerEditLink,
+      favoriteLink: favoriteLink,
+      unfavoriteLink: unfavoriteLink,
+      isFavorited: isFavorited,
+      watchLink: watchLink,
+      unwatchLink: unwatchLink,
+      isWatching: isWatching,
+      blockLink: blockLink,
+      unblockLink: unblockLink,
+      isBlocked: isBlocked,
+      title: title,
+      dateTime: publicationTime,
+      dateTimeRaw: publicationTimeRaw,
+      submissionDescription: submissionDescription,
+      commentsCount: commentsCount,
+      fullViewImageUrl: fullViewImageUrl,
+      fileLink: fileLink,
+      category: category,
+      type: type,
+      species: species,
+      gender: gender,
+      keywords: keywords,
+      deleteLink: deleteLink,
+      commentBodies: commentBodies,
+    );
+  }
+
+  Future<String?> fetchDeleteKey(String uniqueNumber) async {
+    final cookies = await _getCookies();
+    final resp = await httpClient.get(
+      Uri.parse('https://www.furaffinity.net/controls/journal/delete/${uniqueNumber}/'),
+      headers: {
+        'Cookie': 'a=${cookies.cookieA}; b=${cookies.cookieB}',
+        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        'Accept-Encoding': 'gzip',
+      },
+    );
+    if (resp.statusCode != 200) {
+      throw Exception('Failed to fetch delete key: ${resp.statusCode}');
+    }
+    final doc = html_parser.parse(utf8.decode(resp.bodyBytes, allowMalformed: true));
+    return doc.querySelector('input[name="key"]')?.attributes['value'];
+  }
+
+  Future<Map<String, String?>> fetchUserPageLinks(String? authorSlug) async {
+    final cookies = await _getCookies();
+    if (authorSlug == null) {
+      return {'watchLink': null, 'unwatchLink': null, 'blockLink': null, 'unblockLink': null};
+    }
+    final url = 'https://www.furaffinity.net/user/$authorSlug/';
+    final response = await httpClient.get(
+      Uri.parse(url),
+      headers: {
+        'Cookie': 'a=${cookies.cookieA}; b=${cookies.cookieB}',
+        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        'Accept-Encoding': 'gzip',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to fetch user page links: ${response.statusCode}');
+    }
+
+    final document = html_parser.parse(utf8.decode(response.bodyBytes, allowMalformed: true));
+    String? watchLink;
+    String? unwatchLink;
+    String? blockLink;
+    String? unblockLink;
+
+    final watchLinks = document.querySelectorAll('a.watch');
+    for (var wl in watchLinks) {
+      final href = wl.attributes['href'] ?? '';
+      if (href.contains('/watch/')) {
+        watchLink = href;
+      } else if (href.contains('/unwatch/')) {
+        unwatchLink = href;
+      }
+    }
+
+    final blockLinks = document.querySelectorAll('a.block');
+    for (var bl in blockLinks) {
+      final href = bl.attributes['href'] ?? '';
+      if (href.contains('/block/')) {
+        blockLink = href;
+      } else if (href.contains('/unblock/')) {
+        unblockLink = href;
+      }
+    }
+
+    return {
+      'watchLink': watchLink,
+      'unwatchLink': unwatchLink,
+      'blockLink': blockLink,
+      'unblockLink': unblockLink,
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> fetchCommentsFromBody(String body) async {
+    final document = html_parser.parse(body);
+    final List<Map<String, dynamic>> parsedComments = [];
+
+    final commentBlocks = document.querySelectorAll('.comment_container');
+    for (var c in commentBlocks) {
+      final comment = <String, dynamic>{};
+
+      final anchorId = c.querySelector('a.comment_anchor')?.attributes['id'] ?? '';
+      comment['commentId'] = anchorId.isNotEmpty
+          ? anchorId
+          : (c.attributes['data-id'] ?? c.attributes['id'] ?? '');
+
+      final avatarImg = c.querySelector('img.comment_useravatar') ??
+          c.querySelector('img.avatar');
+      String? avatarSrc = avatarImg?.attributes['src'];
+      if (avatarSrc != null && avatarSrc.isNotEmpty) {
+        if (avatarSrc.startsWith('//')) {
+          avatarSrc = 'https:$avatarSrc';
+        } else if (avatarSrc.startsWith('/')) {
+          avatarSrc = 'https://www.furaffinity.net$avatarSrc';
+        }
+      }
+      comment['profileImage'] = avatarSrc;
+
+      final usernameBlock = c.querySelector('.c-usernameBlock');
+      final displayNameSpan = usernameBlock?.querySelector('.js-displayName');
+      final userNameA = usernameBlock?.querySelector('.c-usernameBlock__userName');
+      String? username;
+      if (userNameA != null) {
+        final fullUserText = userNameA.text.trim();
+        final parts = fullUserText.split('~');
+        username = (parts.length > 1 ? parts.last : fullUserText).trim();
+      }
+      comment['username'] = username ?? displayNameSpan?.text.trim() ?? '';
+      comment['displayName'] =
+          displayNameSpan?.text.trim() ?? (comment['username'] as String? ?? '');
+      comment['symbol'] =
+          usernameBlock?.querySelector('.c-usernameBlock__symbol')?.text.trim() ?? '';
+      comment['userTitle'] =
+          c.querySelector('comment-title')?.text.trim() ?? '';
+
+      comment['isOP'] = c.querySelector('.comment_op_marker') != null;
+
+      final popup = c.querySelector('.popup_date');
+      comment['popupDateRelative'] = popup?.text.trim() ?? '';
+      comment['popupDateFull'] = popup?.attributes['title'] ?? '';
+
+      final textContainer = c.querySelector('comment-user-text .user-submitted-links') ??
+          c.querySelector('.comment_text .user-submitted-links') ??
+          c.querySelector('.comment_text');
+      comment['text'] = textContainer?.text.trim() ?? '';
+
+      comment['hideLink'] =
+      c.querySelector('a.hide_comment')?.attributes['href'];
+      comment['editLink'] =
+      c.querySelector('a.edit_comment')?.attributes['href'];
+      comment['deleteLink'] =
+      c.querySelector('a.delete_comment')?.attributes['href'];
+      comment['commentHtml'] = c.innerHtml;
+
+      double width = 100.0;
+      final style = c.attributes['style'] ?? '';
+      final m = RegExp(r'width\s*:\s*([0-9.]+)%').firstMatch(style);
+      if (m != null) {
+        width = double.tryParse(m.group(1)!) ?? 100.0;
+      }
+      comment['width'] = width;
+
+      parsedComments.add(comment);
+    }
+    return parsedComments;
+  }
+
+  DateTime? tryParseDate(String raw) {
+    final trimmed = raw.trim();
+    final formats = [
+      DateFormat("MMMM d, yyyy h:mm:ss a"),
+      DateFormat("MMMM d, yyyy hh:mm:ss a"),
+      DateFormat("MMMM d, yyyy h:mm a"),
+      DateFormat("MMMM d, yyyy hh:mm a"),
+      DateFormat("MMM d, yyyy h:mm a"),
+      DateFormat("MMM d, yyyy hh:mm a"),
+      DateFormat("MMM d yyyy h:mm a"),
+      DateFormat("yyyy-MM-dd HH:mm:ss"),
+    ];
+    for (final fmt in formats) {
+      try {
+        return fmt.parse(trimmed, true).toLocal();
+      } catch (_) {}
+    }
+    return DateTime.tryParse(trimmed);
+  }
+}
+
+class _Cookies {
+  _Cookies({required this.cookieA, required this.cookieB});
+  final String cookieA;
+  final String cookieB;
+}

@@ -31,8 +31,12 @@ import 'openpost.dart';
 import 'user_profile_screen.dart';
 import 'reply_screen.dart';
 import 'avatardownloadscreen.dart';
+import 'openjournal_comments.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
+import '../utils/fa_link_handler.dart';
+import '../utils/utils.dart';
+import 'openjournal_api_service.dart';
 
 // Mapping from FA Timezone Names to IANA Timezones
 final Map<String, String> faTimezoneToIana = {
@@ -90,10 +94,11 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   int commentsCount = 0;
   List<Map<String, dynamic>> comments = [];
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock),
+    iOptions: IOSOptions(
+        accountName: 'flutter_secure_storage_service',
+        accessibility: KeychainAccessibility.first_unlock),
   );
+  late final OpenJournalApiService _api;
   final TextEditingController _commentController = TextEditingController();
   bool _isTyping = false;
 
@@ -111,6 +116,20 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   String? watchLink;
   String? unwatchLink;
   bool isWatching = false;
+
+  // Favorite links
+  String? favoriteLink;
+  String? unfavoriteLink;
+  bool isFavorited = false;
+
+  // Block/unblock links
+  String? blockLink;
+  String? unblockLink;
+  bool isBlocked = false;
+
+  // Media links
+  String? fullViewImageUrl;
+  String? fileLink;
 
   // Loading state and owner flag
   bool isLoading = true;
@@ -139,8 +158,9 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _fetchPostDetails().then((_) {
-      _fetchUserPageLinks();          // fire & forget
+    _api = OpenJournalApiService(_secureStorage);
+    _fetchPostDetailsNew().then((_) {
+      _fetchUserPageLinksNew(); // fire & forget
     });
 
   }
@@ -172,362 +192,123 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   }
 
   /// Helper for full submission description HTML.
-  String? _getFullLinkFromFetchedHtml(String truncatedUrl, {String? htmlSource}) {
+  String _getFullLinkFromFetchedHtml(String truncatedUrl, {String? htmlSource}) {
     final String? source = htmlSource ?? submissionDescription;
-    if (source == null) return null;
+    if (source == null) return truncatedUrl;
     final document = html_parser.parse(source);
     for (var anchor in document.querySelectorAll('a.auto_link_shortened')) {
       if (anchor.text.trim() == truncatedUrl) {
-        return anchor.attributes['title'] ?? anchor.attributes['href'];
+        return anchor.attributes['title'] ?? anchor.attributes['href'] ?? truncatedUrl;
       }
     }
-    return null;
+    return truncatedUrl;
   }
 
-  /// Link handler method.
-  Future<void> _handleFALink(BuildContext context, String url, {String? htmlSource}) async {
-    String fullUrlToMatch = url;
-    if (htmlSource != null) {
-      final recoveredLink = _getFullLinkFromCommentHtml(htmlSource, url);
-      if (recoveredLink != null) {
-        fullUrlToMatch = recoveredLink;
-      }
-    } else if (url.contains('.....')) {
-      final recoveredLink = _getFullLinkFromFetchedHtml(url, htmlSource: htmlSource);
-      if (recoveredLink != null) {
-        fullUrlToMatch = recoveredLink;
-      }
-    }
-    final Uri uri = Uri.parse(fullUrlToMatch);
-    final String urlToMatch = uri.toString();
+  Future<void> _fetchPostDetailsNew() async {
+    try {
+      final result = await _api.fetchJournal(widget.uniqueNumber);
+      setState(() {
+        isJournalClassic = result.isJournalClassic;
+        isOwner = result.ownerEditLink != null;
+        profileImageUrl = result.profileImageUrl;
+        authorDisplayName = result.displayName;
+        authorUserName = result.authorSlug;
+        authorSymbol = result.symbol;
+        authorUserTitle = result.userTitle;
+        submissionDescription = result.submissionDescription;
+        submissionTitle = result.title;
+        publicationTime = result.dateTime;
+        publicationTimeRaw = result.dateTimeRaw;
+        commentsCount = result.commentsCount;
+        favoriteLink = result.favoriteLink;
+        unfavoriteLink = result.unfavoriteLink;
+        isFavorited = result.isFavorited;
+        watchLink = result.watchLink;
+        unwatchLink = result.unwatchLink;
+        isWatching = result.isWatching;
+        blockLink = result.blockLink;
+        unblockLink = result.unblockLink;
+        isBlocked = result.isBlocked;
+        category = result.category;
+        type = result.type;
+        species = result.species;
+        gender = result.gender;
+        keywords = result.keywords;
+        fullViewImageUrl = result.fullViewImageUrl;
+        fileLink = result.fileLink;
+        deleteLink = result.deleteLink;
+        isLoading = false;
+      });
 
-    // Gallery Folder Regex
-    final RegExp galleryFolderRegex = RegExp(
-      r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
-    );
-    if (galleryFolderRegex.hasMatch(urlToMatch)) {
-      final match = galleryFolderRegex.firstMatch(urlToMatch)!;
-      final String tappedUsername = match.group(1)!;
-      final String folderNumber = match.group(2)!;
-      final String folderName = match.group(3)!;
-      final String folderUrl =
-          'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(
-            nickname: tappedUsername,
-            initialSection: ProfileSection.Gallery,
-            initialFolderUrl: folderUrl,
-            initialFolderName: folderName,
-          ),
-        ),
-      );
-      return;
-    }
-
-    // User Regex
-    final RegExp userRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$',
-    );
-    if (userRegex.hasMatch(urlToMatch)) {
-      final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(nickname: tappedUsername),
-        ),
-      );
-      return;
-    }
-
-    // 3. Journal Link:
-    final RegExp journalRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
-    );
-
-    if (journalRegex.hasMatch(urlToMatch)) {
-      final Match match = journalRegex.firstMatch(urlToMatch)!;
-      final String? username = match.group(1);
-      final String? journalId = match.group(2);
-
-      if (username != null) {
-        // Matched: /journals/username/
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => UserProfileScreen(
-              nickname: username,
-              initialSection: ProfileSection.Journals,
-            ),
-          ),
-        );
-      } else if (journalId != null) {
-        // Matched: /journal/12345/
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OpenJournal(uniqueNumber: journalId),
-          ),
-        );
+      if (publicationTime == null && publicationTimeRaw != null) {
+        _parsePublicationTime(publicationTimeRaw!);
       }
 
-      return;
-    }
+      if (result.commentBodies.isNotEmpty) {
+        setState(() {
+          comments = result.commentBodies;
+          commentsCount = result.commentsCount;
+        });
+      } else if (submissionDescription != null) {
+        unawaited(_fetchCommentsNew(submissionDescription!));
+      }
 
-    // Submission/View Regex (unchanged, no username involved)
-    final RegExp viewRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$',
-    );
-    if (viewRegex.hasMatch(urlToMatch)) {
-      final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OpenPost(
-            uniqueNumber: submissionId,
-            imageUrl: '',
-          ),
-        ),
-      );
-      return;
-    }
-
-    // Fallback: Launch externally
-    await launchUrlString(fullUrlToMatch, mode: LaunchMode.externalApplication);
-  }
-
-  Future<void> _fetchPostDetails() async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    if (cookieA == null || cookieB == null) {
+      if (isOwner && (deleteLink == null || !_deleteLinkMatchesCurrentId(deleteLink!))) {
+        await _fetchDeleteLinkFallback();
+      }
+    } catch (e) {
       setState(() {
         isLoading = false;
       });
-      return;
-    }
-    final journalUrl = 'https://www.furaffinity.net/journal/${widget.uniqueNumber}/';
-    final response = await httpClient.get(
-      Uri.parse(journalUrl),
-      headers: {
-        'Cookie': 'a=$cookieA; b=$cookieB',
-        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
-        'Accept-Encoding': 'gzip',
-      },
-    );
-    if (response.statusCode == 200 || response.statusCode == 200) {
-      final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-      var document = html_parser.parse(decodedBody);
-
-      dom.Element? profileImgEl;
-      String? displayName;
-      String? authorSlug;
-      String? symbol;
-      String? userTitle;
-
-      final modernDetails = document.querySelector('userpage-nav-user-details');
-      final classicTitleBox = document.querySelector('td.journal-title-box');
-      isJournalClassic = (modernDetails == null) && (classicTitleBox != null);
-
-      if (!isJournalClassic && modernDetails != null) {
-        final modernHeader = modernDetails.parent;
-        profileImgEl = modernHeader?.querySelector('userpage-nav-avatar img');
-
-        displayName = modernDetails
-            .querySelector('a.c-usernameBlock__displayName span.js-displayName')
-            ?.text
-            .trim();
-
-        final userNameA = modernDetails.querySelector('a.c-usernameBlock__userName') ??
-            modernDetails.querySelector('a.c-usernameBlock__displayName');
-        symbol = userNameA?.querySelector('span.c-usernameBlock__symbol')?.text.trim();
-
-        final href = userNameA?.attributes['href'];
-        if (href != null) {
-          final path = Uri.parse(href).path.toLowerCase();
-          final m = RegExp(r'^/user/([^/]+)/?$').firstMatch(path);
-          if (m != null) authorSlug = m.group(1);
-        }
-
-
-
-        dom.Element? utSpan =
-            modernDetails.querySelector('span.user-title') ??
-                modernHeader?.querySelector('span.user-title') ??
-                document.querySelector('userpage-nav-header span.user-title');
-
-        if (utSpan != null) {
-
-          if (utSpan.text.contains('|')) {
-
-            final clone = (utSpan.clone(true) as dom.Element);
-
-            clone.querySelectorAll('.hideonmobile').forEach((e) => e.remove());
-
-            var t = clone.text.replaceAll('\u00A0', ' ')
-                .replaceAll(RegExp(r'\s+'), ' ')
-                .trim();
-
-            final parts = t.split('|');
-            final titleText = parts.first.trim();
-            if (titleText.isNotEmpty) {
-              userTitle = titleText;
-            }
-          }
-
-        }
-      } else {
-        dom.Element? classicTable;
-        var cur = classicTitleBox;
-        while (cur != null && cur.localName != 'table') {
-          cur = cur.parent;
-        }
-        classicTable = cur;
-
-        profileImgEl = classicTable?.querySelector('td.avatar-box img.avatar') ??
-            document.querySelector('td.avatar-box img.avatar');
-
-        displayName = classicTitleBox
-            ?.querySelector('a.c-usernameBlock__displayName span.js-displayName')
-            ?.text
-            ?.trim();
-
-        final userNameA = classicTitleBox?.querySelector('a.c-usernameBlock__userName') ??
-            classicTitleBox?.querySelector('a.c-usernameBlock__displayName');
-        symbol = userNameA?.querySelector('span.c-usernameBlock__symbol')?.text.trim();
-
-        final href = userNameA?.attributes['href'];
-        if (href != null) {
-          final path = Uri.parse(href).path.toLowerCase();
-          final m = RegExp(r'^/user/([^/]+)/?$').firstMatch(path);
-          if (m != null) authorSlug = m.group(1);
-        }
-      }
-
-
-      bool ownerFound = document
-          .querySelector('a.owner_edit_journal.action-link') != null;
-      document
-          .querySelectorAll('a.owner_edit_journal.action-link')
-          .forEach((el) => el.remove());
-
-      var titleElem =
-          document.querySelector('#c-journalTitleTop__subject h3') ??
-              document.querySelector('div.no_overflow') ??
-              document.querySelector('h2.journal-title');
-
-      var descriptionElem = document.querySelector('div.journal-content.user-submitted-links') ??
-          document.querySelector('div.journal-body');
-      var publicationTimeElem = document.querySelector('div.section-header span.popup_date') ??
-          document.querySelector('span.popup_date');
-
-      setState(() {
-        isOwner = ownerFound;
-
-        final rawSrc = profileImgEl?.attributes['src'];
-        profileImageUrl = (rawSrc == null) ? null
-            : (rawSrc.startsWith('//') ? 'https:$rawSrc' : rawSrc);
-
-        authorDisplayName = displayName;
-        authorUserName    = authorSlug;
-        authorSymbol      = (symbol == null || symbol!.isEmpty) ? '@' : symbol;
-        authorUserTitle   = userTitle;
-
-        username = authorSlug ?? username;
-
-        submissionTitle = titleElem?.text.trim();
-        submissionDescription = descriptionElem?.innerHtml.replaceAllMapped(
-          RegExp(r'src="(//[^"]+)"|href="(//[^"]+)"'),
-              (m) {
-            final url = m.group(1) ?? m.group(2);
-            return url != null ? m[0]!.replaceFirst('//', 'https://') : m[0]!;
-          },
-        );
-
-        if (submissionDescription != null) {
-          final descDoc = html_parser.parse(submissionDescription);
-          for (final el in descDoc.querySelectorAll('a.auto_link_shortened')) {
-            final full = el.attributes['title'] ?? el.attributes['href'];
-            if (full != null) el.innerHtml = full;
-          }
-          submissionDescription = descDoc.body?.innerHtml ?? submissionDescription;
-        }
-
-        if (publicationTimeElem != null) {
-          final rawTime = publicationTimeElem.attributes['title']?.trim();
-          if (rawTime != null && rawTime.isNotEmpty) {
-            publicationTimeRaw = rawTime;
-            _parsePublicationTime(rawTime);
-          }
-        }
-
-      });
-      if (isOwner) {
-        await _fetchDeleteLink(cookieA, cookieB);
-      }
-
-      setState(() {
-        isLoading = false;
-      });
-      unawaited(_fetchComments(decodedBody));
-    } else {
-      print('Failed to fetch journal details: ${response.statusCode}');
+      debugPrint('Failed to fetch journal details: $e');
     }
   }
 
-
-
-  Future<void> _fetchDeleteLink(String cookieA, String cookieB) async {
-    int pageIndex = 1;
-    String? found;
-    while (pageIndex <= 10) {
-      final controlUrl = 'https://www.furaffinity.net/controls/journal/$pageIndex/${widget.uniqueNumber}/';
-      final response = await httpClient.get(
-        Uri.parse(controlUrl),
-        headers: {
-          'Cookie': 'a=$cookieA; b=$cookieB',
-          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
-        },
-      );
-
-      if (response.statusCode != 200) break;
-
-      final document = html_parser.parse(response.body);
-
-      final candidates = document.querySelectorAll('a.delete[onclick*="/controls/deletejournal/"]');
-
-      for (final el in candidates) {
-        final onclickAttr = el.attributes['onclick'] ?? '';
-
-        final m = RegExp(r"showConfirm\('Are you sure you want to delete this journal\?','([^']+)'\)")
-            .firstMatch(onclickAttr);
-        if (m == null) continue;
-
-        final relUrl = m.group(1)!;
-        if (_deleteLinkMatchesCurrentId(relUrl)) {
-
-          found = relUrl.startsWith('http')
-              ? relUrl
-              : 'https://www.furaffinity.net$relUrl';
-          break;
-        }
+  Future<void> _fetchDeleteLinkFallback() async {
+    try {
+      final key = await _api.fetchDeleteKey(widget.uniqueNumber);
+      if (key != null) {
+        setState(() {
+          deleteLink = key.startsWith('http')
+              ? key
+              : 'https://www.furaffinity.net$key';
+        });
       }
-
-      if (found != null) break;
-      pageIndex++;
-    }
-
-    if (mounted) {
-      setState(() {
-        deleteLink = found;
-      });
-    }
-
-    if (found == null) {
-      debugPrint('Delete link not found or did not match journal ${widget.uniqueNumber}.');
+    } catch (e) {
+      debugPrint('Failed to fetch delete key: $e');
     }
   }
 
+  Future<void> _fetchUserPageLinksNew() async {
+    final slug = authorUserName ?? username;
+    if (slug == null) return;
+    try {
+      final links = await _api.fetchUserPageLinks(slug);
+      setState(() {
+        watchLink = links['watchLink'];
+        unwatchLink = links['unwatchLink'];
+        blockLink = links['blockLink'];
+        unblockLink = links['unblockLink'];
+        isWatching = unwatchLink != null;
+        isBlocked = unblockLink != null;
+      });
+    } catch (e) {
+      debugPrint('Failed to fetch user page links: $e');
+    }
+  }
+
+  Future<void> _fetchCommentsNew(String body) async {
+    try {
+      final parsed = await _api.fetchCommentsFromBody(body);
+      if (mounted) {
+        setState(() {
+          comments = parsed;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to parse comments: $e');
+    }
+  }
 
   Future<void> _confirmAndDeleteJournal() async {
     if (_isDeleting) return;
@@ -556,22 +337,17 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
       final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
       final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
       if (cookieA == null || cookieB == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please log in to perform this action.'), backgroundColor: Colors.red),
-        );
+        showAppSnackBar(context, 'Please log in to perform this action.', backgroundColor: Colors.red);
         return;
       }
 
       if (deleteLink == null || !_deleteLinkMatchesCurrentId(deleteLink!)) {
-        await _fetchDeleteLink(cookieA, cookieB);
+        await _fetchDeleteLinkFallback();
       }
       if (deleteLink == null || !_deleteLinkMatchesCurrentId(deleteLink!)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Safe delete failed: couldn't confirm delete link for this journal."),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showAppSnackBar(context,
+            "Safe delete failed: couldn't confirm delete link for this journal.",
+            backgroundColor: Colors.red);
         return;
       }
 
@@ -587,67 +363,67 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
 
       if (resp.statusCode >= 200 && resp.statusCode < 400) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Journal "$titleForDialog" deleted.'), backgroundColor: Colors.green),
-        );
+        showAppSnackBar(context, 'Journal "$titleForDialog" deleted.', backgroundColor: Colors.green);
         Navigator.of(context).pop(true);
       } else {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Delete failed (HTTP ${resp.statusCode}).'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showAppSnackBar(context,
+            'Delete failed (HTTP ${resp.statusCode}).',
+            backgroundColor: Colors.red);
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error while deleting: $e'), backgroundColor: Colors.red),
-      );
+      showAppSnackBar(context, 'Error while deleting: $e', backgroundColor: Colors.red);
     } finally {
       if (mounted) setState(() => _isDeleting = false);
     }
   }
 
-  Future<void> _fetchUserPageLinks() async {
-    if (username == null) return;
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    if (cookieA == null || cookieB == null) return;
-    final userPageUrl = 'https://www.furaffinity.net/user/$username/';
-    final response = await httpClient.get(
-      Uri.parse(userPageUrl),
-      headers: {
-        'Cookie': 'a=$cookieA; b=$cookieB',
-        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
-      },
-    );
-    if (response.statusCode == 200) {
-      var document = html_parser.parse(response.body);
-      var watchLinkElement = document.querySelector('a.button.standard.go[href^="/watch/"]');
-      var unwatchLinkElement = document.querySelector('a.button.standard.stop[href^="/unwatch/"]');
-      setState(() {
-        watchLink = watchLinkElement?.attributes['href'];
-        unwatchLink = unwatchLinkElement?.attributes['href'];
-        isWatching = unwatchLinkElement != null;
-      });
-    } else {
-      print('Failed to fetch user page links: ${response.statusCode}');
-    }
-  }
-
   void _parsePublicationTime(String rawTime) {
     try {
-      final format = DateFormat('MMM d, yyyy hh:mm a');
-      DateTime naiveDateTime = format.parse(rawTime);
-      if (isDstCorrectionApplied) {
-        naiveDateTime = naiveDateTime.subtract(const Duration(hours: 1));
+      final trimmed = rawTime.trim();
+      if (trimmed.isEmpty) return;
+      final lower = trimmed.toLowerCase();
+      // Skip relative strings like "a week ago", "4 months ago", "a year ago".
+      if (lower.contains('ago')) {
+        return;
       }
-      publicationTime = naiveDateTime.toUtc();
+      // Skip anything without a digit; these aren't absolute dates.
+      if (!RegExp(r'\d').hasMatch(trimmed)) {
+        return;
+      }
+
+      final formats = [
+        DateFormat("MMMM d, yyyy h:mm:ss a"),
+        DateFormat("MMMM d, yyyy hh:mm:ss a"),
+        DateFormat("MMMM d, yyyy h:mm a"),
+        DateFormat("MMMM d, yyyy hh:mm a"),
+        DateFormat("MMM d, yyyy h:mm a"),
+        DateFormat("MMM d, yyyy hh:mm a"),
+        DateFormat("MMM d yyyy h:mm a"),
+        DateFormat("yyyy-MM-dd HH:mm:ss"),
+      ];
+
+      DateTime? parsed;
+
+      for (final fmt in formats) {
+        try {
+          parsed = fmt.parse(trimmed, true);
+          break;
+        } catch (_) {}
+      }
+
+      parsed ??= DateTime.tryParse(trimmed);
+
+      if (parsed != null) {
+        if (isDstCorrectionApplied) {
+          parsed = parsed.subtract(const Duration(hours: 1));
+        }
+        publicationTime = parsed.toUtc();
+      }
     } catch (e, stackTrace) {
-      print("Error parsing publication time: $e");
-      print("Stack trace: $stackTrace");
+      debugPrint("Error parsing publication time: $e");
+      debugPrint("Stack trace: $stackTrace");
     }
   }
 
@@ -665,12 +441,9 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
     String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     if (cookieA == null || cookieB == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Please log in to perform this action.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      showAppSnackBar(context,
+          'Please log in to perform this action.',
+          backgroundColor: Colors.red);
       return;
     }
     final fullUrl = 'https://www.furaffinity.net$urlPath';
@@ -683,324 +456,22 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         },
       );
       if (response.statusCode == 200) {
-        await _fetchUserPageLinks();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${shouldWatch ? 'Now watching $username' : 'Stopped watching $username'}'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        await _fetchUserPageLinksNew();
+        showAppSnackBar(context,
+            '${shouldWatch ? 'Now watching $username' : 'Stopped watching $username'}',
+            backgroundColor: Colors.green);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to ${shouldWatch ? 'watch' : 'unwatch'} user.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showAppSnackBar(context,
+            'Failed to ${shouldWatch ? 'watch' : 'unwatch'} user.',
+            backgroundColor: Colors.red);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('An error occurred while trying to ${shouldWatch ? 'watch' : 'unwatch'} user.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      showAppSnackBar(context,
+          'An error occurred while trying to ${shouldWatch ? 'watch' : 'unwatch'} user.',
+          backgroundColor: Colors.red);
     }
   }
-
-
-
-  // Fetch comments
-  Future<void> _fetchComments(String body) async {
-
-    final document = await compute(parseHtml, body);
-
-    // Selects both modern and classic comment containers
-    final commentContainers = document.querySelectorAll('.comment_container, table.container-comment');
-    List<Map<String, dynamic>> loadedComments = [];
-
-    print("Number of comment containers found: ${commentContainers.length}");
-
-    for (var commentContainer in commentContainers) {
-      // Checks if comment is deleted in modern style or classic style
-      final innerContainer = commentContainer.querySelector('comment-container');
-      bool isDeleted = innerContainer?.classes.contains('deleted-comment-container') ?? false;
-
-
-      bool isClassic = commentContainer.localName == 'table';
-
-
-      bool isClassicDeleted = false;
-      dom.Element? classicDeletedCell;
-      if (isClassic) {
-        classicDeletedCell = commentContainer.querySelector('td.comment-deleted');
-        if (classicDeletedCell != null) {
-          isClassicDeleted = true;
-          isDeleted = true;
-        }
-      }
-
-
-      // Width percentage / nesting
-      double widthPercent = 100.0;
-      if (!isClassic) {
-        String? style = commentContainer.attributes['style'];
-        if (style != null) {
-          final widthRegex = RegExp(r'width\s*:\s*(\d+(?:\.\d+)?)%');
-          final match = widthRegex.firstMatch(style);
-          if (match != null) {
-            widthPercent = double.tryParse(match.group(1) ?? '') ?? 100.0;
-          }
-        }
-      } else {
-        // Classic style: use table's "width" attribute
-        String? tableWidth = commentContainer.attributes['width'];
-        if (tableWidth != null) {
-          String numericPart = tableWidth.replaceAll('%', '').trim();
-          widthPercent = double.tryParse(numericPart) ?? 100.0;
-        }
-      }
-
-
-      // Profile image
-      String? profileImage = commentContainer.querySelector('.avatar img')?.attributes['src'];
-      if (profileImage == null || profileImage.isEmpty) {
-        profileImage = commentContainer.querySelector('img.avatar')?.attributes['src'];
-      }
-      if (profileImage != null && profileImage.startsWith('//')) {
-        profileImage = 'https:$profileImage';
-      }
-
-
-      // Comment text & HTML
-      String? commentText;
-      String? commentHtml;
-
-      if (isDeleted) {
-        if (isClassicDeleted && classicDeletedCell != null) {
-          // Classic hidden comment cell
-          commentText = classicDeletedCell.text.trim();
-          commentHtml = classicDeletedCell.innerHtml;
-        } else {
-          final deletedElement = commentContainer.querySelector('comment-user-text.comment_text');
-          if (deletedElement != null) {
-            commentText = deletedElement.text.trim();
-            commentHtml = deletedElement.outerHtml;
-          }
-        }
-      } else {
-        var commentTextElement = commentContainer.querySelector('.comment_text .user-submitted-links');
-        commentTextElement ??= commentContainer.querySelector('div.message-text');
-
-        if (commentTextElement != null) {
-          String rawHtml = commentTextElement.innerHtml;
-          // Converts emoji <i> tags into placeholders.
-
-          rawHtml = rawHtml.replaceAllMapped(
-            // Handles <i class="smilie ..."></i>, <i class="smilie ..." />, and variations
-            RegExp(r'<i\s+class="(smilie\s+[^"]+)"[^>]*>(?:\s*<\/i>)?|<i\s+class="(smilie\s+[^"]+)"[^>]*/?>',
-                caseSensitive: false),
-                (m) {
-              final cls = (m.group(1) ?? m.group(2))!;
-              return '[${cls.replaceAll(' ', '-')}]';
-            },
-          );
-          rawHtml = rawHtml
-              .replaceAll(RegExp(r'<i\s+class="bbcode\s+bbcode_i"[^>]*>', caseSensitive: false), '[[i]]')
-              .replaceAll(RegExp(r'</i>', caseSensitive: false), '[[/i]]')
-
-              // Bold
-              .replaceAll(RegExp(r'<strong\s+class="bbcode\s+bbcode_b"[^>]*>', caseSensitive: false), '[[b]]')
-              .replaceAll(RegExp(r'</strong>', caseSensitive: false), '[[/b]]')
-              // (optional fallback if FA ever emits <b class="bbcode bbcode_b">)
-              .replaceAll(RegExp(r'<b\s+class="bbcode\s+bbcode_b"[^>]*>', caseSensitive: false), '[[b]]')
-              .replaceAll(RegExp(r'</b>', caseSensitive: false), '[[/b]]')
-
-              // Underline
-              .replaceAll(RegExp(r'<u\s+class="bbcode\s+bbcode_u"[^>]*>', caseSensitive: false), '[[u]]')
-              .replaceAll(RegExp(r'</u>', caseSensitive: false), '[[/u]]');
-
-          // Fix truncated links.
-          rawHtml = fixTruncatedLinks(rawHtml);
-
-          final commentDoc = html_parser.parse(rawHtml);
-          commentDoc.querySelectorAll('a.auto_link_shortened').forEach((element) {
-            final fullLink = element.attributes['title'] ?? element.attributes['href'];
-            if (fullLink != null) {
-              element.innerHtml = fullLink;
-            }
-          });
-
-          commentText = commentDoc.body?.text.trim();
-          commentHtml = commentDoc.body?.innerHtml ?? rawHtml;
-        }
-
-      }
-
-
-      // 5) Username, user title, icons
-      final displayNameAnchor = commentContainer.querySelector('a.c-usernameBlock__displayName span.js-displayName');
-      String? displayName = displayNameAnchor?.text.trim();
-
-      String parsedSymbol = '';
-      String parsedUserName = '';
-      final userNameAnchor = commentContainer.querySelector('a.c-usernameBlock__userName');
-      if (userNameAnchor != null) {
-        final symbolElement = userNameAnchor.querySelector('span.c-usernameBlock__symbol');
-        if (symbolElement != null) {
-          parsedSymbol = symbolElement.text.trim();
-        }
-        final fullText = userNameAnchor.text.trim();
-        parsedUserName = fullText.replaceFirst(parsedSymbol, '').trim();
-      }
-      final effectiveUserName = parsedUserName.isNotEmpty ? parsedUserName : displayName;
-      final usernameForUI = effectiveUserName ?? "Anonymous";
-
-      String? userTitle = commentContainer.querySelector('comment-title.custom-title')?.text.trim();
-      userTitle ??= commentContainer.querySelector('span.custom-title.hideonmobile.font-small')?.text.trim();
-
-      final iconBeforeElements = commentContainer.querySelectorAll('usericon-block-before img');
-      final iconBeforeUrls = iconBeforeElements.map((elem) {
-        String? src = elem.attributes['src'];
-        if (src != null) {
-          if (src.startsWith('//')) return 'https:$src';
-          if (src.startsWith('/')) return 'https://www.furaffinity.net$src';
-          return src;
-        }
-        return '';
-      }).where((url) => url.isNotEmpty).toList();
-
-      final iconAfterElements = commentContainer.querySelectorAll('usericon-block-after img');
-      final iconAfterUrls = iconAfterElements.map((elem) {
-        String? src = elem.attributes['src'];
-        if (src != null) {
-          if (src.startsWith('//')) return 'https:$src';
-          if (src.startsWith('/')) return 'https://www.furaffinity.net$src';
-          return src;
-        }
-        return '';
-      }).where((url) => url.isNotEmpty).toList();
-
-
-      // Date
-      final dateElem = commentContainer.querySelector('.popup_date');
-      final popupDateFull = dateElem?.attributes['title']?.trim();
-      final popupDateRelative = dateElem?.text.trim();
-
-
-      // Hide/unhide link
-      String? hideLink;
-      final hideElements = commentContainer.querySelectorAll('comment-hide');
-      for (var element in hideElements) {
-        final link = element.querySelector('a[href*="action=hide_comment"]');
-        if (link != null) {
-          hideLink = link.attributes['href'];
-          break;
-        }
-      }
-      if (hideLink != null && hideLink.startsWith('/')) {
-        hideLink = 'https://www.furaffinity.net$hideLink';
-      }
-
-
-      // Extract comment ID from both "modern" or "classic" reply link
-      dom.Element? replyAnchor = commentContainer.querySelector('.replyto_link');
-      if (replyAnchor != null && replyAnchor.localName != 'a') {
-        // If the element with .replyto_link isn’t the anchor itself, check its children.
-        replyAnchor = replyAnchor.querySelector('a');
-      }
-      // Fallback for classic style if needed.
-      replyAnchor ??= commentContainer.querySelector('td.reply-link a');
-
-      String? commentId;
-      if (replyAnchor != null) {
-        final href = replyAnchor.attributes['href'] ?? '';
-        final match = RegExp(r'/replyto/(?:journal/)?(\d+)/').firstMatch(href);
-        if (match != null) {
-          commentId = match.group(1); // e.g. "60584241"
-          print('Parsed comment ID: $commentId');
-        } else {
-          print('[DEBUG] Original reply href: "$href"');
-        }
-      }
-
-
-
-      // Extract edit link
-      final editLinkElem = commentContainer.querySelector('comment-edit a.edit_link');
-      String? editLink;
-      if (editLinkElem != null) {
-        editLink = editLinkElem.attributes['href'];
-        if (editLink != null && editLink.startsWith('/')) {
-          editLink = 'https://www.furaffinity.net$editLink';
-        }
-      }
-
-
-      // Build comment map
-      final commentMap = <String, dynamic>{
-        'profileImage': profileImage,
-        'displayName': displayName,
-        'userName': effectiveUserName,
-        'username': usernameForUI,
-        'symbol': parsedSymbol.isNotEmpty ? parsedSymbol : '@',
-        'userTitle': userTitle,
-        'text': commentText,
-        'commentHtml': commentHtml,
-        'width': widthPercent,
-        'isOP': commentContainer.querySelector('.comment_op_marker') != null,
-        'popupDateFull': popupDateFull,
-        'popupDateRelative': popupDateRelative,
-        'showFullDate': false,
-        'commentId': commentId,
-        'iconBeforeUrls': iconBeforeUrls,
-        'iconAfterUrls': iconAfterUrls,
-        'deleted': isDeleted,
-        'hideLink': hideLink,
-        'editLink': editLink,
-      };
-
-      // If deleted, adjust text and remove user data
-      if (isDeleted) {
-        String hiddenText = commentText ?? "";
-        hiddenText = hiddenText.replaceAll(
-            RegExp(r'Unhide\s+Comment(\s*<span.*?<\/span>)?', caseSensitive: false),
-            ''
-        ).trim();
-        commentMap['text'] = hiddenText;
-        commentMap['profileImage'] = null;
-        commentMap['displayName'] = null;
-        commentMap['userName'] = null;
-
-        // If available, update hideLink with un-hide link from classic style
-        final unhideLinkElement = commentContainer.querySelector('div.font-small.floatright a[href*="action=unhide_comment"]');
-        if (unhideLinkElement != null) {
-          String? unhideLink = unhideLinkElement.attributes['href'];
-          if (unhideLink != null && unhideLink.startsWith('/')) {
-            unhideLink = 'https://www.furaffinity.net$unhideLink';
-          }
-          commentMap['hideLink'] = unhideLink;
-        }
-      } else {
-        // For non-deleted comments, ensure important fields
-        if (profileImage == null || effectiveUserName == null || commentText == null) {
-          continue;
-        }
-      }
-
-      // Add to the list
-      loadedComments.add(commentMap);
-    }
-
-    // Update state with all parsed comments
-    setState(() {
-      comments = loadedComments;
-      commentsCount = loadedComments.length;
-    });
-  }
-
-
-
+  // (legacy _fetchComments removed; use _fetchCommentsNew)
   Future<void> hideComment(String hideLink, String commentId) async {
     final shouldHide = await showDialog<bool>(
       context: context,
@@ -1034,13 +505,8 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
           },
         );
         if (response.statusCode == 200) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Comment successfully hidden!"),
-              backgroundColor: Colors.green,
-            ),
-          );
-          await _fetchPostDetails();
+          showAppSnackBar(context, "Comment successfully hidden!", backgroundColor: Colors.green);
+          await _fetchPostDetailsNew();
         } else {
           print('Failed to hide comment. Status code: ${response.statusCode}');
         }
@@ -1083,13 +549,8 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
           },
         );
         if (response.statusCode == 200) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Comment successfully un-hidden!"),
-              backgroundColor: Colors.green,
-            ),
-          );
-          await _fetchPostDetails();
+          showAppSnackBar(context, "Comment successfully un-hidden!", backgroundColor: Colors.green);
+          await _fetchPostDetailsNew();
         } else {
           print('Failed to unhide comment. Status code: ${response.statusCode}');
         }
@@ -1150,13 +611,11 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                         uniqueNumber: widget.uniqueNumber,
                       ),
                     ),
-                  ).then((_) => _fetchPostDetails());
+                  ).then((_) => _fetchPostDetailsNew());
                   break;
                 case 'delete':
                   if (!isOwner) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('You do not have permission to delete this journal.')),
-                    );
+                    showAppSnackBar(context, 'You do not have permission to delete this journal.', backgroundColor: Colors.red);
                     break;
                   }
                   unawaited(_confirmAndDeleteJournal());
@@ -1190,7 +649,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
     child: SelectionArea(
     key: _journalSelectionKey,
     child: RefreshIndicator(
-        onRefresh: _fetchPostDetails,
+        onRefresh: _fetchPostDetailsNew,
         child: CustomScrollView(
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
@@ -1316,7 +775,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                               ),
 
                             },
-                            onLinkTap: (url, _, __) => _handleFALink(context, url!),
+                            onLinkTap: (url, _, __) => handleFALink(context, url!, htmlSource: submissionDescription, getFullUrl: _getFullLinkFromFetchedHtml),
                             extensions: [
                               html_pkg.TagExtension(
                                 tagsToExtend: {"i"},
@@ -1560,7 +1019,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                           ),
                         ).then((result) {
                           if (result == true) {
-                            _fetchPostDetails();
+                            _fetchPostDetailsNew();
                           }
                         });
                       },
@@ -1571,7 +1030,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                           : null,
                       handleLink: (url) async {
                         final commentHtml = comment['commentHtml'] ?? '';
-                        await _handleFALink(context, url, htmlSource: commentHtml);
+                        await handleFALink(context, url, htmlSource: commentHtml, getFullUrl: _getFullLinkFromFetchedHtml);
                       },
                     );
                   },
@@ -1632,7 +1091,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                           ),
                         ),
                       );
-                      if (ok == true) _fetchPostDetails();
+                      if (ok == true) _fetchPostDetailsNew();
                     },
                     child: AbsorbPointer(
                       child: SizedBox(
@@ -1686,417 +1145,4 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
 final GlobalKey<SelectionAreaState> _journalSelectionKey = GlobalKey();
 
 /// A stateful widget for an individual comment.
-class CommentWidget extends StatefulWidget {
-  final Map<String, dynamic> comment;
-  final VoidCallback? onHide;
-  final VoidCallback? onEdit;
-  final VoidCallback? onReply;
-  final VoidCallback? onUnhide;
-  final Future<void> Function(String url)? handleLink;
-
-  const CommentWidget({
-    Key? key,
-    required this.comment,
-    this.onHide,
-    this.onEdit,
-    this.onReply,
-    this.onUnhide,
-    this.handleLink,
-  }) : super(key: key);
-
-  @override
-  _CommentWidgetState createState() =>
-      _CommentWidgetState();
-}
-
-class _CommentWidgetState extends State<CommentWidget> {
-  bool _showFullDate = false;
-
-  @override
-  Widget build(BuildContext context) {
-    double widthPercent =
-    (widget.comment['width'] ?? 100).toDouble();
-    int nestingLevel =
-    ((100.0 - widthPercent) / 3.0).round().clamp(0, 4);
-    double leftPadding = nestingLevel * 16.0;
-    if (widget.comment['deleted'] == true) {
-      return Padding(
-        padding:
-        EdgeInsets.only(left: leftPadding, bottom: 6.0),
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-              vertical: 16.0, horizontal: 12.0),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade900,
-            borderRadius: BorderRadius.circular(4.0),
-          ),
-          child: Row(
-            mainAxisAlignment:
-            MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  widget.comment['text'] ?? '',
-                  style: const TextStyle(
-                      fontSize: 12, color: Colors.grey),
-                ),
-              ),
-              if (widget.comment['hideLink'] != null)
-                TextButton(
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 0),
-                    tapTargetSize:
-                    MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  onPressed: widget.onUnhide,
-                  child: const Text(
-                    'Unhide',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      );
-    }
-    return Padding(
-      padding:
-      EdgeInsets.only(left: leftPadding, bottom: 6.0),
-      child: Container(
-        padding: const EdgeInsets.only(
-            right: 12.0,
-            left: 12.0,
-            top: 8.0,
-            bottom: 2.0),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF0b0b0b),
-              Color(0xFF202020)
-            ],
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment:
-              CrossAxisAlignment.start,
-              children: [
-                if (widget.comment['profileImage'] != null)
-                  Padding(
-                    padding: const EdgeInsets.only(
-                        right: 8.0, top: 4.0),
-                    child: GestureDetector(
-                      onTap: () {
-                        if (widget.comment['username'] !=
-                            null) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  UserProfileScreen(
-                                    nickname: widget.comment[
-                                    'username'],
-                                  ),
-                            ),
-                          );
-                        }
-                      },
-                      child: CachedNetworkImage(
-                        imageUrl: widget.comment[
-                        'profileImage'],
-                        width: 46,
-                        height: 46,
-                        fit: BoxFit.cover,
-                        placeholder:
-                            (context, url) =>
-                            Image.asset(
-                              'assets/images/defaultpic.gif',
-                              width: 46,
-                              height: 46,
-                              fit: BoxFit.cover,
-                            ),
-                        errorWidget:
-                            (context, url, error) =>
-                            Image.asset(
-                              'assets/images/defaultpic.gif',
-                              width: 46,
-                              height: 46,
-                              fit: BoxFit.cover,
-                            ),
-                      ),
-                    ),
-                  ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          if (widget.comment[
-                          'iconBeforeUrls'] !=
-                              null &&
-                              widget.comment[
-                              'iconBeforeUrls']
-                                  .isNotEmpty)
-                            ...widget.comment[
-                            'iconBeforeUrls']
-                                .map((url) {
-                              final isEditedIcon =
-                              url.contains(
-                                  'edited.png');
-                              return Padding(
-                                padding:
-                                const EdgeInsets.only(
-                                    right: 4.0),
-                                child: Image.network(
-                                  url,
-                                  width: 16,
-                                  height: 16,
-                                  color: isEditedIcon
-                                      ? Colors.white
-                                      : null,
-                                  colorBlendMode:
-                                  isEditedIcon
-                                      ? BlendMode
-                                      .srcIn
-                                      : null,
-                                ),
-                              );
-                            }),
-                          Flexible(
-                            child: Text(
-                              widget.comment[
-                              'displayName'] ??
-                                  widget.comment[
-                                  'username'] ??
-                                  'Anonymous',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight:
-                                FontWeight.bold,
-                              ),
-                              overflow:
-                              TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (widget.comment[
-                          'iconAfterUrls'] !=
-                              null &&
-                              widget.comment[
-                              'iconAfterUrls']
-                                  .isNotEmpty)
-                            ...widget.comment[
-                            'iconAfterUrls']
-                                .map((url) =>
-                                Padding(
-                                  padding:
-                                  const EdgeInsets.only(
-                                      left:
-                                      4.0),
-                                  child: Image.network(
-                                    url,
-                                    width: 16,
-                                    height: 16,
-                                  ),
-                                )),
-                          if (widget.comment[
-                          'isOP'] ==
-                              true)
-                            const Padding(
-                              padding:
-                              EdgeInsets.only(
-                                  left: 4.0),
-                              child: Text(
-                                'OP',
-                                style: TextStyle(
-                                  color: Colors.blue,
-                                  fontSize: 13,
-                                  fontWeight:
-                                  FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      Text(
-                        '${widget.comment['symbol'] ?? '~'}${widget.comment['username'] ?? 'Anonymous'}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFFE09321),
-                        ),
-                      ),
-                      if ((widget.comment[
-                      'userTitle'] ??
-                          '')
-                          .isNotEmpty)
-                        Text(
-                          widget.comment['userTitle'],
-                          style: TextStyle(
-                            fontSize: 12,
-                            color:
-                            Colors.grey.shade400,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.only(
-                  left: 0.0,
-                  right: 8.0,
-                  top: 11.0,
-                  bottom: 1.0),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  textSelectionTheme:
-                  TextSelectionThemeData(
-                    selectionColor: Color(0xFFE09321)
-                        .withOpacity(0.4),
-                    selectionHandleColor:
-                    const Color(0xFFE09321),
-                  ),
-                ),
-                child: ExtendedText(
-                  widget.comment['text'] ?? '',
-                  specialTextSpanBuilder:
-                  EmojiSpecialTextSpanBuilder(
-                    onTapLink: widget.handleLink,
-                  ),
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade300,
-                  ),
-                ),
-              ),
-            ),
-            Row(
-              mainAxisAlignment:
-              MainAxisAlignment.spaceBetween,
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _showFullDate =
-                      !_showFullDate;
-                    });
-                  },
-                  child: Padding(
-                    padding:
-                    const EdgeInsets.symmetric(
-                        vertical: 12.0),
-                    child: Text(
-                      _showFullDate
-                          ? (widget.comment[
-                      'popupDateFull'] ??
-                          widget.comment[
-                          'popupDateRelative'] ??
-                          '')
-                          : (widget.comment[
-                      'popupDateRelative'] ??
-                          ''),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color:
-                        Colors.grey.shade400,
-                      ),
-                    ),
-                  ),
-                ),
-                Row(
-                  children: [
-                    if (widget.comment[
-                    'hideLink'] !=
-                        null)
-                      IconButton(
-                        padding: EdgeInsets.zero,
-                        constraints:
-                        const BoxConstraints(),
-                        icon: const Icon(
-                            Icons.visibility_off,
-                            size: 16,
-                            color: Colors.white),
-                        onPressed: widget.onHide,
-                      ),
-                    if (widget.comment[
-                    'editLink'] !=
-                        null)
-                      TextButton(
-                        style:
-                        TextButton.styleFrom(
-                          padding:
-                          const EdgeInsets.only(
-                              left: 4.0,
-                              right: 8),
-                          minimumSize:
-                          const Size(0, 0),
-                          tapTargetSize:
-                          MaterialTapTargetSize
-                              .shrinkWrap,
-                        ),
-                        onPressed: widget.onEdit,
-                        child: Row(
-                          mainAxisSize:
-                          MainAxisSize.min,
-                          children: const [
-                            Icon(Icons.edit,
-                                size: 16,
-                                color: Colors.white),
-                            SizedBox(width: 4),
-                            Text('Edit',
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14)),
-                          ],
-                        ),
-                      ),
-                    TextButton(
-                      style:
-                      TextButton.styleFrom(
-                        padding:
-                        const EdgeInsets.only(
-                            left: 6),
-                        minimumSize:
-                        const Size(0, 0),
-                        tapTargetSize:
-                        MaterialTapTargetSize
-                            .shrinkWrap,
-                      ),
-                      onPressed: widget.onReply,
-                      child: Row(
-                        mainAxisSize:
-                        MainAxisSize.min,
-                        children: const [
-                          Icon(Icons.reply,
-                              size: 19,
-                              color: Colors.white),
-                          SizedBox(width: 4),
-                          Text('Reply',
-                              style: TextStyle(
-                                  color:
-                                  Colors.white,
-                                  fontSize: 14)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// CommentWidget moved to openjournal_comments.dart

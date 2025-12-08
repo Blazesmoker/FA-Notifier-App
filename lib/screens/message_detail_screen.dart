@@ -16,6 +16,8 @@ import '../utils.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'openjournal.dart';
 import 'openpost.dart';
+import '../utils/fa_link_handler.dart';
+import '../utils/utils.dart';
 
 class MessageDetailScreen extends StatefulWidget {
   final String messageLink;
@@ -315,9 +317,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
       );
 
       if (response.statusCode == 302 || response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Message marked as unread')),
-        );
+        showAppSnackBar(context, 'Message marked as unread');
         Navigator.pop(context, 'marked_unread');
       } else {
         setState(() {
@@ -332,108 +332,6 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
         SnackBar(content: Text('Error: $e')),
       );
     }
-  }
-
-  /// Custom link handling function to navigate within FA or externally
-  Future<void> _handleFALink(BuildContext context, String url) async {
-    final Uri uri = Uri.parse(url);
-    final String urlToMatch = uri.toString();
-
-    // 1. Gallery Folder Link
-    final RegExp galleryFolderRegex = RegExp(
-      r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
-    );
-    if (galleryFolderRegex.hasMatch(urlToMatch)) {
-      final match = galleryFolderRegex.firstMatch(urlToMatch)!;
-      final String tappedUsername = match.group(1)!;
-      final String folderNumber = match.group(2)!;
-      final String folderName = match.group(3)!;
-      final folderUrl =
-          'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(
-            nickname: tappedUsername,
-            initialSection: ProfileSection.Gallery,
-            initialFolderUrl: folderUrl,
-            initialFolderName: folderName,
-          ),
-        ),
-      );
-      return;
-    }
-
-    // 2. User Link
-    final RegExp userRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$',
-    );
-    if (userRegex.hasMatch(urlToMatch)) {
-      final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(nickname: tappedUsername),
-        ),
-      );
-      return;
-    }
-
-    // 3. Journal Link:
-    final RegExp journalRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
-    );
-
-    if (journalRegex.hasMatch(urlToMatch)) {
-      final Match match = journalRegex.firstMatch(urlToMatch)!;
-      final String? username = match.group(1);
-      final String? journalId = match.group(2);
-
-      if (username != null) {
-        // Matched: /journals/username/
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => UserProfileScreen(
-              nickname: username,
-              initialSection: ProfileSection.Journals,
-            ),
-          ),
-        );
-      } else if (journalId != null) {
-        // Matched: /journal/12345/
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OpenJournal(uniqueNumber: journalId),
-          ),
-        );
-      }
-
-      return;
-    }
-
-    // 4. Submission/View Link
-    final RegExp viewRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$',
-    );
-    if (viewRegex.hasMatch(urlToMatch)) {
-      final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OpenPost(
-            uniqueNumber: submissionId,
-            imageUrl: '',
-          ),
-        ),
-      );
-      return;
-    }
-
-    // 5. Fallback: external link
-    await launchUrlString(url, mode: LaunchMode.externalApplication);
   }
 
   GlobalKey _selectableKey = GlobalKey();
@@ -517,7 +415,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                         GestureDetector(
                           onTap: () {
                             if (senderLink.isNotEmpty) {
-                              _handleFALink(context, senderLink);
+                              handleFALink(context, senderLink);
                             }
                           },
                           child: Container(
@@ -543,6 +441,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                       else
                         const SizedBox.shrink(),
                       const SizedBox(width: 16),
+                      Expanded(child:
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -555,7 +454,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                               ),
                               InkWell(
                                 onTap: senderLink.isNotEmpty
-                                    ? () => _handleFALink(context, senderLink)
+                                    ? () => handleFALink(context, senderLink)
                                     : null,
                                 child: Text(
                                   sender.isNotEmpty ? sender : 'Unknown sender',
@@ -575,14 +474,20 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                               color: Colors.white,
                             ),
                           ),
-                          Text(
-                            'Date: $sentDate',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey,
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Date: $sentDate',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey,
+                              ),
                             ),
                           ),
+
                         ],
+                      ),
                       ),
                     ],
                   ),
@@ -599,7 +504,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                         child: SelectableLinkify(
                           key: _selectableKey,
                           onOpen: (link) async {
-                            await _handleFALink(context, link.url);
+                            await handleFALink(context, link.url);
                           },
                           text: messageContent,
                           style: const TextStyle(
@@ -659,8 +564,6 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                                 );
                               }
                             });
-
-
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFE09321),
@@ -672,7 +575,6 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                 ],
               ),
             ),
-
           ),
         ),
       ),

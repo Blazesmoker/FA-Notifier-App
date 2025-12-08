@@ -2,7 +2,7 @@
 
 buildscript {
 
-    ext.kotlin_version = '2.0.0'
+    ext.kotlin_version = '2.2.21'
 
     repositories {
         google()
@@ -10,7 +10,7 @@ buildscript {
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.4.2'
+        classpath 'com.android.tools.build:gradle:8.13.1'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
 
 
@@ -41,8 +41,11 @@ tasks.register("clean", Delete) {
 ext {
     flutter = [
             minSdkVersion : 26,
-            targetSdkVersion : 35,
+            targetSdkVersion : 36,
             versionCode : 12,
             versionName : "1.1.6"
     ]
+    compileSdkVersion = 36
+    targetSdkVersion = 36
+    minSdkVersion = 26
 }

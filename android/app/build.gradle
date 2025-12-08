@@ -19,8 +19,9 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.blazesmoker.fanotifier"
 
-    compileSdk = 35
-    ndkVersion = "25.1.8937393"
+    compileSdk = 36
+    //ndkVersion = "25.1.8937393"
+    ndkVersion = "27.3.13750724"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
