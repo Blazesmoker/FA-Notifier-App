@@ -52,6 +52,8 @@ class UserProfileParsed {
     required this.unwatchLink,
     required this.blockLink,
     required this.unblockLink,
+    required this.blockUsesPost,
+    required this.unblockUsesPost,
     required this.isWatching,
     required this.isBlocked,
     required this.isOwnProfile,
@@ -97,6 +99,8 @@ class UserProfileParsed {
   String? unwatchLink;
   String? blockLink;
   String? unblockLink;
+  bool blockUsesPost;
+  bool unblockUsesPost;
   bool isWatching;
   bool isBlocked;
   bool isOwnProfile;
@@ -222,9 +226,9 @@ class UserProfileApiService {
   /// Parse additional shouts returned from a pagination call.
   /// Expects the FA JSON payload that includes HTML fragments.
   List<Shout> parseAdditionalShoutsJson(
-    String jsonBody,
-    Set<String> existingShoutIds,
-  ) {
+      String jsonBody,
+      Set<String> existingShoutIds,
+      ) {
     final List<Shout> newShouts = [];
     try {
       final Map<String, dynamic> jsonData = json.decode(jsonBody);
@@ -232,24 +236,20 @@ class UserProfileApiService {
 
       final shoutsList = jsonData['shouts'] as List<dynamic>;
       for (var shoutData in shoutsList) {
-        // Extract shout ID from anchor_id if available
         String shoutId = shoutData['anchor_id'] ?? '';
         if (shoutId.startsWith('shout-')) {
           shoutId = shoutId.substring('shout-'.length);
         }
 
-        // Skip duplicates
         if (shoutId.isNotEmpty && existingShoutIds.contains(shoutId)) {
           continue;
         }
 
-        // Parse the HTML content from JSON to extract username and other details
         String avatarUrl = shoutData['avatar_url'] ?? '';
         if (avatarUrl.startsWith('//')) {
           avatarUrl = 'https:$avatarUrl';
         }
 
-        // Parse the display name HTML
         String displayNameHtml = shoutData['shout_display_name_with_icons'] ?? '';
         final displayNameDoc = html_parser.parse(displayNameHtml);
 
@@ -261,14 +261,12 @@ class UserProfileApiService {
         String userNamePart = userNameElem?.text.trim() ?? '';
         String symbol = symbolElem?.text.trim() ?? "~";
 
-        // Process username
         final usernameWithoutSymbol = userNamePart.replaceFirst(symbol, '').trim();
         String cmtUsername = (usernameWithoutSymbol.isEmpty ||
-                displayName.toLowerCase() == usernameWithoutSymbol.toLowerCase())
+            displayName.toLowerCase() == usernameWithoutSymbol.toLowerCase())
             ? displayName
             : '$displayName\n@$usernameWithoutSymbol';
 
-        // Extract profile nickname from HTML
         String profileNickname = 'Unknown';
         final profileLink = displayNameDoc.querySelector('a[href*="/user/"]');
         if (profileLink != null) {
@@ -278,7 +276,6 @@ class UserProfileApiService {
           }
         }
 
-        // Extract date from thisdate HTML
         String relativeDate = 'Unknown date';
         String fullDate = 'Unknown date';
         String dateHtml = shoutData['thisdate'] ?? '';
@@ -291,10 +288,8 @@ class UserProfileApiService {
           }
         }
 
-        // Get message text
         String text = shoutData['message'] ?? '';
 
-        // Extract icon URLs from display name HTML
         List<String> shoutIconBeforeUrls = [];
         List<String> shoutIconAfterUrls = [];
 
@@ -334,9 +329,7 @@ class UserProfileApiService {
           symbol: symbol,
         ));
       }
-    } catch (_) {
-      // Ignore parsing errors; caller can handle empty results.
-    }
+    } catch (_) {}
 
     return newShouts;
   }
@@ -349,8 +342,9 @@ class UserProfileApiService {
     String? userProfileImageUrl;
     String? userProfilePostNumber;
     String? userProfileTexts;
+    bool acceptingTrades = false;
+    bool acceptingCommissions = false;
 
-    // Profile banner
     String? profileBannerUrl;
     final bannerElem = document.querySelector('site-banner picture source[media="(min-width: 800px)"]')
         ?? document.querySelector('site-banner img')
@@ -370,7 +364,6 @@ class UserProfileApiService {
       profileBannerUrl = 'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg';
     }
 
-    // Profile picture (avatar)
     String? profileImageUrl;
     final profilePicElem = document.querySelector('userpage-nav-avatar img')
         ?? document.querySelector('img.avatar');
@@ -378,7 +371,6 @@ class UserProfileApiService {
         ? (profilePicElem.attributes['src']?.replaceFirst('//', 'https://'))
         : null;
 
-    // Username/display
     final displayNameElem = document.querySelector('a.c-usernameBlock__displayName .js-displayName')
         ?? document.querySelector('a.js-displayName-block .js-displayName');
     final displayName = displayNameElem?.text.trim() ?? 'Unknown User';
@@ -395,9 +387,11 @@ class UserProfileApiService {
       nicknameWithoutSymbol = fullUserName.replaceFirst(symbolText, '').trim();
     }
     final symbolUsername = symbolText.isNotEmpty ? '$symbolText $nicknameWithoutSymbol' : fullUserName;
-    final username = displayName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\\-_.~]'), '');
+    final username = (nicknameWithoutSymbol.isNotEmpty ? nicknameWithoutSymbol : displayName)
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\\-_.~]'), '');
+    final profileUserNamePart = '';
 
-    // Icons
     List<String> userIconBeforeUrls = [];
     List<String> userIconAfterUrls = [];
     final usernameContainer = document.querySelector('.c-usernameBlock') ?? document.querySelector('div.c-usernameBlock');
@@ -426,13 +420,12 @@ class UserProfileApiService {
       }).where((src) => src.isNotEmpty).toList();
     }
 
-    // User title & registration date
     String? userTitle;
     String? registrationDate;
     final userTitleElem = document.querySelector('span.user-title');
     if (userTitleElem != null) {
       String fullText = userTitleElem.text.trim();
-      final regExp = RegExp(r'Registered:\\s*(.+)$');
+      final regExp = RegExp(r'Registered:\s+(.+)$', multiLine: true);
       final regMatch = regExp.firstMatch(fullText);
       if (regMatch != null) {
         registrationDate = regMatch.group(1)!.trim();
@@ -446,13 +439,12 @@ class UserProfileApiService {
       }
     } else {
       final classicHtml = document.body?.innerHtml ?? "";
-      final userTitleMatch = RegExp(r'<b>\\s*User Title:\\s*<\\/b>\\s*([^<]+)').firstMatch(classicHtml);
-      final registeredMatch = RegExp(r'<b>\\s*Registered Since:\\s*<\\/b>\\s*([^<]+)').firstMatch(classicHtml);
+      final userTitleMatch = RegExp(r'<b>\s*User Title:\s*<\/b>\s*([^<]+)').firstMatch(classicHtml);
+      final registeredMatch = RegExp(r'<b>\s*Registered Since:\s*<\/b>\s*([^<]+)').firstMatch(classicHtml);
       userTitle = userTitleMatch?.group(1)?.trim() ?? "";
       registrationDate = registeredMatch?.group(1)?.trim() ?? 'N/A';
     }
 
-    // Description
     String? userDescription;
     bool hasRealUserProfile = true;
     final sectionElem = document.querySelector('section.userpage-layout-profile') ?? document.querySelector('td.ldot');
@@ -478,7 +470,6 @@ class UserProfileApiService {
       hasRealUserProfile = false;
     }
 
-    // Stats
     int? views;
     int? submissions;
     int? favs;
@@ -508,7 +499,7 @@ class UserProfileApiService {
     }
 
     int? _extract(String label) {
-      final regex = RegExp('$label\\\\s*(\\\\d+)');
+      final regex = RegExp('$label\\s*(\\d+)');
       final match = regex.firstMatch(statsText);
       if (match != null && match.groupCount > 0) {
         return int.tryParse(match.group(1)!);
@@ -517,12 +508,12 @@ class UserProfileApiService {
     }
 
     if (statsText.isNotEmpty) {
-      views = _extract('Views:') ?? _extract('Page Visits:') ?? 0;
-      submissions = _extract('Submissions:') ?? 0;
-      favs = _extract('Favs:') ?? _extract('Favorites:') ?? 0;
-      commentsEarned = _extract('Comments Earned:') ?? _extract('Comments Received:') ?? 0;
-      commentsMade = _extract('Comments Made:') ?? _extract('Comments Given:') ?? 0;
-      journals = _extract('Journals:') ?? 0;
+      views = _extract('Views:') ?? _extract('Page Visits:');
+      submissions = _extract('Submissions:');
+      favs = _extract('Favs:') ?? _extract('Favorites:');
+      commentsEarned = _extract('Comments Earned:') ?? _extract('Comments Received:');
+      commentsMade = _extract('Comments Made:') ?? _extract('Comments Given:');
+      journals = _extract('Journals:');
     } else {
       views = 0;
       submissions = 0;
@@ -532,47 +523,215 @@ class UserProfileApiService {
       journals = 0;
     }
 
-    // Modern / classic flags
     bool isClassicMarkup = document.body != null &&
         document.body!.attributes['data-static-path'] == '/themes/classic';
 
-    // Featured submission
-    String? featuredImageUrl;
-    String? featuredImageTitle;
-    String? featuredPostNumber;
-    final featuredSectionHeader = document.querySelector('.userpage-section-left .section-header h2');
-    if (featuredSectionHeader != null && featuredSectionHeader.text.trim() == 'Featured Submission') {
-      final featuredSection = featuredSectionHeader.parent?.parent;
-      if (featuredSection != null) {
-        final imageElem = featuredSection.querySelector('.section-body .aligncenter.preview_img a img');
+    bool userProfileFound = false;
+    if (!isClassicMarkup) {
+      final userSections = document.querySelectorAll('.userpage-section-right');
+      for (var section in userSections) {
+        final headerElem = section.querySelector('.section-header h2') ??
+            section.querySelector('.section-header h3') ??
+            section.querySelector('.section-header');
+        final headerText = headerElem?.text.trim() ?? '';
+
+        if (headerText.toLowerCase() == 'user profile'.toLowerCase()) {
+          final linkElem =
+              section.querySelector('.section-submission.aligncenter a[href^="/view/"]') ??
+                  section.querySelector('.section-submission a[href^="/view/"]') ??
+                  section.querySelector('.section-body a[href^="/view/"]') ??
+                  section.querySelector('a[href^="/view/"]');
+
+          if (linkElem != null) {
+            final href = linkElem.attributes['href'];
+            if (href != null) {
+              final hrefParts = href.split('/');
+              userProfilePostNumber = hrefParts.length > 2 ? hrefParts[2] : 'N/A';
+            }
+
+            final imageElem = linkElem.querySelector('img') ??
+                section.querySelector('.section-submission.aligncenter img') ??
+                section.querySelector('.section-submission img') ??
+                section.querySelector('.section-body img');
+
+            if (imageElem != null) {
+              String? imageSrc = imageElem.attributes['src'];
+              if (imageSrc != null && imageSrc.isNotEmpty) {
+                if (imageSrc.startsWith('//')) {
+                  userProfileImageUrl = 'https:$imageSrc';
+                } else if (imageSrc.startsWith('http://') || imageSrc.startsWith('https://')) {
+                  userProfileImageUrl = imageSrc;
+                } else {
+                  userProfileImageUrl = 'https://www.furaffinity.net$imageSrc';
+                }
+              }
+            }
+          }
+
+          final sectionBodyElem = section.querySelector('.section-body');
+          if (sectionBodyElem != null && sectionBodyElem.innerHtml.trim().isNotEmpty) {
+            userProfileTexts = sectionBodyElem.innerHtml.trim();
+          } else {
+            userProfileTexts = null;
+          }
+
+          userProfileFound = true;
+          break;
+        }
+      }
+    }
+
+
+    if (isClassicMarkup || !userProfileFound) {
+      final profileIdElem = document.getElementById('profilepic-submission');
+      if (profileIdElem != null) {
+        final anchor = profileIdElem.querySelector('a[href^="/view/"]');
+        if (anchor != null) {
+          final href = anchor.attributes['href'];
+          if (href != null) {
+            final parts = href.split('/');
+            userProfilePostNumber = parts.length > 2 ? parts[2] : 'N/A';
+          }
+        }
+
+        final imageElem = profileIdElem.querySelector('img');
         if (imageElem != null) {
           String? imageSrc = imageElem.attributes['src'];
           if (imageSrc != null) {
+            if (imageSrc.startsWith('//')) {
+              userProfileImageUrl = 'https:$imageSrc';
+            } else if (imageSrc.startsWith('http://') || imageSrc.startsWith('https://')) {
+              userProfileImageUrl = imageSrc;
+            } else {
+              userProfileImageUrl = 'https://www.furaffinity.net$imageSrc';
+            }
+          }
+        }
+      }
+
+      dom.Element? artistInfoCell;
+      for (dom.Element table in document.querySelectorAll('table.maintable')) {
+        final headerElem = table.querySelector('td.cat b');
+        if (headerElem != null && headerElem.text.trim() == 'Artist Information') {
+          artistInfoCell = table.querySelector('td.alt1.user-info');
+          break;
+        }
+      }
+
+      if (artistInfoCell != null) {
+        userProfileTexts = artistInfoCell.innerHtml.trim();
+      }
+
+      final optionYesElements = document.querySelectorAll('span.option-yes');
+      acceptingTrades = optionYesElements.any(
+            (elem) => elem.text.trim().toLowerCase().contains('trades'),
+      );
+      acceptingCommissions = optionYesElements.any(
+            (elem) => elem.text.trim().toLowerCase().contains('commissions'),
+      );
+    }
+
+    String? featuredImageUrl;
+    String? featuredImageTitle;
+    String? featuredPostNumber;
+
+    dom.Element? featuredSection;
+    for (final section in document.querySelectorAll('.userpage-section-left')) {
+      final header = section.querySelector('.section-header h2') ??
+          section.querySelector('.section-header h3') ??
+          section.querySelector('.section-header');
+      if (header != null &&
+          header.text.toLowerCase().contains('featured submission'.toLowerCase())) {
+        featuredSection = section;
+        break;
+      }
+    }
+
+    if (featuredSection != null) {
+      final linkElem =
+          featuredSection.querySelector('.section-body .aligncenter.preview_img a[href^="/view/"]') ??
+              featuredSection.querySelector('.section-body a[href^="/view/"]') ??
+              featuredSection.querySelector('a[href^="/view/"]');
+
+      if (linkElem != null) {
+        final href = linkElem.attributes['href'];
+        if (href != null) {
+          final hrefParts = href.split('/');
+          featuredPostNumber = hrefParts.length > 2 ? hrefParts[2] : 'N/A';
+        }
+
+        final imgElem = linkElem.querySelector('img') ??
+            featuredSection.querySelector('.section-body img') ??
+            featuredSection.querySelector('img');
+        if (imgElem != null) {
+          var imageSrc = imgElem.attributes['src'] ?? '';
+          if (imageSrc.isNotEmpty) {
             if (imageSrc.startsWith('//')) {
               featuredImageUrl = 'https:$imageSrc';
             } else if (imageSrc.startsWith('http://') || imageSrc.startsWith('https://')) {
               featuredImageUrl = imageSrc;
             } else {
-              featuredImageUrl = imageSrc;
+              featuredImageUrl = 'https://www.furaffinity.net$imageSrc';
             }
           }
         }
-        final linkElem = featuredSection.querySelector('.section-body .aligncenter.preview_img a');
-        if (linkElem != null) {
-          String? href = linkElem.attributes['href'];
-          if (href != null) {
-            final hrefParts = href.split('/');
-            featuredPostNumber = hrefParts.length > 2 ? hrefParts[2] : 'N/A';
-          }
-        }
-        final titleElem = featuredSection.querySelector('.userpage-featured-title h2 a');
-        featuredImageTitle = titleElem != null && titleElem.text.trim().isNotEmpty
-            ? titleElem.text.trim()
-            : null;
+      }
+
+      final titleElem =
+          featuredSection.querySelector('.userpage-featured-title h2 a') ??
+              featuredSection.querySelector('.userpage-featured-title h3 a') ??
+              featuredSection.querySelector('.userpage-featured-title a') ??
+              featuredSection.querySelector('.section-body h2 a') ??
+              featuredSection.querySelector('.section-body h3 a');
+
+      if (titleElem != null && titleElem.text.trim().isNotEmpty) {
+        featuredImageTitle = titleElem.text.trim();
       }
     }
 
-    // Contact info
+    if ((featuredImageUrl == null || featuredPostNumber == null) && isClassicMarkup) {
+      dom.Element? featuredTable;
+      for (dom.Element table in document.querySelectorAll('table.maintable')) {
+        final headerElem = table.querySelector('td.cat b');
+        if (headerElem != null && headerElem.text.trim() == 'Featured Submission') {
+          featuredTable = table;
+          break;
+        }
+      }
+
+      if (featuredTable != null) {
+        final contentCell = featuredTable.querySelector('td.alt1#featured-submission');
+        if (contentCell != null) {
+          final anchor = contentCell.querySelector('center a[href^="/view/"]');
+          if (anchor != null) {
+            final href = anchor.attributes['href'];
+            if (href != null) {
+              final hrefParts = href.split('/');
+              featuredPostNumber = hrefParts.length > 2 ? hrefParts[2] : 'N/A';
+            }
+            final img = anchor.querySelector('img');
+            if (img != null) {
+              String? imageSrc = img.attributes['src'];
+              if (imageSrc != null) {
+                if (imageSrc.startsWith('//')) {
+                  featuredImageUrl = 'https:$imageSrc';
+                } else if (imageSrc.startsWith('http://') || imageSrc.startsWith('https://')) {
+                  featuredImageUrl = imageSrc;
+                } else {
+                  featuredImageUrl = 'https://www.furaffinity.net$imageSrc';
+                }
+              }
+            }
+          }
+
+          final spanTitle = contentCell.querySelector('center b span');
+          featuredImageTitle = spanTitle != null && spanTitle.text.trim().isNotEmpty
+              ? spanTitle.text.trim()
+              : featuredImageTitle;
+        }
+      }
+    }
+
     List<Map<String, String>> contactInformationLinks = [];
     dom.Element? contactInfoSection = document.querySelector('#userpage-contact');
     if (contactInfoSection != null) {
@@ -597,7 +756,6 @@ class UserProfileApiService {
       }
     }
 
-    // Recent watchers (minimal: counts only; links left as empty)
     List<UserLink> recentWatchers = [];
     int recentWatchersCount = 0;
     dom.Element? recentWatchersSection = document.querySelector('section.userpage-left-column.watched-by-block');
@@ -605,14 +763,58 @@ class UserProfileApiService {
       final viewListLink = recentWatchersSection.querySelector('.section-header .floatright h3 a');
       if (viewListLink != null) {
         final linkText = viewListLink.text.trim();
-        final countMatch = RegExp(r'Watched by (\\d+)').firstMatch(linkText);
+        final countMatch = RegExp(r'Watched by (\d+)').firstMatch(linkText);
         if (countMatch != null && countMatch.groupCount >= 1) {
           recentWatchersCount = int.tryParse(countMatch.group(1)!) ?? 0;
         }
       }
+
+      final userElements = recentWatchersSection.querySelectorAll('.section-body span.c-usernameBlockSimple__displayName');
+      for (var userElem in userElements) {
+        final watcherName = userElem.text.trim();
+        final linkElem = userElem.parent;
+        final href = linkElem?.attributes['href'] ?? '';
+        if (watcherName.isNotEmpty && href.isNotEmpty) {
+          final fullUrl = href.startsWith('http') ? href : 'https://www.furaffinity.net$href';
+          recentWatchers.add(UserLink(rawUsername: watcherName, url: fullUrl));
+        }
+      }
+    } else {
+      dom.Element? watchersTable;
+      for (dom.Element table in document.querySelectorAll('table.maintable')) {
+        final headerElem = table.querySelector('td.cat b');
+        if (headerElem != null && headerElem.text.trim() == 'Watched By') {
+          watchersTable = table;
+          break;
+        }
+      }
+
+      if (watchersTable != null) {
+        final watchersCell = watchersTable.querySelector('td#watched-by');
+        if (watchersCell != null) {
+          final userElements = watchersCell.querySelectorAll('span.c-usernameBlockSimple__displayName');
+          for (var userElem in userElements) {
+            final watcherName = userElem.text.trim();
+            final linkElem = userElem.parent;
+            final href = linkElem?.attributes['href'] ?? '';
+            if (watcherName.isNotEmpty && href.isNotEmpty) {
+              final fullUrl = href.startsWith('http') ? href : 'https://www.furaffinity.net$href';
+              recentWatchers.add(UserLink(rawUsername: watcherName, url: fullUrl));
+            }
+          }
+        }
+
+        final countLink = watchersTable.querySelector('td.cat a');
+        if (countLink != null) {
+          final linkText = countLink.text.trim();
+          final countMatch = RegExp(r'\((\d+)\)').firstMatch(linkText);
+          if (countMatch != null && countMatch.groupCount >= 1) {
+            recentWatchersCount = int.tryParse(countMatch.group(1)!) ?? 0;
+          }
+        }
+      }
     }
 
-    // Recently watched (minimal: counts only)
     List<UserLink> recentlyWatched = [];
     int recentlyWatchedCount = 0;
     dom.Element? recentlyWatchedSection = document.querySelector('section.userpage-left-column.is-watching-block');
@@ -620,14 +822,58 @@ class UserProfileApiService {
       final viewListLink = recentlyWatchedSection.querySelector('.section-header .floatright h3 a');
       if (viewListLink != null) {
         final linkText = viewListLink.text.trim();
-        final countMatch = RegExp(r'Watching (\\d+)').firstMatch(linkText);
+        final countMatch = RegExp(r'Watching (\d+)').firstMatch(linkText);
         if (countMatch != null && countMatch.groupCount >= 1) {
           recentlyWatchedCount = int.tryParse(countMatch.group(1)!) ?? 0;
         }
       }
+
+      final userElements = recentlyWatchedSection.querySelectorAll('.section-body span.c-usernameBlockSimple__displayName');
+      for (var userElem in userElements) {
+        final watchedName = userElem.text.trim();
+        final linkElem = userElem.parent;
+        final href = linkElem?.attributes['href'] ?? '';
+        if (watchedName.isNotEmpty && href.isNotEmpty) {
+          final fullUrl = href.startsWith('http') ? href : 'https://www.furaffinity.net$href';
+          recentlyWatched.add(UserLink(rawUsername: watchedName, url: fullUrl));
+        }
+      }
+    } else {
+      dom.Element? watchingTable;
+      for (dom.Element table in document.querySelectorAll('table.maintable')) {
+        final headerElem = table.querySelector('td.cat b');
+        if (headerElem != null && headerElem.text.trim() == 'Is Watching') {
+          watchingTable = table;
+          break;
+        }
+      }
+
+      if (watchingTable != null) {
+        final watchingCell = watchingTable.querySelector('td#is-watching');
+        if (watchingCell != null) {
+          final userElements = watchingCell.querySelectorAll('span.c-usernameBlockSimple__displayName');
+          for (var userElem in userElements) {
+            final watchedName = userElem.text.trim();
+            final linkElem = userElem.parent;
+            final href = linkElem?.attributes['href'] ?? '';
+            if (watchedName.isNotEmpty && href.isNotEmpty) {
+              final fullUrl = href.startsWith('http') ? href : 'https://www.furaffinity.net$href';
+              recentlyWatched.add(UserLink(rawUsername: watchedName, url: fullUrl));
+            }
+          }
+        }
+
+        final countLink = watchingTable.querySelector('td.cat a');
+        if (countLink != null) {
+          final linkText = countLink.text.trim();
+          final countMatch = RegExp(r'\((\d+)\)').firstMatch(linkText);
+          if (countMatch != null && countMatch.groupCount >= 1) {
+            recentlyWatchedCount = int.tryParse(countMatch.group(1)!) ?? 0;
+          }
+        }
+      }
     }
 
-    // Shouts (initial page)
     List<Shout> shouts = [];
     String? shoutPaginationKey;
     int currentShoutPage = 1;
@@ -640,8 +886,8 @@ class UserProfileApiService {
         final avatarElem = container.querySelector('img.comment_useravatar');
         String avatarUrl = avatarElem != null
             ? (avatarElem.attributes['src']!.startsWith('//')
-                ? 'https:${avatarElem.attributes['src']!}'
-                : avatarElem.attributes['src']!)
+            ? 'https:${avatarElem.attributes['src']!}'
+            : avatarElem.attributes['src']!)
             : 'assets/images/defaultpic.gif';
 
         final displayNameElem = container.querySelector('a.c-usernameBlock__displayName .js-displayName');
@@ -654,9 +900,9 @@ class UserProfileApiService {
 
         final usernameWithoutSymbol = userNamePartShout.replaceFirst(symbolShout, '').trim();
         String cmtUsername = (usernameWithoutSymbol.isEmpty ||
-                displayNameShout.toLowerCase() == usernameWithoutSymbol.toLowerCase())
+            displayNameShout.toLowerCase() == usernameWithoutSymbol.toLowerCase())
             ? displayNameShout
-            : '$displayNameShout\\n@$usernameWithoutSymbol';
+            : '$displayNameShout\n@$usernameWithoutSymbol';
 
         final usernameLink = container.querySelector('div.avatar a');
         String? profileNickname = usernameLink?.attributes['href'] != null
@@ -740,7 +986,6 @@ class UserProfileApiService {
       }
     }
 
-    // Watch/unwatch/block/unblock links detection
     var watchLinkElement = document.querySelector('a.button.standard.go[href^=\"/watch/\"]')
         ?? document.querySelector('a[href^=\"/watch/\"]');
 
@@ -750,13 +995,20 @@ class UserProfileApiService {
     var blockLinkElement = document.querySelector('a.button.standard.stop[href^=\"/block/\"]')
         ?? document.querySelector('form[action^=\"/block/\"]');
     String? computedBlockLink;
+    bool blockUsesPost = false;
     if (blockLinkElement != null) {
       if (blockLinkElement.localName == 'form') {
+        blockUsesPost = true;
+        final actionUrl = blockLinkElement.attributes['action'];
         final keyElem = blockLinkElement.querySelector('input[name=\"key\"]')
             ?? blockLinkElement.querySelector('button[name=\"key\"]');
         final keyValue = keyElem?.attributes['value'] ?? '';
-        if (keyValue.isNotEmpty) {
-          computedBlockLink = 'https://www.furaffinity.net/block/$username/?key=$keyValue';
+
+        if (actionUrl != null && keyValue.isNotEmpty) {
+          final actionUri = Uri.parse(actionUrl.startsWith('http')
+              ? actionUrl
+              : 'https://www.furaffinity.net$actionUrl');
+          computedBlockLink = actionUri.replace(queryParameters: {'key': keyValue}).toString();
         }
       } else {
         computedBlockLink = blockLinkElement.attributes['href'];
@@ -766,13 +1018,20 @@ class UserProfileApiService {
     var unblockLinkElement = document.querySelector('a.button.standard.stop[href^=\"/unblock/\"]')
         ?? document.querySelector('form[action^=\"/unblock/\"]');
     String? computedUnblockLink;
+    bool unblockUsesPost = false;
     if (unblockLinkElement != null) {
       if (unblockLinkElement.localName == 'form') {
+        unblockUsesPost = true;
+        final actionUrl = unblockLinkElement.attributes['action'];
         final keyElem = unblockLinkElement.querySelector('input[name=\"key\"]')
             ?? unblockLinkElement.querySelector('button[name=\"key\"]');
         final keyValue = keyElem?.attributes['value'] ?? '';
-        if (keyValue.isNotEmpty) {
-          computedUnblockLink = 'https://www.furaffinity.net/unblock/$username/?key=$keyValue';
+
+        if (actionUrl != null && keyValue.isNotEmpty) {
+          final actionUri = Uri.parse(actionUrl.startsWith('http')
+              ? actionUrl
+              : 'https://www.furaffinity.net$actionUrl');
+          computedUnblockLink = actionUri.replace(queryParameters: {'key': keyValue}).toString();
         }
       } else {
         computedUnblockLink = unblockLinkElement.attributes['href'];
@@ -784,11 +1043,15 @@ class UserProfileApiService {
         blockLinkElement == null &&
         unblockLinkElement == null;
 
+    if (userProfileTexts != null && userProfileTexts.trim().isEmpty) {
+      userProfileTexts = null;
+    }
+
     return UserProfileParsed(
       profileBannerUrl: profileBannerUrl,
       profileImageUrl: profileImageUrl,
       profileDisplayName: displayName,
-      profileUserNamePart: nicknameWithoutSymbol,
+      profileUserNamePart: profileUserNamePart,
       symbolUsername: symbolUsername,
       username: username,
       userTitle: userTitle,
@@ -796,8 +1059,8 @@ class UserProfileApiService {
       userDescription: userDescription,
       hasRealUserProfile: hasRealUserProfile,
       isClassicMarkup: isClassicMarkup,
-      acceptingTrades: isClassicMarkup && htmlBody.contains('option-yes') && htmlBody.toLowerCase().contains('trades'),
-      acceptingCommissions: isClassicMarkup && htmlBody.contains('option-yes') && htmlBody.toLowerCase().contains('commissions'),
+      acceptingTrades: acceptingTrades,
+      acceptingCommissions: acceptingCommissions,
       userIconBeforeUrls: userIconBeforeUrls,
       userIconAfterUrls: userIconAfterUrls,
       views: views,
@@ -811,7 +1074,7 @@ class UserProfileApiService {
       featuredPostNumber: featuredPostNumber,
       userProfileImageUrl: userProfileImageUrl,
       userProfilePostNumber: userProfilePostNumber,
-      userProfileTexts: null,
+      userProfileTexts: userProfileTexts,
       contactInformationLinks: contactInformationLinks,
       recentWatchers: recentWatchers,
       recentWatchersCount: recentWatchersCount,
@@ -825,10 +1088,11 @@ class UserProfileApiService {
       unwatchLink: unwatchLinkElement?.attributes['href'],
       blockLink: computedBlockLink,
       unblockLink: computedUnblockLink,
+      blockUsesPost: blockUsesPost,
+      unblockUsesPost: unblockUsesPost,
       isWatching: unwatchLinkElement != null,
       isBlocked: computedUnblockLink != null,
       isOwnProfile: isOwnProfile,
     );
   }
 }
-
