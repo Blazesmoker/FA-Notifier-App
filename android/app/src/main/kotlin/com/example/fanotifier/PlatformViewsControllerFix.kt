@@ -4,10 +4,11 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import android.view.MotionEvent
-import io.flutter.embedding.engine.systemchannels.PlatformViewsChannel
+import io.flutter.embedding.engine.systemchannels.PlatformViewTouch
 import io.flutter.plugin.platform.PlatformViewsController
 
 class PlatformViewsControllerFix(context: Context) : PlatformViewsController() {
+
     init {
         Log.d("PlatformFix", "✅ Custom controller initialized! Context: ${context.applicationContext}")
     }
@@ -15,7 +16,7 @@ class PlatformViewsControllerFix(context: Context) : PlatformViewsController() {
     @SuppressLint("VisibleForTests")
     override fun toMotionEvent(
         density: Float,
-        touch: PlatformViewsChannel.PlatformViewTouch?,
+        touch: PlatformViewTouch?,
         usingVirtualDisplay: Boolean
     ): MotionEvent {
         val event = super.toMotionEvent(density, touch, usingVirtualDisplay)

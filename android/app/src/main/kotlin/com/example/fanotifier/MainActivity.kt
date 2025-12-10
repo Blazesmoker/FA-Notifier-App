@@ -28,6 +28,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         Log.d("MainActivity", "🟢 Configuring engine: ${flutterEngine.hashCode()}")
         // Apply jitter fix for platform views
+        // uncomment to apply webview slow scroll fix for flutter 3.35.4
         PlatformViewsHandlerFix.fix(flutterEngine.platformViewsController)
 
         // Listen for "switchIcon" calls from Flutter

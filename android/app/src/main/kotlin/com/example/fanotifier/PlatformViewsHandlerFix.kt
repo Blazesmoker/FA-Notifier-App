@@ -3,17 +3,16 @@ package com.blazesmoker.fanotifier
 import android.util.Log
 import android.util.SparseArray
 import io.flutter.embedding.android.AndroidTouchProcessor
+import io.flutter.embedding.engine.systemchannels.PlatformViewCreationRequest
+import io.flutter.embedding.engine.systemchannels.PlatformViewTouch
 import io.flutter.embedding.engine.systemchannels.PlatformViewsChannel
 import io.flutter.plugin.platform.PlatformViewsController
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 
-/**
- * Fix Android PlatformViewWrapper: prevents extra offset translation for touch events.
- * Issue: https://github.com/flutter/flutter/issues/135531
- */
-class PlatformViewsHandlerFix(private val platformViewsController: PlatformViewsController) :
-    PlatformViewsChannel.PlatformViewsHandler {
+class PlatformViewsHandlerFix(
+    private val platformViewsController: PlatformViewsController
+) : PlatformViewsChannel.PlatformViewsHandler {
 
     companion object {
         fun fix(platformViewsController: PlatformViewsController) {
@@ -25,11 +24,11 @@ class PlatformViewsHandlerFix(private val platformViewsController: PlatformViews
     private var viewWrappers: SparseArray<*>? = null
     private var setTouchProcessorMethod: Method? = null
 
-    override fun createForPlatformViewLayer(request: PlatformViewsChannel.PlatformViewCreationRequest) {
+    override fun createForPlatformViewLayer(request: PlatformViewCreationRequest) {
         origin.createForPlatformViewLayer(request)
     }
 
-    override fun createForTextureLayer(request: PlatformViewsChannel.PlatformViewCreationRequest): Long {
+    override fun createForTextureLayer(request: PlatformViewCreationRequest): Long {
         val result = origin.createForTextureLayer(request)
         removeTouchProcessor(request.viewId)
         return result
@@ -50,7 +49,7 @@ class PlatformViewsHandlerFix(private val platformViewsController: PlatformViews
         origin.offset(viewId, top, left)
     }
 
-    override fun onTouch(touch: PlatformViewsChannel.PlatformViewTouch) {
+    override fun onTouch(touch: PlatformViewTouch) {
         origin.onTouch(touch)
     }
 
@@ -66,15 +65,31 @@ class PlatformViewsHandlerFix(private val platformViewsController: PlatformViews
         origin.synchronizeToNativeViewHierarchy(yes)
     }
 
+    // 🔥 новые методы, которых не хватало:
+
+    override fun isHcppEnabled(): Boolean {
+        return origin.isHcppEnabled()
+    }
+
+    override fun createPlatformViewHcpp(request: PlatformViewCreationRequest) {
+        origin.createPlatformViewHcpp(request)
+    }
+
+    // ===== internals =====
+
     private fun replaceHandler() {
         try {
-            val handlerField: Field = PlatformViewsController::class.java.getDeclaredField("channelHandler")
+            val handlerField: Field =
+                PlatformViewsController::class.java.getDeclaredField("channelHandler")
             handlerField.isAccessible = true
-            val originHandler = handlerField.get(platformViewsController) as? PlatformViewsChannel.PlatformViewsHandler
+            val originHandler =
+                handlerField.get(platformViewsController) as? PlatformViewsChannel.PlatformViewsHandler
+
             if (originHandler is PlatformViewsHandlerFix) {
                 Log.d("PlatformViewsHandlerFix", "Handler already replaced")
                 return
             }
+
             origin = originHandler ?: return
             handlerField.set(platformViewsController, this)
             Log.d("PlatformViewsHandlerFix", "Successfully replaced channelHandler")
@@ -90,14 +105,15 @@ class PlatformViewsHandlerFix(private val platformViewsController: PlatformViews
             val method = getSetTouchProcessorMethod(platformViewWrapper)
             method?.invoke(platformViewWrapper, null)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("PlatformViewsHandlerFix", "Failed to remove touch processor", e)
         }
     }
 
     private fun getViewWrappers(): SparseArray<*>? {
         if (viewWrappers == null) {
             try {
-                val field: Field = PlatformViewsController::class.java.getDeclaredField("viewWrappers")
+                val field: Field =
+                    PlatformViewsController::class.java.getDeclaredField("viewWrappers")
                 field.isAccessible = true
                 viewWrappers = field.get(platformViewsController) as SparseArray<*>
             } catch (e: Exception) {

@@ -17,6 +17,7 @@ class FANotifier : Application() {
     fun createEngine(context: Context): FlutterEngineGroup.Options {
         Log.d("FANotifier", "🟢 Creating engine with PlatformViewsControllerFix...")
         return FlutterEngineGroup.Options(context)
+            //uncomment to apply webview slow scroll fix for flutter 3.35.4
             .setPlatformViewsController(PlatformViewsControllerFix(context))
     }
 }
