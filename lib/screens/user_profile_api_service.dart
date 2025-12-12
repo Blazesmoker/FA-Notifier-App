@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -128,6 +129,58 @@ class ShoutPagePayload {
   });
 }
 
+class WatchUnwatchResult {
+  final bool success;
+  final bool missingCookies;
+  final int? statusCode;
+  final Object? error;
+
+  const WatchUnwatchResult({
+    required this.success,
+    required this.missingCookies,
+    this.statusCode,
+    this.error,
+  });
+}
+
+class BlockUnblockResult {
+  final bool success;
+  final bool missingCookies;
+  final int? statusCode;
+  final Object? error;
+
+  const BlockUnblockResult({
+    required this.success,
+    required this.missingCookies,
+    this.statusCode,
+    this.error,
+  });
+}
+
+class DeleteShoutResult {
+  final bool success;
+  final bool missingCookies;
+  final int? statusCode;
+  final Object? error;
+
+  const DeleteShoutResult({
+    required this.success,
+    required this.missingCookies,
+    this.statusCode,
+    this.error,
+  });
+}
+
+class AdditionalShoutsPayload {
+  final List<Shout> newShouts;
+  final int nextPage;
+
+  const AdditionalShoutsPayload({
+    required this.newShouts,
+    required this.nextPage,
+  });
+}
+
 class UserProfileApiService {
   UserProfileApiService(this._secureStorage);
 
@@ -221,6 +274,206 @@ class UserProfileApiService {
 
     final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
     return ShoutPagePayload(body: decodedBody, nextPage: nextPage);
+  }
+
+  Future<AdditionalShoutsPayload?> fetchAdditionalShouts({
+    required String sanitizedUsername,
+    required String? shoutPaginationKey,
+    required int nextPage,
+    required bool sfwEnabled,
+    required Set<String> existingShoutIds,
+  }) async {
+    final payload = await fetchShoutPage(
+      sanitizedUsername: sanitizedUsername,
+      shoutPaginationKey: shoutPaginationKey,
+      nextPage: nextPage,
+      sfwEnabled: sfwEnabled,
+    );
+    if (payload == null) return null;
+
+    final newShouts = parseAdditionalShoutsJson(payload.body, existingShoutIds);
+    return AdditionalShoutsPayload(newShouts: newShouts, nextPage: payload.nextPage);
+  }
+
+  Future<WatchUnwatchResult> sendWatchUnwatchRequest(
+    String urlPath, {
+    required bool shouldWatch,
+    required bool sfwEnabled,
+  }) async {
+    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+
+    final sfwValue = sfwEnabled ? '1' : '0';
+
+    if (cookieA == null || cookieB == null) {
+      return const WatchUnwatchResult(
+        success: false,
+        missingCookies: true,
+      );
+    }
+
+    final fullUrl = 'https://www.furaffinity.net$urlPath';
+    try {
+      final response = await httpClient.get(
+        Uri.parse(fullUrl),
+        headers: {
+          'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        },
+      );
+
+      return WatchUnwatchResult(
+        success: response.statusCode == 200,
+        missingCookies: false,
+        statusCode: response.statusCode,
+      );
+    } catch (e) {
+      return WatchUnwatchResult(
+        success: false,
+        missingCookies: false,
+        error: e,
+      );
+    }
+  }
+
+  Future<BlockUnblockResult> sendBlockUnblockRequest(
+    String urlOrPath,
+    String keyValue, {
+    required bool shouldBlock,
+    required bool usePost,
+    required bool sfwEnabled,
+    required String sanitizedUsername,
+  }) async {
+    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    final sfwValue = sfwEnabled ? '1' : '0';
+
+    if (cookieA == null || cookieB == null) {
+      return const BlockUnblockResult(
+        success: false,
+        missingCookies: true,
+      );
+    }
+
+    final fullUrl = urlOrPath.startsWith('http')
+        ? urlOrPath
+        : 'https://www.furaffinity.net$urlOrPath';
+
+    final uri = Uri.parse(fullUrl);
+
+    final targetUrl = uri.toString();
+
+    String refererUsername = sanitizedUsername;
+
+    final segments = uri.pathSegments;
+
+    if (segments.length >= 2 && (segments.first == 'block' || segments.first == 'unblock')) {
+      final candidateUsername = segments[1];
+      refererUsername = candidateUsername;
+    } else {
+      print(
+          '[_sendBlockUnblockRequest] Did NOT detect /block/username or /unblock/username pattern. Keeping sanitizedUsername.');
+    }
+
+    try {
+      final uriTarget = Uri.parse(targetUrl);
+
+      final headers = <String, String>{
+        'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        'Referer': 'https://www.furaffinity.net/user/$refererUsername/',
+      };
+
+      headers.forEach((k, v) {
+        if (k.toLowerCase() == 'cookie') {
+          print(
+              '  $k: ${v.substring(0, v.length.clamp(0, 200))}${v.length > 200 ? '... (truncated)' : ''}');
+        } else {
+          print('  $k: $v');
+        }
+      });
+
+      late http.Response response;
+
+      if (usePost) {
+        response = await http.post(
+          uriTarget,
+          headers: {
+            ...headers,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: {'key': keyValue},
+        );
+      } else {
+        response = await http.get(uriTarget, headers: headers);
+      }
+
+      response.headers.forEach((k, v) {
+        print('    $k: $v');
+      });
+
+      final previewLength = min(500, response.body.length);
+      final previewBody = response.body.substring(0, previewLength);
+      print(previewBody);
+
+      return BlockUnblockResult(
+        success: response.statusCode == 302 || response.statusCode == 200,
+        missingCookies: false,
+        statusCode: response.statusCode,
+      );
+    } catch (e) {
+      return BlockUnblockResult(
+        success: false,
+        missingCookies: false,
+        error: e,
+      );
+    }
+  }
+
+  Future<DeleteShoutResult> deleteShout({
+    required String shoutId,
+    required bool sfwEnabled,
+  }) async {
+    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+
+    final sfwValue = sfwEnabled ? '1' : '0';
+
+    if (cookieA == null || cookieB == null) {
+      return const DeleteShoutResult(
+        success: false,
+        missingCookies: true,
+      );
+    }
+
+    final url = "https://www.furaffinity.net/controls/shouts/";
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+          'Referer': 'https://www.furaffinity.net/controls/shouts/',
+        },
+        body: {
+          'do': 'update',
+          'shouts[]': shoutId,
+        },
+      );
+
+      return DeleteShoutResult(
+        success: response.statusCode == 302,
+        missingCookies: false,
+        statusCode: response.statusCode,
+      );
+    } catch (e) {
+      return DeleteShoutResult(
+        success: false,
+        missingCookies: false,
+        error: e,
+      );
+    }
   }
 
   /// Parse additional shouts returned from a pagination call.

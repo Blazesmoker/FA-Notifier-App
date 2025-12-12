@@ -1,19 +1,10 @@
 // user_profile_screen.dart
-import 'dart:convert';
-import 'dart:io';
-import 'dart:math';
-import 'package:FANotifier/screens/shout_widget.dart';
 import 'package:FANotifier/screens/user_description_webview.dart';
-import 'package:auto_size_text/auto_size_text.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as html_parser;
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -22,28 +13,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import '../model/shout.dart';
 import '../model/user_link.dart';
-import '../network.dart';
-import '../parsing_utils.dart';
-import '../utils/html_tags_debug.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'user_profile_styles.dart';
-import 'avatardownloadscreen.dart';
+import 'user_profile_components.dart';
 import 'create_journal.dart';
 import 'new_message.dart';
 import 'openjournal.dart';
 import 'openpost.dart';
 import 'profilegallery.dart';
-import 'profilefavs.dart';
-import 'profilescraps.dart';
-import 'user_grid_section.dart';
-import 'view_list_screen.dart';
 import 'post_shout.dart';
 import 'profilejournals.dart';
-import 'package:html/dom.dart' as dom;
-import '../utils/fa_link_handler.dart';
 import '../utils/utils.dart';
 import 'user_profile_api_service.dart';
-import '../model/shout.dart';
+import 'user_profile_sliver_helpers.dart';
+import 'user_profile_favorites_section.dart';
+import 'user_profile_gallery_section.dart';
+import 'user_profile_home_section.dart';
+import 'user_profile_journals_section.dart';
+import 'user_profile_scraps_section.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String nickname;
@@ -153,12 +140,64 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   String _selectedFolderUrl = '';
   List<FaFolder> _allFolders = [];
 
-  List<String> userIconBeforeUrls = [];
+  UserProfileParsed? _profileParsed;
 
-  String? profileDisplayName;
-  String? profileUserNamePart;
-  String? userIconBeforeUrl;
-  String? userIconAfterUrl;
+  String? get profileBannerUrl => _profileParsed?.profileBannerUrl;
+  String? get profileImageUrl => _profileParsed?.profileImageUrl;
+  String? get profileDisplayName => _profileParsed?.profileDisplayName;
+  String? get profileUserNamePart => _profileParsed?.profileUserNamePart;
+  String? get symbolUsername => _profileParsed?.symbolUsername;
+  String? get username => _profileParsed?.username;
+  String? get userTitle => _profileParsed?.userTitle;
+  String? get registrationDate => _profileParsed?.registrationDate;
+  String? get userDescription => _profileParsed?.userDescription;
+  bool get hasRealUserProfile => _profileParsed?.hasRealUserProfile ?? true;
+
+  bool get isClassicMarkup => _profileParsed?.isClassicMarkup ?? false;
+  bool get acceptingTrades => _profileParsed?.acceptingTrades ?? false;
+  bool get acceptingCommissions => _profileParsed?.acceptingCommissions ?? false;
+
+  List<String> get userIconBeforeUrls => _profileParsed?.userIconBeforeUrls ?? const [];
+  List<String> get userIconAfterUrls => _profileParsed?.userIconAfterUrls ?? const [];
+
+  int? get views => _profileParsed?.views;
+  int? get submissions => _profileParsed?.submissions;
+  int? get favs => _profileParsed?.favs;
+  int? get commentsEarned => _profileParsed?.commentsEarned;
+  int? get commentsMade => _profileParsed?.commentsMade;
+  int? get journals => _profileParsed?.journals;
+
+  bool get isWatching => _profileParsed?.isWatching ?? false;
+  String? get watchLink => _profileParsed?.watchLink;
+  String? get unwatchLink => _profileParsed?.unwatchLink;
+  String? get unblockLink => _profileParsed?.unblockLink;
+  String? get blockLink => _profileParsed?.blockLink;
+  bool get isBlocked => _profileParsed?.isBlocked ?? false;
+  bool get blockUsesPost => _profileParsed?.blockUsesPost ?? false;
+  bool get unblockUsesPost => _profileParsed?.unblockUsesPost ?? false;
+
+  String? get featuredImageUrl => _profileParsed?.featuredImageUrl;
+  String? get featuredImageTitle => _profileParsed?.featuredImageTitle;
+  String? get featuredPostNumber => _profileParsed?.featuredPostNumber;
+
+  String? get userProfileImageUrl => _profileParsed?.userProfileImageUrl;
+  String? get userProfilePostNumber => _profileParsed?.userProfilePostNumber;
+  String? get userProfileTexts => _profileParsed?.userProfileTexts;
+
+  List<Map<String, String>> get contactInformationLinks => _profileParsed?.contactInformationLinks ?? const [];
+
+  List<UserLink> get recentWatchers => _profileParsed?.recentWatchers ?? const [];
+  int get recentWatchersCount => _profileParsed?.recentWatchersCount ?? 0;
+
+  List<UserLink> get recentlyWatched => _profileParsed?.recentlyWatched ?? const [];
+  int get recentlyWatchedCount => _profileParsed?.recentlyWatchedCount ?? 0;
+
+  List<Shout> get shouts => _profileParsed?.shouts ?? <Shout>[];
+  String? get shoutPaginationKey => _profileParsed?.shoutPaginationKey;
+  int get currentShoutPage => _profileParsed?.currentShoutPage ?? 1;
+  int get totalShoutPages => _profileParsed?.totalShoutPages ?? 1;
+
+  bool get isOwnProfile => _profileParsed?.isOwnProfile ?? false;
 
   bool _compareFolderUrls(String url1, String url2) {
     final uri1 = Uri.parse(url1);
@@ -206,63 +245,10 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
     });
   }
 
-  String? profileBannerUrl;
-  String? profileImageUrl;
-  String? username;
-  String? symbolUsername;
-  String? userTitle;
-  String? registrationDate;
-  String? userDescription;
-  List<String> keywords = [];
-  List<Widget> sections = [];
-  List<Shout> shouts = [];
   String sanitizedUsername = '';
-
-  List<UserLink> recentWatchers = [];
-  int recentWatchersCount = 0;
-
-  List<UserLink> recentlyWatched = [];
-  int recentlyWatchedCount = 0;
-
-  int? views;
-  int? submissions;
-  int? favs;
-  int? commentsEarned;
-  int? commentsMade;
-  int? journals;
-
-  bool isWatching = false;
-  String? watchLink;
-  String? unwatchLink;
-  String? unblockLink;
-  String? blockLink;
-  bool isBlocked = false;
-  bool blockUsesPost = false;
-  bool unblockUsesPost = false;
-
-  String? featuredImageUrl;
-  String? featuredImageTitle;
-  String? featuredPostNumber;
-
-  String? extractedUserProfilePostNumber;
-  String? extractedUserProfileTexts;
-
-  String? userProfileImageUrl;
-  String? userProfilePostNumber;
-  String? userProfileTexts;
-
-  List<Map<String, String>> contactInformationLinks = [];
-  bool isOwnProfile = false;
   bool isLoading = true;
   bool _webViewLoaded = false;
   String errorMessage = '';
-  bool hasRealUserProfile = true;
-
-  bool isClassicMarkup = false;
-  bool acceptingTrades = false;
-  bool acceptingCommissions = false;
-
-  List<String> userIconAfterUrls = [];
 
 
   static const double sliverAppBarExpandedHeight = 120.0;
@@ -291,10 +277,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   final double _avatarScaleStart = 0.0;
   final double _avatarScaleEnd = 140.0;
 
-  int currentShoutPage = 1;
-  int totalShoutPages = 1;
   bool isLoadingMoreShouts = false;
-  String? shoutPaginationKey;
 
 
 
@@ -440,47 +423,44 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   }
 
   Future<void> _sendWatchUnwatchRequest(String urlPath, {required bool shouldWatch}) async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    final result = await _api.sendWatchUnwatchRequest(
+      urlPath,
+      shouldWatch: shouldWatch,
+      sfwEnabled: _sfwEnabled,
+    );
 
-
-    final sfwValue = _sfwEnabled ? '1' : '0';
-
-    if (cookieA == null || cookieB == null) {
+    if (result.missingCookies) {
       print('No cookies found. User might not be logged in.');
       showAppSnackBar(context, 'Please log in to perform this action.', backgroundColor: Colors.red);
       return;
     }
 
-    final fullUrl = 'https://www.furaffinity.net$urlPath';
-    try {
-      final response = await httpClient.get(
-        Uri.parse(fullUrl),
-        headers: {
+    if (result.success) {
+      print('${shouldWatch ? 'Watch' : 'Unwatch'} action successful.');
 
-          'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
-          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
-        },
+      setState(() {
+        _profileParsed?.isWatching = shouldWatch;
+      });
+
+      showAppSnackBar(
+        context,
+        '${shouldWatch ? 'Now watching $username' : 'Stopped watching $username'}',
+        backgroundColor: Colors.green,
       );
-
-      if (response.statusCode == 200) {
-        print('${shouldWatch ? 'Watch' : 'Unwatch'} action successful.');
-
-        setState(() {
-          isWatching = shouldWatch;
-        });
-
-
-        showAppSnackBar(context, '${shouldWatch ? 'Now watching $username' : 'Stopped watching $username'}', backgroundColor: Colors.green);
-      } else {
-        print('Failed to ${shouldWatch ? 'watch' : 'unwatch'}. Status code: ${response.statusCode}');
-
-        showAppSnackBar(context, 'Failed to ${shouldWatch ? 'watch' : 'unwatch'} user.', backgroundColor: Colors.red);
-      }
-    } catch (e) {
-      print('Error during ${shouldWatch ? 'watch' : 'unwatch'}: $e');
-
-      showAppSnackBar(context, 'An error occurred while trying to ${shouldWatch ? 'watch' : 'unwatch'} user.', backgroundColor: Colors.red);
+    } else if (result.error != null) {
+      print('Error during ${shouldWatch ? 'watch' : 'unwatch'}: ${result.error}');
+      showAppSnackBar(
+        context,
+        'An error occurred while trying to ${shouldWatch ? 'watch' : 'unwatch'} user.',
+        backgroundColor: Colors.red,
+      );
+    } else {
+      print('Failed to ${shouldWatch ? 'watch' : 'unwatch'}. Status code: ${result.statusCode}');
+      showAppSnackBar(
+        context,
+        'Failed to ${shouldWatch ? 'watch' : 'unwatch'} user.',
+        backgroundColor: Colors.red,
+      );
     }
   }
 
@@ -526,158 +506,8 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
               const SizedBox(height: 10),
               html_pkg.Html(
                 data: shout.text,
-                style: {
-                  "body": html_pkg.Style(
-                    textAlign: TextAlign.left,
-                    fontSize: html_pkg.FontSize(16),
-                    color: Colors.white,
-                  ),
-                  "p": html_pkg.Style(
-                    fontSize: html_pkg.FontSize(16),
-                    color: Colors.white,
-                  ),
-                  "a": html_pkg.Style(
-                    color: const Color(0xFFE09321),
-                    textDecoration: TextDecoration.none,
-                  ),
-                  "img": html_pkg.Style(
-                    width: html_pkg.Width(50.0),
-                    height: html_pkg.Height(50.0),
-                  ),
-                  "strong": html_pkg.Style(
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  "u": html_pkg.Style(
-                    color: Colors.black,
-                  ),
-                  ".bbcode_right": html_pkg.Style(
-                    textAlign: TextAlign.right,
-                  ),
-                  ".bbcode_right .bbcode_sup, .bbcode_right sup": html_pkg.Style(
-                    textAlign: TextAlign.right,
-                  ),
-                  ".bbcode_center": html_pkg.Style(
-                    textAlign: TextAlign.center,
-                  ),
-                  ".bbcode_left": html_pkg.Style(
-                    textAlign: TextAlign.left,
-                  ),
-                  "hr": html_pkg.Style(
-                    padding: HtmlPaddings.symmetric(vertical: 8),
-                    margin: Margins.symmetric(vertical: 8),
-                    height: html_pkg.Height(1),
-                  ),
-                },
-                extensions: [
-                  // Extension for <i> tags and FA emoji images.
-                  html_pkg.TagExtension(
-                    tagsToExtend: {"i"},
-                    builder: (html_pkg.ExtensionContext context) {
-                      final classAttr = context.attributes['class'];
-                      if (classAttr == 'bbcode bbcode_i') {
-                        return Text(
-                          context.styledElement?.element?.text ?? "",
-                          style: const TextStyle(
-                            fontStyle: FontStyle.italic,
-                            color: Colors.white,
-                          ),
-                        );
-                      }
-                      switch (classAttr) {
-                        case 'smilie tongue':
-                          return Image.asset('assets/emojis/tongue.png', width: 20, height: 20);
-                        case 'smilie evil':
-                          return Image.asset('assets/emojis/evil.png', width: 20, height: 20);
-                        case 'smilie lmao':
-                          return Image.asset('assets/emojis/lmao.png', width: 20, height: 20);
-                        case 'smilie gift':
-                          return Image.asset('assets/emojis/gift.png', width: 20, height: 20);
-                        case 'smilie derp':
-                          return Image.asset('assets/emojis/derp.png', width: 20, height: 20);
-                        case 'smilie teeth':
-                          return Image.asset('assets/emojis/teeth.png', width: 20, height: 20);
-                        case 'smilie cool':
-                          return Image.asset('assets/emojis/cool.png', width: 20, height: 20);
-                        case 'smilie huh':
-                          return Image.asset('assets/emojis/huh.png', width: 20, height: 20);
-                        case 'smilie cd':
-                          return Image.asset('assets/emojis/cd.png', width: 20, height: 20);
-                        case 'smilie coffee':
-                          return Image.asset('assets/emojis/coffee.png', width: 20, height: 20);
-                        case 'smilie sarcastic':
-                          return Image.asset('assets/emojis/sarcastic.png', width: 20, height: 20);
-                        case 'smilie veryhappy':
-                          return Image.asset('assets/emojis/veryhappy.png', width: 20, height: 20);
-                        case 'smilie wink':
-                          return Image.asset('assets/emojis/wink.png', width: 20, height: 20);
-                        case 'smilie whatever':
-                          return Image.asset('assets/emojis/whatever.png', width: 20, height: 20);
-                        case 'smilie crying':
-                          return Image.asset('assets/emojis/crying.png', width: 20, height: 20);
-                        case 'smilie love':
-                          return Image.asset('assets/emojis/love.png', width: 20, height: 20);
-                        case 'smilie serious':
-                          return Image.asset('assets/emojis/serious.png', width: 20, height: 20);
-                        case 'smilie yelling':
-                          return Image.asset('assets/emojis/yelling.png', width: 20, height: 20);
-                        case 'smilie oooh':
-                          return Image.asset('assets/emojis/oooh.png', width: 20, height: 20);
-                        case 'smilie angel':
-                          return Image.asset('assets/emojis/angel.png', width: 20, height: 20);
-                        case 'smilie dunno':
-                          return Image.asset('assets/emojis/dunno.png', width: 20, height: 20);
-                        case 'smilie nerd':
-                          return Image.asset('assets/emojis/nerd.png', width: 20, height: 20);
-                        case 'smilie sad':
-                          return Image.asset('assets/emojis/sad.png', width: 20, height: 20);
-                        case 'smilie zipped':
-                          return Image.asset('assets/emojis/zipped.png', width: 20, height: 20);
-                        case 'smilie smile':
-                          return Image.asset('assets/emojis/smile.png', width: 20, height: 20);
-                        case 'smilie badhairday':
-                          return Image.asset('assets/emojis/badhairday.png', width: 20, height: 20);
-                        case 'smilie embarrassed':
-                          return Image.asset('assets/emojis/embarrassed.png', width: 20, height: 20);
-                        case 'smilie note':
-                          return Image.asset('assets/emojis/note.png', width: 20, height: 20);
-                        case 'smilie sleepy':
-                          return Image.asset('assets/emojis/sleepy.png', width: 20, height: 20);
-                        default:
-                          return const SizedBox.shrink();
-                      }
-                    },
-                  ),
-                  // Extension for <img> tags.
-                  html_pkg.TagExtension(
-                    tagsToExtend: {"img"},
-                    builder: (html_pkg.ExtensionContext context) {
-                      final src = context.attributes['src'];
-                      if (src == null) {
-                        return const SizedBox.shrink();
-                      }
-                      final resolvedUrl = src.startsWith('//') ? 'https:$src' : src;
-                      return CachedNetworkImage(
-                        imageUrl: resolvedUrl,
-                        width: 50,
-                        height: 50,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => const SizedBox(
-                          width: 50,
-                          height: 50,
-                          child: CircularProgressIndicator(),
-                        ),
-                        errorWidget: (context, url, error) => Image.asset(
-                          'assets/images/defaultpic.gif',
-                          width: 50,
-                          height: 50,
-                          fit: BoxFit.cover,
-                        ),
-                      );
-                    },
-                  ),
-
-                ],
+                style: userProfileHtmlStyles(),
+                extensions: buildUserProfileBBCodeExtensions(),
               ),
             ],
           ),
@@ -705,45 +535,23 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   }
 
   Future<void> _deleteShout(int index, Shout shout) async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    final result = await _api.deleteShout(
+      shoutId: shout.id,
+      sfwEnabled: _sfwEnabled,
+    );
 
-
-    final sfwValue = _sfwEnabled ? '1' : '0';
-
-    if (cookieA == null || cookieB == null) {
+    if (result.missingCookies) {
       showAppSnackBar(context, "Please log in to perform this action.", backgroundColor: Colors.red);
       return;
     }
 
-    final url = "https://www.furaffinity.net/controls/shouts/";
-    try {
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {
-          'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
-          'Referer': 'https://www.furaffinity.net/controls/shouts/',
-        },
-        body: {
-          'do': 'update',
-          'shouts[]': shout.id,
-        },
-      );
-      final payload = Uri(queryParameters: {'do': 'update', 'shouts[]': shout.id}).query;
-
-
-      if (response.statusCode == 302) {
-
-        showAppSnackBar(context, "Shout deleted.", backgroundColor: Colors.green);
-
-        await _fetchUserProfile();
-      } else {
-        showAppSnackBar(context, "Failed to delete shout.", backgroundColor: Colors.red);
-      }
-    } catch (e) {
-      showAppSnackBar(context, "Error: $e", backgroundColor: Colors.red);
+    if (result.success) {
+      showAppSnackBar(context, "Shout deleted.", backgroundColor: Colors.green);
+      await _fetchUserProfile();
+    } else if (result.error != null) {
+      showAppSnackBar(context, "Error: ${result.error}", backgroundColor: Colors.red);
+    } else {
+      showAppSnackBar(context, "Failed to delete shout.", backgroundColor: Colors.red);
     }
   }
 
@@ -870,68 +678,8 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
           parsed.userDescription != null &&
           parsed.userDescription!.trim().isNotEmpty;
 
-      // DEBUG LOGGING
-      print("=== PARSED DATA DEBUG ===");
-      print("symbolUsername: ${parsed.symbolUsername}");
-      print("userTitle: ${parsed.userTitle}");
-      print("registrationDate: ${parsed.registrationDate}");
-      print("featuredImageUrl: ${parsed.featuredImageUrl}");
-      print("featuredImageTitle: ${parsed.featuredImageTitle}");
-      print("featuredPostNumber: ${parsed.featuredPostNumber}");
-      print("userProfileTexts: ${parsed.userProfileTexts?.substring(0, min(100, parsed.userProfileTexts?.length ?? 0))}");
-      print("recentWatchersCount: ${parsed.recentWatchersCount}");
-      print("recentWatchers.length: ${parsed.recentWatchers.length}");
-      print("recentlyWatchedCount: ${parsed.recentlyWatchedCount}");
-      print("recentlyWatched.length: ${parsed.recentlyWatched.length}");
-      print("hasRealUserProfile: ${parsed.hasRealUserProfile}");
-      print("========================");
-
       setState(() {
-        profileBannerUrl = parsed.profileBannerUrl;
-        profileImageUrl = parsed.profileImageUrl;
-        profileDisplayName = parsed.profileDisplayName;
-        profileUserNamePart = parsed.profileUserNamePart;
-        symbolUsername = parsed.symbolUsername;
-        username = parsed.username;
-        userTitle = parsed.userTitle;
-        registrationDate = parsed.registrationDate;
-        userDescription = parsed.userDescription;
-        hasRealUserProfile = parsed.hasRealUserProfile;
-        isClassicMarkup = parsed.isClassicMarkup;
-        acceptingTrades = parsed.acceptingTrades;
-        acceptingCommissions = parsed.acceptingCommissions;
-        userIconBeforeUrls = parsed.userIconBeforeUrls;
-        userIconAfterUrls = parsed.userIconAfterUrls;
-        views = parsed.views;
-        submissions = parsed.submissions;
-        favs = parsed.favs;
-        commentsEarned = parsed.commentsEarned;
-        commentsMade = parsed.commentsMade;
-        journals = parsed.journals;
-        featuredImageUrl = parsed.featuredImageUrl;
-        featuredImageTitle = parsed.featuredImageTitle;
-        featuredPostNumber = parsed.featuredPostNumber;
-        userProfileImageUrl = parsed.userProfileImageUrl;
-        userProfilePostNumber = parsed.userProfilePostNumber;
-        userProfileTexts = parsed.userProfileTexts;
-        contactInformationLinks = parsed.contactInformationLinks;
-        recentWatchers = parsed.recentWatchers;
-        recentWatchersCount = parsed.recentWatchersCount;
-        recentlyWatched = parsed.recentlyWatched;
-        recentlyWatchedCount = parsed.recentlyWatchedCount;
-        shouts = parsed.shouts;
-        shoutPaginationKey = parsed.shoutPaginationKey;
-        currentShoutPage = parsed.currentShoutPage;
-        totalShoutPages = parsed.totalShoutPages;
-        watchLink = parsed.watchLink;
-        unwatchLink = parsed.unwatchLink;
-        blockLink = parsed.blockLink;
-        unblockLink = parsed.unblockLink;
-        blockUsesPost = parsed.blockUsesPost;
-        unblockUsesPost = parsed.unblockUsesPost;
-        isWatching = parsed.isWatching;
-        isBlocked = parsed.isBlocked;
-        isOwnProfile = parsed.isOwnProfile;
+        _profileParsed = parsed;
         _webViewLoaded = shouldShowDescription ? _webViewLoaded : true;
         isLoading = false;
       });
@@ -978,11 +726,12 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
     try {
       final nextPage = currentShoutPage + 1;
-      final payload = await _api.fetchShoutPage(
+      final payload = await _api.fetchAdditionalShouts(
         sanitizedUsername: sanitizedUsername,
         shoutPaginationKey: shoutPaginationKey,
         nextPage: nextPage,
         sfwEnabled: _sfwEnabled,
+        existingShoutIds: shouts.map((s) => s.id).toSet(),
       );
 
       if (payload == null) {
@@ -990,16 +739,11 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
         return;
       }
 
-      final decodedBody = payload.body;
-
-      final newShouts = _api.parseAdditionalShoutsJson(
-        decodedBody,
-        shouts.map((s) => s.id).toSet(),
-      );
-
       setState(() {
-        shouts.addAll(newShouts);
-        currentShoutPage = payload.nextPage;
+        _profileParsed?.shouts.addAll(payload.newShouts);
+        if (_profileParsed != null) {
+          _profileParsed!.currentShoutPage = payload.nextPage;
+        }
       });
     } catch (e) {
       print('Error loading more shouts: $e');
@@ -1019,26 +763,6 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       return int.tryParse(match.group(1)!);
     }
     return null;
-  }
-
-  // Small stat item helper
-  Widget _buildStatItem(String count, String label) {
-    return Column(
-      children: [
-        Text(
-          count,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 16.0,
-          ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(color: Colors.white70, fontSize: 12.0),
-        ),
-      ],
-    );
   }
 
   // Animated banner/avatar helpers
@@ -1148,89 +872,6 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   }
 
 
-  Widget _buildUserProfileSection() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F1F),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'User Profile',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-            ),
-            const SizedBox(height: 8.0),
-            if (userProfileImageUrl != null)
-              GestureDetector(
-                onTap: () {
-                  if (userProfilePostNumber != null) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => OpenPost(
-                          imageUrl: userProfileImageUrl!,
-                          uniqueNumber: userProfilePostNumber!,
-                        ),
-                      ),
-                    );
-                  }
-                },
-                child: Center(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8.0),
-                    child: CachedNetworkImage(
-                      imageUrl: userProfileImageUrl!,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => const SizedBox(
-                        height: 200,
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                      errorWidget: (context, url, error) => const SizedBox(),
-                    ),
-                  ),
-                ),
-              ),
-            const SizedBox(height: 8.0),
-
-            if (isClassicMarkup)
-              Center(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      "Accepting Trades: ${acceptingTrades ? "Yes" : "No"}",
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Accepting Commissions: ${acceptingCommissions ? "Yes" : "No"}",
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 8.0),
-            html_pkg.Html(
-              data: userProfileTexts!,
-              style: userProfileHtmlStylesCompact(),
-              extensions: buildUserProfileBBCodeExtensions(),
-              onLinkTap: (url, _, __) => _handleFALink(context, url!),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-
-
-
-
   GlobalKey _profileNameRowKey = GlobalKey();
 
   void _clearProfileNameSelection() {
@@ -1311,593 +952,111 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
     );
   }
 
-  Widget _buildContactInformationSection() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F1F),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Contact Information',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-            ),
-            const SizedBox(height: 8.0),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: contactInformationLinks.map((contact) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                  child: Row(
-                    children: [
-                      Text(
-                        '${contact['label']}: ',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16.0,
-                        ),
-                      ),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            final href = contact['href'];
-                            if (href != null && href.isNotEmpty) {
-                              _launchURL(href);
-                            }
-                          },
-                          child: Text(
-                            contact['value'] ?? '',
-                            style: const TextStyle(
-                              color: Color(0xFFE09321),
-                              fontSize: 16.0,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildShoutsSection() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1F1F1F), Colors.black],
-            stops: [0.0, 0.06],
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        padding: const EdgeInsets.only(top: 16.0, bottom: 64.0, right: 0.0, left: 0.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const Text(
-              'Shouts',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 0.0),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12.0, 12.0, 12.0, 12.0),
-              child: GestureDetector(
-                onTap: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => PostShoutScreen(username: sanitizedUsername),
-                    ),
-                  );
-                  if (result == true) {
-                    await _fetchUserProfile();
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF232323),
-                    borderRadius: BorderRadius.circular(10.0),
-                  ),
-                  child: Row(
-                    children: const [
-                      Expanded(
-                        child: Text(
-                          'Type here to leave a shout!',
-                          style: TextStyle(color: Colors.white54),
-                        ),
-                      ),
-                      Icon(Icons.send, color: Colors.white54),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            if (shouts.isEmpty)
-              const Text(
-                'No shouts yet. Be the first to shout!',
-                style: TextStyle(color: Colors.white70),
-              )
-            else
-              Column(
-                children: [
-                  ListView.separated(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: shouts.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 8.0),
-                    itemBuilder: (context, index) {
-                      final shout = shouts[index];
-                      return GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onLongPress: () async {
-                          final plainText = html_parser.parse(shout.text).body?.text ?? shout.text;
-                          final action = await showDialog<String>(
-                            context: context,
-                            builder: (context) {
-                              final maxHeight = MediaQuery.of(context).size.height * 0.6;
-                              return AlertDialog(
-                                scrollable: true,
-                                titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                                title: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(4.0),
-                                      child: Image.network(
-                                        shout.avatarUrl,
-                                        width: 40,
-                                        height: 40,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            shout.username,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          Text(
-                                            '${shout.symbol} ${shout.profileNickname}',
-                                            style: const TextStyle(
-                                              color: Color(0xFFE09321),
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.normal,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                content: ConstrainedBox(
-                                  constraints: BoxConstraints(maxHeight: maxHeight),
-                                  child: SingleChildScrollView(
-                                    child: Text(
-                                      plainText,
-                                      style: const TextStyle(color: Colors.white),
-                                    ),
-                                  ),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context, 'copy'),
-                                    child: const Text('Copy text'),
-                                  ),
-                                  if (isOwnProfile)
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context, 'delete'),
-                                      style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                      child: const Text("Delete"),
-                                    ),
-                                ],
-                              );
-                            },
-                          );
-                          if (action == 'copy') {
-                            await Clipboard.setData(ClipboardData(text: plainText));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Shout text copied'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          } else if (action == 'delete') {
-                            _confirmDeleteShout(index, shout);
-                          }
-                        },
-                        child: ShoutWidget(
-                          shout: shout,
-                          onDelete: () {
-                            if (isOwnProfile) {
-                              _confirmDeleteShout(index, shout);
-                            }
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                  if (currentShoutPage < totalShoutPages)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 16.0),
-                      child: isLoadingMoreShouts
-                          ? const CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE09321)),
-                            )
-                          : ElevatedButton(
-                              onPressed: _loadMoreShouts,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFE09321),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8.0),
-                                ),
-                              ),
-                              child: const Text(
-                                'Load More',
-                                style: TextStyle(
-                                  fontSize: 16.0,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                    ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFeaturedSubmission() {
-    if (featuredImageUrl == null || featuredImageTitle == null || featuredPostNumber == null) {
-      return const SizedBox();
-    }
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F1F),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Featured Submission',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-            ),
-            const SizedBox(height: 8.0),
-            GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => OpenPost(
-                      imageUrl: featuredImageUrl!,
-                      uniqueNumber: featuredPostNumber!,
-                    ),
-                  ),
-                );
-              },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8.0),
-                child: CachedNetworkImage(
-                  imageUrl: featuredImageUrl!,
-                  fit: BoxFit.contain,
-                  placeholder: (context, url) => const SizedBox(
-                    height: 200,
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  errorWidget: (context, url, error) => const SizedBox(
-                    height: 200,
-                    child: Center(
-                      child: Icon(Icons.broken_image, size: 100, color: Colors.redAccent),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8.0),
-            Text(
-              featuredImageTitle!,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _sendBlockUnblockRequest(
       String urlOrPath,
       String keyValue, {
         required bool shouldBlock,
         required bool usePost,
       }) async {
-    print('==================== [_sendBlockUnblockRequest] START ====================');
-    print('[_sendBlockUnblockRequest] Raw args:');
-    print('  urlOrPath: $urlOrPath');
-    print('  keyValue: $keyValue');
-    print('  shouldBlock: $shouldBlock');
-    print('  usePost: $usePost');
+    final result = await _api.sendBlockUnblockRequest(
+      urlOrPath,
+      keyValue,
+      shouldBlock: shouldBlock,
+      usePost: usePost,
+      sfwEnabled: _sfwEnabled,
+      sanitizedUsername: sanitizedUsername,
+    );
 
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    final sfwValue = _sfwEnabled ? '1' : '0';
-
-    print('[_sendBlockUnblockRequest] Cookies / SFW state:');
-    print('  cookieA is null: ${cookieA == null}');
-    print('  cookieB is null: ${cookieB == null}');
-    if (cookieA != null) {
-      print('  cookieA length: ${cookieA.length}');
-    }
-    if (cookieB != null) {
-      print('  cookieB length: ${cookieB.length}');
-    }
-    print('  _sfwEnabled: $_sfwEnabled');
-    print('  sfwValue: $sfwValue');
-
-    if (cookieA == null || cookieB == null) {
-      print('[_sendBlockUnblockRequest] ERROR: No cookies found. Aborting.');
+    if (result.missingCookies) {
       showAppSnackBar(
         context,
         'Please log in to perform this action.',
         backgroundColor: Colors.red,
       );
-      print('==================== [_sendBlockUnblockRequest] END (no cookies) ====================');
       return;
     }
 
-    final fullUrl = urlOrPath.startsWith('http')
-        ? urlOrPath
-        : 'https://www.furaffinity.net$urlOrPath';
-    print('[_sendBlockUnblockRequest] fullUrl (after prefix check): $fullUrl');
-
-    final uri = Uri.parse(fullUrl);
-    print('[_sendBlockUnblockRequest] Parsed uri: $uri');
-    print('[_sendBlockUnblockRequest] uri.scheme: ${uri.scheme}');
-    print('[_sendBlockUnblockRequest] uri.host: ${uri.host}');
-    print('[_sendBlockUnblockRequest] uri.path: ${uri.path}');
-    print('[_sendBlockUnblockRequest] uri.query: ${uri.query}');
-    print('[_sendBlockUnblockRequest] uri.pathSegments: ${uri.pathSegments}');
-
-    final targetUrl = uri.toString();
-    print('[_sendBlockUnblockRequest] targetUrl: $targetUrl');
-
-    String refererUsername = sanitizedUsername;
-    print('[_sendBlockUnblockRequest] Initial refererUsername (sanitizedUsername): $refererUsername');
-
-    final segments = uri.pathSegments;
-    print('[_sendBlockUnblockRequest] segments length: ${segments.length}');
-    if (segments.isNotEmpty) {
-      for (int i = 0; i < segments.length; i++) {
-        print('[_sendBlockUnblockRequest] segments[$i]: ${segments[i]}');
-      }
-    }
-
-    if (segments.length >= 2 && (segments.first == 'block' || segments.first == 'unblock')) {
-      final candidateUsername = segments[1];
-      print('[_sendBlockUnblockRequest] Detected block/unblock path, candidate username from URL: $candidateUsername');
-      refererUsername = candidateUsername;
-    } else {
-      print('[_sendBlockUnblockRequest] Did NOT detect /block/username or /unblock/username pattern. Keeping sanitizedUsername.');
-    }
-
-    print('[_sendBlockUnblockRequest] Final refererUsername: $refererUsername');
-
-    try {
-      final uriTarget = Uri.parse(targetUrl);
-      print('[_sendBlockUnblockRequest] uriTarget: $uriTarget');
-
-      final headers = <String, String>{
-        'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
-        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
-        'Referer': 'https://www.furaffinity.net/user/$refererUsername/',
-      };
-
-      print('[_sendBlockUnblockRequest] Request headers:');
-      headers.forEach((k, v) {
-        if (k.toLowerCase() == 'cookie') {
-          print('  $k: ${v.substring(0, v.length.clamp(0, 200))}${v.length > 200 ? '... (truncated)' : ''}');
-        } else {
-          print('  $k: $v');
-        }
-      });
-
-      late http.Response response;
-
-      if (usePost) {
-        print('[_sendBlockUnblockRequest] Performing POST request...');
-        print('[_sendBlockUnblockRequest] POST body: { key: $keyValue }');
-
-        response = await http.post(
-          uriTarget,
-          headers: {
-            ...headers,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: {'key': keyValue},
-        );
-      } else {
-        print('[_sendBlockUnblockRequest] Performing GET request...');
-        response = await http.get(uriTarget, headers: headers);
-      }
-
-      print('[_sendBlockUnblockRequest] Response received:');
-      print('  statusCode: ${response.statusCode}');
-      print('  isRedirect (3xx): ${response.statusCode >= 300 && response.statusCode < 400}');
-      print('  response.headers:');
-      response.headers.forEach((k, v) {
-        print('    $k: $v');
-      });
-
-      final previewLength = min(500, response.body.length);
-      final previewBody = response.body.substring(0, previewLength);
-      print('[_sendBlockUnblockRequest] Response body preview ($previewLength chars):');
-      print(previewBody);
-
-      if (response.statusCode == 302 || response.statusCode == 200) {
-        print('[_sendBlockUnblockRequest] ${shouldBlock ? 'Block' : 'Unblock'} action SUCCESS.');
-        await _fetchUserProfile();
-        showAppSnackBar(
-          context,
-          shouldBlock ? 'Author blocked' : 'Author unblocked',
-          backgroundColor: Colors.green,
-        );
-      } else {
-        print('[_sendBlockUnblockRequest] ERROR: Failed to ${shouldBlock ? 'block' : 'unblock'}. Status code: ${response.statusCode}');
-        showAppSnackBar(
-          context,
-          'Failed to ${shouldBlock ? 'block' : 'unblock'} author.',
-          backgroundColor: Colors.red,
-        );
-      }
-    } catch (e, st) {
-      print('[_sendBlockUnblockRequest] EXCEPTION during ${shouldBlock ? 'block' : 'unblock'}: $e');
-      print('[_sendBlockUnblockRequest] Stacktrace: $st');
+    if (result.success) {
+      await _fetchUserProfile();
+      showAppSnackBar(
+        context,
+        shouldBlock ? 'Author blocked' : 'Author unblocked',
+        backgroundColor: Colors.green,
+      );
+    } else if (result.error != null) {
       showAppSnackBar(
         context,
         'An error occurred while trying to ${shouldBlock ? 'block' : 'unblock'} author.',
         backgroundColor: Colors.red,
       );
+    } else {
+      showAppSnackBar(
+        context,
+        'Failed to ${shouldBlock ? 'block' : 'unblock'} author.',
+        backgroundColor: Colors.red,
+      );
     }
-
-    print('==================== [_sendBlockUnblockRequest] END ====================');
   }
 
-
-
   Future<void> _handleBlockUnblock() async {
-    print('==================== [_handleBlockUnblock] START ====================');
-    print('[_handleBlockUnblock] isBlocked: $isBlocked');
-    print('[_handleBlockUnblock] blockLink: $blockLink');
-    print('[_handleBlockUnblock] unblockLink: $unblockLink');
-    print('[_handleBlockUnblock] blockUsesPost: $blockUsesPost');
-    print('[_handleBlockUnblock] unblockUsesPost: $unblockUsesPost');
-
     if (isBlocked) {
-      print('[_handleBlockUnblock] Entered UNBLOCK branch');
-
       if (unblockLink == null) {
-        print('[_handleBlockUnblock] ERROR: unblockLink is null');
         showAppSnackBar(
           context,
           'Cannot unblock author at this time.',
           backgroundColor: Colors.red,
         );
-        print('==================== [_handleBlockUnblock] END (unblockLink null) ====================');
         return;
       }
-
-      print('[_handleBlockUnblock] Raw unblockLink: $unblockLink');
       final unblockUri = Uri.parse(unblockLink!);
-      print('[_handleBlockUnblock] Parsed unblockUri: $unblockUri');
-      print('[_handleBlockUnblock] unblockUri.scheme: ${unblockUri.scheme}');
-      print('[_handleBlockUnblock] unblockUri.host: ${unblockUri.host}');
-      print('[_handleBlockUnblock] unblockUri.path: ${unblockUri.path}');
-      print('[_handleBlockUnblock] unblockUri.query: ${unblockUri.query}');
-      print('[_handleBlockUnblock] unblockUri.pathSegments: ${unblockUri.pathSegments}');
 
       final key = unblockUri.queryParameters['key'];
-      print('[_handleBlockUnblock] Extracted unblock key: $key');
 
       if (key == null || key.isEmpty) {
-        print('[_handleBlockUnblock] ERROR: Unblock key is null or empty');
         showAppSnackBar(
           context,
           'Cannot unblock author at this time.',
           backgroundColor: Colors.red,
         );
-        print('==================== [_handleBlockUnblock] END (unblock key invalid) ====================');
         return;
       }
 
-      print('[_handleBlockUnblock] Calling _sendBlockUnblockRequest for UNBLOCK');
       await _sendBlockUnblockRequest(
         unblockLink!,
         key,
         shouldBlock: false,
         usePost: unblockUsesPost,
       );
-      print('[_handleBlockUnblock] Returned from _sendBlockUnblockRequest (UNBLOCK)');
     } else {
-      print('[_handleBlockUnblock] Entered BLOCK branch');
-
       if (blockLink == null) {
-        print('[_handleBlockUnblock] ERROR: blockLink is null');
         showAppSnackBar(
           context,
           'Cannot block author at this time.',
           backgroundColor: Colors.red,
         );
-        print('==================== [_handleBlockUnblock] END (blockLink null) ====================');
         return;
       }
 
-      print('[_handleBlockUnblock] Raw blockLink: $blockLink');
       final blockUri = Uri.parse(blockLink!);
-      print('[_handleBlockUnblock] Parsed blockUri: $blockUri');
-      print('[_handleBlockUnblock] blockUri.scheme: ${blockUri.scheme}');
-      print('[_handleBlockUnblock] blockUri.host: ${blockUri.host}');
-      print('[_handleBlockUnblock] blockUri.path: ${blockUri.path}');
-      print('[_handleBlockUnblock] blockUri.query: ${blockUri.query}');
-      print('[_handleBlockUnblock] blockUri.pathSegments: ${blockUri.pathSegments}');
 
       final key = blockUri.queryParameters['key'];
-      print('[_handleBlockUnblock] Extracted block key: $key');
 
       if (key == null || key.isEmpty) {
-        print('[_handleBlockUnblock] ERROR: Block key is null or empty');
         showAppSnackBar(
           context,
           'Cannot block author at this time.',
           backgroundColor: Colors.red,
         );
-        print('==================== [_handleBlockUnblock] END (block key invalid) ====================');
         return;
       }
 
-      print('[_handleBlockUnblock] Calling _sendBlockUnblockRequest for BLOCK');
       await _sendBlockUnblockRequest(
         blockLink!,
         key,
         shouldBlock: true,
         usePost: blockUsesPost,
       );
-      print('[_handleBlockUnblock] Returned from _sendBlockUnblockRequest (BLOCK)');
     }
-
-    print('==================== [_handleBlockUnblock] END ====================');
   }
 
 
@@ -2328,10 +1487,10 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                               children: [
                                 TableRow(
                                   children: [
-                                    _buildStatItem(views?.toString() ?? '0', 'Views'),
-                                    _buildStatItem(submissions?.toString() ?? '0', 'Submissions'),
-                                    _buildStatItem(favs?.toString() ?? '0', 'Favs'),
-                                    _buildStatItem(recentWatchersCount.toString(), 'Watched'),
+                                    ProfileStatItem(count: views?.toString() ?? '0', label: 'Views'),
+                                    ProfileStatItem(count: submissions?.toString() ?? '0', label: 'Submissions'),
+                                    ProfileStatItem(count: favs?.toString() ?? '0', label: 'Favs'),
+                                    ProfileStatItem(count: recentWatchersCount.toString(), label: 'Watched'),
                                   ],
                                 ),
                               ],
@@ -2567,61 +1726,64 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   }
 
   Widget _buildHomeSection() {
-    return ListView(
-      padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 8.0),
-      children: [
-        if (hasRealUserProfile && userDescription != null && userDescription!.trim().isNotEmpty)
-          GestureDetector(
-            onLongPressStart: _handleDescriptionLongPress,
-            child: UserDescriptionWebView(
-              key: _webViewKey,
-              sanitizedUsername: sanitizedUsername,
-              initialHtml: userDescription,
-              forceHybridComposition: false,
-              onWebViewLoaded: (loaded) {
-                Future.delayed(Duration(milliseconds: 25), () {
-                  setState(() {
-                    _webViewLoaded = loaded;
-                  });
-                });
-              },
+    return UserProfileHomeSection(
+      hasRealUserProfile: hasRealUserProfile,
+      userDescription: userDescription,
+      webViewKey: _webViewKey,
+      sanitizedUsername: sanitizedUsername,
+      onDescriptionLongPressStart: _handleDescriptionLongPress,
+      onWebViewLoaded: (loaded) {
+        Future.delayed(Duration(milliseconds: 25), () {
+          setState(() {
+            _webViewLoaded = loaded;
+          });
+        });
+      },
+      featuredImageUrl: featuredImageUrl,
+      featuredImageTitle: featuredImageTitle,
+      featuredPostNumber: featuredPostNumber,
+      onOpenPost: (context, imageUrl, uniqueNumber) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OpenPost(
+              imageUrl: imageUrl,
+              uniqueNumber: uniqueNumber,
             ),
           ),
-        const SizedBox(height: 16.0),
-        if (featuredImageUrl != null && featuredImageUrl!.isNotEmpty &&
-            featuredImageTitle != null && featuredImageTitle!.isNotEmpty &&
-            featuredPostNumber != null && featuredPostNumber!.isNotEmpty)
-          ...[
-            _buildFeaturedSubmission(),
-            const SizedBox(height: 8.0),
-          ],
-        if (hasRealUserProfile &&
-            userProfileTexts != null &&
-            userProfileTexts!.isNotEmpty &&
-            userProfileTexts != 'No additional profile information.')
-          _buildUserProfileSection(),
-        const SizedBox(height: 8.0),
-        if (contactInformationLinks.isNotEmpty) _buildContactInformationSection(),
-        const SizedBox(height: 8.0),
-        if (recentWatchers.isNotEmpty || recentWatchersCount > 0)
-          UserGridSection(
-            title: 'Recent Watchers',
-            viewListText: 'Watched by $recentWatchersCount',
-            users: recentWatchers,
-            sanitizedUsername: sanitizedUsername,
+        );
+      },
+      userProfileImageUrl: userProfileImageUrl,
+      userProfilePostNumber: userProfilePostNumber,
+      userProfileTexts: userProfileTexts,
+      isClassicMarkup: isClassicMarkup,
+      acceptingTrades: acceptingTrades,
+      acceptingCommissions: acceptingCommissions,
+      onHandleFALink: _handleFALink,
+      contactInformationLinks: contactInformationLinks,
+      onLaunchUrl: _launchURL,
+      recentWatchers: recentWatchers,
+      recentWatchersCount: recentWatchersCount,
+      recentlyWatched: recentlyWatched,
+      recentlyWatchedCount: recentlyWatchedCount,
+      shouts: shouts,
+      isOwnProfile: isOwnProfile,
+      currentShoutPage: currentShoutPage,
+      totalShoutPages: totalShoutPages,
+      isLoadingMoreShouts: isLoadingMoreShouts,
+      onOpenPostShout: (context) async {
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PostShoutScreen(username: sanitizedUsername),
           ),
-        const SizedBox(height: 8.0),
-        if (recentlyWatched.isNotEmpty || recentlyWatchedCount > 0)
-          UserGridSection(
-            title: 'Recently Watched',
-            viewListText: 'Watching $recentlyWatchedCount',
-            users: recentlyWatched,
-            sanitizedUsername: sanitizedUsername,
-          ),
-        const SizedBox(height: 8.0),
-        _buildShoutsSection(),
-        const SizedBox(height: 8.0),
-      ],
+        );
+        if (result == true) {
+          await _fetchUserProfile();
+        }
+      },
+      onLoadMoreShouts: _loadMoreShouts,
+      onConfirmDeleteShout: _confirmDeleteShout,
     );
   }
 
@@ -2632,71 +1794,14 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
     /// Builds the Gallery section content.
   Widget _buildGallerySection() {
-
-    final galleryUrl = _selectedFolderUrl.isNotEmpty
-        ? _selectedFolderUrl
-        : 'https://www.furaffinity.net/gallery/$sanitizedUsername/';
-
-
-    return CustomScrollView(
-      slivers: [
-
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Gallery',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                PopupMenuButton<FaFolder>(
-                  onSelected: (FaFolder folder) {
-
-                    setState(() {
-                      _selectedFolderName = folder.name;
-                      _selectedFolderUrl = folder.url;
-                    });
-
-                  },
-                  itemBuilder: (context) {
-                    return _allFolders.map((folder) {
-                      return PopupMenuItem<FaFolder>(
-                        value: folder,
-                        child: Text(folder.name),
-                      );
-                    }).toList();
-                  },
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFE09321),
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: const Color(0xFFE09321),
-                      disabledForegroundColor: Colors.white,
-                    ),
-                    onPressed: null,
-                    child: Text(
-                      'Folder: $_selectedFolderName',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        ProfileGallerySliver(
-          username: widget.nickname,
-          selectedFolderUrl: galleryUrl,
-          onFoldersParsed: _onFoldersParsed,
-        ),
-      ],
+    return UserProfileGallerySection(
+      nickname: widget.nickname,
+      sanitizedUsername: sanitizedUsername,
+      selectedFolderName: _selectedFolderName,
+      selectedFolderUrl: _selectedFolderUrl,
+      allFolders: _allFolders,
+      onFolderSelected: _onFolderSelected,
+      onFoldersParsed: _onFoldersParsed,
     );
   }
 
@@ -2707,371 +1812,29 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
   /// Builds the Scraps section content.
   Widget _buildScrapsSection() {
-    return CustomScrollView(
-      slivers: [
-
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Scraps',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        ProfileScrapsSliver(username: sanitizedUsername),
-      ],
-    );
+    return UserProfileScrapsSection(sanitizedUsername: sanitizedUsername);
   }
 
   Widget _buildFavoritesSection() {
-    return CustomScrollView(
-      slivers: [
-
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Favs',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        ProfileFavsSliver(username: sanitizedUsername),
-      ],
-    );
+    return UserProfileFavoritesSection(sanitizedUsername: sanitizedUsername);
   }
 
   /// Builds the Journals section content.
   Widget _buildJournalsSection() {
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Journals',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-
-                if (isOwnProfile)
-                  ElevatedButton(
-                    onPressed: () {
-
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => CreateJournalScreen(),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(0xFFE09321),
-                    ),
-                    child: const Text(
-                      'Create Journal',
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+    return UserProfileJournalsSection(
+      sanitizedUsername: sanitizedUsername,
+      isOwnProfile: isOwnProfile,
+      journalsKey: _journalsKey,
+      onCreateJournalPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CreateJournalScreen(),
           ),
-        ),
-
-        ProfileJournals(
-          key: _journalsKey,
-          username: sanitizedUsername,
-        ),
-      ],
+        );
+      },
     );
   }
 
 
-}
-
-class FixedSliverPersistentHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-  final double height;
-
-  FixedSliverPersistentHeaderDelegate({
-    required this.child,
-    required this.height,
-  });
-
-  @override
-  double get minExtent => height;
-
-  @override
-  double get maxExtent => height;
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return SizedBox.expand(child: child);
-  }
-
-  @override
-  bool shouldRebuild(covariant FixedSliverPersistentHeaderDelegate oldDelegate) {
-    return oldDelegate.child != child || oldDelegate.height != height;
-  }
-}
-
-
-
-class NavigationSliderSliverDelegate extends SliverPersistentHeaderDelegate {
-  final double minHeight;
-  final double maxHeight;
-  final Widget child;
-
-  NavigationSliderSliverDelegate({
-    required this.minHeight,
-    required this.maxHeight,
-    required this.child,
-  });
-
-  @override
-  double get minExtent => minHeight;
-
-  @override
-  double get maxExtent => max(maxHeight, minHeight);
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return SizedBox.expand(child: child);
-  }
-
-  @override
-  bool shouldRebuild(NavigationSliderSliverDelegate oldDelegate) {
-    return false;
-  }
-
-}
-
-
-class CollapsibleSliverPersistentHeader extends SliverPersistentHeaderDelegate {
-  final double minHeight;
-  final double maxHeight;
-  final Widget child;
-
-  CollapsibleSliverPersistentHeader({
-    required this.minHeight,
-    required this.maxHeight,
-    required this.child,
-  });
-
-  @override
-  double get minExtent => minHeight;
-
-  @override
-  double get maxExtent => max(maxHeight, minHeight);
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    // Calculate the current height based on shrinkOffset
-    double currentHeight = maxExtent - shrinkOffset;
-    if (currentHeight < minExtent) {
-      currentHeight = minExtent;
-    }
-
-    // Calculate opacity based on shrinkOffset
-    double opacity = (currentHeight - minExtent) / (maxExtent - minExtent);
-    if (opacity < 0.0) opacity = 0.0;
-    if (opacity > 1.0) opacity = 1.0;
-
-    return Opacity(
-      opacity: opacity,
-      child: child,
-    );
-  }
-
-  @override
-  bool shouldRebuild(CollapsibleSliverPersistentHeader oldDelegate) {
-    return maxHeight != oldDelegate.maxHeight ||
-        minHeight != oldDelegate.minHeight ||
-        child != oldDelegate.child;
-  }
-}
-
-/// A custom navigation slider widget to replace the TabBar.
-class NavigationSlider extends StatefulWidget {
-  final List<ProfileSection> sections;
-  final TabController tabController;
-  final String Function(ProfileSection) getTabTitle;
-  final IconData Function(ProfileSection) getIconForSection;
-
-  final void Function(int index, bool isAlreadySelected)? onTabTapped;
-
-
-  const NavigationSlider({
-    Key? key,
-    required this.sections,
-    required this.tabController,
-    required this.getTabTitle,
-    required this.getIconForSection,
-    this.onTabTapped,
-  }) : super(key: key);
-
-  @override
-  _NavigationSliderState createState() => _NavigationSliderState();
-}
-
-class _NavigationSliderState extends State<NavigationSlider> {
-
-  int _selectedIndex = 0;
-  final ScrollController _listScrollController = ScrollController();
-  void _scrollToCenter(int index) {
-    final itemWidth = 106.0;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final targetScrollOffset = (itemWidth * index) - (screenWidth / 2) + (itemWidth / 2);
-
-    _listScrollController.animateTo(
-      targetScrollOffset,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
-  }
-
-
-
-  @override
-  void initState() {
-    super.initState();
-
-    _selectedIndex = widget.tabController.index;
-    widget.tabController.addListener(_onTabChanged);
-    widget.tabController.animation?.addListener(_onAnimationChanged);
-
-  }
-
-  @override
-  void dispose() {
-
-    widget.tabController.removeListener(_onTabChanged);
-    widget.tabController.animation?.removeListener(_onAnimationChanged);
-    super.dispose();
-  }
-
-  void _onTabChanged() {
-    if (widget.tabController.indexIsChanging) {
-      setState(() {
-        _selectedIndex = widget.tabController.index;
-      });
-      _scrollToCenter(_selectedIndex);
-    }
-  }
-
-  void _onAnimationChanged() {
-    if (widget.tabController.animation == null) return;
-    int newIndex = widget.tabController.animation!.value.round();
-    if (newIndex != _selectedIndex) {
-      setState(() {
-        _selectedIndex = newIndex;
-      });
-      _scrollToCenter(_selectedIndex);
-    }
-  }
-
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const Divider(
-          height: 4.0,
-          color: Color(0xFF111111),
-          thickness: 4.0,
-        ),
-        Container(
-          color: Colors.black,
-          padding: const EdgeInsets.symmetric(horizontal: 4.0),
-          child: SizedBox(
-            height: 54,
-            child: ListView(
-              controller: _listScrollController,
-              scrollDirection: Axis.horizontal,
-              physics: Platform.isIOS
-                  ? const ClampingScrollPhysics()   // more native for iOS
-                  : const ClampingScrollPhysics(),  // default for Android
-              children: widget.sections.asMap().entries.map((entry) {
-                final index = entry.key;
-                final section = entry.value;
-                final isSelected = _selectedIndex == index;
-
-                return GestureDetector(
-                  onTap: () {
-                    bool isAlreadySelected = index == _selectedIndex;
-                    if (isAlreadySelected) {
-                      widget.onTabTapped?.call(index, true);
-                    } else {
-                      widget.tabController.animateTo(index);
-                    }
-                  },
-                  child: SizedBox(
-                    width: 106,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      margin: const EdgeInsets.symmetric(horizontal: 1.4, vertical: 6.0),
-                      padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
-                      decoration: BoxDecoration(
-                        color: isSelected ? const Color(0xFFE09321) : Color(0xFF1F1F1F),
-                        borderRadius: BorderRadius.circular(4.0),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            widget.getIconForSection(section),
-                            color: Colors.white,
-                            size: 20.0,
-                          ),
-                          const SizedBox(width: 4.0),
-
-                          Flexible(
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                widget.getTabTitle(section),
-                                maxLines: 1,
-                                softWrap: false,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-
-        const Divider(
-          height: 4.0,
-          color: Color(0xFF111111),
-          thickness: 4.0,
-        ),
-      ],
-    );
-  }
 }
