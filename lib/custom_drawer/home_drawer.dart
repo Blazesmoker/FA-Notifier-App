@@ -1169,7 +1169,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                                 ],
                               ),
                               onTap: () => launchUrlString(
-                                'https://www.google.com',
+                                'https://t.me/+xTEmmXoDW5tkMGFi',
                                 mode: LaunchMode.externalApplication,
                               ),
                             ),
