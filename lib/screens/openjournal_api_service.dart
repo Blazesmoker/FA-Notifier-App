@@ -94,6 +94,158 @@ class OpenJournalApiService {
     return _Cookies(cookieA: cookieA, cookieB: cookieB);
   }
 
+  String? _absFaUrl(String? href) {
+    if (href == null) return null;
+    final h = href.trim();
+    if (h.isEmpty) return null;
+    if (h.startsWith('http://') || h.startsWith('https://')) return h;
+    if (h.startsWith('//')) return 'https:$h';
+    if (h.startsWith('/')) return 'https://www.furaffinity.net$h';
+    return 'https://www.furaffinity.net/$h';
+  }
+
+  String? _extractCommentIdFromUrl(String? url) {
+    if (url == null) return null;
+    final m = RegExp(r'(?:\?|&)comment_id=(\d+)').firstMatch(url);
+    return m?.group(1);
+  }
+
+  String? _normalizeCommentId(String? raw) {
+    if (raw == null) return null;
+    final t = raw.trim();
+    if (t.isEmpty) return null;
+    if (t.startsWith('cid:')) {
+      final s = t.substring(4);
+      return RegExp(r'^\d+$').hasMatch(s) ? s : null;
+    }
+    final m = RegExp(r'cid:(\d+)').firstMatch(t);
+    if (m != null) return m.group(1);
+    final m2 = RegExp(r'(\d+)').firstMatch(t);
+    return m2?.group(1);
+  }
+
+  String _extractCommentText(dom.Element c) {
+    final textEl =
+        c.querySelector('comment-user-text.comment_text') ??
+            c.querySelector('comment-user-text') ??
+            c.querySelector('.comment_text') ??
+            c.querySelector('.comment_text .user-submitted-links') ??
+            c.querySelector('comment-user-text .user-submitted-links');
+
+    if (textEl == null) return '';
+
+    final cleaned = textEl.clone(true) as dom.Element;
+    cleaned.querySelectorAll('div.floatright, .floatright').forEach((e) => e.remove());
+
+    return cleaned.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  List<Map<String, dynamic>> _parseCommentsFromDocument(dom.Document document) {
+    final commentBodies = <Map<String, dynamic>>[];
+
+    final commentBlocks = document.querySelectorAll(
+      '#comments-journal .comment_container, .comments-list .comment_container, div.comment_container',
+    );
+
+    for (final c in commentBlocks) {
+      final comment = <String, dynamic>{};
+
+      String? commentId;
+
+      final anchorId = c.querySelector('a.comment_anchor')?.attributes['id'];
+      commentId = _normalizeCommentId(anchorId);
+      commentId ??= _normalizeCommentId(c.attributes['data-id']);
+      commentId ??= _normalizeCommentId(c.attributes['id']);
+
+      final avatarImg =
+          c.querySelector('img.comment_useravatar') ?? c.querySelector('img.avatar');
+      comment['profileImage'] = _absFaUrl(avatarImg?.attributes['src']);
+
+      final usernameBlock = c.querySelector('.c-usernameBlock');
+      final displayNameSpan = usernameBlock?.querySelector('.js-displayName');
+      final userNameA = usernameBlock?.querySelector('.c-usernameBlock__userName');
+
+      String? username;
+      if (userNameA != null) {
+        var t = userNameA.text.trim();
+        t = t.replaceAll('\u00A0', ' ');
+        t = t.replaceFirst(RegExp(r'^[^A-Za-z0-9_-]+'), '');
+        if (t.isNotEmpty) username = t.trim();
+      }
+
+      comment['username'] = (username ?? '').isNotEmpty
+          ? username
+          : (displayNameSpan?.text.trim() ?? '');
+      comment['displayName'] =
+          displayNameSpan?.text.trim() ?? (comment['username'] as String? ?? '');
+
+      comment['symbol'] =
+          usernameBlock?.querySelector('.c-usernameBlock__symbol')?.text.trim() ?? '';
+
+      comment['userTitle'] = c.querySelector('comment-title')?.text.trim() ?? '';
+      comment['isOP'] = c.querySelector('.comment_op_marker') != null;
+
+      final popup = c.querySelector('.popup_date');
+      comment['popupDateRelative'] = popup?.text.trim() ?? '';
+      comment['popupDateFull'] = popup?.attributes['title'] ?? '';
+
+      final hideA = c.querySelector('a[href*="action=hide_comment"][href*="comment_id="]');
+      final unhideA = c.querySelector('a[href*="action=unhide_comment"][href*="comment_id="]');
+
+      final editA =
+          c.querySelector('a.edit_link') ??
+              c.querySelector('a[title*="Edit this Comment"]') ??
+              c.querySelector('a[href*="/edit/"]');
+
+      final deleteA = c.querySelector('a[href*="action=delete_comment"]') ??
+          c.querySelector('a[title*="Delete"]');
+
+      final hideLink = _absFaUrl(hideA?.attributes['href']);
+      final unhideLink = _absFaUrl(unhideA?.attributes['href']);
+      final editLink = _absFaUrl(editA?.attributes['href']);
+      final deleteLink = _absFaUrl(deleteA?.attributes['href']);
+
+      comment['hideLink'] = hideLink;
+      comment['unhideLink'] = unhideLink;
+      comment['editLink'] = editLink;
+      comment['deleteLink'] = deleteLink;
+
+      if ((commentId == null || commentId.isEmpty) && unhideLink != null) {
+        commentId = _extractCommentIdFromUrl(unhideLink);
+      }
+      if ((commentId == null || commentId.isEmpty) && hideLink != null) {
+        commentId = _extractCommentIdFromUrl(hideLink);
+      }
+
+      comment['commentId'] = commentId ?? '';
+
+      comment['text'] = _extractCommentText(c);
+
+      final hasDeletedInner = c.querySelector('comment-container.deleted-comment-container') != null;
+      final lowerAll = c.text.toLowerCase();
+      comment['deleted'] =
+          hasDeletedInner ||
+              (unhideLink != null) ||
+              lowerAll.contains('comment hidden') ||
+              lowerAll.contains('hidden by its owner');
+
+      double width = 100.0;
+      final style = c.attributes['style'] ?? '';
+      final mw = RegExp(r'width\s*:\s*([0-9.]+)%').firstMatch(style);
+      if (mw != null) {
+        width = double.tryParse(mw.group(1)!) ?? 100.0;
+      }
+      comment['width'] = width;
+
+      comment['commentHtml'] = c.outerHtml;
+
+      commentBodies.add(comment);
+    }
+
+    return commentBodies;
+  }
+
+
   Future<OpenJournalFetchResult> fetchJournal(String uniqueNumber) async {
     final cookies = await _getCookies();
     final journalUrl = 'https://www.furaffinity.net/journal/$uniqueNumber/';
@@ -154,7 +306,6 @@ class OpenJournalApiService {
 
       if (utSpan != null) {
         final cleaned = utSpan.clone(true) as dom.Element;
-
         cleaned.querySelectorAll('.hideonmobile, .popup_date').forEach((e) => e.remove());
 
         var t = cleaned.text
@@ -172,7 +323,6 @@ class OpenJournalApiService {
           }
         }
       }
-
     } else if (isJournalClassic && classicTitleBox != null) {
       dom.Element? classicTable;
       dom.Node? cur = classicTitleBox;
@@ -188,7 +338,7 @@ class OpenJournalApiService {
       displayName = classicTitleBox
           .querySelector('a.c-usernameBlock__displayName span.js-displayName')
           ?.text
-          ?.trim();
+          .trim();
 
       final userNameA = classicTitleBox.querySelector('a.c-usernameBlock__userName') ??
           classicTitleBox.querySelector('a.c-usernameBlock__displayName');
@@ -202,7 +352,6 @@ class OpenJournalApiService {
       }
     }
 
-    // Fallback: derive author slug from the avatar anchor if we still don't have it.
     if (authorSlug == null && profileAvatarAnchor != null) {
       final href = profileAvatarAnchor.attributes['href'];
       if (href != null) {
@@ -212,7 +361,6 @@ class OpenJournalApiService {
     }
 
     if (profileImgEl == null) {
-      // Fallback to og:image if avatar wasn't found
       final ogImage = document.querySelector('meta[property="og:image"]')?.attributes['content'];
       if (ogImage != null && ogImage.isNotEmpty) {
         profileImageUrl = ogImage.startsWith('//')
@@ -287,8 +435,7 @@ class OpenJournalApiService {
     title ??= document.querySelector('td.journal-title-box h2')?.text.trim();
     title ??= document.querySelector('title')?.text.trim();
 
-    final dateElem =
-    document.querySelector('#c-journalTitleTop__date .popup_date');
+    final dateElem = document.querySelector('#c-journalTitleTop__date .popup_date');
     if (dateElem != null) {
       final unix = int.tryParse(dateElem.attributes['data-time'] ?? '');
       if (unix != null) {
@@ -299,11 +446,11 @@ class OpenJournalApiService {
       publicationTimeRaw = dateElem.attributes['title'];
 
       if (publicationTime == null && publicationTimeRaw != null) {
-        publicationTime = DateFormat('MMMM d, yyyy hh:mm:ss a')
-            .parseUtc(publicationTimeRaw);
+        try {
+          publicationTime = DateFormat('MMMM d, yyyy hh:mm:ss a').parseUtc(publicationTimeRaw);
+        } catch (_) {}
       }
     }
-
 
     if (publicationTime == null && publicationTimeRaw != null) {
       publicationTime = tryParseDate(publicationTimeRaw);
@@ -350,83 +497,10 @@ class OpenJournalApiService {
       if (kw.isNotEmpty) keywords.add(kw);
     });
 
-    fullViewImageUrl =
-    document.querySelector('a.fullview')?.attributes['href'];
+    fullViewImageUrl = document.querySelector('a.fullview')?.attributes['href'];
     fileLink = document.querySelector('a.download')?.attributes['href'];
 
-    final commentBodies = <Map<String, dynamic>>[];
-
-    final commentBlocks = document.querySelectorAll(
-      '#comments-journal .comment_container, .comments-list .comment_container, .comment_container, div.comment_container, div.comment-container',
-    );
-
-    for (var c in commentBlocks) {
-      final comment = <String, dynamic>{};
-
-      final anchorId = c.querySelector('a.comment_anchor')?.attributes['id'] ?? '';
-      comment['commentId'] = anchorId.isNotEmpty
-          ? anchorId
-          : (c.attributes['data-id'] ?? c.attributes['id'] ?? '');
-
-      final avatarImg = c.querySelector('img.comment_useravatar') ??
-          c.querySelector('img.avatar');
-      String? avatarSrc = avatarImg?.attributes['src'];
-      if (avatarSrc != null && avatarSrc.isNotEmpty) {
-        if (avatarSrc.startsWith('//')) {
-          avatarSrc = 'https:$avatarSrc';
-        } else if (avatarSrc.startsWith('/')) {
-          avatarSrc = 'https://www.furaffinity.net$avatarSrc';
-        }
-      }
-      comment['profileImage'] = avatarSrc;
-
-      final usernameBlock = c.querySelector('.c-usernameBlock');
-      final displayNameSpan = usernameBlock?.querySelector('.js-displayName');
-      final userNameA = usernameBlock?.querySelector('.c-usernameBlock__userName');
-      String? username;
-      if (userNameA != null) {
-        final fullUserText = userNameA.text.trim();
-        final parts = fullUserText.split('~');
-        username = (parts.length > 1 ? parts.last : fullUserText).trim();
-      }
-      comment['username'] = username ?? displayNameSpan?.text.trim() ?? '';
-      comment['displayName'] =
-          displayNameSpan?.text.trim() ?? (comment['username'] as String? ?? '');
-      comment['symbol'] =
-          usernameBlock?.querySelector('.c-usernameBlock__symbol')?.text.trim() ?? '';
-      comment['userTitle'] =
-          c.querySelector('comment-title')?.text.trim() ?? '';
-
-      comment['isOP'] = c.querySelector('.comment_op_marker') != null;
-
-      final popup = c.querySelector('.popup_date');
-      comment['popupDateRelative'] = popup?.text.trim() ?? '';
-      comment['popupDateFull'] = popup?.attributes['title'] ?? '';
-
-      final textContainer = c.querySelector('comment-user-text .user-submitted-links') ??
-          c.querySelector('.comment_text .user-submitted-links') ??
-          c.querySelector('.comment_text');
-      comment['text'] = textContainer?.text.trim() ?? '';
-
-      comment['hideLink'] =
-      c.querySelector('a.hide_comment')?.attributes['href'];
-      comment['editLink'] =
-      c.querySelector('a.edit_comment')?.attributes['href'];
-      comment['deleteLink'] =
-      c.querySelector('a.delete_comment')?.attributes['href'];
-
-      comment['commentHtml'] = c.innerHtml;
-
-      double width = 100.0;
-      final style = c.attributes['style'] ?? '';
-      final m = RegExp(r'width\s*:\s*([0-9.]+)%').firstMatch(style);
-      if (m != null) {
-        width = double.tryParse(m.group(1)!) ?? 100.0;
-      }
-      comment['width'] = width;
-
-      commentBodies.add(comment);
-    }
+    final commentBodies = _parseCommentsFromDocument(document);
 
     int commentsCount = 0;
     String? footerCountText;
@@ -480,7 +554,7 @@ class OpenJournalApiService {
   Future<String?> fetchDeleteKey(String uniqueNumber) async {
     final cookies = await _getCookies();
     final resp = await httpClient.get(
-      Uri.parse('https://www.furaffinity.net/controls/journal/delete/${uniqueNumber}/'),
+      Uri.parse('https://www.furaffinity.net/controls/journal/delete/$uniqueNumber/'),
       headers: {
         'Cookie': 'a=${cookies.cookieA}; b=${cookies.cookieB}',
         'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
@@ -549,76 +623,7 @@ class OpenJournalApiService {
 
   Future<List<Map<String, dynamic>>> fetchCommentsFromBody(String body) async {
     final document = html_parser.parse(body);
-    final List<Map<String, dynamic>> parsedComments = [];
-
-    final commentBlocks = document.querySelectorAll('.comment_container');
-    for (var c in commentBlocks) {
-      final comment = <String, dynamic>{};
-
-      final anchorId = c.querySelector('a.comment_anchor')?.attributes['id'] ?? '';
-      comment['commentId'] = anchorId.isNotEmpty
-          ? anchorId
-          : (c.attributes['data-id'] ?? c.attributes['id'] ?? '');
-
-      final avatarImg = c.querySelector('img.comment_useravatar') ??
-          c.querySelector('img.avatar');
-      String? avatarSrc = avatarImg?.attributes['src'];
-      if (avatarSrc != null && avatarSrc.isNotEmpty) {
-        if (avatarSrc.startsWith('//')) {
-          avatarSrc = 'https:$avatarSrc';
-        } else if (avatarSrc.startsWith('/')) {
-          avatarSrc = 'https://www.furaffinity.net$avatarSrc';
-        }
-      }
-      comment['profileImage'] = avatarSrc;
-
-      final usernameBlock = c.querySelector('.c-usernameBlock');
-      final displayNameSpan = usernameBlock?.querySelector('.js-displayName');
-      final userNameA = usernameBlock?.querySelector('.c-usernameBlock__userName');
-      String? username;
-      if (userNameA != null) {
-        final fullUserText = userNameA.text.trim();
-        final parts = fullUserText.split('~');
-        username = (parts.length > 1 ? parts.last : fullUserText).trim();
-      }
-      comment['username'] = username ?? displayNameSpan?.text.trim() ?? '';
-      comment['displayName'] =
-          displayNameSpan?.text.trim() ?? (comment['username'] as String? ?? '');
-      comment['symbol'] =
-          usernameBlock?.querySelector('.c-usernameBlock__symbol')?.text.trim() ?? '';
-      comment['userTitle'] =
-          c.querySelector('comment-title')?.text.trim() ?? '';
-
-      comment['isOP'] = c.querySelector('.comment_op_marker') != null;
-
-      final popup = c.querySelector('.popup_date');
-      comment['popupDateRelative'] = popup?.text.trim() ?? '';
-      comment['popupDateFull'] = popup?.attributes['title'] ?? '';
-
-      final textContainer = c.querySelector('comment-user-text .user-submitted-links') ??
-          c.querySelector('.comment_text .user-submitted-links') ??
-          c.querySelector('.comment_text');
-      comment['text'] = textContainer?.text.trim() ?? '';
-
-      comment['hideLink'] =
-      c.querySelector('a.hide_comment')?.attributes['href'];
-      comment['editLink'] =
-      c.querySelector('a.edit_comment')?.attributes['href'];
-      comment['deleteLink'] =
-      c.querySelector('a.delete_comment')?.attributes['href'];
-      comment['commentHtml'] = c.innerHtml;
-
-      double width = 100.0;
-      final style = c.attributes['style'] ?? '';
-      final m = RegExp(r'width\s*:\s*([0-9.]+)%').firstMatch(style);
-      if (m != null) {
-        width = double.tryParse(m.group(1)!) ?? 100.0;
-      }
-      comment['width'] = width;
-
-      parsedComments.add(comment);
-    }
-    return parsedComments;
+    return _parseCommentsFromDocument(document);
   }
 
   DateTime? tryParseDate(String raw) {

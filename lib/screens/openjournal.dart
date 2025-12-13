@@ -983,10 +983,11 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                     return CommentWidget(
                       key: ValueKey(comment['commentId'] ?? index),
                       comment: comment,
-                      onHide: () async {
-                        hideComment(comment['hideLink'], comment['commentId']);
-                      },
-                      onEdit: () {
+                      onHide: (comment['hideLink'] != null)
+                          ? () => hideComment(comment['hideLink'], comment['commentId'] ?? '')
+                          : null,
+                      onEdit: (comment['editLink'] != null)
+                          ? () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1001,7 +1002,8 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                             ),
                           ),
                         );
-                      },
+                      }
+                          : null,
                       onReply: () async {
                         await Navigator.push(
                           context,
@@ -1009,9 +1011,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                             builder: (context) => JournalReplyScreen(
                               submissionId: widget.uniqueNumber,
                               commentId: comment['commentId'] ?? '',
-                              onSendReply: (replyText) {
-                                // handle reply
-                              },
+                              onSendReply: (replyText) {},
                               username: comment['username'] ?? 'Anonymous',
                               profileImage: comment['profileImage'] ?? '',
                               commentText: comment['text'] ?? '',
@@ -1023,17 +1023,21 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                           }
                         });
                       },
-                      onUnhide: (comment['deleted'] == true && comment['hideLink'] != null)
-                          ? () {
-                        _unhideComment(comment['hideLink'], comment['commentId'] ?? '');
-                      }
+                      onUnhide: (comment['deleted'] == true && comment['unhideLink'] != null)
+                          ? () => _unhideComment(comment['unhideLink'], comment['commentId'] ?? '')
                           : null,
                       handleLink: (url) async {
                         final commentHtml = comment['commentHtml'] ?? '';
-                        await handleFALink(context, url, htmlSource: commentHtml, getFullUrl: _getFullLinkFromFetchedHtml);
+                        await handleFALink(
+                          context,
+                          url,
+                          htmlSource: commentHtml,
+                          getFullUrl: _getFullLinkFromFetchedHtml,
+                        );
                       },
                     );
-                  },
+
+                      },
                   childCount: comments.length,
                 ),
               ),

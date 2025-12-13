@@ -230,32 +230,41 @@ class _CommentWidgetState extends State<CommentWidget> {
 
             // Footer row
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Date
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _showFullDate = !_showFullDate;
-                    });
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12.0),
-                    child: Text(
-                      _showFullDate
-                          ? (widget.comment['popupDateFull'] ??
-                              widget.comment['popupDateRelative'] ??
-                              '')
-                          : (widget.comment['popupDateRelative'] ?? ''),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade400,
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _showFullDate = !_showFullDate;
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12.0),
+                      child: ClipRect(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            _showFullDate
+                                ? (widget.comment['popupDateFull'] ??
+                                widget.comment['popupDateRelative'] ??
+                                '')
+                                : (widget.comment['popupDateRelative'] ?? ''),
+                            maxLines: 1,
+                            softWrap: false,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade400,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-                // Buttons
+                const SizedBox(width: 8),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     if (widget.comment['hideLink'] != null)
                       IconButton(
@@ -301,6 +310,7 @@ class _CommentWidgetState extends State<CommentWidget> {
                 ),
               ],
             ),
+
           ],
         ),
       ),
