@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_switch/flutter_switch.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -15,6 +16,7 @@ import '../screens/user_profile_screen.dart';
 import '../services/fa_service.dart';
 import '../model/drawer_list.dart';
 import '../enums/drawer_index.dart';
+import 'package:FANotifier/services/activities_notification_state.dart';
 import 'package:FANotifier/services/notification_refresh_service.dart';
 import '../services/notification_service.dart';
 import '../utils/notification_counts.dart';
@@ -52,6 +54,7 @@ class HomeDrawer extends StatefulWidget {
   final Function(Notifications) onNotificationsUpdated;
   final Function(String) onBadgeTap;
 
+
   @override
   _HomeDrawerState createState() => _HomeDrawerState();
 }
@@ -70,10 +73,9 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
     registeredUsersOnline: '0',
   );
 
-  static const String kPreviousSumKey = 'previousSumOfNotifications';
   final FaService _faService = FaService();
   Timer? _timer;
-  int _previousSumOfNotifications = 0;
+  bool _isFetchingNotifications = false;
   bool _sfwEnabled = true;
   static const String NsfwConfirmationDisabled = 'nsfwConfirmationDisabled';
 
@@ -95,7 +97,6 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     setDrawerListArray();
-    _loadPreviousSum();
     _startTimer();
     fetchNotifications();
     _loadSfwEnabled();
@@ -182,6 +183,8 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
   }
 
   Future<void> fetchNotifications() async {
+    if (_isFetchingNotifications) return;
+    _isFetchingNotifications = true;
     try {
       Notifications? notifications = await _faService.fetchNotifications();
 
@@ -226,45 +229,71 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
 
         final settings =
             Provider.of<NotificationSettingsProvider>(context, listen: false);
-        final int submissionsCount = settings.drawerSubmissionsEnabled
-            ? (int.tryParse(_notifications.submissions) ?? 0)
-            : 0;
-        final int watchesCount = settings.drawerWatchesEnabled
-            ? (int.tryParse(_notifications.watches) ?? 0)
-            : 0;
-        final int commentsCount = settings.drawerCommentsEnabled
-            ? (int.tryParse(_notifications.comments) ?? 0)
-            : 0;
-        final int favoritesCount = settings.drawerFavoritesEnabled
-            ? (int.tryParse(_notifications.favorites) ?? 0)
-            : 0;
-        final int journalsCount = settings.drawerJournalsEnabled
-            ? (int.tryParse(_notifications.journals) ?? 0)
-            : 0;
-        final int filteredNotesCount = settings.drawerNotesEnabled
-            ? (int.tryParse(_notifications.notes) ?? 0)
-            : 0;
 
-        final int newSum = submissionsCount +
-            watchesCount +
-            commentsCount +
-            favoritesCount +
-            journalsCount +
-            filteredNotesCount;
+        // Raw counts (always stored as the baseline, even if a category is disabled).
+        final int rawSubmissions = int.tryParse(_notifications.submissions) ?? 0;
+        final int rawWatches = int.tryParse(_notifications.watches) ?? 0;
+        final int rawComments = int.tryParse(_notifications.comments) ?? 0;
+        final int rawFavorites = int.tryParse(_notifications.favorites) ?? 0;
+        final int rawJournals = int.tryParse(_notifications.journals) ?? 0;
+        final int rawNotes = int.tryParse(_notifications.notes) ?? 0;
 
-        if (newSum != _previousSumOfNotifications) {
-          final NotificationCounts filteredCounts = NotificationCounts(
-            submissions: submissionsCount,
-            watches: watchesCount,
-            comments: commentsCount,
-            favorites: favoritesCount,
-            journals: journalsCount,
-            notes: filteredNotesCount,
-          );
+        // Visible counts in the notification body (respect per-category toggles).
+        final int submissionsCount =
+            settings.drawerSubmissionsEnabled ? rawSubmissions : 0;
+        final int watchesCount = settings.drawerWatchesEnabled ? rawWatches : 0;
+        final int commentsCount =
+            settings.drawerCommentsEnabled ? rawComments : 0;
+        final int favoritesCount =
+            settings.drawerFavoritesEnabled ? rawFavorites : 0;
+        final int journalsCount =
+            settings.drawerJournalsEnabled ? rawJournals : 0;
+        final int filteredNotesCount = settings.drawerNotesEnabled ? rawNotes : 0;
 
-          final String messageBody = _buildNotificationMessage(filteredCounts);
+        final ActivitiesDiff diff = await ActivitiesNotificationStateStore()
+            .diffAndUpdateLastSeen(
+          currentCounts: NotificationCounts(
+            submissions: rawSubmissions,
+            watches: rawWatches,
+            comments: rawComments,
+            favorites: rawFavorites,
+            journals: rawJournals,
+            notes: rawNotes,
+          ),
+        );
+        print(
+            '[HomeDrawer] Last-seen counts: S:${diff.previous.submissions} W:${diff.previous.watches} C:${diff.previous.comments} F:${diff.previous.favorites} J:${diff.previous.journals} N:${diff.previous.notes}');
+        print(
+            '[HomeDrawer] Increased by:     S:${diff.increasedBy.submissions} W:${diff.increasedBy.watches} C:${diff.increasedBy.comments} F:${diff.increasedBy.favorites} J:${diff.increasedBy.journals} N:${diff.increasedBy.notes}');
 
-          if (messageBody.isNotEmpty) {
+        final NotificationCounts filteredCounts = NotificationCounts(
+          submissions: submissionsCount,
+          watches: watchesCount,
+          comments: commentsCount,
+          favorites: favoritesCount,
+          journals: journalsCount,
+          notes: filteredNotesCount,
+        );
+
+        final String messageBody = _buildNotificationMessage(filteredCounts);
+
+        final bool shouldNotify =
+            (settings.drawerSubmissionsEnabled &&
+                    diff.increasedBy.submissions > 0) ||
+                (settings.drawerWatchesEnabled && diff.increasedBy.watches > 0) ||
+                (settings.drawerCommentsEnabled &&
+                    diff.increasedBy.comments > 0) ||
+                (settings.drawerFavoritesEnabled &&
+                    diff.increasedBy.favorites > 0) ||
+                (settings.drawerJournalsEnabled &&
+                    diff.increasedBy.journals > 0) ||
+                (settings.drawerNotesEnabled && diff.increasedBy.notes > 0);
+
+        if (shouldNotify) {
+          // Keep behavior consistent with the background worker: if both are off,
+          // treat that as "don't show activities notifications".
+          if (settings.soundNewActivitiesEnabled ||
+              settings.vibrationNewActivitiesEnabled) {
             final NotificationService notificationService =
                 NotificationService();
             await notificationService.showNotification(
@@ -277,31 +306,17 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
 
             print(
                 '[HomeDrawer] Sent new activities notification: $messageBody');
-            _previousSumOfNotifications = newSum;
-            await _saveCurrentSum(newSum);
+          } else {
+            print(
+                '[HomeDrawer] Activities sound+vibration disabled; not showing notification.');
           }
-        }
-
-        if (newSum <= _previousSumOfNotifications) {
-          _previousSumOfNotifications = newSum;
-          await _saveCurrentSum(newSum);
         }
       }
     } catch (e) {
       print('Error fetching notifications: $e');
+    } finally {
+      _isFetchingNotifications = false;
     }
-  }
-
-  Future<void> _loadPreviousSum() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _previousSumOfNotifications = prefs.getInt(kPreviousSumKey) ?? 0;
-    });
-  }
-
-  Future<void> _saveCurrentSum(int sum) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(kPreviousSumKey, sum);
   }
 
   String _buildNotificationMessage(NotificationCounts diff) {
@@ -342,6 +357,8 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
   }
 
   bool showStars = false;
+
+
 
   void _onKofiPressed(Offset globalTapPosition) {
     // Ignore if in cooldown
@@ -859,6 +876,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
     final int journalsCount = int.tryParse(_notifications.journals) ?? 0;
     final int notesCount = int.tryParse(_notifications.notes) ?? 0;
 
+
     final List<Widget> badgeWidgets = [];
     if (submissionsCount > 0) {
       badgeWidgets.add(
@@ -956,6 +974,9 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
         ),
       );
     }
+
+    const bool kForceShowUpdateButton = false;
+    final bool showUpdateButton = _updateAvailable || (kDebugMode && kForceShowUpdateButton);
 
     return Container(
       color: Color(0xFF111111),
@@ -1140,43 +1161,59 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                       child: ListView.builder(
                         physics: const BouncingScrollPhysics(),
                         padding: EdgeInsets.zero,
-                        itemCount: drawerList!.length + (_updateAvailable ? 1 : 0),
+                        itemCount: drawerList!.length + (showUpdateButton ? 1 : 0),
                         itemBuilder: (context, index) {
                           if (index < drawerList!.length) {
                             return inkwell(drawerList![index]);
                           }
-                          return Container(
-                            height: 60.0,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF3ACD3E),
-                              borderRadius: BorderRadius.circular(0),
-                            ),
-                            child: ListTile(
-                              contentPadding: EdgeInsets.only(left: 16.0, top: 2),
-                              title: Row(
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                children: const [
-                                  Icon(Icons.cached, color: Colors.white),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Update Available!',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 16,
+
+                          return Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 200,
+                                ),
+                                child: Material(
+                                  color: const Color(0xFF3ACD3E),
+                                  borderRadius: BorderRadius.circular(26),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: InkWell(
+                                    onTap: () => launchUrlString(
+                                      'https://t.me/+xTEmmXoDW5tkMGFi',
+                                      mode: LaunchMode.externalApplication,
+                                    ),
+                                    child: const SizedBox(
+                                      height: 46,
+                                      child: Center(
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.cached, color: Colors.white),
+                                            SizedBox(width: 6),
+                                            Text(
+                                              'Update Available!',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ],
-                              ),
-                              onTap: () => launchUrlString(
-                                'https://t.me/+xTEmmXoDW5tkMGFi',
-                                mode: LaunchMode.externalApplication,
+                                ),
                               ),
                             ),
                           );
+
                         },
                       ),
                     ),
+
 
                     // NSFW Toggle
                     Padding(

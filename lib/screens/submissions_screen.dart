@@ -10,7 +10,6 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import '../services/app_refetch_bus.dart';
 import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
@@ -66,7 +65,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
 
   bool _isError = false;
   String? _errorMessage;
-  late final StreamSubscription _resumeSub;
+
 
   String? _nextPageUrl;
   /// Base URL for delete/nuke actions
@@ -92,22 +91,18 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   bool get wantKeepAlive => true;
 
   @override
-  @override
   void initState() {
     super.initState();
     _scrollController.addListener(_scrollListenerForPagination);
     _loadSfwEnabled().then((_) => _refreshSubmissions());
 
-    _resumeSub = AppRefetchBus.stream.listen((_) {
-      if (mounted) _refreshSubmissions();
-    });
+
   }
 
   @override
   void dispose() {
     _scrollController.removeListener(_scrollListenerForPagination);
     _scrollController.dispose();
-    _resumeSub.cancel();
     super.dispose();
   }
 
@@ -216,9 +211,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
         _isError = true;
         _errorMessage = e.toString();
       });
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted) _refreshSubmissions();
-      });
+
     }
   }
 
@@ -620,11 +613,15 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     debugPrint('[Submissions] HQ fetch: $absoluteUrl');
 
     final cookieHeader = await _getAuthCookies();
-    final resp = await http.get(Uri.parse(absoluteUrl), headers: {
-      'Cookie': cookieHeader,
-      'User-Agent': 'Mozilla/5.0',
-      'Referer': 'https://www.furaffinity.net',
-    });
+    final resp = await FAHttp.get(
+      Uri.parse(absoluteUrl),
+      headers: {
+        HttpHeaders.cookieHeader: cookieHeader,
+        'User-Agent': 'Mozilla/5.0',
+        'Referer': 'https://www.furaffinity.net',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    );
 
     if (resp.statusCode != 200) {
       throw Exception('Submission detail fetch failed: ${resp.statusCode}');

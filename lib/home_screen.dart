@@ -170,13 +170,19 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.reload();
     final String? pendingPayload = prefs.getString('pending_navigation');
     if (pendingPayload == null) return;
+    if (pendingPayload.isEmpty) {
+      await prefs.remove('pending_navigation');
+      return;
+    }
 
     final navProvider =
     Provider.of<NotificationNavigationProvider>(context, listen: false);
     final bool isNotes = pendingPayload.startsWith('note_') ||
-        pendingPayload.contains('DrawerIndex.Notes');
+        pendingPayload.contains('DrawerIndex.Notes') ||
+        pendingPayload == 'note_native';
     final bool isActivities = pendingPayload.startsWith('activity_') ||
-        pendingPayload.contains('DrawerIndex.Notifications');
+        pendingPayload.contains('DrawerIndex.Notifications') ||
+        pendingPayload == 'activity_native';
 
     if (isNotes) {
       navProvider.setTargetIndex(4);

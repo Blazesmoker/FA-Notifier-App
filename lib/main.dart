@@ -5,7 +5,7 @@ import 'package:FANotifier/providers/timezone_provider.dart';
 import 'package:FANotifier/screens/message_model.dart';
 import 'package:FANotifier/screens/notifications_provider.dart';
 import 'package:FANotifier/services/CacheMonitorService.dart';
-import 'package:FANotifier/services/app_refetch_bus.dart';
+import 'package:FANotifier/services/fa_http.dart';
 import 'package:FANotifier/services/fa_notification_service.dart';
 import 'package:FANotifier/services/pending_navigation.dart';
 import 'package:FANotifier/utils/notes_notifications_text_edit.dart';
@@ -33,6 +33,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'custom_cache_manager.dart';
 import 'custom_drawer/drawer_user_controller.dart';
 import 'model/notifications.dart';
+import 'services/activities_notification_state.dart';
 import 'services/notification_service.dart';
 import 'utils.dart';
 import 'utils/message_storage.dart';
@@ -48,42 +49,20 @@ import 'utils/fa_link_handler.dart';
 import 'package:app_links/app_links.dart';
 import 'dart:async';
 
-class _LifecycleRefetch extends StatefulWidget {
-  final Widget child;
-  const _LifecycleRefetch({required this.child, Key? key}) : super(key: key);
-  @override
-  State<_LifecycleRefetch> createState() => _LifecycleRefetchState();
-}
-
-class _LifecycleRefetchState extends State<_LifecycleRefetch> with WidgetsBindingObserver {
-  @override
-  void initState() { super.initState(); WidgetsBinding.instance.addObserver(this); }
-  @override
-  void dispose() { WidgetsBinding.instance.removeObserver(this); super.dispose(); }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      AppRefetchBus.trigger();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
-}
-
 
 class FreshHttpOverrides extends HttpOverrides {
   @override
   HttpClient createHttpClient(SecurityContext? context) {
     final client = super.createHttpClient(context);
-    client.idleTimeout = Duration.zero;
+    client.idleTimeout = const Duration(seconds: 10);
     client.connectionTimeout = const Duration(seconds: 20);
     client.autoUncompress = true;
+    client.maxConnectionsPerHost = 8;
     client.userAgent = 'FA Notifier';
     return client;
   }
 }
+
 
 final RouteObserver<ModalRoute<dynamic>> routeObserver = RouteObserver<ModalRoute<dynamic>>();
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -91,7 +70,6 @@ final GlobalKey<DrawerUserControllerState> drawerKey = GlobalKey<DrawerUserContr
 
 const String fetchBackgroundTask = "fetchBackgroundTask";
 const String iOSWorkInitTask = "com.blazesmoker.FANotifier.refresh";
-const String kPreviousSumKey = 'previousSumOfNotifications';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -106,6 +84,7 @@ void callbackDispatcher() {
     final startTime = DateTime.now();
     try {
       final notificationService = NotificationService();
+      await notificationService.init();
       print("[BG] NotificationService initialized");
       SharedPreferences prefs;
       try {
@@ -198,40 +177,65 @@ void callbackDispatcher() {
               final bool favoritesEnabled = prefs.getBool('drawer_notif_favorites_enabled') ?? true;
               final bool journalsEnabled = prefs.getBool('drawer_notif_journals_enabled') ?? true;
               final bool notesEnabled = prefs.getBool('drawer_notif_notes_enabled') ?? true;
-              final int newSum = (submissionsEnabled ? newCounts.submissions : 0) +
-                  (watchesEnabled ? newCounts.watches : 0) +
-                  (commentsEnabled ? newCounts.comments : 0) +
-                  (favoritesEnabled ? newCounts.favorites : 0) +
-                  (journalsEnabled ? newCounts.journals : 0) +
-                  (notesEnabled ? newCounts.notes : 0);
-              final int previousSum = prefs.getInt(kPreviousSumKey) ?? 0;
-              print('[BG] Sum comparison - Previous: $previousSum, New: $newSum');
-              if (newSum != previousSum && newSum > 0) {
-                final NotificationCounts filteredCounts = NotificationCounts(
-                  submissions: submissionsEnabled ? newCounts.submissions : 0,
-                  watches: watchesEnabled ? newCounts.watches : 0,
-                  comments: commentsEnabled ? newCounts.comments : 0,
-                  favorites: favoritesEnabled ? newCounts.favorites : 0,
-                  journals: journalsEnabled ? newCounts.journals : 0,
-                  notes: notesEnabled ? newCounts.notes : 0,
-                );
-                final String messageBody = _buildNotificationMessage(filteredCounts);
-                if (messageBody.isNotEmpty) {
-                  final bool soundActivitiesEnabled = prefs.getBool('sound_new_activities_enabled') ?? true;
-                  final bool vibrationActivitiesEnabled = prefs.getBool('vibration_new_activities_enabled') ?? true;
-                  if (soundActivitiesEnabled || vibrationActivitiesEnabled) {
-                    await notificationService.showNotification(
-                      999999,
-                      'New FA Activity',
-                      messageBody,
-                      'activity_fa_activity',
-                      'activities',
-                    );
-                    print('[BG] Activity notification shown: $messageBody');
-                  }
+
+              final ActivitiesDiff diff = await ActivitiesNotificationStateStore()
+                  .diffAndUpdateLastSeen(currentCounts: newCounts);
+              print(
+                  '[BG] Last-seen counts: S:${diff.previous.submissions} W:${diff.previous.watches} C:${diff.previous.comments} F:${diff.previous.favorites} J:${diff.previous.journals} N:${diff.previous.notes}');
+              print(
+                  '[BG] Increased by:     S:${diff.increasedBy.submissions} W:${diff.increasedBy.watches} C:${diff.increasedBy.comments} F:${diff.increasedBy.favorites} J:${diff.increasedBy.journals} N:${diff.increasedBy.notes}');
+
+              // Notify based on per-category increases, but only for enabled categories.
+              final NotificationCounts enabledIncreases = NotificationCounts(
+                submissions: submissionsEnabled ? diff.increasedBy.submissions : 0,
+                watches: watchesEnabled ? diff.increasedBy.watches : 0,
+                comments: commentsEnabled ? diff.increasedBy.comments : 0,
+                favorites: favoritesEnabled ? diff.increasedBy.favorites : 0,
+                journals: journalsEnabled ? diff.increasedBy.journals : 0,
+                notes: notesEnabled ? diff.increasedBy.notes : 0,
+              );
+
+              final bool shouldNotify = enabledIncreases.submissions > 0 ||
+                  enabledIncreases.watches > 0 ||
+                  enabledIncreases.comments > 0 ||
+                  enabledIncreases.favorites > 0 ||
+                  enabledIncreases.journals > 0 ||
+                  enabledIncreases.notes > 0;
+
+              // Keep notification body consistent with previous behavior:
+              // show the current per-category totals (filtered by enabled categories),
+              // while dedupe is decided by per-category *increases*.
+              final NotificationCounts filteredCounts = NotificationCounts(
+                submissions: submissionsEnabled ? newCounts.submissions : 0,
+                watches: watchesEnabled ? newCounts.watches : 0,
+                comments: commentsEnabled ? newCounts.comments : 0,
+                favorites: favoritesEnabled ? newCounts.favorites : 0,
+                journals: journalsEnabled ? newCounts.journals : 0,
+                notes: notesEnabled ? newCounts.notes : 0,
+              );
+              final String messageBody = _buildNotificationMessage(filteredCounts);
+
+              // Only show a system notification on an *increase*.
+              if (shouldNotify) {
+                final bool soundActivitiesEnabled =
+                    prefs.getBool('sound_new_activities_enabled') ?? true;
+                final bool vibrationActivitiesEnabled =
+                    prefs.getBool('vibration_new_activities_enabled') ?? true;
+                if (soundActivitiesEnabled || vibrationActivitiesEnabled) {
+                  await notificationService.showNotification(
+                    999999,
+                    'New FA Activity',
+                    messageBody,
+                    'activity_fa_activity',
+                    'activities',
+                  );
+                  print('[BG] Activity notification shown: $messageBody');
+                } else {
+                  print(
+                      '[BG] Activities sound+vibration disabled; not showing notification.');
                 }
-                await prefs.setInt(kPreviousSumKey, newSum);
-                print('[BG] Previous sum updated to: $newSum');
+              } else {
+                print('[BG] No enabled category increased; not notifying.');
               }
             } else {
               print('[BG] No notification data received from FA');
@@ -557,8 +561,29 @@ Future<void> _afterFirstFrameBoot(TimezoneProvider timezoneProvider) async {
   }
 }
 
+class AppLifecycleNetworkReset with WidgetsBindingObserver {
+  static final AppLifecycleNetworkReset _instance = AppLifecycleNetworkReset._();
+  AppLifecycleNetworkReset._();
+
+  static void attach() {
+    WidgetsBinding.instance.addObserver(_instance);
+  }
+
+  static void detach() {
+    WidgetsBinding.instance.removeObserver(_instance);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      FAHttp.reset();
+    }
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  AppLifecycleNetworkReset.attach();
   HttpOverrides.global = FreshHttpOverrides();
   print("===============================================");
   print("APP STARTING: ${DateTime.now()}");
@@ -690,7 +715,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       theme: AppTheme.darkTheme,
       navigatorKey: navigatorKey,
       navigatorObservers: [routeObserver],
-      home: _LifecycleRefetch(child: const HomeScreen()),
+      home: const HomeScreen(),
     );
   }
 }

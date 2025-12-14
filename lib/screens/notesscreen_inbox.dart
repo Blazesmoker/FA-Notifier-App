@@ -49,4 +49,3 @@ class InboxTab extends StatelessWidget {
     );
   }
 }
-

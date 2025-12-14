@@ -17,7 +17,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../custom_drawer/drawer_user_controller.dart';
 import 'notesscreen_api_service.dart';
 import 'notesscreen_preview_dialog.dart';
-import 'notesscreen_widgets.dart';
 import 'notesscreen_inbox.dart';
 import 'notesscreen_sent.dart';
 
@@ -36,13 +35,19 @@ class NotesScreen extends StatefulWidget {
 }
 
 class _NotesScreenState extends State<NotesScreen>
-    with RouteAware, WidgetsBindingObserver {
+    with RouteAware, WidgetsBindingObserver, SingleTickerProviderStateMixin {
+  static const Color _accent = Color(0xFFE09321);
+
   final _secureStorage = const FlutterSecureStorage(
     iOptions: IOSOptions(
-        accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock),
+      accountName: 'flutter_secure_storage_service',
+      accessibility: KeychainAccessibility.first_unlock,
+    ),
   );
+
   late final NotesApiService _notesApi;
+  late final TabController _tabController;
+
   Timer? _refreshTimer;
   StreamSubscription<void>? _notesRefreshSub;
 
@@ -77,12 +82,18 @@ class _NotesScreenState extends State<NotesScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
     _notesApi = NotesApiService(_secureStorage);
+    _tabController = TabController(length: 2, vsync: this);
 
     if (widget.forceRefresh) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _fetchInbox(page: 1, clearOld: true);
-        _fetchSent(page: 1, clearOld: true);
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        _currentInboxPage = 1;
+        _currentSentPage = 1;
+        _hasMoreInbox = true;
+        _hasMoreSent = true;
+        await _fetchInbox(page: 1, clearOld: false);
+        await _fetchSent(page: 1, clearOld: false);
       });
     }
 
@@ -98,8 +109,12 @@ class _NotesScreenState extends State<NotesScreen>
 
     _notesRefreshSub = NotesRefreshService().stream.listen((_) {
       if (!mounted) return;
-      _fetchInbox(page: 1, clearOld: true);
-      _fetchSent(page: 1, clearOld: true);
+      _currentInboxPage = 1;
+      _currentSentPage = 1;
+      _hasMoreInbox = true;
+      _hasMoreSent = true;
+      _fetchInbox(page: 1, clearOld: false);
+      _fetchSent(page: 1, clearOld: false);
     });
   }
 
@@ -107,6 +122,9 @@ class _NotesScreenState extends State<NotesScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     routeObserver.unsubscribe(this);
+
+    _tabController.dispose();
+
     _refreshTimer?.cancel();
     _inboxScrollController.dispose();
     _sentScrollController.dispose();
@@ -124,7 +142,9 @@ class _NotesScreenState extends State<NotesScreen>
   void didPopNext() {
     if (!_isDialogOpen) {
       _fetchInboxTwoPagesOnly();
-      _fetchSent(page: 1, clearOld: true);
+      _currentSentPage = 1;
+      _hasMoreSent = true;
+      _fetchSent(page: 1, clearOld: false);
     }
   }
 
@@ -137,8 +157,9 @@ class _NotesScreenState extends State<NotesScreen>
       _currentSentPage = 1;
       _hasMoreInbox = true;
       _hasMoreSent = true;
-      _fetchInbox(page: 1, clearOld: true);
-      _fetchSent(page: 1, clearOld: true);
+      _fetchInbox(page: 1, clearOld: false);
+      _fetchSent(page: 1, clearOld: false);
+
       _startPeriodicFetch();
     }
   }
@@ -180,6 +201,7 @@ class _NotesScreenState extends State<NotesScreen>
         _loadMoreInbox();
       }
     });
+
     _sentScrollController.addListener(() {
       if (_sentScrollController.position.pixels ==
           _sentScrollController.position.maxScrollExtent &&
@@ -206,8 +228,10 @@ class _NotesScreenState extends State<NotesScreen>
   Future<void> _fetchInboxTwoPagesOnly() async {
     try {
       List<Message> newFetched = [];
-      newFetched.addAll(await _notesApi.fetchNotesPage(folder: 'inbox', page: 1));
-      newFetched.addAll(await _notesApi.fetchNotesPage(folder: 'inbox', page: 2));
+      newFetched
+          .addAll(await _notesApi.fetchNotesPage(folder: 'inbox', page: 1));
+      newFetched
+          .addAll(await _notesApi.fetchNotesPage(folder: 'inbox', page: 2));
       await _handleNewUnreadMessages(newFetched);
     } catch (e) {
       debugPrint('[Foreground fetchInboxTwoPagesOnly] error => $e');
@@ -223,8 +247,11 @@ class _NotesScreenState extends State<NotesScreen>
         _hasMoreInbox = true;
       });
     }
+
     try {
-      final newMessages = await _notesApi.fetchNotesPage(folder: 'inbox', page: page);
+      final newMessages =
+      await _notesApi.fetchNotesPage(folder: 'inbox', page: page);
+
       if (page == 1) {
         setState(() {
           inboxMessages = newMessages;
@@ -238,6 +265,7 @@ class _NotesScreenState extends State<NotesScreen>
       setState(() {
         isLoadingInbox = false;
       });
+
       if (newMessages.isEmpty) {
         setState(() {
           _hasMoreInbox = false;
@@ -284,8 +312,11 @@ class _NotesScreenState extends State<NotesScreen>
         _hasMoreSent = true;
       });
     }
+
     try {
-      final newMessages = await _notesApi.fetchNotesPage(folder: 'sent', page: page);
+      final newMessages =
+      await _notesApi.fetchNotesPage(folder: 'sent', page: page);
+
       if (page == 1) {
         setState(() {
           sentMessages = newMessages;
@@ -299,6 +330,7 @@ class _NotesScreenState extends State<NotesScreen>
       setState(() {
         isLoadingSent = false;
       });
+
       if (newMessages.isEmpty) {
         setState(() {
           _hasMoreSent = false;
@@ -326,7 +358,6 @@ class _NotesScreenState extends State<NotesScreen>
     _isFetchingMoreSent = false;
   }
 
-
   Future<void> _handleNewUnreadMessages(List<Message> fetchedInbox) async {
     try {
       final shownIds = await MessageStorage.getShownNoteIds();
@@ -337,8 +368,7 @@ class _NotesScreenState extends State<NotesScreen>
         return;
       }
 
-      final newUnread =
-      unread.where((m) => !shownIds.contains(m.id)).toList();
+      final newUnread = unread.where((m) => !shownIds.contains(m.id)).toList();
       if (newUnread.isEmpty) return;
 
       for (var msg in newUnread) {
@@ -355,6 +385,7 @@ class _NotesScreenState extends State<NotesScreen>
           await _markAsUnreadWithoutRefetch(msg);
         } catch (_) {}
       }
+
       final newIds = newUnread.map((m) => m.id).toList();
       await MessageStorage.addShownNoteIds(newIds);
     } catch (_) {}
@@ -401,8 +432,7 @@ class _NotesScreenState extends State<NotesScreen>
         options: Options(
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            'Referer':
-            'https://www.furaffinity.net/msg/pms/$pageNum/$msgId/',
+            'Referer': 'https://www.furaffinity.net/msg/pms/$pageNum/$msgId/',
             'Origin': 'https://www.furaffinity.net',
             'Accept':
             'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
@@ -423,8 +453,6 @@ class _NotesScreenState extends State<NotesScreen>
       }
     } catch (_) {}
   }
-
-  // Message list UI moved to notesscreen_widgets.dart (MessageList)
 
   void _showPreviewDialog(Message message, String folder) {
     bool wasInitiallyUnread = message.isUnread;
@@ -459,207 +487,214 @@ class _NotesScreenState extends State<NotesScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = isLoadingInbox || isLoadingSent;
+    final bool showInitialLoader =
+        (inboxMessages.isEmpty && isLoadingInbox) &&
+            (sentMessages.isEmpty && isLoadingSent);
 
-    if (isLoading) {
+    if (showInitialLoader) {
       return Scaffold(
+        appBar: AppBar(
+          title: const Text('Notes'),
+          centerTitle: true,
+          backgroundColor: Colors.black,
+        ),
+        backgroundColor: Colors.black,
+        body: const Center(
+          child: PulsatingLoadingIndicator(
+            size: 88.0,
+            assetPath: 'assets/icons/fathemed.png',
+          ),
+        ),
+      );
+    }
+
+    return Stack(
+      children: [
+        Scaffold(
           appBar: AppBar(
             title: const Text('Notes'),
             centerTitle: true,
             backgroundColor: Colors.black,
+            bottom: TabBar(
+              controller: _tabController,
+              indicator: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(width: 2.5, color: _accent),
+                ),
+              ),
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelStyle: const TextStyle(
+                fontSize: 19.0,
+                fontWeight: FontWeight.bold,
+              ),
+              unselectedLabelStyle: const TextStyle(fontSize: 17.0),
+              tabs: const [
+                Tab(text: 'Inbox'),
+                Tab(text: 'Sent'),
+              ],
+            ),
           ),
-          backgroundColor: Colors.black,
-          body: const Center(
-              child: PulsatingLoadingIndicator(
-                  size: 88.0, assetPath: 'assets/icons/fathemed.png')));
-    }
-
-    return DefaultTabController(
-      length: 2,
-      child: Stack(
-        children: [
-          Scaffold(
-            appBar: AppBar(
-              title: const Text('Notes'),
-              centerTitle: true,
-              backgroundColor: Colors.black,
-              bottom: const TabBar(
-                indicator: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(width: 2.5, color: Color(0xFFE09321)),
+          body: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 0.0),
+            child: NotificationListener<OverscrollNotification>(
+              onNotification: (OverscrollNotification notification) {
+                final tabIndex = _tabController.index;
+                if (tabIndex == 0 &&
+                    notification.metrics.axis == Axis.horizontal &&
+                    notification.overscroll < 0) {
+                  widget.drawerKey.currentState?.openDrawer();
+                  return true;
+                }
+                return false;
+              },
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  InboxTab(
+                    isLoading: isLoadingInbox,
+                    isLoadingMore: isLoadingMoreInbox,
+                    errorMessage: errorInbox,
+                    messages: inboxMessages,
+                    scrollController: _inboxScrollController,
+                    hasMore: _hasMoreInbox,
+                    refreshInbox: () async {
+                      _currentInboxPage = 1;
+                      _hasMoreInbox = true;
+                      await _fetchInbox(page: 1, clearOld: false);
+                    },
+                    refreshSent: () async {
+                      _currentSentPage = 1;
+                      _hasMoreSent = true;
+                      await _fetchSent(page: 1, clearOld: false);
+                    },
+                    loadMore: _loadMoreInbox,
+                    onOpenMessage: (msg) {
+                      Navigator.of(context)
+                          .push(MaterialPageRoute(
+                        builder: (_) => MessageDetailScreen(
+                          messageLink: msg.link,
+                          folder: 'inbox',
+                        ),
+                      ))
+                          .then((result) {
+                        if (result == 'refresh' || result == 'marked_unread') {
+                          _currentInboxPage = 1;
+                          _currentSentPage = 1;
+                          _hasMoreInbox = true;
+                          _hasMoreSent = true;
+                          _fetchInbox(page: 1, clearOld: false);
+                          _fetchSent(page: 1, clearOld: false);
+                        }
+                      });
+                    },
+                    onPreviewMessage: (msg) => _showPreviewDialog(msg, 'inbox'),
                   ),
-                ),
-                indicatorSize: TabBarIndicatorSize.tab,
-                labelStyle: TextStyle(
-                  fontSize: 19.0,
-                  fontWeight: FontWeight.bold,
-                ),
-                unselectedLabelStyle: TextStyle(fontSize: 17.0),
-                tabs: [
-                  Tab(text: 'Inbox'),
-                  Tab(text: 'Sent'),
+                  SentTab(
+                    isLoading: isLoadingSent,
+                    isLoadingMore: isLoadingMoreSent,
+                    errorMessage: errorSent,
+                    messages: sentMessages,
+                    scrollController: _sentScrollController,
+                    hasMore: _hasMoreSent,
+                    refreshInbox: () async {
+                      _currentInboxPage = 1;
+                      _hasMoreInbox = true;
+                      await _fetchInbox(page: 1, clearOld: false);
+                    },
+                    refreshSent: () async {
+                      _currentSentPage = 1;
+                      _hasMoreSent = true;
+                      await _fetchSent(page: 1, clearOld: false);
+                    },
+                    loadMore: _loadMoreSent,
+                    onOpenMessage: (msg) {
+                      Navigator.of(context)
+                          .push(MaterialPageRoute(
+                        builder: (_) => MessageDetailScreen(
+                          messageLink: msg.link,
+                          folder: 'sent',
+                        ),
+                      ))
+                          .then((result) {
+                        if (result == 'refresh' || result == 'marked_unread') {
+                          _currentInboxPage = 1;
+                          _currentSentPage = 1;
+                          _hasMoreInbox = true;
+                          _hasMoreSent = true;
+                          _fetchInbox(page: 1, clearOld: false);
+                          _fetchSent(page: 1, clearOld: false);
+                        }
+                      });
+                    },
+                  ),
                 ],
               ),
             ),
-            body: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 0.0),
-              child: Builder(
-                builder: (innerContext) =>
-                    NotificationListener<OverscrollNotification>(
-                      onNotification: (OverscrollNotification notification) {
-                        final tabIndex =
-                            DefaultTabController.of(innerContext)?.index ?? 0;
-                        if (tabIndex == 0 &&
-                            notification.metrics.axis == Axis.horizontal &&
-                            notification.overscroll < 0) {
-                          widget.drawerKey.currentState?.openDrawer();
-                          return true;
-                        }
-
-                        return false;
-                      },
-                      child: TabBarView(
-                        children: [
-                          InboxTab(
-                            isLoading: isLoadingInbox,
-                            isLoadingMore: isLoadingMoreInbox,
-                            errorMessage: errorInbox,
-                            messages: inboxMessages,
-                            scrollController: _inboxScrollController,
-                            hasMore: _hasMoreInbox,
-                            refreshInbox: () async {
-                              _currentInboxPage = 1;
-                              _hasMoreInbox = true;
-                              await _fetchInbox(page: 1, clearOld: true);
-                            },
-                            refreshSent: () async {
-                              _currentSentPage = 1;
-                              _hasMoreSent = true;
-                              await _fetchSent(page: 1, clearOld: true);
-                            },
-                            loadMore: _loadMoreInbox,
-                            onOpenMessage: (msg) {
-                              Navigator.of(context)
-                                  .push(MaterialPageRoute(
-                                builder: (_) => MessageDetailScreen(
-                                  messageLink: msg.link,
-                                  folder: 'inbox',
-                                ),
-                              ))
-                                  .then((result) {
-                                if (result == 'refresh' || result == 'marked_unread') {
-                                  _fetchInbox(page: 1, clearOld: true);
-                                  _fetchSent(page: 1, clearOld: true);
-                                }
-                              });
-                            },
-                            onPreviewMessage: (msg) => _showPreviewDialog(msg, 'inbox'),
-                          ),
-                          SentTab(
-                            isLoading: isLoadingSent,
-                            isLoadingMore: isLoadingMoreSent,
-                            errorMessage: errorSent,
-                            messages: sentMessages,
-                            scrollController: _sentScrollController,
-                            hasMore: _hasMoreSent,
-                            refreshInbox: () async {
-                              _currentInboxPage = 1;
-                              _hasMoreInbox = true;
-                              await _fetchInbox(page: 1, clearOld: true);
-                            },
-                            refreshSent: () async {
-                              _currentSentPage = 1;
-                              _hasMoreSent = true;
-                              await _fetchSent(page: 1, clearOld: true);
-                            },
-                            loadMore: _loadMoreSent,
-                            onOpenMessage: (msg) {
-                              Navigator.of(context)
-                                  .push(MaterialPageRoute(
-                                builder: (_) => MessageDetailScreen(
-                                  messageLink: msg.link,
-                                  folder: 'sent',
-                                ),
-                              ))
-                                  .then((result) {
-                                if (result == 'refresh' || result == 'marked_unread') {
-                                  _fetchInbox(page: 1, clearOld: true);
-                                  _fetchSent(page: 1, clearOld: true);
-                                }
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-              ),
-            ),
-            floatingActionButton: FloatingActionButton(
-              backgroundColor: const Color(0xFFE09321),
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => NewMessageScreen()),
-                );
-              },
-              shape: const CircleBorder(),
-              child: const Icon(Icons.message),
-            ),
-            backgroundColor: Colors.black,
           ),
-          Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: 25,
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onHorizontalDragStart: (DragStartDetails details) {
-                const edgeWidth = 62.0;
-                if (details.globalPosition.dx <= edgeWidth) {
-                  _isDraggingFromEdge = true;
-                  _startDragX = details.globalPosition.dx;
+          floatingActionButton: FloatingActionButton(
+            backgroundColor: _accent,
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => NewMessageScreen()),
+              );
+            },
+            shape: const CircleBorder(),
+            child: const Icon(Icons.message),
+          ),
+          backgroundColor: Colors.black,
+        ),
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 25,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragStart: (DragStartDetails details) {
+              const edgeWidth = 62.0;
+              if (details.globalPosition.dx <= edgeWidth) {
+                _isDraggingFromEdge = true;
+                _startDragX = details.globalPosition.dx;
+              }
+            },
+            onHorizontalDragUpdate: (DragUpdateDetails details) {
+              if (_isDraggingFromEdge) {
+                final drawerState = widget.drawerKey.currentState;
+                if (drawerState != null) {
+                  final drawerWidth = drawerState.widget.drawerWidth;
+                  final currentOffset =
+                      drawerState.scrollController?.offset ?? drawerWidth;
+
+                  double newOffset = currentOffset - details.delta.dx;
+                  if (newOffset < 0) newOffset = 0;
+                  if (newOffset > drawerWidth) newOffset = drawerWidth;
+
+                  drawerState.setDrawerPosition(newOffset);
                 }
-              },
-              onHorizontalDragUpdate: (DragUpdateDetails details) {
-                if (_isDraggingFromEdge) {
-                  final drawerState = widget.drawerKey.currentState;
-                  if (drawerState != null) {
-                    final drawerWidth = drawerState.widget.drawerWidth;
-                    final currentOffset =
-                        drawerState.scrollController?.offset ?? drawerWidth;
+              }
+            },
+            onHorizontalDragEnd: (DragEndDetails details) {
+              if (_isDraggingFromEdge) {
+                _isDraggingFromEdge = false;
+                final drawerState = widget.drawerKey.currentState;
+                if (drawerState != null) {
+                  final drawerWidth = drawerState.widget.drawerWidth;
+                  final currentOffset =
+                      drawerState.scrollController?.offset ?? drawerWidth;
+                  final threshold = drawerWidth / 2;
 
-                    double newOffset = currentOffset - details.delta.dx;
-                    if (newOffset < 0) newOffset = 0;
-                    if (newOffset > drawerWidth) newOffset = drawerWidth;
-
-                    drawerState.setDrawerPosition(newOffset);
+                  if (currentOffset < threshold) {
+                    drawerState.openDrawer();
+                  } else {
+                    drawerState.closeDrawer();
                   }
                 }
-              },
-              onHorizontalDragEnd: (DragEndDetails details) {
-                if (_isDraggingFromEdge) {
-                  _isDraggingFromEdge = false;
-                  final drawerState = widget.drawerKey.currentState;
-                  if (drawerState != null) {
-                    final drawerWidth = drawerState.widget.drawerWidth;
-                    final currentOffset =
-                        drawerState.scrollController?.offset ?? drawerWidth;
-                    final threshold = drawerWidth / 2;
-
-                    if (currentOffset < threshold) {
-                      drawerState.openDrawer();
-                    } else {
-                      drawerState.closeDrawer();
-                    }
-                  }
-                }
-              },
-              child: Container(color: Colors.transparent),
-            ),
+              }
+            },
+            child: Container(color: Colors.transparent),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
-

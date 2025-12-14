@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,28 +18,60 @@ Future<void> processPendingNavigation({String from = 'unknown'}) async {
     return;
   }
 
+  if (payload.isEmpty) {
+    debugPrint('[PENDING_NAV] empty payload; clearing (from=$from)');
+    await prefs.remove('pending_navigation');
+    return;
+  }
+
   final ctx = navigatorKey.currentContext;
   debugPrint('[PENDING_NAV] handling "$payload" (from=$from) ctx=${ctx != null}');
 
-  if (ctx != null) {
-    final navProvider = Provider.of<NotificationNavigationProvider>(ctx, listen: false);
-    final bool isNotes = payload.startsWith('note_') || payload.contains('DrawerIndex.Notes');
-
-    // 1) Switch tab now
-    navProvider.setTargetIndex(isNotes ? 4 : 3);
-
-    // 2) Trigger refresh on the next frame (after tab is mounted)
+  if (ctx == null) {
+    // Keep pending payload; UI isn't ready yet. Retry once next frame.
+    debugPrint('[PENDING_NAV] no context yet; will retry next frame (from=$from)');
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (isNotes) {
-        NotesRefreshService().triggerRefresh();
-        debugPrint('NOTES REFRESH TRIGGERED_postframe ($from)');
-      } else {
-        NotificationRefreshService().triggerRefresh();
-        debugPrint('ACTIVITIES REFRESH TRIGGERED_postframe ($from)');
-      }
+      processPendingNavigation(from: '$from/retry');
     });
+    SchedulerBinding.instance.ensureVisualUpdate();
+    return;
   }
 
-  // Clear the pending flag either way
+  final navProvider =
+      Provider.of<NotificationNavigationProvider>(ctx, listen: false);
+
+  // If nobody is listening yet, don't clear the payload; let HomeScreen/lifecycle
+  // pick it up once mounted.
+  if (!navProvider.hasListeners) {
+    debugPrint('[PENDING_NAV] navProvider has no listeners; keeping pending (from=$from)');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      processPendingNavigation(from: '$from/retry_listeners');
+    });
+    SchedulerBinding.instance.ensureVisualUpdate();
+    return;
+  }
+
+  final bool isNotes = payload.startsWith('note_') ||
+      payload.contains('DrawerIndex.Notes') ||
+      payload == 'note_native';
+
+  // Switch tab now (Notes=4, Notifications=3).
+  navProvider.setTargetIndex(isNotes ? 4 : 3);
+
+  // Refresh immediately. Notes/Notifications screens are kept alive in
+  // HomeScreen's `IndexedStack`, so listeners are already attached.
+  try {
+    if (isNotes) {
+      NotesRefreshService().triggerRefresh();
+      debugPrint('NOTES REFRESH TRIGGERED_pending_nav ($from)');
+    } else {
+      NotificationRefreshService().triggerRefresh();
+      debugPrint('ACTIVITIES REFRESH TRIGGERED_pending_nav ($from)');
+    }
+  } catch (e) {
+    debugPrint('[PENDING_NAV] refresh error: $e');
+  }
+
+  // Clear only after successfully handling.
   await prefs.remove('pending_navigation');
 }

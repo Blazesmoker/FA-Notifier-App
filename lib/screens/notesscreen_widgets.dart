@@ -4,6 +4,8 @@ import '../widgets/PulsatingLoadingIndicator.dart';
 import 'message_model.dart';
 
 class MessageList extends StatelessWidget {
+  static const Color _accent = Color(0xFFE09321);
+
   final bool isLoading;
   final bool isLoadingMore;
   final String errorMessage;
@@ -60,6 +62,8 @@ class MessageList extends StatelessWidget {
     }
 
     return RefreshIndicator(
+      color: _accent,
+      backgroundColor: Colors.black,
       onRefresh: () async {
         if (folder == 'inbox') {
           await refreshInbox();
@@ -77,7 +81,14 @@ class MessageList extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 44.0),
               child: Center(
                 child: isLoadingMore
-                    ? const CircularProgressIndicator()
+                    ? const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.6,
+                    valueColor: AlwaysStoppedAnimation<Color>(_accent),
+                  ),
+                )
                     : const SizedBox.shrink(),
               ),
             );
@@ -103,7 +114,7 @@ class MessageList extends StatelessWidget {
                           margin: const EdgeInsets.only(right: 16),
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Color(0xFFE09321),
+                            color: _accent,
                           ),
                         ),
                       Expanded(
@@ -113,13 +124,37 @@ class MessageList extends StatelessWidget {
                             Text(
                               msg.subject,
                               style: const TextStyle(
-                                  color: Colors.white, fontSize: 16),
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
                             ),
                             const SizedBox(height: 4),
+
                             Text(
-                              'From: ${msg.sender}\nDate: ${msg.date}',
+                              'From: ${msg.sender}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                  color: Colors.white70, fontSize: 14),
+                                color: Colors.white70,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'Date: ${msg.date}',
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -146,4 +181,3 @@ class MessageList extends StatelessWidget {
     );
   }
 }
-

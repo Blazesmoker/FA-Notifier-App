@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import '../services/app_refetch_bus.dart';
 import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
@@ -25,7 +23,7 @@ class _FAImageGridState extends State<FAImageGrid> {
   int currentPage = 1;
   bool isLoading = false;
   bool hasMore = true;
-  late final StreamSubscription _resumeSub;
+
 
   /// Each image is a Map with:
   ///   - 'url': thumbnail URL
@@ -59,9 +57,6 @@ class _FAImageGridState extends State<FAImageGrid> {
     _fetchImages(currentPage);
     _scrollController.addListener(_scrollListener);
 
-    _resumeSub = AppRefetchBus.stream.listen((_) {
-      if (mounted) _refreshImages();
-    });
   }
 
   Future<void> _loadSfwEnabled() async {
@@ -82,7 +77,6 @@ class _FAImageGridState extends State<FAImageGrid> {
   @override
   void dispose() {
     _scrollController.dispose();
-    _resumeSub.cancel();
     super.dispose();
   }
 
@@ -191,10 +185,6 @@ class _FAImageGridState extends State<FAImageGrid> {
       setState(() => isLoading = false);
       debugPrint('FAImageGrid: Error fetching images => $e');
 
-      // Auto-heal once after resume/stale socket
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted) _refreshImages();
-      });
     }
   }
 

@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' hide Priority;
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:provider/provider.dart';
@@ -34,11 +35,9 @@ class NotificationService {
     'activities',
   ];
 
-  // iOS <-> Dart bridge: receives taps forwarded by AppDelegate
   static const MethodChannel _iosChannel = MethodChannel('app.notifications');
 
   Future<void> init() async {
-    // --- Initialization (Android + iOS) ---
     const AndroidInitializationSettings initializationSettingsAndroid =
     AndroidInitializationSettings('@mipmap/fathemednotif');
 
@@ -54,7 +53,6 @@ class NotificationService {
       iOS: initializationSettingsDarwin,
     );
 
-    // IMPORTANT: hook up both foreground and background tap handlers.
     await flutterLocalNotificationsPlugin.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: onDidReceiveNotificationResponse,
@@ -67,7 +65,6 @@ class NotificationService {
 
     await _createNotificationChannels();
 
-    // 🔗 Handle taps routed by native AppDelegate (foreground/background/cold)
     _iosChannel.setMethodCallHandler((call) async {
       if (call.method == 'notificationTapped') {
         final Map<String, dynamic> map =
@@ -88,12 +85,10 @@ class NotificationService {
       }
     });
 
-    // Tell iOS native that Dart is ready to receive any pending tap
     try {
       await _iosChannel.invokeMethod('notifications.ready');
     } catch (_) {}
 
-    // Cold start from plugin path (Android/iOS)
     final details =
     await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
     if ((details?.didNotificationLaunchApp ?? false) &&
@@ -106,7 +101,7 @@ class NotificationService {
     }
   }
 
-  // ========= iOS permissions =========
+
   Future<void> _requestIOSPermissions() async {
     final implementation = flutterLocalNotificationsPlugin
         .resolvePlatformSpecificImplementation<
@@ -120,7 +115,7 @@ class NotificationService {
     }
   }
 
-  // ========= Channels =========
+
   Future<void> _createNotificationChannels() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -180,7 +175,6 @@ class NotificationService {
         importance: Importance.high,
         playSound: soundEnabled,
         enableVibration: vibrationEnabled,
-        // If you really need a silent sound resource, ensure you have it in android/app/src/main/res/raw/silent.mp3
         sound: soundEnabled
             ? null
             : const RawResourceAndroidNotificationSound('silent'),
@@ -193,7 +187,7 @@ class NotificationService {
     }
   }
 
-  // ========= Taps (plugin path on UI isolate) =========
+
   Future<void> onDidReceiveNotificationResponse(
       NotificationResponse response) async {
     final String? payload = response.payload;
@@ -201,7 +195,7 @@ class NotificationService {
     await _handleTapPayload(payload, source: 'plugin');
   }
 
-  // ========= Shared tap handler (updates index + refresh) =========
+
   Future<void> _handleTapPayload(
       String payload, {
         required String source,
@@ -228,7 +222,13 @@ class NotificationService {
       // Remove pending since we're going to handle it now
       await prefs.remove('pending_navigation');
 
-      // Defer actual navigation until the next frame so HomeScreen has built
+      // Defer until the next frame so HomeScreen is definitely built.
+      //
+      // IMPORTANT: `addPostFrameCallback` does NOT schedule a frame by itself.
+      // When the app is already on the root route and idle, tapping a system
+      // notification may deliver the callback without triggering a Flutter
+      // frame. In that case this work would not run until the user touches the
+      // screen (which schedules a frame). We force a visual update below.
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         // Extra micro-delay helps in release with heavy first-frame work
         await Future<void>.delayed(const Duration(milliseconds: 16));
@@ -251,24 +251,28 @@ class NotificationService {
         // Switch tab first
         navProvider.setTargetIndex(isNotes ? 4 : 3);
 
-        // Trigger the correct refresh on the next frame (after tab switch)
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          try {
-            if (isNotes) {
-              NotesRefreshService().triggerRefresh();
-              debugPrint('NOTES REFRESH TRIGGERED_service');
-            } else {
-              NotificationRefreshService().triggerRefresh();
-              debugPrint('ACTIVITIES REFRESH TRIGGERED_service');
-            }
-          } catch (e) {
-            debugPrint('[_handleTapPayload] refresh error: $e');
+        // Trigger refresh immediately. Both screens are kept alive in the
+        // HomeScreen `IndexedStack`, so their stream listeners are active even
+        // when not visible.
+        try {
+          if (isNotes) {
+            NotesRefreshService().triggerRefresh();
+            debugPrint('NOTES REFRESH TRIGGERED_service');
+          } else {
+            NotificationRefreshService().triggerRefresh();
+            debugPrint('ACTIVITIES REFRESH TRIGGERED_service');
           }
-        });
+        } catch (e) {
+          debugPrint('[_handleTapPayload] refresh error: $e');
+        }
 
         // Mark handled to avoid double-processing
         await prefs.setString('last_handled_payload', payload);
       });
+
+      // Ensure the post-frame callback above actually gets a frame to run on.
+      // (Fixes "tap does nothing until I touch the screen".)
+      SchedulerBinding.instance.ensureVisualUpdate();
     } catch (e, st) {
       debugPrint('[_handleTapPayload] error: $e\n$st');
       // As a fallback, stash for lifecycle processing

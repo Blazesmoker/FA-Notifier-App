@@ -7,8 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
-
-import '../services/app_refetch_bus.dart';
 import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
@@ -50,7 +48,7 @@ class _FASearchImageState extends State<FASearchImage> {
   final Map<String, String> _unfavUrls = {};
 
   bool _sfwEnabled = true;
-  late final StreamSubscription _resumeSub;
+
 
   @override
   void initState() {
@@ -58,10 +56,6 @@ class _FASearchImageState extends State<FASearchImage> {
     _loadSfwEnabled();
     _fetchImages(currentPage);
     _scrollController.addListener(_scrollListener);
-
-    _resumeSub = AppRefetchBus.stream.listen((_) {
-      if (mounted) _refreshImages();
-    });
   }
 
   Future<void> _loadSfwEnabled() async {
@@ -74,7 +68,6 @@ class _FASearchImageState extends State<FASearchImage> {
   @override
   void dispose() {
     _scrollController.dispose();
-    _resumeSub.cancel();
     super.dispose();
   }
 
@@ -157,10 +150,6 @@ class _FASearchImageState extends State<FASearchImage> {
         isLoading = false;
       });
 
-      // Heal once after resume/stale socket
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted) _refreshImages();
-      });
     }
   }
 

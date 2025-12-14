@@ -1,28 +1,74 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 typedef _Call<T> = Future<T> Function();
 
 class FAHttp {
-  static const Duration _defaultTimeout = Duration(seconds: 20);
+  static const Duration defaultTimeout = Duration(seconds: 20);
 
-  static bool _looksLikeStaleSocket(Object e) {
-    final s = e.toString();
-    return e is SocketException ||
-        s.contains('Broken pipe') ||
-        s.contains('Connection reset') ||
-        s.contains('timed out') ||
-        s.contains('Connection closed while receiving');
+  static HttpClient? _http;
+  static IOClient? _client;
+
+  static void reset() {
+    try {
+      _client?.close();
+    } catch (_) {}
+    try {
+      _http?.close(force: true);
+    } catch (_) {}
+    _client = null;
+    _http = null;
   }
 
-  static Future<R> _withRetry<R>(_Call<R> call) async {
+  static IOClient _ensureClient({Duration? timeout}) {
+    if (_client != null) return _client!;
+
+    final t = timeout ?? defaultTimeout;
+
+    final c = HttpClient()
+      ..connectionTimeout = t
+      ..idleTimeout = const Duration(seconds: 10)
+      ..autoUncompress = true
+      ..maxConnectionsPerHost = 8
+      ..userAgent = 'FANotifier/1.0 (+dart:io)';
+
+    _http = c;
+    _client = IOClient(c);
+    return _client!;
+  }
+
+  static bool _isRecoverable(Object e) {
+    if (e is TimeoutException) return true;
+    if (e is SocketException) return true;
+    if (e is HandshakeException) return true;
+
+    final s = e.toString();
+    return s.contains('Broken pipe') ||
+        s.contains('Connection reset') ||
+        s.contains('timed out') ||
+        s.contains('Connection closed while receiving') ||
+        s.contains('Network is unreachable') ||
+        s.contains('Software caused connection abort');
+  }
+
+  static Map<String, String> _mergeHeaders(Map<String, String>? headers) {
+    return <String, String>{
+      HttpHeaders.acceptEncodingHeader: 'gzip',
+      if (headers != null) ...headers,
+    };
+  }
+
+  static Future<R> _withOneRetry<R>(_Call<R> call) async {
     try {
       return await call();
     } catch (e) {
-      if (_looksLikeStaleSocket(e)) {
+      if (e is Object && _isRecoverable(e)) {
+        // Reset client + retry once with a tiny delay.
+        reset();
         await Future.delayed(const Duration(milliseconds: 250));
         return await call();
       }
@@ -30,31 +76,15 @@ class FAHttp {
     }
   }
 
-  static HttpClient _newClientBase({Duration? timeout}) {
-    final c = HttpClient();
-    c.connectionTimeout = timeout ?? _defaultTimeout;
-    c.idleTimeout = Duration.zero;
-    c.userAgent = 'FANotifier/1.0 (+dart:io)';
-    return c;
-  }
-
   static Future<http.Response> get(
       Uri uri, {
         Map<String, String>? headers,
         Duration? timeout,
       }) async {
-    return _withRetry(() async {
-      final client = IOClient(_newClientBase(timeout: timeout));
-      try {
-        final merged = {
-          HttpHeaders.connectionHeader: 'close',
-          if (headers != null) ...headers,
-        };
-        final resp = await client.get(uri, headers: merged).timeout(timeout ?? _defaultTimeout);
-        return resp;
-      } finally {
-        client.close();
-      }
+    final t = timeout ?? defaultTimeout;
+    return _withOneRetry(() async {
+      final c = _ensureClient(timeout: t);
+      return await c.get(uri, headers: _mergeHeaders(headers)).timeout(t);
     });
   }
 
@@ -65,20 +95,12 @@ class FAHttp {
         Encoding? encoding,
         Duration? timeout,
       }) async {
-    return _withRetry(() async {
-      final client = IOClient(_newClientBase(timeout: timeout));
-      try {
-        final merged = {
-          HttpHeaders.connectionHeader: 'close',
-          if (headers != null) ...headers,
-        };
-        final resp = await client
-            .post(uri, headers: merged, body: body, encoding: encoding)
-            .timeout(timeout ?? _defaultTimeout);
-        return resp;
-      } finally {
-        client.close();
-      }
+    final t = timeout ?? defaultTimeout;
+    return _withOneRetry(() async {
+      final c = _ensureClient(timeout: t);
+      return await c
+          .post(uri, headers: _mergeHeaders(headers), body: body, encoding: encoding)
+          .timeout(t);
     });
   }
 }
