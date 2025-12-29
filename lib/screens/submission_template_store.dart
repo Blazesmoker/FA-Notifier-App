@@ -102,23 +102,23 @@ class SubmissionTemplateStore {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
     if (raw == null || raw.trim().isEmpty) {
-      return const _TemplatesPayload(templates: [], order: []);
+      return _TemplatesPayload(templates: <SubmissionTemplate>[], order: <String>[]);
     }
 
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) {
-        return const _TemplatesPayload(templates: [], order: []);
+        return _TemplatesPayload(templates: <SubmissionTemplate>[], order: <String>[]);
       }
 
       final v = decoded['version'];
       if (v is int && v != version) {
-        return const _TemplatesPayload(templates: [], order: []);
+        return _TemplatesPayload(templates: <SubmissionTemplate>[], order: <String>[]);
       }
 
       final list = decoded['templates'];
       if (list is! List) {
-        return const _TemplatesPayload(templates: [], order: []);
+        return _TemplatesPayload(templates: <SubmissionTemplate>[], order: <String>[]);
       }
 
       final templates = <SubmissionTemplate>[];
@@ -139,7 +139,7 @@ class SubmissionTemplateStore {
 
       return _TemplatesPayload(templates: templates, order: order);
     } catch (_) {
-      return const _TemplatesPayload(templates: [], order: []);
+      return _TemplatesPayload(templates: <SubmissionTemplate>[], order: <String>[]);
     }
   }
 

@@ -559,6 +559,11 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
         (function() {
           function __b64(o) { return 'B64:' + btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
           try {
+            var form = document.getElementById('myform');
+            if (!form) {
+              return __b64({ ok: false, error: 'Finalize form not found. Make sure you are on the finalize page.' });
+            }
+
             function selectObj(sel) {
               if (!sel) return null;
               var idx = sel.selectedIndex;
@@ -635,10 +640,22 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       ''');
 
       final map = _decodeJsMap(res);
-      if (map == null || map['ok'] != true) return null;
+      if (map == null) {
+        debugPrint('Failed to decode JavaScript result');
+        return null;
+      }
+      
+      if (map['ok'] != true) {
+        final error = map['error'] ?? 'Unknown error';
+        debugPrint('JavaScript error reading form: $error');
+        return null;
+      }
 
       final fields = map['fields'];
-      if (fields is! Map<String, dynamic>) return null;
+      if (fields is! Map<String, dynamic>) {
+        debugPrint('Fields is not a Map: $fields');
+        return null;
+      }
 
       final normalized = <String, dynamic>{
         'category': fields['category'],
@@ -653,7 +670,8 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       };
 
       return SubmissionTemplateFields.fromJson(normalized);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Exception in _readFinalizeFields: $e');
       return null;
     }
   }
@@ -707,34 +725,56 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   }
 
   Future<void> _saveTemplateFlow() async {
-    final fields = await _readFinalizeFields();
-    if (fields == null) {
-      _showSnack('Failed to read finalize form.', isError: true);
+    debugPrint('_saveTemplateFlow called');
+    
+    if (!_isFinalizeReady) {
+      _showSnack('Please navigate to the finalize page first.', isError: true);
       return;
     }
 
-    final name = await _promptTemplateName();
+    try {
+      // Wait a bit to ensure the page is fully loaded
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      final fields = await _readFinalizeFields();
+      if (fields == null) {
+        _showSnack('Failed to read finalize form. Make sure you are on the finalize page.', isError: true);
+        return;
+      }
+      
+      debugPrint('Successfully read fields: ${fields.toJson()}');
 
-    if (name == null) {
-      return;
+      final name = await _promptTemplateName();
+
+      if (name == null) {
+        return;
+      }
+
+      final trimmed = name.trim();
+      if (trimmed.isEmpty) {
+        _showSnack('Template name cannot be empty.', isError: true);
+        return;
+      }
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final template = SubmissionTemplate(
+        id: now.toString(),
+        name: trimmed,
+        updatedAtMs: now,
+        fields: fields,
+      );
+
+      debugPrint('Saving template: ${template.name} (id: ${template.id})');
+      await _templateStore.upsertTemplate(template);
+      debugPrint('Template saved successfully');
+      
+      if (!mounted) return;
+      _showSnack('Template saved.', isError: false);
+    } catch (e) {
+      debugPrint('Error saving template: $e');
+      if (!mounted) return;
+      _showSnack('Failed to save template: ${e.toString()}', isError: true);
     }
-
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) {
-      _showSnack('Template name cannot be empty.', isError: true);
-      return;
-    }
-
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final template = SubmissionTemplate(
-      id: now.toString(),
-      name: trimmed,
-      updatedAtMs: now,
-      fields: fields,
-    );
-
-    await _templateStore.upsertTemplate(template);
-    _showSnack('Template saved.', isError: false);
   }
 
 
