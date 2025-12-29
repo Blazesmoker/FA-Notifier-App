@@ -2378,6 +2378,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                           key: _submissionWebViewKey,
                           submissionId: widget.uniqueNumber,
                           initialHtml: submissionDescription,
+                          enableTextSelection: false,
                           forceHybridComposition: false,
                           onHeightChanged: (double height) {
                             if (!_webViewLoaded) {

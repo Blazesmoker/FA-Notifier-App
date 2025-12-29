@@ -96,6 +96,7 @@ class UserProfileHomeSection extends StatelessWidget {
               sanitizedUsername: sanitizedUsername,
               initialHtml: userDescription,
               forceHybridComposition: false,
+              enableTextSelection: false,
               onWebViewLoaded: onWebViewLoaded,
             ),
           ),

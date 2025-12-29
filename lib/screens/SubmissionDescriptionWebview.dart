@@ -20,6 +20,7 @@ class SubmissionDescriptionWebView extends StatefulWidget {
   final String? initialHtml;
   final VoidCallback? onDispose;
   final bool forceHybridComposition;
+  final bool enableTextSelection;
   final void Function(double height)? onHeightChanged;
 
   const SubmissionDescriptionWebView({
@@ -27,6 +28,7 @@ class SubmissionDescriptionWebView extends StatefulWidget {
     this.initialHtml,
     this.onDispose,
     this.forceHybridComposition = false,
+    this.enableTextSelection = false,
     this.onHeightChanged,
     Key? key,
   }) : super(key: key);
@@ -160,116 +162,134 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
 
   /// Injects CSS to enable text selection and apply the FA dark theme.
   String _injectFACSS(String submissionDescHtml) {
-
     String bgColor =
         '#${background.value.toRadixString(16).substring(2).padLeft(6, '0')}';
     String textColor = '#FFFFFF';
 
+    final selectionCss = widget.enableTextSelection
+        ? '''
+-webkit-touch-callout: default;
+-webkit-user-select: text;
+user-select: text;
+'''
+        : '''
+-webkit-touch-callout: none !important;
+-webkit-user-select: none !important;
+user-select: none !important;
+''';
+
     return '''
-  <html>
-    <head>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <base href="https://www.furaffinity.net/">
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="https://www.furaffinity.net/">
 
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,500,500i,600,600i,700,700i">
-      <link rel="stylesheet" href="https://www.furaffinity.net/themes/beta/css/ui_theme_dark.css?u=2024112800">
-      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/wenk/1.0.8/wenk.min.css">
-      
-      <style>
-        /* Custom selection styling */
-        ::selection {
-          background: #E09321 !important;
-          color: #fff !important;
-        }
-        
-        ::-webkit-selection {
-          background: #E09321 !important;
-          color: #fff !important;
-        }
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,500,500i,600,600i,700,700i">
+    <link rel="stylesheet" href="https://www.furaffinity.net/themes/beta/css/ui_theme_dark.css?u=2024112800">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/wenk/1.0.8/wenk.min.css">
 
-        /* Ensure touch callout is enabled */
-        body {
-          -webkit-touch-callout: default;
-          
-        }
+    <style>
+      ::selection {
+        background: #E09321 !important;
+        color: #fff !important;
+      }
 
-        /* Set background, text colors, and allow text selection */
-        html, body {
-          margin: 0 !important;
-          padding: 0 !important;
-          background-color: #111111 !important;
-          color: $textColor !important;
-          font-family: 'Open Sans', sans-serif;
-          -webkit-user-select: text;
-          user-select: text;
-        }
-        body {
-          margin: 8px;
-        }
-        .submission-description, .bbcode, .user-submitted-links {
-          background-color: transparent !important;
-        }
-        img {
-          max-width: 100%;
-          height: auto;
-        }
+      ::-webkit-selection {
+        background: #E09321 !important;
+        color: #fff !important;
+      }
+
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background-color: #111111 !important;
+        color: $textColor !important;
+        font-family: 'Open Sans', sans-serif;
+        $selectionCss
+      }
+
+      body {
+        margin: 8px;
+      }
+
+      .submission-description,
+      .bbcode,
+      .user-submitted-links {
+        background-color: transparent !important;
+      }
+
+      img {
+        max-width: 100%;
+        height: auto;
+      }
+
+      a.iconusername img {
+        width: 60px;
+        height: auto;
+      }
+
+      @media (max-width: 600px) {
         a.iconusername img {
-          width: 60px;
-          height: auto;
+          width: 40px;
         }
-        @media (max-width: 600px) {
-          a.iconusername img {
-            width: 40px;
-          }
-        }
-        @media (min-width: 1200px) {
-          a.iconusername img {
-            width: 80px;
-          }
-        }
-        code {
-          display: block;
-          margin-bottom: 10px;
-        }
-        .bbcode_center {
-          text-align: center !important;
-        }
-        .bbcode_right {
-          text-align: right !important;
-          display: block;
-        }
-        .bbcode_left {
-          text-align: left !important;
-          display: block;
-        }
-        h1, h2, h3, h4, h5, h6 {
-          text-align: center;
-        }
-        sup.bbcode_sup {
-          display: block;
-          text-align: inherit;
-          margin-bottom: 10px;
-        }
-        a {
-  color: #E09321 !important;
-  text-decoration: none !important;
-}
+      }
 
-        a.auto_link.named_url:hover {
-          text-decoration: underline;
+      @media (min-width: 1200px) {
+        a.iconusername img {
+          width: 80px;
         }
-      </style>
+      }
 
-      <script src="https://www.furaffinity.net/themes/beta/js/prototype.1.7.3.min.js"></script>
-      <script src="https://www.furaffinity.net/themes/beta/js/common.js?u=2024112800"></script>
-      <script src="https://www.furaffinity.net/themes/beta/js/script.js?u=2024112800"></script>
-    </head>
-    <body class="ui_theme_dark">
-      $submissionDescHtml
-    </body>
-  </html>
-  ''';
+      code {
+        display: block;
+        margin-bottom: 10px;
+      }
+
+      .bbcode_center {
+        text-align: center !important;
+      }
+
+      .bbcode_right {
+        text-align: right !important;
+        display: block;
+      }
+
+      .bbcode_left {
+        text-align: left !important;
+        display: block;
+      }
+
+      h1, h2, h3, h4, h5, h6 {
+        text-align: center;
+      }
+
+      sup.bbcode_sup {
+        display: block;
+        text-align: inherit;
+        margin-bottom: 10px;
+      }
+
+      a {
+        color: #E09321 !important;
+        text-decoration: none !important;
+      }
+
+      a.auto_link.named_url:hover {
+        text-decoration: underline;
+      }
+    </style>
+
+    <script src="https://www.furaffinity.net/themes/beta/js/prototype.1.7.3.min.js"></script>
+    <script src="https://www.furaffinity.net/themes/beta/js/common.js?u=2024112800"></script>
+    <script src="https://www.furaffinity.net/themes/beta/js/script.js?u=2024112800"></script>
+  </head>
+  <body class="ui_theme_dark">
+    $submissionDescHtml
+  </body>
+</html>
+''';
   }
+
 
   /// Searches the provided HTML for a truncated URL and returns the full URL.
   /// Returns the original truncated URL when a better match is not found to
@@ -542,6 +562,7 @@ class SubmissionDescriptionWebViewScreen extends StatelessWidget {
         submissionId: submissionId,
         initialHtml: initialHtml,
         forceHybridComposition: true,
+        enableTextSelection: true,
       ),
     );
   }
