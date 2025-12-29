@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'package:flutter/cupertino.dart';
 
 /// A singleton service to handle favorite/unfavorite actions:
 /// - 3-second debounce to prevent spam.
@@ -21,7 +22,7 @@ class FavoriteGalleryService {
 
   /// Executes a POST request with retries every 2 seconds, up to 10 tries.
   Future<void> executePostWithRetry(String url, String cookieA, String cookieB) async {
-    print('[FAV SERVICE] Starting executePostWithRetry => $url');
+    debugPrint('[FAV SERVICE] Starting executePostWithRetry => $url');
     int attempts = 0;
     const maxAttempts = 10;
     while (attempts < maxAttempts) {
@@ -34,22 +35,22 @@ class FavoriteGalleryService {
             'Referer': 'https://www.furaffinity.net',
           },
         );
-        print('[FAV SERVICE] POST => $url, status: ${response.statusCode}');
+        debugPrint('[FAV SERVICE] POST => $url, status: ${response.statusCode}');
         if (response.statusCode == 302) {
-          print('[FAV SERVICE] Success => $url');
+          debugPrint('[FAV SERVICE] Success => $url');
           return;
         } else {
-          print('[FAV SERVICE] Failed with status: ${response.statusCode}, retrying...');
+          debugPrint('[FAV SERVICE] Failed with status: ${response.statusCode}, retrying...');
         }
       } catch (e) {
-        print('[FAV SERVICE] Error => $url, will retry. $e');
+        debugPrint('[FAV SERVICE] Error => $url, will retry. $e');
       }
       attempts++;
       if (attempts < maxAttempts) {
         // Wait 2 seconds before next retry.
         await Future.delayed(const Duration(seconds: 2));
       } else {
-        print('[FAV SERVICE] Max retry attempts reached for $url');
+        debugPrint('[FAV SERVICE] Max retry attempts reached for $url');
       }
     }
   }
@@ -64,7 +65,7 @@ class FavoriteGalleryService {
     required String cookieB,
     void Function(String uniqueNumber, bool finalState)? onPostComplete,
   }) {
-    print('[FAV SERVICE] toggleFavorite($uniqueNumber, isFav=$isFav)');
+    debugPrint('[FAV SERVICE] toggleFavorite($uniqueNumber, isFav=$isFav)');
 
 
     _pendingFavStates[uniqueNumber] = isFav;
@@ -84,11 +85,11 @@ class FavoriteGalleryService {
 
       String? urlToUse = finalState ? favUrl : unfavUrl;
       if (urlToUse == null || urlToUse.isEmpty) {
-        print('[FAV SERVICE] No valid URL found for $uniqueNumber => cannot POST.');
+        debugPrint('[FAV SERVICE] No valid URL found for $uniqueNumber => cannot POST.');
         return;
       }
 
-      print('[FAV SERVICE] Debounce ended => POSTing $urlToUse');
+      debugPrint('[FAV SERVICE] Debounce ended => POSTing $urlToUse');
 
       await executePostWithRetry(urlToUse, cookieA, cookieB);
 
@@ -106,6 +107,6 @@ class FavoriteGalleryService {
     }
     _debounceTimers.clear();
     _pendingFavStates.clear();
-    print('[FAV SERVICE] cancelAll() called.');
+    debugPrint('[FAV SERVICE] cancelAll() called.');
   }
 }

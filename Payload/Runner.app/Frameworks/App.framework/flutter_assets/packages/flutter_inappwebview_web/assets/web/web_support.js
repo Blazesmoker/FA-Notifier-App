@@ -123,8 +123,8 @@ window.flutter_inappwebview = {
                                 return newWindow;
                             };
 
-                            var originalPrint = iframe.contentWindow.print;
-                            iframe.contentWindow.print = function() {
+                            var originalPrint = iframe.contentWindow.debugPrint;
+                            iframe.contentWindow.debugPrint = function() {
                                 var iframeUrl = iframe.src;
                                 try {
                                     iframeUrl = iframe.contentWindow.location.href;
@@ -137,7 +137,7 @@ window.flutter_inappwebview = {
 
                             webView.functionMap = {
                                 "window.open": iframe.contentWindow.open,
-                                "window.print": iframe.contentWindow.print,
+                                "window.debugPrint": iframe.contentWindow.debugPrint,
                                 "window.history.pushState": iframe.contentWindow.history.pushState,
                                 "window.history.replaceState": iframe.contentWindow.history.replaceState,
                             }
@@ -472,10 +472,10 @@ window.flutter_inappwebview = {
                     console.log(e);
                 }
             },
-            printCurrentPage: function() {
+            debugPrintCurrentPage: function() {
                 var iframe = webView.iframe;
                 try {
-                    iframe.contentWindow.print();
+                    iframe.contentWindow.debugPrint();
                 } catch (e) {
                     console.log(e);
                 }

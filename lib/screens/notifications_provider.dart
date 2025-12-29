@@ -116,7 +116,7 @@ class NotificationsProvider with ChangeNotifier {
         ),
       );
 
-      print("[fetchNotifications] Response code: ${response.statusCode}");
+      debugPrint("[fetchNotifications] Response code: ${response.statusCode}");
       if (response.statusCode != 200) {
         throw Exception('Failed to load notifications.');
       }
@@ -133,7 +133,7 @@ class NotificationsProvider with ChangeNotifier {
           final match = reg.firstMatch(href);
           if (match != null) {
             currentUsername = match.group(1);
-            print("[fetchNotifications] Found currentUsername=$currentUsername");
+            debugPrint("[fetchNotifications] Found currentUsername=$currentUsername");
           }
         }
       }
@@ -145,7 +145,7 @@ class NotificationsProvider with ChangeNotifier {
         sectionContainers = document.querySelectorAll('fieldset');
       }
 
-      print("[fetchNotifications] Found ${sectionContainers.length} container(s).");
+      debugPrint("[fetchNotifications] Found ${sectionContainers.length} container(s).");
       // The <form> action used for removing/nuking items
       final formAction = document.querySelector('form#messages-form')
           ?.attributes['action'] ??
@@ -357,7 +357,7 @@ class NotificationsProvider with ChangeNotifier {
       }
 
       sections = fetchedSections;
-      print("[fetchNotifications] Final parsed sections: "
+      debugPrint("[fetchNotifications] Final parsed sections: "
           "${sections.map((s) => s.title).toList()}");
 
       // If there's a "Shouts" section, check if there's at least one real shout
@@ -369,17 +369,17 @@ class NotificationsProvider with ChangeNotifier {
               (item) => item.content.trim() != 'Shout has been removed from your page.',
         );
         if (anyReal && currentUsername != null) {
-          print("[fetchNotifications] Real shouts found => fetch profile shouts.");
+          debugPrint("[fetchNotifications] Real shouts found => fetch profile shouts.");
           await _fetchProfileShouts();
         } else {
-          print("[fetchNotifications] Only removal messages or no username => skip profile fetch.");
+          debugPrint("[fetchNotifications] Only removal messages or no username => skip profile fetch.");
         }
       } else {
-        print("[fetchNotifications] No shouts section found in notifications.");
+        debugPrint("[fetchNotifications] No shouts section found in notifications.");
       }
     } catch (e, st) {
       errorMessage = e.toString();
-      print("[fetchNotifications] Error: $e\n$st");
+      debugPrint("[fetchNotifications] Error: $e\n$st");
     } finally {
       isLoading = false;
       hasFetched = true;
@@ -394,12 +394,12 @@ class NotificationsProvider with ChangeNotifier {
       final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
       final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
       if (cookieA == null || cookieB == null) {
-        print("[_fetchProfileShouts] Missing cookies => skip");
+        debugPrint("[_fetchProfileShouts] Missing cookies => skip");
         return;
       }
 
       final profileUrl = 'https://www.furaffinity.net/user/$currentUsername/';
-      print("[_fetchProfileShouts] GET $profileUrl");
+      debugPrint("[_fetchProfileShouts] GET $profileUrl");
       final resp = await _dio.get(
         profileUrl,
         options: Options(
@@ -409,12 +409,12 @@ class NotificationsProvider with ChangeNotifier {
           },
         ),
       );
-      print("[_fetchProfileShouts] code: ${resp.statusCode}");
+      debugPrint("[_fetchProfileShouts] code: ${resp.statusCode}");
       if (resp.statusCode != 200) return;
 
       final doc = html_parser.parse(resp.data.toString());
       final shoutTables = doc.querySelectorAll('table[id^="shout-"]');
-      print("[_fetchProfileShouts] Found ${shoutTables.length} shout table(s).");
+      debugPrint("[_fetchProfileShouts] Found ${shoutTables.length} shout table(s).");
 
       final List<NotificationItem> profileShouts = [];
       for (var t in shoutTables) {
@@ -468,12 +468,12 @@ class NotificationsProvider with ChangeNotifier {
 
       int index = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
       if (index != -1) {
-        print("[_fetchProfileShouts] Overwriting with ${profileShouts.length} table-based shouts.");
+        debugPrint("[_fetchProfileShouts] Overwriting with ${profileShouts.length} table-based shouts.");
         sections[index].items = profileShouts;
         notifyListeners();
       }
     } catch (e, st) {
-      print("[_fetchProfileShouts] Error: $e\n$st");
+      debugPrint("[_fetchProfileShouts] Error: $e\n$st");
     }
   }
 
@@ -571,7 +571,7 @@ class NotificationsProvider with ChangeNotifier {
       }
     } catch (e, st) {
       errorMessage = e.toString();
-      print("[removeSelected] $e\n$st");
+      debugPrint("[removeSelected] $e\n$st");
     } finally {
       isLoading = false;
       notifyListeners();
@@ -680,7 +680,7 @@ class NotificationsProvider with ChangeNotifier {
       }
     } catch (e, st) {
       errorMessage = e.toString();
-      print("[nukeSection] $e\n$st");
+      debugPrint("[nukeSection] $e\n$st");
     } finally {
       isLoading = false;
       notifyListeners();
@@ -759,7 +759,7 @@ class NotificationsProvider with ChangeNotifier {
       }
     } catch (e, st) {
       errorMessage = e.toString();
-      print("[removeAllNotifications] $e\n$st");
+      debugPrint("[removeAllNotifications] $e\n$st");
     } finally {
       isLoading = false;
       notifyListeners();

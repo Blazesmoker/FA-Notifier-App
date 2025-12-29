@@ -40,6 +40,7 @@ import 'utils/message_storage.dart';
 import 'home_screen.dart';
 import 'app_theme.dart';
 import 'providers/notification_settings_provider.dart';
+import 'providers/thumbnail_display_settings_provider.dart';
 import 'services/fa_service.dart';
 import 'package:provider/provider.dart';
 import 'utils/notification_counts.dart';
@@ -76,56 +77,56 @@ void callbackDispatcher() {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = FreshHttpOverrides();
   Workmanager().executeTask((task, inputData) async {
-    print("===============================================");
-    print("BACKGROUND TASK TRIGGERED: $task");
-    print("Time: ${DateTime.now()}");
-    print("Input data: $inputData");
-    print("===============================================");
+    debugPrint("===============================================");
+    debugPrint("BACKGROUND TASK TRIGGERED: $task");
+    debugPrint("Time: ${DateTime.now()}");
+    debugPrint("Input data: $inputData");
+    debugPrint("===============================================");
     final startTime = DateTime.now();
     try {
       final notificationService = NotificationService();
       await notificationService.init();
-      print("[BG] NotificationService initialized");
+      debugPrint("[BG] NotificationService initialized");
       SharedPreferences prefs;
       try {
         prefs = await SharedPreferences.getInstance();
         await prefs.reload();
-        print('[BG] SharedPreferences loaded successfully');
+        debugPrint('[BG] SharedPreferences loaded successfully');
       } catch (e) {
-        print('[BG ERROR] Failed to load SharedPreferences: $e');
+        debugPrint('[BG ERROR] Failed to load SharedPreferences: $e');
         return Future.value(false);
       }
       bool isAppActive = prefs.getBool("isAppActive") ?? false;
-      print('[BG] App active status: $isAppActive');
+      debugPrint('[BG] App active status: $isAppActive');
       if (isAppActive) {
-        print('[BG] App is ACTIVE - skipping background fetch');
-        print('[BG] Task completed (skipped) in ${DateTime.now().difference(startTime).inSeconds}s');
+        debugPrint('[BG] App is ACTIVE - skipping background fetch');
+        debugPrint('[BG] Task completed (skipped) in ${DateTime.now().difference(startTime).inSeconds}s');
         return Future.value(true);
       }
-      print('[BG] App is INACTIVE - proceeding with background fetch');
+      debugPrint('[BG] App is INACTIVE - proceeding with background fetch');
       if (task == fetchBackgroundTask || task == iOSWorkInitTask) {
-        print('[BG] Valid background task detected: $task');
+        debugPrint('[BG] Valid background task detected: $task');
         try {
           bool didFirstRunSkip = prefs.getBool('did_first_run_skip') ?? false;
-          print('[BG] First run skip status: $didFirstRunSkip');
+          debugPrint('[BG] First run skip status: $didFirstRunSkip');
           if (!didFirstRunSkip) {
-            print('[BG] First run not complete - skipping notifications');
+            debugPrint('[BG] First run not complete - skipping notifications');
             return Future.value(true);
           }
-          print('[BG] === Starting UNREAD NOTES CHECK ===');
+          debugPrint('[BG] === Starting UNREAD NOTES CHECK ===');
           try {
             final List<Message> fetchedInbox = await _fetchInboxTwoPagesBg();
-            print('[BG] Fetched ${fetchedInbox.length} messages from inbox');
+            debugPrint('[BG] Fetched ${fetchedInbox.length} messages from inbox');
             final Set<String> shownSet = await MessageStorage.getShownNoteIds();
-            print('[BG] Already shown: ${shownSet.length} message IDs');
+            debugPrint('[BG] Already shown: ${shownSet.length} message IDs');
             final List<Message> unread = fetchedInbox.where((m) => m.isUnread).toList();
-            print('[BG] Found ${unread.length} unread messages');
+            debugPrint('[BG] Found ${unread.length} unread messages');
             if (unread.isNotEmpty) {
               final List<Message> newNotes = unread.where((m) => !shownSet.contains(m.id)).toList();
-              print('[BG] New unread messages: ${newNotes.length}');
+              debugPrint('[BG] New unread messages: ${newNotes.length}');
               for (var msg in newNotes) {
                 try {
-                  print('[BG] Processing message: ${msg.id} from ${msg.sender}');
+                  debugPrint('[BG] Processing message: ${msg.id} from ${msg.sender}');
                   final String content = await _fetchMessageContentInBackground(msg.link);
                   final String payload = 'note_${msg.id}';
                   await notificationService.showNotification(
@@ -135,29 +136,29 @@ void callbackDispatcher() {
                     payload,
                     'notes',
                   );
-                  print('[BG] Notification shown for message ${msg.id}');
+                  debugPrint('[BG] Notification shown for message ${msg.id}');
                   if (Platform.isIOS) {
                     int currentBadge = await getBadgeCounter();
                     int newBadge = currentBadge + 1;
                     await updateBadgeCounter(newBadge);
-                    print('[BG] Badge updated to: $newBadge');
+                    debugPrint('[BG] Badge updated to: $newBadge');
                   }
                   await _markAsUnreadBackground(msg);
-                  print('[BG] Message ${msg.id} marked as unread on server');
+                  debugPrint('[BG] Message ${msg.id} marked as unread on server');
                 } catch (e) {
-                  print('[BG ERROR] Failed to process message ${msg.id}: $e');
+                  debugPrint('[BG ERROR] Failed to process message ${msg.id}: $e');
                 }
               }
               if (newNotes.isNotEmpty) {
                 final List<String> newIds = newNotes.map((m) => m.id).toList();
                 await MessageStorage.addShownNoteIds(newIds);
-                print('[BG] Saved ${newIds.length} new message IDs');
+                debugPrint('[BG] Saved ${newIds.length} new message IDs');
               }
             }
           } catch (e) {
-            print('[BG ERROR] Notes check failed: $e');
+            debugPrint('[BG ERROR] Notes check failed: $e');
           }
-          print('[BG] === Starting NOTIFICATION COUNTS CHECK ===');
+          debugPrint('[BG] === Starting NOTIFICATION COUNTS CHECK ===');
           try {
             final faService = FaService();
             final Notifications? newNotifications = await faService.fetchNotifications();
@@ -170,7 +171,7 @@ void callbackDispatcher() {
                 journals: int.tryParse(newNotifications.journals) ?? 0,
                 notes: int.tryParse(newNotifications.notes) ?? 0,
               );
-              print('[BG] New counts: S:${newCounts.submissions} W:${newCounts.watches} C:${newCounts.comments} F:${newCounts.favorites} J:${newCounts.journals} N:${newCounts.notes}');
+              debugPrint('[BG] New counts: S:${newCounts.submissions} W:${newCounts.watches} C:${newCounts.comments} F:${newCounts.favorites} J:${newCounts.journals} N:${newCounts.notes}');
               final bool submissionsEnabled = prefs.getBool('drawer_notif_submissions_enabled') ?? true;
               final bool watchesEnabled = prefs.getBool('drawer_notif_watches_enabled') ?? true;
               final bool commentsEnabled = prefs.getBool('drawer_notif_comments_enabled') ?? true;
@@ -180,9 +181,9 @@ void callbackDispatcher() {
 
               final ActivitiesDiff diff = await ActivitiesNotificationStateStore()
                   .diffAndUpdateLastSeen(currentCounts: newCounts);
-              print(
+              debugPrint(
                   '[BG] Last-seen counts: S:${diff.previous.submissions} W:${diff.previous.watches} C:${diff.previous.comments} F:${diff.previous.favorites} J:${diff.previous.journals} N:${diff.previous.notes}');
-              print(
+              debugPrint(
                   '[BG] Increased by:     S:${diff.increasedBy.submissions} W:${diff.increasedBy.watches} C:${diff.increasedBy.comments} F:${diff.increasedBy.favorites} J:${diff.increasedBy.journals} N:${diff.increasedBy.notes}');
 
               // Notify based on per-category increases, but only for enabled categories.
@@ -229,41 +230,41 @@ void callbackDispatcher() {
                     'activity_fa_activity',
                     'activities',
                   );
-                  print('[BG] Activity notification shown: $messageBody');
+                  debugPrint('[BG] Activity notification shown: $messageBody');
                 } else {
-                  print(
+                  debugPrint(
                       '[BG] Activities sound+vibration disabled; not showing notification.');
                 }
               } else {
-                print('[BG] No enabled category increased; not notifying.');
+                debugPrint('[BG] No enabled category increased; not notifying.');
               }
             } else {
-              print('[BG] No notification data received from FA');
+              debugPrint('[BG] No notification data received from FA');
             }
           } catch (e) {
-            print('[BG ERROR] Notification counts check failed: $e');
+            debugPrint('[BG ERROR] Notification counts check failed: $e');
           }
-          print('[BG] === Task completed successfully ===');
-          print('[BG] Total duration: ${DateTime.now().difference(startTime).inSeconds}s');
+          debugPrint('[BG] === Task completed successfully ===');
+          debugPrint('[BG] Total duration: ${DateTime.now().difference(startTime).inSeconds}s');
           return Future.value(true);
         } catch (e, stackTrace) {
-          print('[BG ERROR] Task failed: $e');
-          print('[BG ERROR] Stack: $stackTrace');
+          debugPrint('[BG ERROR] Task failed: $e');
+          debugPrint('[BG ERROR] Stack: $stackTrace');
           if (e.toString().contains('network') ||
               e.toString().contains('timeout') ||
               e.toString().contains('connection') ||
               e.toString().contains('SocketException')) {
-            print('[BG] Network error detected - will retry');
+            debugPrint('[BG] Network error detected - will retry');
             return Future.value(false);
           }
-          print('[BG] Non-network error - marking as complete');
+          debugPrint('[BG] Non-network error - marking as complete');
           return Future.value(true);
         }
       }
-      print('[BG] Unknown task type: $task');
+      debugPrint('[BG] Unknown task type: $task');
       return Future.value(true);
     } catch (e) {
-      print('[BG FATAL ERROR] Callback dispatcher crash: $e');
+      debugPrint('[BG FATAL ERROR] Callback dispatcher crash: $e');
       return Future.value(false);
     }
   });
@@ -282,7 +283,7 @@ String _buildNotificationMessage(NotificationCounts counts) {
 
 Future<void> debugLogs(String message) async {
   final timestamp = DateTime.now().toIso8601String();
-  print('[$timestamp] $message');
+  debugPrint('[$timestamp] $message');
 }
 
 Future<int> getBadgeCounter() async {
@@ -316,7 +317,7 @@ Future<List<Message>> _fetchInboxTwoPagesBg() async {
   final cookieA = await storage.read(key: 'fa_cookie_a');
   final cookieB = await storage.read(key: 'fa_cookie_b');
   if (cookieA == null || cookieB == null) {
-    print('[BG] No cookies found - user not logged in');
+    debugPrint('[BG] No cookies found - user not logged in');
     throw Exception('Not logged in');
   }
   final result = <Message>[];
@@ -505,7 +506,7 @@ Future<void> requestAndroidNotificationPermission() async {
     final status = await Permission.notification.status;
     if (status.isDenied || status.isPermanentlyDenied) {
       final newStatus = await Permission.notification.request();
-      print('Android notification permission: ${newStatus.isGranted ? "granted" : "denied"}');
+      debugPrint('Android notification permission: ${newStatus.isGranted ? "granted" : "denied"}');
     }
   }
 }
@@ -515,7 +516,7 @@ Future<void> requestIOSNotificationPermission() async {
     final status = await Permission.notification.status;
     if (status.isDenied || status.isPermanentlyDenied) {
       final newStatus = await Permission.notification.request();
-      print('iOS notification permission: ${newStatus.isGranted ? "granted" : "denied"}');
+      debugPrint('iOS notification permission: ${newStatus.isGranted ? "granted" : "denied"}');
     }
   }
 }
@@ -538,9 +539,9 @@ Future<void> _afterFirstFrameBoot(TimezoneProvider timezoneProvider) async {
     final cacheManager = CustomCacheManager();
     final cacheMonitorService = CacheMonitorService(cacheManager);
     await cacheMonitorService.checkStorageUsage();
-    print("Initializing Workmanager...");
+    debugPrint("Initializing Workmanager...");
     await Workmanager().initialize(callbackDispatcher);
-    print("Workmanager initialized");
+    debugPrint("Workmanager initialized");
     if (Platform.isAndroid) {
       await Workmanager().registerPeriodicTask(
         "FANotify",
@@ -548,16 +549,16 @@ Future<void> _afterFirstFrameBoot(TimezoneProvider timezoneProvider) async {
         frequency: const Duration(minutes: 15),
         constraints: Constraints(networkType: NetworkType.connected),
       );
-      print("Android background task registered");
+      debugPrint("Android background task registered");
     } else if (Platform.isIOS) {
-      print("iOS background task handler registered");
+      debugPrint("iOS background task handler registered");
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool("isAppActive", true);
-    print("App initial state set to ACTIVE");
+    debugPrint("App initial state set to ACTIVE");
   } catch (e, st) {
-    print('[BOOT] afterFirstFrame error: $e');
-    print(st);
+    debugPrint('[BOOT] afterFirstFrame error: $e');
+    debugPrint(st as String?);
   }
 }
 
@@ -585,9 +586,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AppLifecycleNetworkReset.attach();
   HttpOverrides.global = FreshHttpOverrides();
-  print("===============================================");
-  print("APP STARTING: ${DateTime.now()}");
-  print("===============================================");
+  debugPrint("===============================================");
+  debugPrint("APP STARTING: ${DateTime.now()}");
+  debugPrint("===============================================");
   final timezoneProvider = TimezoneProvider();
   runApp(
     MultiProvider(
@@ -599,6 +600,9 @@ void main() async {
         ChangeNotifierProvider<NotificationSettingsProvider>(
           create: (_) => NotificationSettingsProvider(),
         ),
+        ChangeNotifierProvider<ThumbnailDisplaySettingsProvider>(
+          create: (_) => ThumbnailDisplaySettingsProvider(),
+        ),
         ChangeNotifierProvider<FANotificationService>(
           create: (_) => FANotificationService(),
         ),
@@ -608,11 +612,11 @@ void main() async {
   );
   final t0 = DateTime.now();
   WidgetsBinding.instance.addPostFrameCallback((_) async {
-    print('[BOOT] First frame at ${DateTime.now()} (+${DateTime.now().difference(t0)})');
+    debugPrint('[BOOT] First frame at ${DateTime.now()} (+${DateTime.now().difference(t0)})');
     await _afterFirstFrameBoot(timezoneProvider);
   });
   Future.delayed(const Duration(seconds: 3), () {
-    print('[BOOT][WATCHDOG] If no first-frame log appeared, splash is still gating.');
+    debugPrint('[BOOT][WATCHDOG] If no first-frame log appeared, splash is still gating.');
   });
 }
 
@@ -637,39 +641,39 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _stateDebugTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
         final prefs = await SharedPreferences.getInstance();
         final isActive = prefs.getBool("isAppActive") ?? false;
-        print("[STATE CHECK] App active: $isActive at ${DateTime.now()}");
+        debugPrint("[STATE CHECK] App active: $isActive at ${DateTime.now()}");
       });
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    print('===============================================');
-    print('APP LIFECYCLE CHANGED: $state');
-    print('Time: ${DateTime.now()}');
-    print('===============================================');
+    debugPrint('===============================================');
+    debugPrint('APP LIFECYCLE CHANGED: $state');
+    debugPrint('Time: ${DateTime.now()}');
+    debugPrint('===============================================');
     switch (state) {
       case AppLifecycleState.resumed:
         _setAppActive(true);
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           await processPendingNavigation(from: 'app_lifecycle_resumed');
         });
-        print('→ App RESUMED - Background fetch DISABLED');
+        debugPrint('→ App RESUMED - Background fetch DISABLED');
         break;
       case AppLifecycleState.inactive:
-        print('→ App INACTIVE (transitional state)');
+        debugPrint('→ App INACTIVE (transitional state)');
         break;
       case AppLifecycleState.paused:
         _setAppActive(false);
-        print('→ App PAUSED - Background fetch ENABLED');
+        debugPrint('→ App PAUSED - Background fetch ENABLED');
         break;
       case AppLifecycleState.detached:
         _setAppActive(false);
-        print('→ App DETACHED - Background fetch ENABLED');
+        debugPrint('→ App DETACHED - Background fetch ENABLED');
         break;
       case AppLifecycleState.hidden:
         _setAppActive(false);
-        print('→ App HIDDEN - Background fetch ENABLED');
+        debugPrint('→ App HIDDEN - Background fetch ENABLED');
         break;
     }
   }
@@ -697,12 +701,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool("isAppActive", active);
       await prefs.reload();
-      print("[APP STATE] Set to: ${active ? 'ACTIVE' : 'INACTIVE'}");
+      debugPrint("[APP STATE] Set to: ${active ? 'ACTIVE' : 'INACTIVE'}");
       if (active) {
         await resetBadgeCounter();
       }
     } catch (e) {
-      print("[ERROR] Failed to set app state: $e");
+      debugPrint("[ERROR] Failed to set app state: $e");
     }
   }
 

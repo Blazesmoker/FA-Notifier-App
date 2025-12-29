@@ -9,8 +9,10 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
+import '../services/fa_thumbnail_parser.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import '../widgets/heart_animation.dart';
+import '../widgets/fa_thumbnail_display.dart';
 import 'openpost.dart';
 
 class FASearchImage extends StatefulWidget {
@@ -24,10 +26,10 @@ class FASearchImage extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _FASearchImageState createState() => _FASearchImageState();
+  FASearchImageState createState() => FASearchImageState();
 }
 
-class _FASearchImageState extends State<FASearchImage> {
+class FASearchImageState extends State<FASearchImage> {
   int currentPage = 1;
   bool isLoading = false;
   List<Map<String, dynamic>> images = [];
@@ -49,6 +51,8 @@ class _FASearchImageState extends State<FASearchImage> {
 
   bool _sfwEnabled = true;
 
+  int _detailsEpoch = 0;
+  final Map<String, Future<void>> _detailsInFlight = {};
 
   @override
   void initState() {
@@ -71,6 +75,19 @@ class _FASearchImageState extends State<FASearchImage> {
     super.dispose();
   }
 
+  Future<void> scrollToTop({bool animate = true}) async {
+    if (!_scrollController.hasClients) return;
+    if (!animate) {
+      _scrollController.jumpTo(0);
+      return;
+    }
+    await _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   @override
   void didUpdateWidget(covariant FASearchImage oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -81,6 +98,9 @@ class _FASearchImageState extends State<FASearchImage> {
   }
 
   Future<void> _refreshImages() async {
+    _detailsEpoch++;
+    _detailsInFlight.clear();
+
     setState(() {
       images.clear();
       imageUrls.clear();
@@ -139,17 +159,11 @@ class _FASearchImageState extends State<FASearchImage> {
         _preloadImagesImmediately(filteredImages);
         isLoading = false;
       });
-
-      // Pre-fetch details (fav/unfav) lazily
-      for (int i = 0; i < filteredImages.length; i++) {
-        _prefetchItemDetails(images.length - filteredImages.length + i);
-      }
     } catch (e) {
       debugPrint('Error fetching images: $e');
       setState(() {
         isLoading = false;
       });
-
     }
   }
 
@@ -233,44 +247,22 @@ class _FASearchImageState extends State<FASearchImage> {
 
   Future<List<Map<String, dynamic>>> parseHtml(String html) async {
     final document = html_parser.parse(html);
-    final figureElements = document.querySelectorAll('figure.t-image');
-
+    final figures = FaThumbnailParser.selectThumbnailFigures(document);
     final imageMetadata = <Map<String, dynamic>>[];
 
-    for (var figure in figureElements) {
-      final aTag = figure.querySelector('a');
-      final imgElement =
-      figure.querySelector('img[src^="//t.furaffinity.net/"]');
-
-      if (aTag != null && imgElement != null) {
-        final String? postUrl = aTag.attributes['href'];
-        final String? thumbnailUrl = imgElement.attributes['src'];
-        final String? dataWidth = imgElement.attributes['data-width'];
-        final String? dataHeight = imgElement.attributes['data-height'];
-
-        if (postUrl != null &&
-            thumbnailUrl != null &&
-            dataWidth != null &&
-            dataHeight != null) {
-          final width = double.tryParse(dataWidth);
-          final height = double.tryParse(dataHeight);
-
-          if (width != null && height != null) {
-            final regex = RegExp(r'/view/(\d+)/');
-            final match = regex.firstMatch(postUrl);
-            final uniqueNumber =
-            match != null && match.groupCount >= 1 ? match.group(1)! : 'Unknown';
-
-            imageMetadata.add({
-              'url': 'https:$thumbnailUrl',
-              'width': width,
-              'height': height,
-              'postUrl': postUrl,
-              'uniqueNumber': uniqueNumber,
-            });
-          }
-        }
-      }
+    for (final fig in figures) {
+      final data = FaThumbnailParser.extract(fig);
+      if (data == null) continue;
+      imageMetadata.add({
+        'url': data['thumbnailUrl'],
+        'width': data['width'],
+        'height': data['height'],
+        'postUrl': data['postUrl'],
+        'uniqueNumber': data['uniqueNumber'],
+        'rating': data['rating'],
+        'title': data['title'],
+        'author': data['author'],
+      });
     }
 
     return imageMetadata;
@@ -320,22 +312,55 @@ class _FASearchImageState extends State<FASearchImage> {
     }
   }
 
-  Future<void> _prefetchItemDetails(int index) async {
-    if (index < 0 || index >= images.length) return;
+  Future<void> _ensurePostDetails({
+    required String uniqueNumber,
+    required String postUrl,
+  }) async {
+    if (uniqueNumber.isEmpty || postUrl.isEmpty) return;
 
-    final postUrl = images[index]['postUrl'] ?? '';
-    if (postUrl.isEmpty) return;
+    final hasFav = _favUrls[uniqueNumber]?.isNotEmpty == true;
+    final hasUnfav = _unfavUrls[uniqueNumber]?.isNotEmpty == true;
+    if (hasFav || hasUnfav) return;
 
-    final details = await _fetchPostDetails(postUrl);
-    if (details != null && mounted) {
-      final uniqueNumber = images[index]['uniqueNumber'];
+    final existing = _detailsInFlight[uniqueNumber];
+    if (existing != null) {
+      await existing;
+      return;
+    }
+
+    final int epoch = _detailsEpoch;
+
+    final future = () async {
+      final details = await _fetchPostDetails(postUrl);
+      if (!mounted) return;
+      if (epoch != _detailsEpoch) return;
+      if (details == null) return;
+
+      final favUrl = details['favUrl'] ?? '';
+      final unfavUrl = details['unfavUrl'] ?? '';
+
       setState(() {
-        _favUrls[uniqueNumber] = details['favUrl']!;
-        _unfavUrls[uniqueNumber] = details['unfavUrl']!;
-        if ((details['unfavUrl'] ?? '').isNotEmpty) {
+        _favUrls[uniqueNumber] = favUrl;
+        _unfavUrls[uniqueNumber] = unfavUrl;
+
+        if (unfavUrl.isNotEmpty && favUrl.isEmpty) {
+          _favoritedImages.add(uniqueNumber);
+        } else if (favUrl.isNotEmpty && unfavUrl.isEmpty) {
+          _favoritedImages.remove(uniqueNumber);
+        } else if (unfavUrl.isNotEmpty) {
           _favoritedImages.add(uniqueNumber);
         }
       });
+    }();
+
+    _detailsInFlight[uniqueNumber] = future;
+
+    try {
+      await future;
+    } finally {
+      if (_detailsInFlight[uniqueNumber] == future) {
+        _detailsInFlight.remove(uniqueNumber);
+      }
     }
   }
 
@@ -396,18 +421,20 @@ class _FASearchImageState extends State<FASearchImage> {
   }
 
   Future<void> _toggleFavorite(String uniqueNumber, bool wantFavorite) async {
-    bool hasFav =
-        _favUrls.containsKey(uniqueNumber) && _favUrls[uniqueNumber]!.isNotEmpty;
-    bool hasUnfav =
-        _unfavUrls.containsKey(uniqueNumber) && _unfavUrls[uniqueNumber]!.isNotEmpty;
+    final idx = images.indexWhere((e) => e['uniqueNumber'] == uniqueNumber);
+    if (idx == -1) return;
+
+    final postUrl = (images[idx]['postUrl'] ?? '') as String;
+    if (postUrl.isEmpty) return;
+
+    await _ensurePostDetails(uniqueNumber: uniqueNumber, postUrl: postUrl);
+
+    final hasFav = _favUrls[uniqueNumber]?.isNotEmpty == true;
+    final hasUnfav = _unfavUrls[uniqueNumber]?.isNotEmpty == true;
 
     if (!hasFav && !hasUnfav) {
-      final idx = images.indexWhere((e) => e['uniqueNumber'] == uniqueNumber);
-      if (idx != -1) {
-        await _prefetchItemDetails(idx);
-        hasFav = _favUrls[uniqueNumber]!.isNotEmpty;
-        hasUnfav = _unfavUrls[uniqueNumber]!.isNotEmpty;
-      }
+      debugPrint('DEBUG: No fav/unfav URLs found for $uniqueNumber');
+      return;
     }
 
     final isCurrentlyFav = _favoritedImages.contains(uniqueNumber);
@@ -427,7 +454,6 @@ class _FASearchImageState extends State<FASearchImage> {
       return;
     }
 
-    // optimistic UI
     setState(() {
       if (wantFavorite) {
         _favoritedImages.add(uniqueNumber);
@@ -438,7 +464,6 @@ class _FASearchImageState extends State<FASearchImage> {
 
     final success = await _favoriteService.executePostWithRetry(urlToUse);
     if (!success) {
-      // rollback
       setState(() {
         if (wantFavorite) {
           _favoritedImages.remove(uniqueNumber);
@@ -447,13 +472,14 @@ class _FASearchImageState extends State<FASearchImage> {
         }
       });
       debugPrint('DEBUG: Failed to ${wantFavorite ? 'fav' : 'unfav'} $uniqueNumber.');
-    } else {
-      debugPrint('DEBUG: Successfully ${wantFavorite ? 'favored' : 'unfavored'} $uniqueNumber.');
-      final idx = images.indexWhere((e) => e['uniqueNumber'] == uniqueNumber);
-      if (idx != -1) {
-        await _prefetchItemDetails(idx);
-      }
+      return;
     }
+
+    debugPrint('DEBUG: Successfully ${wantFavorite ? 'favored' : 'unfavored'} $uniqueNumber.');
+
+    _favUrls[uniqueNumber] = '';
+    _unfavUrls[uniqueNumber] = '';
+    await _ensurePostDetails(uniqueNumber: uniqueNumber, postUrl: postUrl);
   }
 
   @override
@@ -565,6 +591,7 @@ class _FASearchImageState extends State<FASearchImage> {
 
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _FavSearchTile(
               item: left,
@@ -654,49 +681,67 @@ class _FavSearchTileState extends State<_FavSearchTile> {
   @override
   Widget build(BuildContext context) {
     final imageUrl = widget.item['url'] as String;
+    final String? rating = widget.item['rating'] as String?;
+    final String? title = widget.item['title'] as String?;
+    final String? author = widget.item['author'] as String?;
 
     return GestureDetector(
       onTap: widget.onTap,
       onLongPress: () {
         setState(() => _localFav = !_localFav);
       },
-      child: HeartAnimationWidget(
-        isFavorite: _localFav,
-        containerWidth: widget.width,
-        containerHeight: widget.height,
-        onDebounceComplete: (finalVal) {
-          widget.onFinalFavState(finalVal);
-        },
-        debounceDuration: const Duration(seconds: 3),
-        child: Stack(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8.0),
-              child: Image.network(
-                imageUrl,
-                width: widget.width,
-                height: widget.height,
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return buildEmptyPlaceholder(widget.width, widget.height);
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return buildEmptyPlaceholder(widget.width, widget.height);
-                },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          HeartAnimationWidget(
+            isFavorite: _localFav,
+            containerWidth: widget.width,
+            containerHeight: widget.height,
+            onDebounceComplete: (finalVal) {
+              widget.onFinalFavState(finalVal);
+            },
+            debounceDuration: const Duration(seconds: 3),
+            child: FaThumbnailOutline(
+              rating: rating,
+              borderRadius: 8.0,
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8.0),
+                    child: Image.network(
+                      imageUrl,
+                      width: widget.width,
+                      height: widget.height,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return buildEmptyPlaceholder(widget.width, widget.height);
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return buildEmptyPlaceholder(widget.width, widget.height);
+                      },
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: AnimatedOpacity(
+                      opacity: _localFav ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: const Icon(Icons.favorite, color: Colors.redAccent, size: 24),
+                    ),
+                  ),
+                ],
               ),
             ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: AnimatedOpacity(
-                opacity: _localFav ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 200),
-                child: const Icon(Icons.favorite, color: Colors.redAccent, size: 24),
-              ),
-            ),
-          ],
-        ),
+          ),
+          FaThumbnailCaption(
+            maxWidth: widget.width,
+            title: title,
+            author: author,
+          ),
+        ],
       ),
     );
   }

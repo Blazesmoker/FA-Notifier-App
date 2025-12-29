@@ -142,7 +142,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
 
       final info = await PackageInfo.fromPlatform();
       final current = info.version.trim(); // "1.2.3"
-      print('Current app version: $current');
+      debugPrint('Current app version: $current');
 
 
       final uri = Uri.parse(
@@ -155,7 +155,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
           'User-Agent': 'FA-Notifier/UpdateCheck',
         },
       );
-      print('GitHub API status: ${resp.statusCode}');
+      debugPrint('GitHub API status: ${resp.statusCode}');
 
       if (resp.statusCode == 200) {
 
@@ -172,10 +172,10 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
           _updateAvailable     = ghVer != current;
         });
 
-        print('Remote version: $ghVer; show update = $_updateAvailable');
+        debugPrint('Remote version: $ghVer; show update = $_updateAvailable');
       } else {
         // optional: handle rate-limit or error
-        print('Failed to fetch release: ${resp.body}');
+        debugPrint('Failed to fetch release: ${resp.body}');
       }
     } catch (e, st) {
       debugPrint('_checkForUpdate error: $e\n$st');
@@ -216,7 +216,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
         widget.onNotesCountChanged(actualNotesCount);
         widget.onNotificationsUpdated(_notifications);
 
-        print(
+        debugPrint(
           'Drawer: Notifications - '
           'Submissions: ${_notifications.submissions}, '
           'Watches: ${_notifications.watches}, '
@@ -261,9 +261,9 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
             notes: rawNotes,
           ),
         );
-        print(
+        debugPrint(
             '[HomeDrawer] Last-seen counts: S:${diff.previous.submissions} W:${diff.previous.watches} C:${diff.previous.comments} F:${diff.previous.favorites} J:${diff.previous.journals} N:${diff.previous.notes}');
-        print(
+        debugPrint(
             '[HomeDrawer] Increased by:     S:${diff.increasedBy.submissions} W:${diff.increasedBy.watches} C:${diff.increasedBy.comments} F:${diff.increasedBy.favorites} J:${diff.increasedBy.journals} N:${diff.increasedBy.notes}');
 
         final NotificationCounts filteredCounts = NotificationCounts(
@@ -304,16 +304,16 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
               'activities',
             );
 
-            print(
+            debugPrint(
                 '[HomeDrawer] Sent new activities notification: $messageBody');
           } else {
-            print(
+            debugPrint(
                 '[HomeDrawer] Activities sound+vibration disabled; not showing notification.');
           }
         }
       }
     } catch (e) {
-      print('Error fetching notifications: $e');
+      debugPrint('Error fetching notifications: $e');
     } finally {
       _isFetchingNotifications = false;
     }
@@ -595,7 +595,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
         cleanUrl = 'https://$cleanUrl';
       }
 
-      print('Processing URL: $cleanUrl');
+      debugPrint('Processing URL: $cleanUrl');
 
       final Uri uri = Uri.parse(cleanUrl);
       String urlToMatch = uri.toString();
@@ -604,10 +604,10 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
         urlToMatch = urlToMatch.substring(0, urlToMatch.length - 1);
       }
 
-      print('URL to match: $urlToMatch');
+      debugPrint('URL to match: $urlToMatch');
 
       if (!context.mounted) {
-        print('Context not mounted, cannot navigate');
+        debugPrint('Context not mounted, cannot navigate');
         return;
       }
 
@@ -617,7 +617,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
       );
       final Match? galleryMatch = galleryFolderRegex.firstMatch(urlToMatch);
       if (galleryMatch != null) {
-        print('Matched gallery folder link');
+        debugPrint('Matched gallery folder link');
         final String tappedUsername = galleryMatch.group(1)!;
         final String folderNumber = galleryMatch.group(2)!;
         final String folderName = galleryMatch.group(3)!;
@@ -644,9 +644,9 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
       );
       final Match? userMatch = userRegex.firstMatch(urlToMatch);
       if (userMatch != null) {
-        print('Matched user link');
+        debugPrint('Matched user link');
         final String tappedUsername = userMatch.group(1)!;
-        print('Navigating to user: $tappedUsername');
+        debugPrint('Navigating to user: $tappedUsername');
 
         await Navigator.push(
           context,
@@ -697,7 +697,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
       );
       final Match? viewMatch = viewRegex.firstMatch(urlToMatch);
       if (viewMatch != null) {
-        print('Matched submission link');
+        debugPrint('Matched submission link');
         final String submissionId = viewMatch.group(1)!;
 
         await Navigator.push(
@@ -711,10 +711,10 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
       }
 
       // 5. Fallback: open externally
-      print('No pattern matched, opening externally: $cleanUrl');
+      debugPrint('No pattern matched, opening externally: $cleanUrl');
       await launchUrlString(cleanUrl, mode: LaunchMode.externalApplication);
     } catch (e) {
-      print('Error handling FA link: $e');
+      debugPrint('Error handling FA link: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1015,7 +1015,7 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
                                   : filename;
                               final String lowercaseNickname =
                                   nickname.toLowerCase();
-                              print("Extracted nickname: $lowercaseNickname");
+                              debugPrint("Extracted nickname: $lowercaseNickname");
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(

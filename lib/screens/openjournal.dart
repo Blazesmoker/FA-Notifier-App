@@ -101,6 +101,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   late final OpenJournalApiService _api;
   final TextEditingController _commentController = TextEditingController();
   bool _isTyping = false;
+  final ValueNotifier<bool> _showScrollToTopNotifier = ValueNotifier<bool>(false);
 
   String? authorDisplayName;
   String? authorUserName;
@@ -158,6 +159,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _scrollController.addListener(_onScroll);
     _api = OpenJournalApiService(_secureStorage);
     _fetchPostDetailsNew().then((_) {
       _fetchUserPageLinksNew(); // fire & forget
@@ -169,8 +171,17 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _commentController.dispose();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _showScrollToTopNotifier.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final shouldShow = _scrollController.offset > 350;
+    if (shouldShow == _showScrollToTopNotifier.value) return;
+    _showScrollToTopNotifier.value = shouldShow;
   }
 
   @override
@@ -508,10 +519,10 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
           showAppSnackBar(context, "Comment successfully hidden!", backgroundColor: Colors.green);
           await _fetchPostDetailsNew();
         } else {
-          print('Failed to hide comment. Status code: ${response.statusCode}');
+          debugPrint('Failed to hide comment. Status code: ${response.statusCode}');
         }
       } catch (e) {
-        print('Error hiding comment: $e');
+        debugPrint('Error hiding comment: $e');
       }
     }
   }
@@ -552,10 +563,10 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
           showAppSnackBar(context, "Comment successfully un-hidden!", backgroundColor: Colors.green);
           await _fetchPostDetailsNew();
         } else {
-          print('Failed to unhide comment. Status code: ${response.statusCode}');
+          debugPrint('Failed to unhide comment. Status code: ${response.statusCode}');
         }
       } catch (e) {
-        print('Error un-hiding comment: $e');
+        debugPrint('Error un-hiding comment: $e');
       }
     }
   }
@@ -598,6 +609,8 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
+            position: PopupMenuPosition.under,
+            offset: const Offset(0, 8),
             onSelected: (value) {
               switch (value) {
                 case 'share':
@@ -753,8 +766,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                 selectionHandleColor: const Color(0xFFE09321),
                               ),
                             ),
-                        child: SelectionArea(
-                          child: html_pkg.Html(
+                        child: html_pkg.Html(
                             data: submissionDescription ?? '',
                             style: {
                               "body": html_pkg.Style(
@@ -931,8 +943,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                 },
                               ),
                             ],
-                          ),
-                        )
+                          )
                       )
 
 
@@ -1063,25 +1074,42 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
             ),
             child: Row(
               children: [
-                if (comments.isNotEmpty)
-                  SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: FloatingActionButton.small(
-                      heroTag: 'journal_scroll_top',
-                      backgroundColor: const Color(0xFFE09321),
-                      elevation: 0,
-                      onPressed: () {
-                        _scrollController.animateTo(
-                          0,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOut,
+                ClipRect(
+                  child: AnimatedSize(
+                    duration: const Duration(milliseconds: 210),
+                    curve: Curves.easeInOut,
+                    alignment: Alignment.centerLeft,
+                    child: ValueListenableBuilder<bool>(
+                      valueListenable: _showScrollToTopNotifier,
+                      builder: (context, show, _) {
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (show)
+                              SizedBox(
+                                width: 36,
+                                height: 36,
+                                child: FloatingActionButton.small(
+                                  heroTag: 'journal_scroll_top',
+                                  backgroundColor: const Color(0xFFE09321),
+                                  elevation: 0,
+                                  onPressed: () {
+                                    _scrollController.animateTo(
+                                      0,
+                                      duration: const Duration(milliseconds: 300),
+                                      curve: Curves.easeOut,
+                                    );
+                                  },
+                                  child: const Icon(Icons.arrow_upward, size: 18),
+                                ),
+                              ),
+                            if (show) const SizedBox(width: 8),
+                          ],
                         );
                       },
-                      child: const Icon(Icons.arrow_upward, size: 18),
                     ),
                   ),
-                const SizedBox(width: 8),
+                ),
                 Expanded(
                   child: GestureDetector(
                     onTap: () async {

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter/cupertino.dart';
 
 class CacheMonitorService {
   static const int maxCacheSize = 100 * 1024 * 1024; // 100 MB
@@ -12,23 +13,23 @@ class CacheMonitorService {
 
   Future<void> checkStorageUsage() async {
     final cacheDir = await getTemporaryDirectory();
-    final dataDir = await getApplicationSupportDirectory(); // App's data directory
+    final dataDir = await getApplicationSupportDirectory();
 
     final cacheSize = await _getDirectorySize(cacheDir);
     final dataSize = await _getDirectorySize(dataDir);
 
-    print('Cache size: ${_formatBytes(cacheSize)}');
-    print('Data size: ${_formatBytes(dataSize)}');
+    debugPrint('Cache size: ${_formatBytes(cacheSize)}');
+    debugPrint('Data size: ${_formatBytes(dataSize)}');
 
     if (cacheSize > maxCacheSize) {
-      print('Cache exceeds limit. Clearing cache...');
+      debugPrint('Cache exceeds limit. Clearing cache...');
       await _clearCacheDirectory(cacheDir);
       await InAppWebViewController.clearAllCache();
 
     }
 
     if (dataSize > maxCacheSize) {
-      print('Data exceeds limit. Cleaning up app data...');
+      debugPrint('Data exceeds limit. Cleaning up app data...');
       await _clearDataDirectory(dataDir);
     }
   }
@@ -39,10 +40,10 @@ class CacheMonitorService {
         for (final file in cacheDir.listSync()) {
           await file.delete(recursive: true);
         }
-        print('Cache directory cleared.');
+        debugPrint('Cache directory cleared.');
       }
     } catch (e) {
-      print('Error clearing cache: $e');
+      debugPrint('Error clearing cache: $e');
     }
   }
 
@@ -56,10 +57,10 @@ class CacheMonitorService {
             await file.delete(recursive: true);
           }
         }
-        print('Data directory cleaned, except protected files.');
+        debugPrint('Data directory cleaned, except protected files.');
       }
     } catch (e) {
-      print('Error clearing data: $e');
+      debugPrint('Error clearing data: $e');
     }
   }
 
@@ -74,7 +75,7 @@ class CacheMonitorService {
         }
       }
     } catch (e) {
-      print('Error calculating size: $e');
+      debugPrint('Error calculating size: $e');
     }
     return size;
   }

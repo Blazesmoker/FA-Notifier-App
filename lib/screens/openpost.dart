@@ -27,6 +27,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:linkify/linkify.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../app_theme.dart';
 import '../parsing_utils.dart';
 import '../providers/timezone_provider.dart';
 import '../utils/html_tags_debug.dart';
@@ -102,6 +103,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   String? fullViewImageUrl;
   String? submissionDescription;
   DateTime? publicationTime;
+  String? rating; // "general" | "mature" | "adult" | null
   int favoritesCount = 0;
   int viewCount = 0;
   int commentsCount = 0;
@@ -134,6 +136,12 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   String? size;
   String? fileSize;
   List<String> keywords = [];
+  List<FaPostTag> keywordTags = [];
+  List<FaPostTag> metaKeywordTags = [];
+  String? tagBlocklistNonce;
+  bool _showTagsSection = false;
+  final Set<String> _tagToggleInFlight = <String>{};
+  final ValueNotifier<bool> _showScrollToTopNotifier = ValueNotifier<bool>(false);
   bool _isTyping = false;
   String? _blockKey;
   String? _unblockKey;
@@ -155,6 +163,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _scrollController.addListener(_onScroll);
 
     Future.wait([
       _loadSfwEnabled(),
@@ -170,7 +179,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _commentController.dispose();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _showScrollToTopNotifier.dispose();
     super.dispose();
   }
 
@@ -191,6 +202,13 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       return 'https://www.furaffinity.net$url';
     }
     return url;
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final shouldShow = _scrollController.offset > 350;
+    if (shouldShow == _showScrollToTopNotifier.value) return;
+    _showScrollToTopNotifier.value = shouldShow;
   }
 
   Future<void> _loadSfwEnabled() async {
@@ -443,6 +461,256 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         );
       },
     );
+  }
+
+  Widget _buildTagsPanel() {
+    final bool hasAnyTags = keywordTags.isNotEmpty || metaKeywordTags.isNotEmpty;
+
+    // Guard: some posts have *only* meta keywords. In that case, older parsing
+    // fallbacks could end up treating the meta section as normal keywords,
+    // making the UI show the same chips twice. If both groups are identical,
+    // show only the meta group.
+    final Set<String> keywordSet =
+        keywordTags.map((t) => t.name.toLowerCase()).toSet();
+    final Set<String> metaSet =
+        metaKeywordTags.map((t) => t.name.toLowerCase()).toSet();
+    final bool hideKeywordGroup = keywordSet.isNotEmpty &&
+        metaSet.isNotEmpty &&
+        keywordSet.length == metaSet.length &&
+        keywordSet.containsAll(metaSet);
+
+    if (!hasAnyTags) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+        child: Text(
+          'No keywords available.',
+          style: TextStyle(fontSize: 13, color: Colors.grey),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12, 10, 12, metaKeywordTags.isNotEmpty ? 4 : 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (keywordTags.isNotEmpty && !hideKeywordGroup)
+            _buildTagsGroup(title: 'Keywords', tags: keywordTags, allowSearch: true),
+          if (metaKeywordTags.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _buildTagsGroup(title: 'Meta Keywords', tags: metaKeywordTags, allowSearch: false),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTagsGroup({
+    required String title,
+    required List<FaPostTag> tags,
+    required bool allowSearch,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: tags
+              .map((t) => _buildTagPill(t, allowSearch: allowSearch))
+              .toList(growable: false),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTagPill(FaPostTag tag, {required bool allowSearch}) {
+    final bool inFlight = _tagToggleInFlight.contains(tag.name);
+    final bool isBlocked = tag.isBlocked;
+
+    final Color accent = isBlocked ? Colors.redAccent : const Color(0xFFE09321);
+    final Color border = isBlocked ? accent.withOpacity(0.55) : const Color(0xFF2A2A2A);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF151515),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: border, width: 1),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Tooltip(
+            message: isBlocked
+                ? 'Click to remove this tag from the blocklist!'
+                : 'Click to add this tag to the blocklist!',
+            child: InkWell(
+              onTap: inFlight ? null : () => _toggleTagBlock(tag),
+              borderRadius: BorderRadius.circular(999),
+              child: Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: inFlight
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                          ),
+                        )
+                      : Icon(
+                          isBlocked ? Icons.remove : Icons.add,
+                          size: 16,
+                          color: Colors.black,
+                        ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          InkWell(
+            onTap: (allowSearch && tag.isSearchable) ? () => _navigateToSearch(tag.name) : null,
+            child: Text(
+              tag.name,
+              style: TextStyle(
+                fontSize: 13,
+                color: (allowSearch && tag.isSearchable) ? Colors.white : Colors.white70,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _toggleTagBlock(FaPostTag tag) async {
+    if (_tagToggleInFlight.contains(tag.name)) return;
+
+    if (tagBlocklistNonce == null || tagBlocklistNonce!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tag blocking is unavailable right now (missing nonce).'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _tagToggleInFlight.add(tag.name));
+
+    try {
+      final shouldBlock = !tag.isBlocked;
+      await _sendTagBlocklistRequest(tag.name, shouldBlock: shouldBlock);
+
+      // Update UI immediately so +/− changes without waiting for a full refresh.
+      _applyLocalTagBlockState(tag.name, isBlocked: shouldBlock);
+
+      // Refresh so the block/unblock state and blocked-content markers match FA.
+      await _fetchPostDetails();
+
+      // If the refreshed HTML didn't reflect the change yet, keep UI consistent.
+      _applyLocalTagBlockState(tag.name, isBlocked: shouldBlock);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            shouldBlock ? 'Tag blocked: ${tag.name}' : 'Tag unblocked: ${tag.name}',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to ${tag.isBlocked ? 'unblock' : 'block'} tag: ${tag.name}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _tagToggleInFlight.remove(tag.name));
+    }
+  }
+
+  void _applyLocalTagBlockState(String tagName, {required bool isBlocked}) {
+    bool updated = false;
+
+    FaPostTag copyWith(FaPostTag t) => FaPostTag(
+          name: t.name,
+          isBlocked: isBlocked,
+          isMeta: t.isMeta,
+          isSearchable: t.isSearchable,
+        );
+
+    final updatedKeywords = keywordTags.map((t) {
+      if (t.name != tagName) return t;
+      updated = true;
+      return copyWith(t);
+    }).toList(growable: false);
+
+    final updatedMeta = metaKeywordTags.map((t) {
+      if (t.name != tagName) return t;
+      updated = true;
+      return copyWith(t);
+    }).toList(growable: false);
+
+    if (!updated) return;
+    setState(() {
+      keywordTags = updatedKeywords;
+      metaKeywordTags = updatedMeta;
+    });
+  }
+
+  Future<void> _sendTagBlocklistRequest(String tagName, {required bool shouldBlock}) async {
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    final sfwValue = _sfwEnabled ? '1' : '0';
+
+    if (cookieA == null || cookieB == null) {
+      throw Exception('Not logged in.');
+    }
+    if (tagBlocklistNonce == null || tagBlocklistNonce!.isEmpty) {
+      throw Exception('Missing tag blocklist nonce.');
+    }
+
+    final url = 'https://www.furaffinity.net/route/tag_blocking';
+    final response = await httpClient.post(
+      Uri.parse(url),
+      headers: <String, String>{
+        'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        'Referer': 'https://www.furaffinity.net/view/${widget.uniqueNumber}/',
+        'Origin': 'https://www.furaffinity.net',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: <String, String>{
+        'action': shouldBlock ? 'add-tag' : 'remove-tag',
+        'key': tagBlocklistNonce!,
+        'tag_name': tagName,
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Tag blocklist request failed: ${response.statusCode}');
+    }
   }
 
   void _navigateToSearch(String keyword) {
@@ -763,6 +1031,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       submissionTitle = parsedPost.submissionTitle;
       fullViewImageUrl = parsedPost.fullViewImageUrl;
       submissionDescription = parsedPost.submissionDescription;
+      rating = parsedPost.rating;
 
       if (parsedPost.publicationTimeRaw != null &&
           parsedPost.publicationTimeRaw!.isNotEmpty) {
@@ -784,6 +1053,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       size = parsedPost.size;
       fileSize = parsedPost.fileSize;
       keywords = parsedPost.keywords;
+      keywordTags = parsedPost.keywordTags;
+      metaKeywordTags = parsedPost.metaKeywordTags;
+      tagBlocklistNonce = parsedPost.tagBlocklistNonce;
 
       imageWidth = parsedPost.imageWidth;
       imageHeight = parsedPost.imageHeight;
@@ -1651,10 +1923,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                   value: 'info',
                   child: Text('Info'),
                 ),
-                PopupMenuItem<String>(
-                  value: 'keywords',
-                  child: const Text('Keywords'),
-                ),
                 const PopupMenuItem<String>(
                   value: 'copy_link',
                   child: Text('Copy link'),
@@ -1713,9 +1981,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                     case 'info':
                       _showInfoDialog();
                       break;
-                    case 'keywords':
-                      _showKeywordsDialog();
-                      break;
                     case 'edit':
                       _showEditDialog();
                       break;
@@ -1743,29 +2008,31 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       ),
       resizeToAvoidBottomInset: true,
       // Build the main content in a Stack so it can overlay the loading indicator.
-    body: GestureDetector(
-    behavior: HitTestBehavior.opaque,
-      onTapDown: (_) {
-
+    body: Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) {
         _commentsSelectionKey.currentState?.clearSelection();
         _commentsSelectionKey.currentState?.hideToolbar();
       },
-    child: Stack(
+      child: Stack(
         children: [
-          RefreshIndicator(
-            onRefresh: () async {
-              // Re-fetch post details when the user pulls down.
-              await _fetchPostDetails();
-            },
-            child: SingleChildScrollView(
-              controller: _scrollController,
-              physics: Platform.isIOS
-                  ? const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics())
-                  : const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
-              padding: EdgeInsets.only(bottom: keyboardHeight + 0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
+          SelectionArea(
+            key: _commentsSelectionKey,
+            child: RefreshIndicator(
+              onRefresh: () async {
+                // Re-fetch post details when the user pulls down.
+                await _fetchPostDetails();
+              },
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: Platform.isIOS
+                    ? const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics())
+                    : const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
                   if (profileImageUrl != null && username != null)
                     Padding(
                       padding: const EdgeInsets.all(8.0),
@@ -1916,7 +2183,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                             ],
                           );
                           if (selected == 'download') {
-                            print("$fullViewImageUrl image2");
+                            debugPrint("$fullViewImageUrl image2");
                             await _downloadImage(context, fullViewImageUrl!);
 
                           } else if (selected == 'share') {
@@ -2280,6 +2547,23 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                   splashRadius: 24,
                                 ),
                               ),
+                              Expanded(
+                                child: IconButton(
+                                  icon: Icon(
+                                    Icons.numbers,
+                                    size: 26,
+                                    color: _showTagsSection
+                                        ? const Color(0xFFE09321)
+                                        : Colors.grey,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _showTagsSection = !_showTagsSection;
+                                    });
+                                  },
+                                  splashRadius: 24,
+                                ),
+                              ),
 
                               Expanded(
                                 child: IconButton(
@@ -2296,6 +2580,11 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                           ),
                         ),
 
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeInOut,
+                          child: _showTagsSection ? _buildTagsPanel() : const SizedBox.shrink(),
+                        ),
 
                       ],
                     ),
@@ -2310,15 +2599,11 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                     color: Color(0xFF111111),
                     thickness: 4.0,
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 0.0, vertical: 0.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          _buildCommentsSection(),
-                        ],
-                      ),
-                  )
+                      ],
+                    ),
+                  ),
+                  ..._buildCommentSlivers(),
+                  SliverToBoxAdapter(child: SizedBox(height: keyboardHeight)),
                 ],
               ),
             ),
@@ -2361,25 +2646,42 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
             ),
             child: Row(
               children: [
-                if (comments.isNotEmpty && isLoading)
-                  SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: FloatingActionButton.small(
-                      heroTag: 'scroll_top',
-                      backgroundColor: const Color(0xFFE09321),
-                      elevation: 0,
-                      onPressed: () {
-                        _scrollController.animateTo(
-                          0,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOut,
+                ClipRect(
+                  child: AnimatedSize(
+                    duration: const Duration(milliseconds: 210),
+                    curve: Curves.easeInOut,
+                    alignment: Alignment.centerLeft,
+                    child: ValueListenableBuilder<bool>(
+                      valueListenable: _showScrollToTopNotifier,
+                      builder: (context, show, _) {
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (show)
+                              SizedBox(
+                                width: 36,
+                                height: 36,
+                                child: FloatingActionButton.small(
+                                  heroTag: 'scroll_top',
+                                  backgroundColor: const Color(0xFFE09321),
+                                  elevation: 0,
+                                  onPressed: () {
+                                    _scrollController.animateTo(
+                                      0,
+                                      duration: const Duration(milliseconds: 300),
+                                      curve: Curves.easeOut,
+                                    );
+                                  },
+                                  child: const Icon(Icons.arrow_upward, size: 18),
+                                ),
+                              ),
+                            if (show) const SizedBox(width: 8),
+                          ],
                         );
                       },
-                      child: const Icon(Icons.arrow_upward, size: 18),
                     ),
                   ),
-                const SizedBox(width: 8),
+                ),
                 Expanded(
                   child: GestureDetector(
                     onTap: () async {
@@ -2404,16 +2706,15 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                           decoration: InputDecoration(
                             hintText: 'Add a comment...',
                             hintStyle: const TextStyle(color: Colors.white54),
-                            contentPadding: const EdgeInsets.symmetric(
-                                vertical: 8, horizontal: 16),
+                            contentPadding:
+                            const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                             filled: true,
                             fillColor: const Color(0xFF151515),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                               borderSide: BorderSide.none,
                             ),
-                            suffixIcon: const Icon(Icons.send,
-                                color: Colors.white54),
+                            suffixIcon: const Icon(Icons.send, color: Colors.white54),
                           ),
                         ),
                       ),
@@ -2431,6 +2732,19 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
 
   Widget _buildPublicationAndViewsRow() {
+    String? ratingLabel(String? r) {
+      switch (r) {
+        case 'general':
+          return 'General';
+        case 'mature':
+          return 'Mature';
+        case 'adult':
+          return 'Adult';
+        default:
+          return null;
+      }
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -2499,93 +2813,108 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
               ),
             ],
           ),
+        if (commentsCount >= 0 && ratingLabel(rating) != null)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 5.0),
+            child: Icon(Icons.circle, size: 4, color: Colors.grey),
+          ),
+        if (commentsCount >= 0 && ratingLabel(rating) != null)
+          Tooltip(
+            message: 'Rating: ${ratingLabel(rating)}',
+            child: Text(
+              ratingLabel(rating)!,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.ratingTextColor(rating) ?? Colors.white,
+              ),
+            ),
+          ),
       ],
     );
   }
   final _commentsSelectionKey = GlobalKey<SelectableRegionState>();
 
-
-
-  Widget _buildCommentsSection() {
+  List<Widget> _buildCommentSlivers() {
     if (comments.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.only(top: 10.0, bottom: 14.0, right: 8.0, left: 8.0),
-        child: const Text(
-          "No comments.",
-          style: TextStyle(fontSize: 16, color: Colors.grey),
+      return const [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.only(top: 10.0, bottom: 14.0, right: 8.0, left: 8.0),
+            child: Text(
+              "No comments.",
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+          ),
         ),
-      );
+      ];
     }
 
-    return SelectionArea(
-      key: _commentsSelectionKey,
-      child: Container(
-        color: Colors.black,
+    return [
+      SliverPadding(
         padding: const EdgeInsets.only(top: 8.0, bottom: 0.0, right: 8.0, left: 8.0),
-        child: ListView.builder(
-          shrinkWrap: true,
-          physics: Platform.isIOS
-              ? const NeverScrollableScrollPhysics(parent: ClampingScrollPhysics())
-              : const NeverScrollableScrollPhysics(parent: ClampingScrollPhysics()),
-          itemCount: comments.length,
-          itemBuilder: (context, index) {
-            final comment = comments[index];
-            return CommentWidget(
-              key: ValueKey(comment['commentId'] ?? index),
-              comment: comment,
-              onHide: () {
-                final hideLink = comment['hideLink'] as String?;
-                final cId = comment['commentId'] as String?;
-                if (hideLink != null && cId != null) {
-                  hideComment(hideLink, cId);
-                }
-              },
-              onEdit: () {
-                if (comment['editLink'] != null) {
-                  Navigator.push(
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final comment = comments[index];
+              return CommentWidget(
+                key: ValueKey(comment['commentId'] ?? index),
+                comment: comment,
+                onHide: () {
+                  final hideLink = comment['hideLink'] as String?;
+                  final cId = comment['commentId'] as String?;
+                  if (hideLink != null && cId != null) {
+                    hideComment(hideLink, cId);
+                  }
+                },
+                onEdit: () {
+                  if (comment['editLink'] != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => EditCommentScreen(
+                          comment: comment,
+                          editLink: comment['editLink'],
+                          onUpdateComment: (updatedText) {
+                            setState(() {
+                              comment['text'] = updatedText;
+                            });
+                          },
+                        ),
+                      ),
+                    );
+                  }
+                },
+                onReply: () async {
+                  final result = await Navigator.push<bool>(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => EditCommentScreen(
+                      builder: (context) => ReplyScreen(
                         comment: comment,
-                        editLink: comment['editLink'],
-                        onUpdateComment: (updatedText) {
-                          setState(() {
-                            comment['text'] = updatedText;
-                          });
-                        },
+                        uniqueNumber: widget.uniqueNumber,
+                        isClassic: _isClassicUserPage,
+                        onSendReply: (_) {},
                       ),
                     ),
                   );
-                }
-              },
-              onReply: () async {
-                final result = await Navigator.push<bool>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ReplyScreen(
-                      comment: comment,
-                      uniqueNumber: widget.uniqueNumber,
-                      isClassic: _isClassicUserPage,
-                      onSendReply: (_) {},
-                    ),
-                  ),
-                );
-                if (result == true) {
-                  _fetchPostDetails();
-                }
-              },
-              onUnhide: (comment['deleted'] == true && comment['hideLink'] != null)
-                  ? () => _unhideComment(comment['hideLink'], "")
-                  : null,
-              handleLink: (url) async {
-                final commentHtml = comment['commentHtml'] ?? '';
-                await _handleCommentLink(context, url, commentHtml);
-              },
-            );
-          },
+                  if (result == true) {
+                    _fetchPostDetails();
+                  }
+                },
+                onUnhide: (comment['deleted'] == true && comment['hideLink'] != null)
+                    ? () => _unhideComment(comment['hideLink'], "")
+                    : null,
+                handleLink: (url) async {
+                  final commentHtml = comment['commentHtml'] ?? '';
+                  await _handleCommentLink(context, url, commentHtml);
+                },
+              );
+            },
+            childCount: comments.length,
+          ),
         ),
       ),
-    );
+    ];
   }
 }
 

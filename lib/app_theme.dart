@@ -18,6 +18,46 @@ class AppTheme {
   static const Color spacer = Color(0xFF242424);
   static const String fontName = 'WorkSans';
 
+  // Thumbnail display
+  static const Color ratingGeneralOutline = Color(0xFF333333);
+  static const Color ratingMatureOutline = Color(0xFF697CC1);
+  static const Color ratingAdultOutline = Color(0xFF971C1C);
+  static const double thumbnailRatingOutlineWidth = 1.6;
+
+  static const Color ratingGeneralText = Color(0xFFFAF8F6);
+  static const Color ratingMatureText = Color(0xFFB0E9D5);
+  static const Color ratingAdultText = Color(0xFFD26466);
+
+  /// Returns the outline color for a given FA rating string.
+  /// rating: "general" | "mature" | "adult"
+  static Color? thumbnailRatingOutlineColor(String? rating) {
+    switch (rating) {
+      case 'general':
+        return ratingGeneralOutline;
+      case 'mature':
+        return ratingMatureOutline;
+      case 'adult':
+        return ratingAdultOutline;
+      default:
+        return null;
+    }
+  }
+
+  /// Returns the text color for a given FA rating string.
+  /// rating: "general" | "mature" | "adult"
+  static Color? ratingTextColor(String? rating) {
+    switch (rating) {
+      case 'general':
+        return ratingGeneralText;
+      case 'mature':
+        return ratingMatureText;
+      case 'adult':
+        return ratingAdultText;
+      default:
+        return null;
+    }
+  }
+
   static const TextTheme textTheme = TextTheme(
     headlineLarge: display1,
     headlineMedium: headline,
@@ -105,12 +145,18 @@ class AppTheme {
           selectionColor: Color(0xFFE09321)
       ),
 
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
+
       colorScheme: ColorScheme.dark(
         primary: darkText,
         onPrimary: white,
         surface: cardBackground,
-        background: background,
-        onBackground: white,
+        onSurface: white,
       ),
     );
   }

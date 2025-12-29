@@ -54,12 +54,12 @@ class _ReplyScreenState extends State<ReplyScreen> {
       replyId = widget.comment['commentId'];
     }
 
-    // Debug prints
-    print("Final sending parameters:");
-    print("Mode: ${widget.isClassic ? 'Classic' : 'Modern'}");
-    print("Submission ID: ${widget.uniqueNumber}");
-    print("Reply ID (to be sent as 'replyto'): $replyId");
-    print("Message: $replyText");
+    // Debug debugPrints
+    debugPrint("Final sending parameters:");
+    debugPrint("Mode: ${widget.isClassic ? 'Classic' : 'Modern'}");
+    debugPrint("Submission ID: ${widget.uniqueNumber}");
+    debugPrint("Reply ID (to be sent as 'replyto'): $replyId");
+    debugPrint("Message: $replyText");
 
     try {
       bool success = await submitCommentOrReply(
@@ -161,10 +161,10 @@ class _ReplyScreenState extends State<ReplyScreen> {
       }
     }
 
-    // Debug prints
-    print("Sending POST request:");
-    print("POST URL: $postUrl");
-    print("Request Body: $body");
+    // Debug debugPrints
+    debugPrint("Sending POST request:");
+    debugPrint("POST URL: $postUrl");
+    debugPrint("Request Body: $body");
 
 
     Map<String, String> headers = {
@@ -184,8 +184,8 @@ class _ReplyScreenState extends State<ReplyScreen> {
       body: body,
     );
 
-    print('Status Code: ${response.statusCode}');
-    print('Response Body: ${response.body}');
+    debugPrint('Status Code: ${response.statusCode}');
+    debugPrint('Response Body: ${response.body}');
 
     if (response.statusCode == 302 ||
         response.body.contains('Your comment has been posted')) {

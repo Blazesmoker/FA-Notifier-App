@@ -14,6 +14,7 @@ class OpenPostParseResult {
     required this.fullViewImageUrl,
     required this.submissionDescription,
     required this.publicationTimeRaw,
+    required this.rating,
     required this.favoritesCount,
     required this.viewCount,
     required this.commentsCount,
@@ -27,6 +28,9 @@ class OpenPostParseResult {
     required this.size,
     required this.fileSize,
     required this.keywords,
+    required this.keywordTags,
+    required this.metaKeywordTags,
+    required this.tagBlocklistNonce,
     required this.imageWidth,
     required this.imageHeight,
   });
@@ -39,6 +43,8 @@ class OpenPostParseResult {
   final String? fullViewImageUrl;
   final String? submissionDescription;
   final String? publicationTimeRaw;
+  /// "general" | "mature" | "adult" | null
+  final String? rating;
   final int favoritesCount;
   final int viewCount;
   final int commentsCount;
@@ -52,8 +58,25 @@ class OpenPostParseResult {
   final String? size;
   final String? fileSize;
   final List<String> keywords;
+  final List<FaPostTag> keywordTags;
+  final List<FaPostTag> metaKeywordTags;
+  final String? tagBlocklistNonce;
   final double? imageWidth;
   final double? imageHeight;
+}
+
+class FaPostTag {
+  const FaPostTag({
+    required this.name,
+    required this.isBlocked,
+    required this.isMeta,
+    required this.isSearchable,
+  });
+
+  final String name;
+  final bool isBlocked;
+  final bool isMeta;
+  final bool isSearchable;
 }
 
 class OpenPostApiService {
@@ -195,6 +218,45 @@ class OpenPostApiService {
     }
     final parsedCommentsCount = int.tryParse(commentsCountElem?.text.trim() ?? '0') ?? 0;
 
+    // Rating (General/Mature/Adult)
+    String? rating;
+    dom.Element? ratingElem =
+        logQuery(document, '.rating .font-large') ??
+            logQuery(document, 'span[class*="c-contentRating--"]');
+    if (ratingElem == null) {
+      // Classic fallback: parse from stats container labels.
+      final statsContainer = logQuery(document, 'td.alt1.stats-container');
+      if (statsContainer != null) {
+        final boldElements = statsContainer.getElementsByTagName('b');
+        for (final b in boldElements) {
+          if (b.text.trim() == 'Rating:') {
+            final nodes = b.parent?.nodes;
+            if (nodes != null) {
+              final index = nodes.indexOf(b);
+              if (index != -1 && index < nodes.length - 1) {
+                final ratingText = nodes[index + 1].text?.trim().toLowerCase() ?? '';
+                if (ratingText.contains('general')) rating = 'general';
+                if (ratingText.contains('mature')) rating = 'mature';
+                if (ratingText.contains('adult')) rating = 'adult';
+              }
+            }
+            break;
+          }
+        }
+      }
+    }
+    if (rating == null && ratingElem != null) {
+      if (ratingElem.classes.contains('c-contentRating--general')) rating = 'general';
+      if (ratingElem.classes.contains('c-contentRating--mature')) rating = 'mature';
+      if (ratingElem.classes.contains('c-contentRating--adult')) rating = 'adult';
+    }
+    if (rating == null && ratingElem != null) {
+      final t = ratingElem.text.trim().toLowerCase();
+      if (t.contains('general')) rating = 'general';
+      if (t.contains('mature')) rating = 'mature';
+      if (t.contains('adult')) rating = 'adult';
+    }
+
     // Info section
     final infoSection = logQuery(document, 'section.info.text, td.alt1.stats-container');
     String? category;
@@ -306,21 +368,48 @@ class OpenPostApiService {
       }
     }
 
-    // Keywords
-    var tagsSection = logQuery(document, 'section.tags-row') ?? logQuery(document, '#keywords');
-    final List<String> keywords = [];
-    if (tagsSection != null) {
-      var tagElems = tagsSection.querySelectorAll('span.tags a[href^="/search/@keywords"]');
-      if (tagElems.isEmpty) {
-        tagElems = tagsSection.querySelectorAll('a[href*="/search/"]');
-      }
-      for (final t in tagElems) {
-        final kw = t.text.trim();
-        if (kw.isNotEmpty && !keywords.contains(kw)) {
-          keywords.add(kw);
-        }
-      }
-    }
+    // Keywords / Meta Keywords
+    final bodyElem = document.querySelector('body');
+    final tagBlocklistNonce =
+        bodyElem?.attributes['data-tag-blocklist-nonce']?.trim();
+    final tagBlocklistRaw = bodyElem?.attributes['data-tag-blocklist'] ?? '';
+    final blockedTags = tagBlocklistRaw
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((t) => t.trim().isNotEmpty)
+        .map((t) => t.trim().toLowerCase())
+        .toSet();
+
+    // Keywords should *not* fall back to a generic `section.tags-row` selector,
+    // because meta-only posts still use `tags-row` with the `tags-row--meta`
+    // modifier. If we accidentally select that, we end up duplicating meta tags
+    // in the normal "Keywords" list.
+    dom.Element? keywordSection =
+        document.querySelector('section.tags-row:not(.tags-row--meta)') ??
+            document.querySelector('section.tags-mobile:not(.tags-mobile--meta)') ??
+            logQuery(document, 'section.tags-row:not(.tags-row--meta)') ??
+            logQuery(document, 'section.tags-mobile:not(.tags-mobile--meta)') ??
+            logQuery(document, '#keywords');
+
+    dom.Element? metaKeywordSection = document.querySelector('section.tags-row.tags-row--meta') ??
+        document.querySelector('section.tags-mobile.tags-mobile--meta');
+
+    final keywordTags = _parseTagsFromSection(
+      keywordSection,
+      isMeta: false,
+      blockedTags: blockedTags,
+    );
+    final metaKeywordTags = _parseTagsFromSection(
+      metaKeywordSection,
+      isMeta: true,
+      blockedTags: blockedTags,
+    );
+
+    // Back-compat string list (used by some UI)
+    final List<String> keywords = [
+      for (final t in keywordTags)
+        if (t.isSearchable) t.name,
+    ];
 
     // Favorite count (unused for state but kept parity)
     var favCountElem = logQuery(document, '.favorites .font-large');
@@ -404,6 +493,7 @@ class OpenPostApiService {
       fullViewImageUrl: fullViewUrl,
       submissionDescription: fixedDescription,
       publicationTimeRaw: rawTime,
+      rating: rating,
       favoritesCount: localFavoritesCount,
       viewCount: parsedViewCount,
       commentsCount: parsedCommentsCount,
@@ -417,9 +507,61 @@ class OpenPostApiService {
       size: size,
       fileSize: fileSize,
       keywords: keywords,
+      keywordTags: keywordTags,
+      metaKeywordTags: metaKeywordTags,
+      tagBlocklistNonce: tagBlocklistNonce,
       imageWidth: imageWidth,
       imageHeight: imageHeight,
     );
+  }
+
+  static List<FaPostTag> _parseTagsFromSection(
+    dom.Element? section, {
+    required bool isMeta,
+    required Set<String> blockedTags,
+  }) {
+    if (section == null) return const [];
+
+    final List<FaPostTag> tags = [];
+
+    for (final tagContainer in section.querySelectorAll('span.tags')) {
+      final tagBlock = tagContainer.querySelector('a.tag-block');
+      final dataTagName = tagBlock?.attributes['data-tag-name']?.trim();
+      final isBlockedFromClass =
+          tagBlock?.classes.contains('remove-tag') ?? false;
+
+      final searchAnchor =
+          tagContainer.querySelector('a[href^="/search/@keywords"]');
+      final String? label = searchAnchor?.text.trim();
+      final isSearchable = searchAnchor != null;
+
+      String? fallbackLabel;
+      if (!isSearchable) {
+        fallbackLabel = tagContainer
+                .querySelector('span.tag-invalid')
+                ?.text
+                .trim() ??
+            tagContainer.querySelector('a')?.text.trim();
+      }
+
+      final name = (dataTagName ?? label ?? fallbackLabel ?? '').trim();
+      if (name.isEmpty) continue;
+      if (tags.any((t) => t.name == name)) continue;
+
+      final normalizedName = name.toLowerCase();
+      final isBlocked = isBlockedFromClass || blockedTags.contains(normalizedName);
+
+      tags.add(
+        FaPostTag(
+          name: name,
+          isBlocked: isBlocked,
+          isMeta: isMeta,
+          isSearchable: isSearchable,
+        ),
+      );
+    }
+
+    return tags;
   }
 
   /// Parses comment containers from the provided FA post document.

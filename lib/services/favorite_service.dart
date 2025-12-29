@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -27,7 +28,7 @@ class FavoriteService {
       try {
         final cookieHeader = await _getAuthCookies();
         if (cookieHeader.isEmpty) {
-          print('DEBUG: Missing authentication cookies.');
+          debugPrint('DEBUG: Missing authentication cookies.');
           return false;
         }
 
@@ -41,21 +42,21 @@ class FavoriteService {
         );
 
         if (response.statusCode == 200 || response.statusCode == 302) {
-          print('DEBUG: Successfully executed POST request to $url');
+          debugPrint('DEBUG: Successfully executed POST request to $url');
           return true;
         } else {
-          print('DEBUG: Failed POST request to $url with status ${response.statusCode}');
+          debugPrint('DEBUG: Failed POST request to $url with status ${response.statusCode}');
         }
       } catch (e) {
-        print('DEBUG: Exception during POST request to $url: $e');
+        debugPrint('DEBUG: Exception during POST request to $url: $e');
       }
 
       attempt++;
-      print('DEBUG: Retry attempt $attempt for $url after ${retryInterval.inSeconds} seconds.');
+      debugPrint('DEBUG: Retry attempt $attempt for $url after ${retryInterval.inSeconds} seconds.');
       await Future.delayed(retryInterval);
     }
 
-    print('DEBUG: All retry attempts failed for $url');
+    debugPrint('DEBUG: All retry attempts failed for $url');
     return false;
   }
 

@@ -311,7 +311,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
       final recoveredLink = _getFullLinkFromFetchedHtml(url, htmlSource: htmlSource);
       if (recoveredLink != null) {
         fullUrlToMatch = recoveredLink;
-        print("Recovered full URL: $fullUrlToMatch");
+        debugPrint("Recovered full URL: $fullUrlToMatch");
       }
     }
 

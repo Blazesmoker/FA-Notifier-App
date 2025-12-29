@@ -99,9 +99,9 @@ class _EditJournalCommentScreenState extends State<EditJournalCommentScreen> {
       String? csrfKey = form.querySelector('input[name="key"]')?.attributes['value'];
 
 
-      print('TEST action: $action');
-      print('TEST comment_id: $commentId');
-      print('TEST key: $csrfKey');
+      debugPrint('TEST action: $action');
+      debugPrint('TEST comment_id: $commentId');
+      debugPrint('TEST key: $csrfKey');
 
 
       if (action == null || commentId == null || csrfKey == null) {

@@ -99,7 +99,7 @@ class _AddCommentScreenState extends State<AddJournalCommentScreen> {
 
 
     if (cookieA == null || cookieB == null) {
-      print('Error: Authentication cookies are missing.');
+      debugPrint('Error: Authentication cookies are missing.');
       return false;
     }
 
@@ -128,7 +128,7 @@ class _AddCommentScreenState extends State<AddJournalCommentScreen> {
     );
 
 
-    print('Status Code: ${response.statusCode}');
+    debugPrint('Status Code: ${response.statusCode}');
 
 
 
@@ -138,7 +138,7 @@ class _AddCommentScreenState extends State<AddJournalCommentScreen> {
     } else if (response.statusCode == 200 && response.body.contains('Your comment has been posted')) {
       return true;
     } else {
-      print('Failed to post comment. Response status: ${response.statusCode}');
+      debugPrint('Failed to post comment. Response status: ${response.statusCode}');
       return false;
     }
   }

@@ -1,15 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
-
 import '../network.dart';
 import '../model/shout.dart';
 import '../model/user_link.dart';
+import 'package:flutter/cupertino.dart';
 
 class UserProfileParsed {
   UserProfileParsed({
@@ -371,7 +370,7 @@ class UserProfileApiService {
       final candidateUsername = segments[1];
       refererUsername = candidateUsername;
     } else {
-      print(
+      debugPrint(
           '[_sendBlockUnblockRequest] Did NOT detect /block/username or /unblock/username pattern. Keeping sanitizedUsername.');
     }
 
@@ -386,10 +385,10 @@ class UserProfileApiService {
 
       headers.forEach((k, v) {
         if (k.toLowerCase() == 'cookie') {
-          print(
+          debugPrint(
               '  $k: ${v.substring(0, v.length.clamp(0, 200))}${v.length > 200 ? '... (truncated)' : ''}');
         } else {
-          print('  $k: $v');
+          debugPrint('  $k: $v');
         }
       });
 
@@ -409,12 +408,12 @@ class UserProfileApiService {
       }
 
       response.headers.forEach((k, v) {
-        print('    $k: $v');
+        debugPrint('    $k: $v');
       });
 
       final previewLength = min(500, response.body.length);
       final previewBody = response.body.substring(0, previewLength);
-      print(previewBody);
+      debugPrint(previewBody);
 
       return BlockUnblockResult(
         success: response.statusCode == 302 || response.statusCode == 200,

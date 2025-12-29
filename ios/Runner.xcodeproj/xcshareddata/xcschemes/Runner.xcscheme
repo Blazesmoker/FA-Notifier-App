@@ -14,9 +14,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "97C146ED1CF9000F007C117D"
+               BluedebugPrintIdentifier = "97C146ED1CF9000F007C117D"
                BuildableName = "Runner.app"
-               BlueprintName = "Runner"
+               BluedebugPrintName = "Runner"
                ReferencedContainer = "container:Runner.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -31,9 +31,9 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "97C146ED1CF9000F007C117D"
+            BluedebugPrintIdentifier = "97C146ED1CF9000F007C117D"
             BuildableName = "Runner.app"
-            BlueprintName = "Runner"
+            BluedebugPrintName = "Runner"
             ReferencedContainer = "container:Runner.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
@@ -43,9 +43,9 @@
             parallelizable = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "331C8080294A63A400263BE5"
+               BluedebugPrintIdentifier = "331C8080294A63A400263BE5"
                BuildableName = "RunnerTests.xctest"
-               BlueprintName = "RunnerTests"
+               BluedebugPrintName = "RunnerTests"
                ReferencedContainer = "container:Runner.xcodeproj">
             </BuildableReference>
          </TestableReference>
@@ -68,9 +68,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "97C146ED1CF9000F007C117D"
+            BluedebugPrintIdentifier = "97C146ED1CF9000F007C117D"
             BuildableName = "Runner.app"
-            BlueprintName = "Runner"
+            BluedebugPrintName = "Runner"
             ReferencedContainer = "container:Runner.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -85,9 +85,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "97C146ED1CF9000F007C117D"
+            BluedebugPrintIdentifier = "97C146ED1CF9000F007C117D"
             BuildableName = "Runner.app"
-            BlueprintName = "Runner"
+            BluedebugPrintName = "Runner"
             ReferencedContainer = "container:Runner.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

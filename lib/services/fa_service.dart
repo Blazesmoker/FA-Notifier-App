@@ -21,10 +21,10 @@ class FaService {
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     String? cfClearance = await _secureStorage.read(key: 'fa_cookie_cf_clearance');
 
-    print('[FaService] fetchUserProfile: cookieA=$cookieA, cookieB=$cookieB, cf_clearance=$cfClearance');
+    debugPrint('[FaService] fetchUserProfile: cookieA=$cookieA, cookieB=$cookieB, cf_clearance=$cfClearance');
 
     if (cookieA == null || cookieB == null) {
-      print('[FaService] No cookies found. User might not be logged in.');
+      debugPrint('[FaService] No cookies found. User might not be logged in.');
       return null;
     }
 
@@ -35,7 +35,7 @@ class FaService {
     }
 
     const String url = 'https://www.furaffinity.net/';
-    print('[FaService] Making HTTP GET request to $url with cookies: $cookiesHeader');
+    debugPrint('[FaService] Making HTTP GET request to $url with cookies: $cookiesHeader');
 
     final response = await http.get(
       Uri.parse(url),
@@ -47,8 +47,8 @@ class FaService {
       },
     );
 
-    print('[FaService] Response received: statusCode=${response.statusCode}');
-    print('[FaService] Response body snippet: ${response.body.substring(0, 100)}');
+    debugPrint('[FaService] Response received: statusCode=${response.statusCode}');
+    debugPrint('[FaService] Response body snippet: ${response.body.substring(0, 100)}');
 
     if (response.statusCode == 200) {
       final document = html_parser.parse(response.body);
@@ -84,7 +84,7 @@ class FaService {
             final String profileUrl = profilePath.startsWith('http')
                 ? profilePath
                 : 'https://www.furaffinity.net$profilePath';
-            print('[FaService] Fetching classic profile page: $profileUrl');
+            debugPrint('[FaService] Fetching classic profile page: $profileUrl');
             final profileResponse = await http.get(
               Uri.parse(profileUrl),
               headers: {
@@ -93,7 +93,7 @@ class FaService {
                     '(KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36',
               },
             );
-            print('[FaService] Classic profile page response: ${profileResponse.statusCode}');
+            debugPrint('[FaService] Classic profile page response: ${profileResponse.statusCode}');
             if (profileResponse.statusCode == 200) {
               final profileDoc = html_parser.parse(profileResponse.body);
               final avatarElement = profileDoc.querySelector('img.avatar');
@@ -102,26 +102,26 @@ class FaService {
                 profileImageUrl = 'https:' + profileImageUrl;
               }
             } else {
-              print('[FaService] Failed to load user profile page: ${profileResponse.statusCode}');
+              debugPrint('[FaService] Failed to load user profile page: ${profileResponse.statusCode}');
             }
           }
         }
 
         if (displayName.isNotEmpty && profileImageUrl != null) {
-          print('[FaService] Parsed user profile: $displayName, avatar: $profileImageUrl');
+          debugPrint('[FaService] Parsed user profile: $displayName, avatar: $profileImageUrl');
           return UserProfile(username: displayName, profileImageUrl: profileImageUrl);
         }
       }
-      print('[FaService] Could not parse user profile.');
+      debugPrint('[FaService] Could not parse user profile.');
       return null;
     } else if (response.statusCode == 403 && response.body.contains('Just a moment')) {
-      print('[FaService] 403 with Cloudflare challenge for user profile.');
+      debugPrint('[FaService] 403 with Cloudflare challenge for user profile.');
       // No human verification dialog or retry logic, simply return null.
       return null;
     } else {
-      print('[FaService] fetchUserProfile received unexpected status code: ${response.statusCode}');
-      print('URL: $url');
-      print('Body: ${response.body.substring(0, 100)}');
+      debugPrint('[FaService] fetchUserProfile received unexpected status code: ${response.statusCode}');
+      debugPrint('URL: $url');
+      debugPrint('Body: ${response.body.substring(0, 100)}');
     }
     return null;
   }
@@ -140,11 +140,11 @@ class FaService {
     }
 
     if (cookies.isEmpty) {
-      print('[FaService] No cookies => not logged in.');
+      debugPrint('[FaService] No cookies => not logged in.');
       return null;
     }
 
-    print('[FaService] Sending notifications request with cookies: $cookies');
+    debugPrint('[FaService] Sending notifications request with cookies: $cookies');
 
     const String notificationsUrl = 'https://www.furaffinity.net/';
     final response = await http.get(
@@ -156,8 +156,8 @@ class FaService {
       },
     );
 
-    print('[FaService] fetchNotifications => ${response.statusCode}');
-    print('[FaService] Response snippet: ${response.body.substring(0, 100)}');
+    debugPrint('[FaService] fetchNotifications => ${response.statusCode}');
+    debugPrint('[FaService] Response snippet: ${response.body.substring(0, 100)}');
 
     if (response.statusCode == 200) {
       final doc = html_parser.parse(response.body);
@@ -226,7 +226,7 @@ class FaService {
         }
       }
 
-      print('[FaService] Notifications parsed: sub=$submissions, watch=$watches, journal=$journals, note=$notes, comment=$comments, fav=$favorites, online=$registeredUsersOnline');
+      debugPrint('[FaService] Notifications parsed: sub=$submissions, watch=$watches, journal=$journals, note=$notes, comment=$comments, fav=$favorites, online=$registeredUsersOnline');
       return Notifications(
         submissions: submissions,
         watches: watches,
@@ -237,13 +237,13 @@ class FaService {
         registeredUsersOnline: registeredUsersOnline,
       );
     } else if (response.statusCode == 403 && response.body.contains('Just a moment')) {
-      print('[FaService] 403 with Cloudflare challenge for notifications.');
+      debugPrint('[FaService] 403 with Cloudflare challenge for notifications.');
 
       return null;
     } else {
-      print('[FaService] fetchNotifications => ${response.statusCode}');
-      print('URL: $notificationsUrl');
-      print('Body: ${response.body.substring(0, 100)}');
+      debugPrint('[FaService] fetchNotifications => ${response.statusCode}');
+      debugPrint('URL: $notificationsUrl');
+      debugPrint('Body: ${response.body.substring(0, 100)}');
     }
 
     return null;

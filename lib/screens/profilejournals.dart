@@ -116,8 +116,8 @@ class ProfileJournalsState extends State<ProfileJournals> {
       setState(() {
         isLoading = false;
       });
-      print('ProfileJournals: Error fetching journals from page $pageNumber: $e');
-      print('Stack trace: $stackTrace');
+      debugPrint('ProfileJournals: Error fetching journals from page $pageNumber: $e');
+      debugPrint('Stack trace: $stackTrace');
     }
   }
 
@@ -144,7 +144,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
     if (response.statusCode == 200) {
       return await parseHtmlJournals(response.body);
     } else {
-      print('Response body: ${response.body}');
+      debugPrint('Response body: ${response.body}');
       throw Exception('ProfileJournals: Failed to load journals: ${response.statusCode}');
     }
   }

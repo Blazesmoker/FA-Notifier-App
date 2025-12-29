@@ -124,14 +124,14 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
 
       List<Cookie> savedCookies = await _cookieJar.loadForRequest(uri);
       for (var cookie in savedCookies) {
-        print("${cookie.name}");
+        debugPrint("${cookie.name}");
       }
     } catch (e) {
       setState(() {
         _errorMessage = 'Error loading cookies: $e';
         _isLoadingOptions = false;
       });
-      print("Error in _loadCookies: $e");
+      debugPrint("Error in _loadCookies: $e");
     }
   }
 
@@ -150,7 +150,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
       if (parsedKey.isEmpty) {
         throw Exception('Finalize Submission key value is empty.');
       }
-      print("Parsed Finalize Submission Key: $parsedKey");
+      debugPrint("Parsed Finalize Submission Key: $parsedKey");
       return parsedKey;
     } else {
       throw Exception('Finalize Submission key input not found within the form.');
@@ -162,9 +162,9 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
       final directory = await Directory.systemTemp.createTemp('request_logs');
       final file = File('${directory.path}/$fileName');
       await file.writeAsString(content, mode: FileMode.append);
-      print('Saved request body to file: ${file.path}');
+      debugPrint('Saved request body to file: ${file.path}');
     } catch (e) {
-      print('Error saving to file: $e');
+      debugPrint('Error saving to file: $e');
     }
   }
 
@@ -177,7 +177,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
     try {
       final response = await _dio.get('https://www.furaffinity.net/submit/finalize/');
 
-      print("GET /submit/finalize/ Status Code: ${response.statusCode}");
+      debugPrint("GET /submit/finalize/ Status Code: ${response.statusCode}");
 
       await _saveToFile(
         'fetch_options_get.txt',
@@ -185,9 +185,9 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
       );
 
       if (response.data is String && response.data.length > 1000) {
-        print("Response snippet: ${response.data.substring(0, 1000)}");
+        debugPrint("Response snippet: ${response.data.substring(0, 1000)}");
       } else {
-        print("Response data: ${response.data}");
+        debugPrint("Response data: ${response.data}");
       }
 
       if (response.statusCode == 200 || response.statusCode == 302) {
@@ -203,7 +203,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
         setState(() {
           _submissionKeyUpload = submissionKey;
         });
-        print("Finalized Submission Key: $_submissionKeyUpload");
+        debugPrint("Finalized Submission Key: $_submissionKeyUpload");
         // Parse Category
         _categoryOptions = _parseSelectOptions(document, 'cat');
 
@@ -256,7 +256,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
         _errorMessage = 'Error fetching options: $e';
         _isLoadingOptions = false;
       });
-      print("Error in _fetchOptions: $e");
+      debugPrint("Error in _fetchOptions: $e");
     }
   }
 
@@ -266,7 +266,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
       if (targetGroupLabels.contains(group.label)) {
         if (group.options.isNotEmpty && group.options[0].label.toLowerCase() == 'all') {
           group.options.removeAt(0);
-          print("Removed 'All' from group: ${group.label}");
+          debugPrint("Removed 'All' from group: ${group.label}");
         }
       }
     }
@@ -278,7 +278,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
     dom.Element? selectElement = document.querySelector('select[name="$selectName"]');
 
     if (selectElement == null) {
-      print('Select element with name="$selectName" not found.');
+      debugPrint('Select element with name="$selectName" not found.');
       return optionGroups;
     }
 
@@ -350,8 +350,8 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
         'finalize': 'Finalize',
       };
 
-      print("Finalizing submission with key: ${data['key']}");
-      print("Finalizing submission with data: $data");
+      debugPrint("Finalizing submission with key: ${data['key']}");
+      debugPrint("Finalizing submission with data: $data");
 
       await _saveToFile(
         'finalize_submission_post.txt',
@@ -374,8 +374,8 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
         ),
       );
 
-      print("POST /submit/finalize/ Status Code: ${response.statusCode}");
-      print("Response Headers: ${response.headers.map}");
+      debugPrint("POST /submit/finalize/ Status Code: ${response.statusCode}");
+      debugPrint("Response Headers: ${response.headers.map}");
 
 
       String responseBody = '';
@@ -386,15 +386,15 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
           int end = (i + chunkSize < responseBody.length)
               ? i + chunkSize
               : responseBody.length;
-          print("Response Body Chunk: ${responseBody.substring(i, end)}");
+          debugPrint("Response Body Chunk: ${responseBody.substring(i, end)}");
         }
       } else {
-        print("Response Data: ${response.data}");
+        debugPrint("Response Data: ${response.data}");
       }
 
       if (response.statusCode == 302) {
         String? location = response.headers.value('location');
-        print("Redirect Location: $location");
+        debugPrint("Redirect Location: $location");
 
         if (location != null && location.contains('?upload-successful')) {
           // Upload was successful
@@ -432,7 +432,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
       setState(() {
         _errorMessage = 'Error finalizing submission: $e';
       });
-      print("Error in _finalizeSubmission: $e");
+      debugPrint("Error in _finalizeSubmission: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error finalizing submission: $e'),

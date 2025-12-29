@@ -14,8 +14,10 @@ import 'package:html/dom.dart' as htmlDom;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import '../services/favorite_gallery_service.dart';
+import '../services/fa_thumbnail_parser.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'heart_animation_optimized.dart';
+import '../widgets/fa_thumbnail_display.dart';
 import 'openpost.dart';
 
 /// Data class to store a folder's name and URL.
@@ -262,7 +264,7 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
   _ParseResult _parseHtml(String html, String currentUrl) {
     final doc = html_parser.parse(html);
-    final imageElements = doc.querySelectorAll('figure.t-image');
+    final figures = FaThumbnailParser.selectThumbnailFigures(doc);
 
     // Determine next page URL.
     String? nextPageUrl;
@@ -279,25 +281,20 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
     }
 
     final posts = <Map<String, dynamic>>[];
-    for (var elem in imageElements) {
-      final postUrl = elem.querySelector('a')?.attributes['href'];
-      final thumbUrl = elem.querySelector('img')?.attributes['src'];
-      final dataWidth = elem.querySelector('img')?.attributes['data-width'];
-      final dataHeight = elem.querySelector('img')?.attributes['data-height'];
-      if (postUrl != null && thumbUrl != null && dataWidth != null && dataHeight != null) {
-        final w = double.tryParse(dataWidth);
-        final h = double.tryParse(dataHeight);
-        if (w != null && h != null) {
-          posts.add({
-            'postUrl': postUrl,
-            'uniqueNumber': _parseUniqueNumber(postUrl),
-            'thumbnailUrl': thumbUrl.startsWith('//') ? 'https:$thumbUrl' : thumbUrl,
-            'width': w,
-            'height': h,
-            'initialIsFav': null,
-          });
-        }
-      }
+    for (final fig in figures) {
+      final data = FaThumbnailParser.extract(fig);
+      if (data == null) continue;
+      posts.add({
+        'postUrl': data['postUrl'],
+        'uniqueNumber': data['uniqueNumber'],
+        'thumbnailUrl': data['thumbnailUrl'],
+        'width': data['width'],
+        'height': data['height'],
+        'rating': data['rating'],
+        'title': data['title'],
+        'author': data['author'],
+        'initialIsFav': null,
+      });
     }
 
     // Parses folders from the page.
@@ -583,6 +580,9 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
               hqUrl: hqUrl,
               isFavorite: isFav,
               wasInitiallyFavorited: initialIsFav,
+              rating: item['rating'] as String?,
+              title: item['title'] as String?,
+              author: null,
               onToggle: (val) => _handleToggleFavorite(index, val),
               onTap: () {
                 final resolved = Uri.parse('https://www.furaffinity.net')
@@ -626,6 +626,9 @@ class _FavImageTile extends StatelessWidget {
   final String? hqUrl;
   final bool isFavorite;
   final bool wasInitiallyFavorited;
+  final String? rating;
+  final String? title;
+  final String? author;
   final ValueChanged<bool> onToggle;
   final VoidCallback onTap;
   const _FavImageTile({
@@ -637,6 +640,9 @@ class _FavImageTile extends StatelessWidget {
     this.hqUrl,
     required this.isFavorite,
     required this.wasInitiallyFavorited,
+    required this.rating,
+    required this.title,
+    required this.author,
     required this.onToggle,
     required this.onTap,
   }) : super(key: key);
@@ -646,40 +652,58 @@ class _FavImageTile extends StatelessWidget {
       builder: (context, constraints) {
         final displayedWidth = constraints.maxWidth;
         final displayedHeight = displayedWidth / aspectRatio;
+        final imageStack = ClipRRect(
+          borderRadius: BorderRadius.circular(8.0),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CachedNetworkImage(
+                imageUrl: thumbnailUrl,
+                fit: BoxFit.cover,
+              ),
+              if (hqUrl != null && hqUrl!.isNotEmpty)
+                CachedNetworkImage(
+                  imageUrl: hqUrl!,
+                  fit: BoxFit.cover,
+                  fadeInDuration: Duration.zero,
+                  errorWidget: (context, url, error) {
+                    debugPrint("Error loading image: $url, error: $error");
+                    return const Icon(Icons.error);
+                  },
+                ),
+            ],
+          ),
+        );
+
         return GestureDetector(
           onTap: onTap,
           onLongPress: _onLongPressToggle,
-          child: HeartAnimationOptimized(
-            containerWidth: displayedWidth,
-            containerHeight: displayedHeight,
-            isFavorite: isFavorite,
-            wasInitiallyFavorited: wasInitiallyFavorited,
-            onToggle: (val) => onToggle(val),
-            child: AspectRatio(
-              aspectRatio: aspectRatio,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8.0),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    CachedNetworkImage(
-                      imageUrl: thumbnailUrl,
-                      fit: BoxFit.cover,
-                    ),
-                    if (hqUrl != null && hqUrl!.isNotEmpty)
-                      CachedNetworkImage(
-                        imageUrl: hqUrl!,
-                        fit: BoxFit.cover,
-                        fadeInDuration: Duration.zero,
-                        errorWidget: (context, url, error) {
-                          debugPrint("Error loading image: $url, error: $error");
-                          return const Icon(Icons.error);
-                        },
-                      ),
-                  ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              HeartAnimationOptimized(
+                containerWidth: displayedWidth,
+                containerHeight: displayedHeight,
+                isFavorite: isFavorite,
+                wasInitiallyFavorited: wasInitiallyFavorited,
+                onToggle: (val) => onToggle(val),
+                child: SizedBox(
+                  width: displayedWidth,
+                  height: displayedHeight,
+                  child: FaThumbnailOutline(
+                    rating: rating,
+                    borderRadius: 8.0,
+                    child: imageStack,
+                  ),
                 ),
               ),
-            ),
+              FaThumbnailCaption(
+                maxWidth: displayedWidth,
+                title: title,
+                author: author,
+              ),
+            ],
           ),
         );
       },

@@ -49,7 +49,7 @@ class _ViewListScreenState extends State<ViewListScreen> {
         errorMessage = 'No cookies found. User might not be logged in.';
         isLoading = false;
       });
-      print("No cookies found.");
+      debugPrint("No cookies found.");
       return;
     }
 
@@ -92,7 +92,7 @@ class _ViewListScreenState extends State<ViewListScreen> {
             errorMessage = 'Failed to load data: ${response.statusCode}';
             isLoading = false;
           });
-          print("Failed to fetch data. Status code: ${response.statusCode}");
+          debugPrint("Failed to fetch data. Status code: ${response.statusCode}");
           break;
         }
       } catch (e) {
@@ -100,7 +100,7 @@ class _ViewListScreenState extends State<ViewListScreen> {
           errorMessage = 'An error occurred: $e';
           isLoading = false;
         });
-        print("An error occurred while fetching data: $e");
+        debugPrint("An error occurred while fetching data: $e");
         break;
       }
     }

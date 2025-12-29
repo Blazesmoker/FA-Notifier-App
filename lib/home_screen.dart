@@ -115,6 +115,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final GlobalKey<SubmissionsScreenState> _submissionsKey =
   GlobalKey<SubmissionsScreenState>();
+  final GlobalKey<FAImageGridState> _browseKey = GlobalKey<FAImageGridState>();
+  final GlobalKey<SearchScreenState> _searchKey = GlobalKey<SearchScreenState>();
+  final GlobalKey<NotesScreenState> _notesKey = GlobalKey<NotesScreenState>();
 
   // Gate login SnackBar to only show once per real login
   bool _loginSnackShownThisRun = false;
@@ -311,12 +314,36 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onBottomNavigationItemTapped(int index) {
     _drawerKey.currentState?.closeDrawer();
 
+    if (index == _selectedIndex) {
+      unawaited(_scrollToTopForIndex(index));
+      return;
+    }
+
     setState(() {
       _selectedIndex = index;
       if (index != 3) {
         _notificationsInitialSection = null;
       }
     });
+  }
+
+  Future<void> _scrollToTopForIndex(int index) async {
+    switch (index) {
+      case 0:
+        await _browseKey.currentState?.scrollToTop();
+        return;
+      case 1:
+        await _searchKey.currentState?.scrollToTop();
+        return;
+      case 2:
+        await _submissionsKey.currentState?.scrollToTop();
+        return;
+      case 4:
+        await _notesKey.currentState?.scrollToTop();
+        return;
+      default:
+        return;
+    }
   }
 
   void _triggerSearch(String query) {
@@ -345,7 +372,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _webViewController = controller;
       },
       onLoadStart: (InAppWebViewController controller, WebUri? url) async {
-        print('WebView Loading Started: ${url?.toString() ?? "Unknown URL"}');
+        debugPrint('WebView Loading Started: ${url?.toString() ?? "Unknown URL"}');
         _cancelStabilityTimer();
         if (url?.toString().startsWith(loginUrl) == true) {
           await _injectLoginCss();
@@ -353,7 +380,7 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       onReceivedHttpError: (InAppWebViewController controller,
           WebResourceRequest request, WebResourceResponse response) async {
-        print(
+        debugPrint(
             "Received HTTP ${response.statusCode} error: ${response.reasonPhrase}");
         if (response.statusCode == 403) {
           _cancelStabilityTimer();
@@ -362,7 +389,7 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       onLoadStop: (controller, url) async {
         final pageUrl = url?.toString() ?? '';
-        print('Load stopped at: $pageUrl');
+        debugPrint('Load stopped at: $pageUrl');
         if (url?.toString().startsWith(loginUrl) == true) {
           await _injectLoginCss();
         }
@@ -417,18 +444,18 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       shouldOverrideUrlLoading: (controller, navigationAction) async {
         var uri = navigationAction.request.url;
-        print("Navigating to: $uri");
+        debugPrint("Navigating to: $uri");
         const String passwordRecoveryPath = '/lostpw/';
         if (uri != null &&
             uri.host.contains('furaffinity.net') &&
             uri.path.contains(passwordRecoveryPath)) {
-          print("Password recovery URL detected.");
+          debugPrint("Password recovery URL detected.");
           if (await canLaunchUrl(uri)) {
             await launchUrl(uri, mode: LaunchMode.externalApplication);
-            print('Opened Password Recovery in external browser.');
+            debugPrint('Opened Password Recovery in external browser.');
             return NavigationActionPolicy.CANCEL;
           } else {
-            print('Could not launch $uri');
+            debugPrint('Could not launch $uri');
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                   content: Text('Could not open link. Please try again.')),
@@ -438,7 +465,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return NavigationActionPolicy.ALLOW;
       },
       onConsoleMessage: (controller, consoleMessage) {
-        print("WebView Console Message: ${consoleMessage.message}");
+        debugPrint("WebView Console Message: ${consoleMessage.message}");
       },
     );
   }
@@ -588,33 +615,33 @@ class _HomeScreenState extends State<HomeScreen> {
             title: const Text('Browse'),
             centerTitle: true,
             actions: [
-              IconButton(
-                icon: const Icon(Icons.filter_list),
-                onPressed: () async {
-                  final updatedFilters =
-                  await Navigator.push<Map<String, String>>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => FiltersScreen(
-                        selectedFilters: browseFilters,
+              Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: IconButton(
+                  icon: const Icon(Icons.filter_list),
+                  onPressed: () async {
+                    final updatedFilters = await Navigator.push<Map<String, String>>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => FiltersScreen(selectedFilters: browseFilters),
                       ),
-                    ),
-                  );
-                  if (updatedFilters != null) {
-                    setState(() {
-                      browseFilters = updatedFilters;
-                    });
-                  }
-                },
+                    );
+                    if (updatedFilters != null) {
+                      setState(() => browseFilters = updatedFilters);
+                    }
+                  },
+                ),
               ),
             ],
           ),
           body: FAImageGrid(
+            key: _browseKey,
             selectedFilters: browseFilters,
           ),
         ),
         // 1: Search
         SearchScreen(
+          key: _searchKey,
           searchFilters: searchFilters,
           onFilterUpdated: (updatedSearchFilters) {
             setState(() {
@@ -634,7 +661,7 @@ class _HomeScreenState extends State<HomeScreen> {
         NotesScreen(
           drawerKey: _drawerKey,
           forceRefresh: shouldForceRefresh,
-          key: const ValueKey('notes_screen'),
+          key: _notesKey,
         ),
       ],
     );
@@ -674,7 +701,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _selectedIndex = 3;
             break;
           default:
-            print("Unhandled DrawerIndex: $indexScreen");
+            debugPrint("Unhandled DrawerIndex: $indexScreen");
             _selectedIndex = 0;
             break;
         }

@@ -17,7 +17,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     private func fLog(_ msg: String) {
         let line = "[AppDelegate] \(msg)"
         NSLog("%@", line)
-        print("flutter: \(line)")
+        debugPrint("flutter: \(line)")
     }
 
     private var notifChannel: FlutterMethodChannel?

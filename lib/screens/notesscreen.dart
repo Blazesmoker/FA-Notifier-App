@@ -31,10 +31,10 @@ class NotesScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _NotesScreenState createState() => _NotesScreenState();
+  NotesScreenState createState() => NotesScreenState();
 }
 
-class _NotesScreenState extends State<NotesScreen>
+class NotesScreenState extends State<NotesScreen>
     with RouteAware, WidgetsBindingObserver, SingleTickerProviderStateMixin {
   static const Color _accent = Color(0xFFE09321);
 
@@ -130,6 +130,22 @@ class _NotesScreenState extends State<NotesScreen>
     _sentScrollController.dispose();
     _notesRefreshSub?.cancel();
     super.dispose();
+  }
+
+  Future<void> scrollToTop({bool animate = true}) async {
+    final controller = (_tabController.index == 0)
+        ? _inboxScrollController
+        : _sentScrollController;
+    if (!controller.hasClients) return;
+    if (!animate) {
+      controller.jumpTo(0);
+      return;
+    }
+    await controller.animateTo(
+      0,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
@@ -454,6 +470,39 @@ class _NotesScreenState extends State<NotesScreen>
     } catch (_) {}
   }
 
+  void _openNewMessage() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => NewMessageScreen()),
+    );
+  }
+
+  Widget _buildNewMessageAppBarButton() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 20.0),
+      child: Semantics(
+        button: true,
+        label: 'New message',
+        child: Material(
+          color: _accent,
+          shape: const CircleBorder(),
+          elevation: 4,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: _openNewMessage,
+            customBorder: const CircleBorder(),
+            child: const SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: Icon(Icons.mail, color: Colors.white),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showPreviewDialog(Message message, String folder) {
     bool wasInitiallyUnread = message.isUnread;
 
@@ -497,6 +546,9 @@ class _NotesScreenState extends State<NotesScreen>
           title: const Text('Notes'),
           centerTitle: true,
           backgroundColor: Colors.black,
+          actions: [
+            _buildNewMessageAppBarButton(),
+          ],
         ),
         backgroundColor: Colors.black,
         body: const Center(
@@ -515,6 +567,9 @@ class _NotesScreenState extends State<NotesScreen>
             title: const Text('Notes'),
             centerTitle: true,
             backgroundColor: Colors.black,
+            actions: [
+              _buildNewMessageAppBarButton(),
+            ],
             bottom: TabBar(
               controller: _tabController,
               indicator: const BoxDecoration(
@@ -630,16 +685,6 @@ class _NotesScreenState extends State<NotesScreen>
                 ],
               ),
             ),
-          ),
-          floatingActionButton: FloatingActionButton(
-            backgroundColor: _accent,
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => NewMessageScreen()),
-              );
-            },
-            shape: const CircleBorder(),
-            child: const Icon(Icons.message),
           ),
           backgroundColor: Colors.black,
         ),

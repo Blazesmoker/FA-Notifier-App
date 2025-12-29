@@ -195,6 +195,7 @@ class NewMessageScreen extends StatelessWidget {
                     children: [
                       TextField(
                         controller: _recipientController,
+                        style: const TextStyle(color: Colors.white),
                         decoration: const InputDecoration(
                           labelText: 'Recipient',
                           border: OutlineInputBorder(),
@@ -203,6 +204,7 @@ class NewMessageScreen extends StatelessWidget {
                       const SizedBox(height: 16),
                       TextField(
                         controller: _subjectController,
+                        style: const TextStyle(color: Colors.white),
                         decoration: const InputDecoration(
                           labelText: 'Subject',
                           border: OutlineInputBorder(),
@@ -214,6 +216,7 @@ class NewMessageScreen extends StatelessWidget {
                           controller: _messageController,
                           maxLines: null, // Allows dynamic height
                           keyboardType: TextInputType.multiline,
+                          style: const TextStyle(color: Colors.white),
                           decoration: const InputDecoration(
                             labelText: 'Your Message',
                             border: OutlineInputBorder(),

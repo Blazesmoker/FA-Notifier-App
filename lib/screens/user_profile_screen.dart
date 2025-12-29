@@ -62,8 +62,10 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   @override
   void dispose() {
     _tabController.dispose();
-    _scrollController.dispose();
     _scrollController.removeListener(_updateAvatarTransform);
+    _scrollController.removeListener(_onScrollForMoveUpFab);
+    _scrollController.dispose();
+    _showMoveUpFab.dispose();
     routeObserver.unsubscribe(this);
     super.dispose();
   }
@@ -261,6 +263,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
 
   late ScrollController _scrollController;
+  late final ValueNotifier<bool> _showMoveUpFab = ValueNotifier<bool>(false);
 
 
   late TabController _tabController;
@@ -301,6 +304,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
     _scrollController = ScrollController();
     _scrollController.addListener(_updateAvatarTransform);
+    _scrollController.addListener(_onScrollForMoveUpFab);
 
 
     _tabController = TabController(
@@ -329,6 +333,13 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
     sanitizedUsername = _sanitizeUsername(widget.nickname);
 
     _initAsyncFetch();
+  }
+
+  void _onScrollForMoveUpFab() {
+    final bool shouldShow = _scrollController.hasClients && _scrollController.offset > 140.0;
+    if (_showMoveUpFab.value != shouldShow) {
+      _showMoveUpFab.value = shouldShow;
+    }
   }
 
   Future<void> _initAsyncFetch() async {
@@ -430,13 +441,13 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
     );
 
     if (result.missingCookies) {
-      print('No cookies found. User might not be logged in.');
+      debugPrint('No cookies found. User might not be logged in.');
       showAppSnackBar(context, 'Please log in to perform this action.', backgroundColor: Colors.red);
       return;
     }
 
     if (result.success) {
-      print('${shouldWatch ? 'Watch' : 'Unwatch'} action successful.');
+      debugPrint('${shouldWatch ? 'Watch' : 'Unwatch'} action successful.');
 
       setState(() {
         _profileParsed?.isWatching = shouldWatch;
@@ -448,14 +459,14 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
         backgroundColor: Colors.green,
       );
     } else if (result.error != null) {
-      print('Error during ${shouldWatch ? 'watch' : 'unwatch'}: ${result.error}');
+      debugPrint('Error during ${shouldWatch ? 'watch' : 'unwatch'}: ${result.error}');
       showAppSnackBar(
         context,
         'An error occurred while trying to ${shouldWatch ? 'watch' : 'unwatch'} user.',
         backgroundColor: Colors.red,
       );
     } else {
-      print('Failed to ${shouldWatch ? 'watch' : 'unwatch'}. Status code: ${result.statusCode}');
+      debugPrint('Failed to ${shouldWatch ? 'watch' : 'unwatch'}. Status code: ${result.statusCode}');
       showAppSnackBar(
         context,
         'Failed to ${shouldWatch ? 'watch' : 'unwatch'} user.',
@@ -467,14 +478,14 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   Future<void> _handleWatchButtonPressed() async {
     if (isWatching) {
       if (unwatchLink == null) {
-        print('Unwatch link not available.');
+        debugPrint('Unwatch link not available.');
         return;
       }
       await _sendWatchUnwatchRequest(unwatchLink!, shouldWatch: false);
       _fetchUserProfile();
     } else {
       if (watchLink == null) {
-        print('Watch link not available.');
+        debugPrint('Watch link not available.');
         return;
       }
       await _sendWatchUnwatchRequest(watchLink!, shouldWatch: true);
@@ -562,7 +573,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
 
-      print('Could not launch $url');
+      debugPrint('Could not launch $url');
       showAppSnackBar(context, 'Could not launch URL: $url', backgroundColor: Colors.red);
     }
   }
@@ -684,21 +695,21 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
         isLoading = false;
       });
 
-      print("Block/Unblock Link: $blockLink / $unblockLink");
-      print("Watch/Unwatch Link: $watchLink / $unwatchLink");
-      print("isBlocked: $isBlocked");
+      debugPrint("Block/Unblock Link: $blockLink / $unblockLink");
+      debugPrint("Watch/Unwatch Link: $watchLink / $unwatchLink");
+      debugPrint("isBlocked: $isBlocked");
     } on StateError catch (e) {
       setState(() {
         errorMessage = e.message ?? e.toString();
         isLoading = false;
       });
-      print(e.toString());
+      debugPrint(e.toString());
     } catch (e) {
       setState(() {
         errorMessage = 'An error occurred: $e';
         isLoading = false;
       });
-      print("An error occurred while fetching profile: $e");
+      debugPrint("An error occurred while fetching profile: $e");
     }
   }
 
@@ -716,7 +727,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
   Future<void> _loadMoreShouts() async {
     if (isLoadingMoreShouts || currentShoutPage >= totalShoutPages) {
-      print("Cannot load more shouts. Loading: $isLoadingMoreShouts, Current: $currentShoutPage, Total: $totalShoutPages");
+      debugPrint("Cannot load more shouts. Loading: $isLoadingMoreShouts, Current: $currentShoutPage, Total: $totalShoutPages");
       return;
     }
 
@@ -735,7 +746,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       );
 
       if (payload == null) {
-        print("Missing shout pagination key; cannot load more shouts.");
+        debugPrint("Missing shout pagination key; cannot load more shouts.");
         return;
       }
 
@@ -746,7 +757,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
         }
       });
     } catch (e) {
-      print('Error loading more shouts: $e');
+      debugPrint('Error loading more shouts: $e');
       showAppSnackBar(context, 'Failed to load more shouts', backgroundColor: Colors.red);
     } finally {
       setState(() {
@@ -888,7 +899,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
     Clipboard.setData(ClipboardData(text: profileLink)).then((_) {
       showAppSnackBar(context, 'Copied profile link!', backgroundColor: Colors.green);
     }).catchError((error) {
-      print('Failed to copy profile link: $error');
+      debugPrint('Failed to copy profile link: $error');
       showAppSnackBar(context, 'Failed to copy profile link.', backgroundColor: Colors.red);
     });
   }
@@ -1569,35 +1580,39 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
         ),
 
         floatingActionButton: !isLoading
-        ? AnimatedBuilder(
-          animation: _tabController,
-          builder: (context, child) {
-            // bool showFab = _tabController.index != ProfileSection.Home.index;
-            bool showFab = true;
-            return AnimatedOpacity(
-              opacity: showFab ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              child: Visibility(
-                visible: showFab,
-                maintainSize: false,
-                maintainAnimation: false,
-                maintainState: false,
-                child: FloatingActionButton(
-                  onPressed: () {
-                    _scrollController.animateTo(
-                      0.0,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                  },
-                  backgroundColor: const Color(0xFFE09321),
-                  child: const Icon(Icons.arrow_upward, color: Colors.white),
-                  tooltip: 'Scroll to Top',
+        ? ValueListenableBuilder<bool>(
+          valueListenable: _showMoveUpFab,
+          builder: (context, showFab, child) {
+            return IgnorePointer(
+              ignoring: !showFab,
+              child: ExcludeSemantics(
+                excluding: !showFab,
+                child: AnimatedOpacity(
+                  opacity: showFab ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 210),
+                  curve: Curves.easeInOut,
+                  child: AnimatedScale(
+                    scale: showFab ? 1.0 : 0.92,
+                    duration: const Duration(milliseconds: 210),
+                    curve: Curves.easeInOut,
+                    child: child,
+                  ),
                 ),
               ),
             );
           },
+          child: FloatingActionButton(
+            onPressed: () {
+              _scrollController.animateTo(
+                0.0,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            },
+            backgroundColor: const Color(0xFFE09321),
+            child: const Icon(Icons.arrow_upward, color: Colors.white),
+            tooltip: 'Scroll to Top',
+          ),
         )
             : null,
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,

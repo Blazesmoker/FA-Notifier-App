@@ -6,10 +6,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart';
+import '../services/fa_thumbnail_parser.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'openpost.dart';
 import '../services/favorite_service.dart';
 import '../widgets/heart_animation.dart';
+import '../widgets/fa_thumbnail_display.dart';
 
 /// A helper class for paginated parsing results.
 class _ParseResult {
@@ -119,7 +121,7 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
   /// Parses the favorites HTML to extract image metadata and the next page URL.
   _ParseResult _parseFavsHtml(String html, String currentUrl) {
     final document = parse(html);
-    final imageElements = document.querySelectorAll('figure.t-image');
+    final figures = FaThumbnailParser.selectThumbnailFigures(document);
 
 
     String? nextPageUrl;
@@ -136,26 +138,19 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
     }
 
     final posts = <Map<String, dynamic>>[];
-    for (var element in imageElements) {
-      final thumbUrl = element.querySelector('img')?.attributes['src'];
-      final dataWidth = element.querySelector('img')?.attributes['data-width'];
-      final dataHeight = element.querySelector('img')?.attributes['data-height'];
-      if (thumbUrl != null && dataWidth != null && dataHeight != null) {
-        final w = double.tryParse(dataWidth);
-        final h = double.tryParse(dataHeight);
-        if (w != null && h != null) {
-          final match = RegExp(r'/(\d+)@').firstMatch(thumbUrl);
-          final uniqueNumber = match != null
-              ? match.group(1)!
-              : DateTime.now().millisecondsSinceEpoch.toString();
-          posts.add({
-            'url': 'https:$thumbUrl',
-            'width': w,
-            'height': h,
-            'uniqueNumber': uniqueNumber,
-          });
-        }
-      }
+    for (final fig in figures) {
+      final data = FaThumbnailParser.extract(fig);
+      if (data == null) continue;
+      posts.add({
+        'url': data['thumbnailUrl'],
+        'width': data['width'],
+        'height': data['height'],
+        'uniqueNumber': data['uniqueNumber'],
+        'postUrl': data['postUrl'],
+        'rating': data['rating'],
+        'title': data['title'],
+        'author': data['author'],
+      });
     }
     return _ParseResult(posts: posts, nextPageUrl: nextPageUrl);
   }
@@ -360,6 +355,9 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
       height: height,
       imageUrl: imageUrl,
       isFav: isFav,
+      rating: im['rating'] as String?,
+      title: im['title'] as String?,
+      author: im['author'] as String?,
       onToggle: (val) => _toggleFavorite(uniqueNumber, val),
       onTap: () {
         Navigator.push(
@@ -433,6 +431,9 @@ class _FavImageTileFavs extends StatefulWidget {
   final double height;
   final String imageUrl;
   final bool isFav;
+  final String? rating;
+  final String? title;
+  final String? author;
   final ValueChanged<bool> onToggle;
   final VoidCallback onTap;
 
@@ -442,6 +443,9 @@ class _FavImageTileFavs extends StatefulWidget {
     required this.height,
     required this.imageUrl,
     required this.isFav,
+    required this.rating,
+    required this.title,
+    required this.author,
     required this.onToggle,
     required this.onTap,
   }) : super(key: key);
@@ -484,29 +488,44 @@ class _FavImageTileFavsState extends State<_FavImageTileFavs> {
       onLongPress: () => setState(() {
         _localFav = !_localFav;
       }),
-      child: HeartAnimationWidget(
-        isFavorite: _localFav,
-        containerWidth: widget.width,
-        containerHeight: widget.height,
-        onDebounceComplete: (finalVal) => widget.onToggle(finalVal),
-        debounceDuration: const Duration(seconds: 3),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: CachedNetworkImage(
-            imageUrl: widget.imageUrl,
-            width: widget.width,
-            height: widget.height,
-            fit: BoxFit.cover,
-            placeholder: (ctx, url) => _buildPlaceholder(widget.width, widget.height),
-            errorWidget: (ctx, url, err) => Container(
-              width: widget.width,
-              height: widget.height,
-              color: Colors.grey,
-              alignment: Alignment.center,
-              child: const Icon(Icons.error, color: Colors.red),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          HeartAnimationWidget(
+            isFavorite: _localFav,
+            containerWidth: widget.width,
+            containerHeight: widget.height,
+            onDebounceComplete: (finalVal) => widget.onToggle(finalVal),
+            debounceDuration: const Duration(seconds: 3),
+            child: FaThumbnailOutline(
+              rating: widget.rating,
+              borderRadius: 8,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: CachedNetworkImage(
+                  imageUrl: widget.imageUrl,
+                  width: widget.width,
+                  height: widget.height,
+                  fit: BoxFit.cover,
+                  placeholder: (ctx, url) => _buildPlaceholder(widget.width, widget.height),
+                  errorWidget: (ctx, url, err) => Container(
+                    width: widget.width,
+                    height: widget.height,
+                    color: Colors.grey,
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.error, color: Colors.red),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
+          FaThumbnailCaption(
+            maxWidth: widget.width,
+            title: widget.title,
+            author: widget.author,
+          ),
+        ],
       ),
     );
   }

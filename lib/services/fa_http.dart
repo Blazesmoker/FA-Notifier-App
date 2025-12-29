@@ -25,9 +25,14 @@ class FAHttp {
   }
 
   static IOClient _ensureClient({Duration? timeout}) {
-    if (_client != null) return _client!;
-
     final t = timeout ?? defaultTimeout;
+
+    if (_client != null) {
+      try {
+        _http?.connectionTimeout = t;
+      } catch (_) {}
+      return _client!;
+    }
 
     final c = HttpClient()
       ..connectionTimeout = t
@@ -42,17 +47,30 @@ class FAHttp {
   }
 
   static bool _isRecoverable(Object e) {
+    if (e is http.ClientException) return true;
+
     if (e is TimeoutException) return true;
     if (e is SocketException) return true;
     if (e is HandshakeException) return true;
 
-    final s = e.toString();
-    return s.contains('Broken pipe') ||
-        s.contains('Connection reset') ||
+    if (e is HttpException) {
+      final m = e.message.toLowerCase();
+      return m.contains('connection') ||
+          m.contains('closed') ||
+          m.contains('reset') ||
+          m.contains('broken pipe') ||
+          m.contains('timed out');
+    }
+
+    final s = e.toString().toLowerCase();
+    return s.contains('broken pipe') ||
+        s.contains('connection reset') ||
         s.contains('timed out') ||
-        s.contains('Connection closed while receiving') ||
-        s.contains('Network is unreachable') ||
-        s.contains('Software caused connection abort');
+        s.contains('connection closed before full header was received') ||
+        s.contains('connection closed while receiving') ||
+        s.contains('connection terminated') ||
+        s.contains('network is unreachable') ||
+        s.contains('software caused connection abort');
   }
 
   static Map<String, String> _mergeHeaders(Map<String, String>? headers) {
@@ -67,7 +85,6 @@ class FAHttp {
       return await call();
     } catch (e) {
       if (e is Object && _isRecoverable(e)) {
-        // Reset client + retry once with a tiny delay.
         reset();
         await Future.delayed(const Duration(milliseconds: 250));
         return await call();

@@ -69,7 +69,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     if (journalId == null) return;
 
     _handledCurrentJournal = true;
-    print("Journal created with ID: $journalId");
+    debugPrint("Journal created with ID: $journalId");
 
     await _webViewController.loadRequest(Uri.parse(initialUrl));
 
@@ -88,18 +88,18 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) async {
-            print("Page started loading: $url");
+            debugPrint("Page started loading: $url");
 
             if (url.startsWith(initialUrl)) {
               _handledCurrentJournal = false;
-              print("Injecting journal form CSS and JavaScript");
+              debugPrint("Injecting journal form CSS and JavaScript");
               await _injectJournalFormCss();
             }
 
             await _handlePossibleJournalSuccess(url);
           },
           onPageFinished: (url) async {
-            print("Page finished loading: $url");
+            debugPrint("Page finished loading: $url");
             if (url.startsWith(initialUrl)) {
               await _injectJournalFormCss();
             }
@@ -108,12 +108,12 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
             final url = change.url;
             if (url == null) return;
             if (Platform.isIOS) {
-              print("URL changed: $url");
+              debugPrint("URL changed: $url");
               await _handlePossibleJournalSuccess(url);
             }
           },
           onWebResourceError: (error) {
-            print("Web resource error: $error");
+            debugPrint("Web resource error: $error");
           },
         ),
       )
@@ -130,7 +130,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
         return uri.pathSegments[1];
       }
     } catch (e) {
-      print('Error parsing journal ID: $e');
+      debugPrint('Error parsing journal ID: $e');
     }
     return null;
   }
@@ -223,7 +223,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
         });
       })();
     ''');
-    print("CSS and JavaScript injection completed.");
+    debugPrint("CSS and JavaScript injection completed.");
   }
 
   void addFileSelectionListener() async {
@@ -246,7 +246,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
         return [file.uri.toString()];
       }
     } catch (e) {
-      print("Error selecting file: $e");
+      debugPrint("Error selecting file: $e");
     }
     return [];
   }

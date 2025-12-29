@@ -576,7 +576,7 @@ class NotificationSectionWidget extends StatelessWidget {
                         if (section.title.toLowerCase().contains('watches'))
                           GestureDetector(
                             onTap: () {
-                              print("Opening profile: ${item.linkUsername}");
+                              debugPrint("Opening profile: ${item.linkUsername}");
                               if (item.linkUsername != null) {
                                 Navigator.push(
                                   context,
@@ -599,7 +599,7 @@ class NotificationSectionWidget extends StatelessWidget {
                           child: GestureDetector(
                             onTap: () {
                               if (section.title.toLowerCase().contains('watches')) {
-                                print("Opening profile: ${item.linkUsername}");
+                                debugPrint("Opening profile: ${item.linkUsername}");
                                 if (item.linkUsername != null) {
                                   Navigator.push(
                                     context,
@@ -629,7 +629,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                 }
                               } else if (section.title.toLowerCase().contains('shouts')) {
                                 final username = service.currentUsernameFromLink;
-                                print("shout clicked: $username");
+                                debugPrint("shout clicked: $username");
 
                                 if (username != null) {
                                   Navigator.push(

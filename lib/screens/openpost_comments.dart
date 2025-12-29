@@ -216,14 +216,12 @@ class _CommentWidgetState extends State<CommentWidget> {
                     selectionHandleColor: const Color(0xFFE09321),
                   ),
                 ),
-                child: SelectionArea(
-                  child: ExtendedText(
-                    widget.comment['text'] ?? '',
-                    specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
-                      onTapLink: widget.handleLink,
-                    ),
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade300),
+                child: ExtendedText(
+                  widget.comment['text'] ?? '',
+                  specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
+                    onTapLink: widget.handleLink,
                   ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade300),
                 ),
               ),
             ),

@@ -131,8 +131,8 @@ class _AddCommentScreenState extends State<AddCommentScreen> {
     );
 
 
-    print('Status Code: ${response.statusCode}');
-    print('Response Body: ${response.body}');
+    debugPrint('Status Code: ${response.statusCode}');
+    debugPrint('Response Body: ${response.body}');
 
 
     if (response.statusCode == 302 || response.body.contains('Your comment has been posted')) {

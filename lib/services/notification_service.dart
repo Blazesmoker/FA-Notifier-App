@@ -409,5 +409,5 @@ void notificationTapBackground(NotificationResponse response) async {
   final payload = response.payload ?? '';
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString('pending_navigation', payload);
-  print('[NOTIF_TAP_BG] saved payload "$payload"');
+  debugPrint('[NOTIF_TAP_BG] saved payload "$payload"');
 }

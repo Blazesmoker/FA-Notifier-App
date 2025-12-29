@@ -61,7 +61,12 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const String telegramDisplayText = 'Join our Telegram Group!';
-
+    final noSplashTheme = Theme.of(context).copyWith(
+      splashFactory: NoSplash.splashFactory,
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      hoverColor: Colors.transparent,
+    );
     return SafeArea(
       top: false,
       child: Scaffold(
@@ -71,10 +76,12 @@ class SettingsScreen extends StatelessWidget {
         body: Column(
           children: [
             Expanded(
+
               child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.phone_android),
+                    leading: const Icon(Icons.phone_android, color: Color(0xFFE09321)),
                     title: const Text('App Settings'),
                     onTap: () {
                       Navigator.push(
@@ -90,11 +97,8 @@ class SettingsScreen extends StatelessWidget {
                     color: Color(0xFF111111),
                     thickness: 3.0,
                   ),
-
-                  // TODO: Site Settings Screen
-                  /*
                   ListTile(
-                    leading: const Icon(Icons.public),
+                    leading: const Icon(Icons.public, color: Color(0xFFE09321)),
                     title: const Text('Site Settings'),
                     onTap: () {
                       Navigator.push(
@@ -110,10 +114,6 @@ class SettingsScreen extends StatelessWidget {
                     color: Color(0xFF111111),
                     thickness: 3.0,
                   ),
-                  */
-                  // In your debug/settings screen
-
-
                   ListTile(
                     leading: const Icon(
                       Icons.power_settings_new,

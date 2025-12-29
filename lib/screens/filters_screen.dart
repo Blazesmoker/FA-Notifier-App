@@ -80,7 +80,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
       _isLoadingFilters = true;
     });
     try {
-      print('Fetching all filters...');
+      debugPrint('Fetching all filters...');
       final response =
       await http.get(Uri.parse('https://www.furaffinity.net/browse/'));
       if (response.statusCode == 200) {
@@ -97,9 +97,9 @@ class _FiltersScreenState extends State<FiltersScreen> {
               return {'label': label, 'value': value};
             }).toList();
             loadedFilterOptions[filterName] = options;
-            print('$filterName: ${options.length} options fetched.');
+            debugPrint('$filterName: ${options.length} options fetched.');
           } else {
-            print('Select element for "$filterName" not found.');
+            debugPrint('Select element for "$filterName" not found.');
             loadedFilterOptions[filterName] = [];
           }
         }
@@ -109,7 +109,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
           _isLoadingFilters = false;
         });
       } else {
-        print('Failed to fetch filters. Status code: ${response.statusCode}');
+        debugPrint('Failed to fetch filters. Status code: ${response.statusCode}');
         setState(() {
           _filterOptions = {
             'cat': [],
@@ -121,7 +121,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
         });
       }
     } catch (e) {
-      print('Error fetching filter data: $e');
+      debugPrint('Error fetching filter data: $e');
       setState(() {
         _filterOptions = {
           'cat': [],

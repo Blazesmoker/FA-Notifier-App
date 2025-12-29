@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'notificationsSettings.dart';
+import 'thumbnail_display_settings_screen.dart';
+import 'app_icon_settings_screen.dart';
 
 class AppSettingsScreen extends StatefulWidget {
   const AppSettingsScreen({Key? key}) : super(key: key);
@@ -13,128 +13,72 @@ class AppSettingsScreen extends StatefulWidget {
 }
 
 class _AppSettingsScreenState extends State<AppSettingsScreen> {
-
-  static const platform = MethodChannel('com.blazesmoker.fanotifier/icon');
-
-  bool useAdaptiveIcon = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadIconPreference();
-  }
-
-  Future<void> _loadIconPreference() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      useAdaptiveIcon = prefs.getBool('useAdaptiveIcon') ?? false;
-    });
-  }
-
-  Future<void> _toggleIcon(bool value) async {
-    setState(() => useAdaptiveIcon = value);
-
-
-    final prefs = await SharedPreferences.getInstance();
-    prefs.setBool('useAdaptiveIcon', useAdaptiveIcon);
-
-    try {
-
-      await platform.invokeMethod('switchIcon', {'useAdaptive': useAdaptiveIcon});
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.green,
-          content: Text(
-            'Icon switched to ${useAdaptiveIcon ? 'Adaptive' : 'Transparent'}. Restarting...',
-            style: const TextStyle(color: Colors.white),
-          ),
-        ),
-      );
-    } on PlatformException catch (e) {
-      debugPrint("Error switching icon: $e");
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('App Settings')),
       body: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Column(
             children: [
               const SizedBox(height: 8),
 
-              if (Platform.isAndroid)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.center,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Text(
-                              'Transparent icon',
-                              style: TextStyle(fontSize: 14),
-                              textAlign: TextAlign.center,
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              '(if supported)',
-                              style: TextStyle(fontSize: 11, color: Colors.grey),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
+              if (Platform.isAndroid) ...[
+                ListTile(
+                  leading: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: OverflowBox(
+                      minWidth: 0,
+                      minHeight: 0,
+                      maxWidth: 48,
+                      maxHeight: 48,
+                      child: Image.asset(
+                        'assets/icons/AppIcon.png',
+                        width: 32,
+                        height: 32,
+                        fit: BoxFit.contain,
                       ),
                     ),
-                    Center(
-                      child: Switch(
-                        value: useAdaptiveIcon,
-                        activeColor: const Color(0xFFE09321),
-                        onChanged: _toggleIcon,
+                  ),
+                  title: const Text('App Icon'),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AppIconSettingsScreen(),
                       ),
-                    ),
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.center,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Text(
-                              'Adaptive icon',
-                              style: TextStyle(fontSize: 14),
-                              textAlign: TextAlign.center,
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              '(theme supported)',
-                              style: TextStyle(fontSize: 11, color: Colors.grey),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
+                const Divider(
+                  height: 1.0,
+                  color: Color(0xFF111111),
+                  thickness: 3.0,
+                ),
+              ],
 
-
-              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined, color: Color(0xFFE09321)),
+                title: const Text('Thumbnail display'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ThumbnailDisplaySettingsScreen(),
+                    ),
+                  );
+                },
+              ),
               const Divider(
                 height: 1.0,
                 color: Color(0xFF111111),
                 thickness: 3.0,
               ),
 
-
               ListTile(
-                leading: const Icon(Icons.notifications),
+                leading: const Icon(Icons.notifications, color: Color(0xFFE09321)),
                 title: const Text('Notifications Settings'),
                 onTap: () {
                   Navigator.push(

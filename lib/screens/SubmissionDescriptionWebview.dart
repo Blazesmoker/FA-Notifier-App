@@ -290,12 +290,12 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
 
   Future<void> _handleFALink(BuildContext context, String url, {String? htmlSource}) async {
     String fullUrlToMatch = url;
-    print("full URL: $fullUrlToMatch");
+    debugPrint("full URL: $fullUrlToMatch");
     if (url.contains('.....')) {
       final recoveredLink = _getFullLinkFromFetchedHtml(url, htmlSource: htmlSource);
       if (recoveredLink != null) {
         fullUrlToMatch = recoveredLink;
-        print("Recovered full URL: $fullUrlToMatch");
+        debugPrint("Recovered full URL: $fullUrlToMatch");
       }
     }
 
@@ -313,10 +313,10 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
       final String folderName = match.group(3)!;
       final String folderUrl = 'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
 
-      print('Tapped username: $tappedUsername');
-      print('Folder number: $folderNumber');
-      print('Folder name: $folderName');
-      print('Folder URL: $folderUrl');
+      debugPrint('Tapped username: $tappedUsername');
+      debugPrint('Folder number: $folderNumber');
+      debugPrint('Folder name: $folderName');
+      debugPrint('Folder URL: $folderUrl');
 
       Navigator.push(
         context,
@@ -511,7 +511,7 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
                 );
               },
               onConsoleMessage: (controller, consoleMessage) {
-                print('WebView Console: ${consoleMessage.message}');
+                debugPrint('WebView Console: ${consoleMessage.message}');
               },
             ),
           ),

@@ -12,9 +12,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
+import '../services/fa_thumbnail_parser.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'heart_animation_optimized.dart';
 import 'openpost.dart';
+import '../widgets/fa_thumbnail_display.dart';
 
 /// Data model that represents a group of images posted on the same date.
 class DateImageGroup {
@@ -104,6 +106,19 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     _scrollController.removeListener(_scrollListenerForPagination);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> scrollToTop({bool animate = true}) async {
+    if (!_scrollController.hasClients) return;
+    if (!animate) {
+      _scrollController.jumpTo(0);
+      return;
+    }
+    await _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Future<void> _loadSfwEnabled() async {
@@ -291,32 +306,18 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   }
 
   Map<String, dynamic>? _extractListingData(html_dom.Element fig) {
-    final aTag = fig.querySelector('a');
-    final img = fig.querySelector('img');
-    if (aTag == null || img == null) return null;
-
-    final postUrl = aTag.attributes['href'] ?? '';
-    final thumbUrl = img.attributes['src'] ?? '';
-    if (postUrl.isEmpty || thumbUrl.isEmpty) return null;
-
-    final widthRaw = img.attributes['data-width'] ?? '100';
-    final heightRaw = img.attributes['data-height'] ?? '100';
-    final w = double.tryParse(widthRaw) ?? 100.0;
-    final h = double.tryParse(heightRaw) ?? 100.0;
-
-    // /view/XXXXXX/
-    final match = RegExp(r'/view/(\d+)/').firstMatch(postUrl);
-    final uniqueNum = match?.group(1) ?? 'Unknown';
-
-    final resolvedThumb =
-    thumbUrl.startsWith('//') ? 'https:$thumbUrl' : thumbUrl;
+    final data = FaThumbnailParser.extract(fig);
+    if (data == null) return null;
 
     return {
-      'postUrl': postUrl,
-      'uniqueNumber': uniqueNum,
-      'thumbnailUrl': resolvedThumb,
-      'width': w,
-      'height': h,
+      'postUrl': data['postUrl'],
+      'uniqueNumber': data['uniqueNumber'],
+      'thumbnailUrl': data['thumbnailUrl'],
+      'width': data['width'],
+      'height': data['height'],
+      'rating': data['rating'],
+      'title': data['title'],
+      'author': data['author'],
       'hqUrl': null,
       'isFav': false,
       'initialIsFav': false,
@@ -728,6 +729,72 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     );
   }
 
+  Widget _buildRefreshableBody() {
+    if (_isLoading && _listItems.isEmpty) {
+      return ListView(
+        physics: AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(height: 220),
+          Center(child: CircularProgressIndicator()),
+        ],
+      );
+    }
+
+    if (_isError && _listItems.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          const SizedBox(height: 220),
+          const Center(child: Text('Network error. Pull to retry.')),
+          if (_errorMessage != null) const SizedBox(height: 8),
+          if (_errorMessage != null)
+            Text(
+              _errorMessage!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12),
+            ),
+        ],
+      );
+    }
+
+    if (_listItems.isEmpty) {
+      return ListView(
+        physics: AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(height: 220),
+          Center(child: Text('No new submissions found.')),
+        ],
+      );
+    }
+
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+      controller: _scrollController,
+      itemCount: _listItems.length + (_isLoading ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == _listItems.length) {
+          // loading indicator at the bottom
+          return const Padding(
+            padding: EdgeInsets.only(top: 168.0),
+            child: Center(
+              child: PulsatingLoadingIndicator(
+                size: 88.0,
+                assetPath: 'assets/icons/fathemed.png',
+              ),
+            ),
+          );
+        }
+        final item = _listItems[index];
+        if (item.isHeader) {
+          return _buildDateHeader(item.dateLabel!, item.showDividerAfterGroup);
+        } else {
+          return _buildRowWidget(item.rowImages!, item.showDividerAfterGroup);
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -759,48 +826,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
         ),
         body: RefreshIndicator(
           onRefresh: _refreshSubmissions,
-          child: (_isLoading && _listItems.isEmpty)
-              ? const Center(child: CircularProgressIndicator())
-              : (_isError && _listItems.isEmpty)
-              ? Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Network error. Pull to retry.'),
-                if (_errorMessage != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
-                  ),
-              ],
-            ),
-          )
-              : (_listItems.isEmpty)
-              ? const Center(child: Text('No new submissions found.'))
-              : ListView.builder(
-          controller: _scrollController,
-            itemCount: _listItems.length + (_isLoading ? 1 : 0),
-            itemBuilder: (context, index) {
-              if (index == _listItems.length) {
-                // loading indicator at the bottom
-                return const Padding(
-                  padding: EdgeInsets.only(top: 168.0),
-                  child: Center(
-                    child: PulsatingLoadingIndicator(
-                      size: 88.0,
-                      assetPath: 'assets/icons/fathemed.png',
-                    ),
-                  ),
-                );
-              }
-              final item = _listItems[index];
-              if (item.isHeader) {
-                return _buildDateHeader(item.dateLabel!, item.showDividerAfterGroup);
-              } else {
-                return _buildRowWidget(item.rowImages!, item.showDividerAfterGroup);
-              }
-            },
-          ),
+          child: _buildRefreshableBody(),
         ),
       ),
     );
@@ -1086,6 +1112,9 @@ class _FavImageTile extends StatelessWidget {
     final uniqueNumber = item['uniqueNumber'] as String;
     final int flatIndex = item['flatIndex'] as int? ?? -1;
     final displayUrl = hqUrl.isNotEmpty ? hqUrl : thumbnailUrl;
+    final String? rating = item['rating'] as String?;
+    final String? title = item['title'] as String?;
+    final String? author = item['author'] as String?;
 
     return VisibilityDetector(
       key: Key('visible-$uniqueNumber'),
@@ -1106,52 +1135,70 @@ class _FavImageTile extends StatelessWidget {
         },
         child: SizedBox(
           width: width,
-          height: height,
-          child: HeartAnimationOptimized(
-            isFavorite: isFav,
-            wasInitiallyFavorited: wasInitiallyFav,
-            containerWidth: width,
-            containerHeight: height,
-            onToggle: (val) => onToggleFavorite(item, val),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8.0),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedNetworkImage(
-                    imageUrl: displayUrl,
-                    fit: BoxFit.cover,
-                    fadeInDuration: const Duration(milliseconds: 300),
-                    placeholder: (context, url) => CachedNetworkImage(
-                      imageUrl: thumbnailUrl,
-                      fit: BoxFit.cover,
-                      fadeInDuration: Duration.zero,
-                      errorWidget: (ctx, url, err) => Container(
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.error, color: Colors.red),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: width,
+                height: height,
+                child: HeartAnimationOptimized(
+                  isFavorite: isFav,
+                  wasInitiallyFavorited: wasInitiallyFav,
+                  containerWidth: width,
+                  containerHeight: height,
+                  onToggle: (val) => onToggleFavorite(item, val),
+                  child: FaThumbnailOutline(
+                    rating: rating,
+                    borderRadius: 8.0,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8.0),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          CachedNetworkImage(
+                            imageUrl: displayUrl,
+                            fit: BoxFit.cover,
+                            fadeInDuration: const Duration(milliseconds: 300),
+                            placeholder: (context, url) => CachedNetworkImage(
+                              imageUrl: thumbnailUrl,
+                              fit: BoxFit.cover,
+                              fadeInDuration: Duration.zero,
+                              errorWidget: (ctx, url, err) => Container(
+                                color: Colors.grey[300],
+                                child: const Icon(Icons.error, color: Colors.red),
+                              ),
+                            ),
+                            errorWidget: (ctx, url, err) => Container(
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.error, color: Colors.red),
+                            ),
+                          ),
+                          if (selectionMode)
+                            Container(
+                              color: isSelected ? Colors.black54 : Colors.black26,
+                              child: Center(
+                                child: Icon(
+                                  isSelected
+                                      ? Icons.check_circle
+                                      : Icons.radio_button_unchecked,
+                                  color: Colors.white,
+                                  size: 30,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                    ),
-                    errorWidget: (ctx, url, err) => Container(
-                      color: Colors.grey[300],
-                      child: const Icon(Icons.error, color: Colors.red),
                     ),
                   ),
-                  if (selectionMode)
-                    Container(
-                      color: isSelected ? Colors.black54 : Colors.black26,
-                      child: Center(
-                        child: Icon(
-                          isSelected
-                              ? Icons.check_circle
-                              : Icons.radio_button_unchecked,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      ),
-                    ),
-                ],
+                ),
               ),
-            ),
+              FaThumbnailCaption(
+                maxWidth: width,
+                title: title,
+                author: author,
+              ),
+            ],
           ),
         ),
       ),

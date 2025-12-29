@@ -210,11 +210,11 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
         NavigationDelegate(
           onPageStarted: (String url) {
             // Check if we've navigated to the messages list (success)
-            print('DEBUG: WebView page started: $url');
+            debugPrint('DEBUG: WebView page started: $url');
             if (url.contains('/msg/pms/') && !url.contains('/viewmessage/')) {
-              print('DEBUG: Success detected in onPageStarted');
+              debugPrint('DEBUG: Success detected in onPageStarted');
               if (mounted && !_replySentSuccessfully) {
-                print('DEBUG: Setting _replySentSuccessfully = true in onPageStarted');
+                debugPrint('DEBUG: Setting _replySentSuccessfully = true in onPageStarted');
                 setState(() {
                   _replySentSuccessfully = true;
                   _useWebView = false;
@@ -224,7 +224,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
             }
           },
           onPageFinished: (String url) async {
-            print('DEBUG: WebView page finished: $url');
+            debugPrint('DEBUG: WebView page finished: $url');
             await _injectFormHandler(controller);
             if (mounted) {
               setState(() {
@@ -234,9 +234,9 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
             // Double-check for success page
             if (url.contains('/msg/pms/') && !url.contains('/viewmessage/')) {
-              print('DEBUG: Success detected in onPageFinished');
+              debugPrint('DEBUG: Success detected in onPageFinished');
               if (mounted && !_replySentSuccessfully) {
-                print('DEBUG: Setting _replySentSuccessfully = true in onPageFinished');
+                debugPrint('DEBUG: Setting _replySentSuccessfully = true in onPageFinished');
                 setState(() {
                   _replySentSuccessfully = true;
                   _useWebView = false;
@@ -492,16 +492,16 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    print('DEBUG: NoteReplyScreen build() - _replySentSuccessfully: $_replySentSuccessfully, _useWebView: $_useWebView, _hasPopped: $_hasPopped');
+    debugPrint('DEBUG: NoteReplyScreen build() - _replySentSuccessfully: $_replySentSuccessfully, _useWebView: $_useWebView, _hasPopped: $_hasPopped');
 
     // If reply was sent successfully via WebView, show success and close
     if (_replySentSuccessfully && !_useWebView && !_hasPopped) {
-      print('DEBUG: Conditions met, setting _hasPopped = true and scheduling pop');
+      debugPrint('DEBUG: Conditions met, setting _hasPopped = true and scheduling pop');
       _hasPopped = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        print('DEBUG: PostFrameCallback executing - mounted: $mounted');
+        debugPrint('DEBUG: PostFrameCallback executing - mounted: $mounted');
         if (mounted) {
-          print('DEBUG: Calling Navigator.pop(context, true)');
+          debugPrint('DEBUG: Calling Navigator.pop(context, true)');
           Navigator.pop(context, true);
         }
       });

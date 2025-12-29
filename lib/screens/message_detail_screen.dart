@@ -349,7 +349,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
       _shouldShowReplySuccess = false; // Reset immediately
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          print('DEBUG: Showing snackbar from build cycle');
+          debugPrint('DEBUG: Showing snackbar from build cycle');
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Reply sent successfully!'),

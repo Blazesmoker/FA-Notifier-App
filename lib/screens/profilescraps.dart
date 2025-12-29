@@ -7,10 +7,12 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:collection';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/fa_thumbnail_parser.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'openpost.dart';
 import '../services/favorite_service.dart';
 import '../widgets/heart_animation.dart';
+import '../widgets/fa_thumbnail_display.dart';
 
 
 class _ParseResult {
@@ -132,7 +134,7 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
 
   _ParseResult _parseScrapsHtml(String html, String currentUrl) {
     final document = parse(html);
-    final imageElements = document.querySelectorAll('figure.t-image');
+    final figures = FaThumbnailParser.selectThumbnailFigures(document);
 
     // Determine next page
     String? nextPageUrl;
@@ -149,27 +151,19 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     }
 
     final posts = <Map<String, dynamic>>[];
-    for (var element in imageElements) {
-      final thumbUrl = element.querySelector('img')?.attributes['src'];
-      final wStr = element.querySelector('img')?.attributes['data-width'];
-      final hStr = element.querySelector('img')?.attributes['data-height'];
-      if (thumbUrl != null && wStr != null && hStr != null) {
-        final w = double.tryParse(wStr);
-        final h = double.tryParse(hStr);
-        if (w != null && h != null) {
-          final match = RegExp(r'/(\d+)@').firstMatch(thumbUrl);
-          final un = match != null
-              ? match.group(1)!
-              : DateTime.now().millisecondsSinceEpoch.toString();
-
-          posts.add({
-            'url': 'https:$thumbUrl',
-            'width': w,
-            'height': h,
-            'uniqueNumber': un,
-          });
-        }
-      }
+    for (final fig in figures) {
+      final data = FaThumbnailParser.extract(fig);
+      if (data == null) continue;
+      posts.add({
+        'url': data['thumbnailUrl'],
+        'width': data['width'],
+        'height': data['height'],
+        'uniqueNumber': data['uniqueNumber'],
+        'postUrl': data['postUrl'],
+        'rating': data['rating'],
+        'title': data['title'],
+        'author': data['author'],
+      });
     }
     return _ParseResult(posts: posts, nextPageUrl: nextPageUrl);
   }
@@ -346,6 +340,7 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
         }
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildImageContainer(im1, w1, h),
             const SizedBox(width: 4.0),
@@ -377,12 +372,18 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     final imageUrl = im['url'] as String;
     final uniqueNumber = im['uniqueNumber'] as String;
     final isFav = _favoritedImages.contains(uniqueNumber);
+    final String? rating = im['rating'] as String?;
+    final String? title = im['title'] as String?;
+    final String? author = null;
 
     return _FavImageTileScrapsSliver(
       width: width,
       height: height,
       imageUrl: imageUrl,
       isFav: isFav,
+      rating: rating,
+      title: title,
+      author: author,
       onToggle: (val) => _toggleFavorite(uniqueNumber, val),
       onTap: () {
         Navigator.push(
@@ -455,6 +456,9 @@ class _FavImageTileScrapsSliver extends StatefulWidget {
   final double height;
   final String imageUrl;
   final bool isFav;
+  final String? rating;
+  final String? title;
+  final String? author;
   final ValueChanged<bool> onToggle;
   final VoidCallback onTap;
 
@@ -464,6 +468,9 @@ class _FavImageTileScrapsSliver extends StatefulWidget {
     required this.height,
     required this.imageUrl,
     required this.isFav,
+    required this.rating,
+    required this.title,
+    required this.author,
     required this.onToggle,
     required this.onTap,
   }) : super(key: key);
@@ -502,29 +509,44 @@ class _FavImageTileScrapsSliverState extends State<_FavImageTileScrapsSliver> {
     return GestureDetector(
       onTap: widget.onTap,
       onLongPress: () => setState(() => _localFav = !_localFav),
-      child: HeartAnimationWidget(
-        isFavorite: _localFav,
-        containerWidth: widget.width,
-        containerHeight: widget.height,
-        onDebounceComplete: (finalVal) => widget.onToggle(finalVal),
-        debounceDuration: const Duration(seconds: 2),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: CachedNetworkImage(
-            imageUrl: widget.imageUrl,
-            width: widget.width,
-            height: widget.height,
-            fit: BoxFit.cover,
-            placeholder: (ctx, url) => _buildPlaceholder(widget.width, widget.height),
-            errorWidget: (ctx, url, err) => Container(
-              width: widget.width,
-              height: widget.height,
-              color: Colors.grey,
-              alignment: Alignment.center,
-              child: const Icon(Icons.error, color: Colors.red),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          HeartAnimationWidget(
+            isFavorite: _localFav,
+            containerWidth: widget.width,
+            containerHeight: widget.height,
+            onDebounceComplete: (finalVal) => widget.onToggle(finalVal),
+            debounceDuration: const Duration(seconds: 2),
+            child: FaThumbnailOutline(
+              rating: widget.rating,
+              borderRadius: 8,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: CachedNetworkImage(
+                  imageUrl: widget.imageUrl,
+                  width: widget.width,
+                  height: widget.height,
+                  fit: BoxFit.cover,
+                  placeholder: (ctx, url) => _buildPlaceholder(widget.width, widget.height),
+                  errorWidget: (ctx, url, err) => Container(
+                    width: widget.width,
+                    height: widget.height,
+                    color: Colors.grey,
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.error, color: Colors.red),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
+          FaThumbnailCaption(
+            maxWidth: widget.width,
+            title: widget.title,
+            author: widget.author,
+          ),
+        ],
       ),
     );
   }
