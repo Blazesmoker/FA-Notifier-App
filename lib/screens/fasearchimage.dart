@@ -230,8 +230,7 @@ class FASearchImageState extends State<FASearchImage> {
       uri,
       headers: {
         HttpHeaders.cookieHeader: cookieHeader,
-        'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36',
+        'User-Agent': FAHttp.userAgent,
         'Referer': 'https://www.furaffinity.net/search/',
         'Accept':
         'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -375,7 +374,7 @@ class FASearchImageState extends State<FASearchImage> {
         Uri.parse(absolute),
         headers: {
           HttpHeaders.cookieHeader: cookie,
-          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+          'User-Agent': FAHttp.userAgent,
         },
       );
 

@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import '../services/fa_http.dart';
 
 class ReplyScreen extends StatefulWidget {
   final Map<String, dynamic> comment;
@@ -169,7 +170,7 @@ class _ReplyScreenState extends State<ReplyScreen> {
 
     Map<String, String> headers = {
       'Cookie': 'a=$cookieA; b=$cookieB',
-      'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+      'User-Agent': FAHttp.userAgent,
       'Content-Type': 'application/x-www-form-urlencoded',
     };
 

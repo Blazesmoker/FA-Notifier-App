@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
+import '../services/fa_http.dart';
 
 // Mapping from FA Timezone Names to IANA Timezones
 final Map<String, String> faTimezoneToIana = {
@@ -69,7 +70,7 @@ class TimezoneProvider with ChangeNotifier {
       Uri.parse(settingsUrl),
       headers: {
         'Cookie': 'a=$cookieA; b=$cookieB',
-        'User-Agent': 'Mozilla/5.0 (compatible; FANotifier/1.0)',
+        'User-Agent': FAHttp.userAgent,
       },
     );
 

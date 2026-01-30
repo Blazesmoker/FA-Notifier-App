@@ -1,4 +1,5 @@
 // user_profile_screen.dart
+import 'dart:async';
 import 'package:FANotifier/screens/user_description_webview.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -61,6 +62,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
   @override
   void dispose() {
+    _tabSettleTimer?.cancel();
     _tabController.dispose();
     _scrollController.removeListener(_updateAvatarTransform);
     _scrollController.removeListener(_onScrollForMoveUpFab);
@@ -224,7 +226,9 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
           orElse: () => FaFolder(name: _selectedFolderName, url: _selectedFolderUrl),
         );
         _selectedFolderName = matchingFolder.name;
-        _selectedFolderUrl = matchingFolder.url;
+        if (!_compareFolderUrls(matchingFolder.url, _selectedFolderUrl)) {
+          _selectedFolderUrl = matchingFolder.url;
+        }
       } else if (folders.isNotEmpty) {
 
         final mainGallery = folders.firstWhere(
@@ -232,7 +236,6 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
           orElse: () => folders.first,
         );
         _selectedFolderName = mainGallery.name;
-        _selectedFolderUrl = mainGallery.url;
       }
 
       _allFolders = folders;
@@ -267,6 +270,13 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
 
   late TabController _tabController;
+
+  // Avoid "pass-through" tab animation causing background tabs to initialize and fetch.
+  // We only build (and thus allow initState-fetches) for a tab after it has remained
+  // selected for a short settle period.
+  static const Duration _tabSettleDelay = Duration(milliseconds: 100);
+  Timer? _tabSettleTimer;
+  final Set<ProfileSection> _lazyLoadedSections = <ProfileSection>{};
 
 
   int _previousIndex = 0;
@@ -313,9 +323,21 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       initialIndex: widget.initialSection.index,
     );
 
+    // Load only the initial tab immediately; others will load after "settling".
+    _lazyLoadedSections.add(ProfileSection.values[_tabController.index]);
+
 
     _tabController.addListener(() {
-      if (!_tabController.indexIsChanging && _previousIndex != _tabController.index) {
+      if (_tabController.indexIsChanging) {
+        // Cancel any pending lazy-load while the tab is still animating/dragging.
+        _tabSettleTimer?.cancel();
+        return;
+      }
+
+      // Tab finished changing; schedule lazy-load for the final tab.
+      _scheduleLazyLoadForIndex(_tabController.index);
+
+      if (_previousIndex != _tabController.index) {
         final double appBarHeight = sliverAppBarExpandedHeight - sliverAppBarMinHeight;
         final double targetOffset = appBarHeight + collapsibleHeaderMaxHeight - 24;
 
@@ -333,6 +355,19 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
     sanitizedUsername = _sanitizeUsername(widget.nickname);
 
     _initAsyncFetch();
+  }
+
+  void _scheduleLazyLoadForIndex(int index) {
+    _tabSettleTimer?.cancel();
+    _tabSettleTimer = Timer(_tabSettleDelay, () {
+      if (!mounted) return;
+      if (_tabController.index != index) return;
+      final section = ProfileSection.values[index];
+      if (_lazyLoadedSections.contains(section)) return;
+      setState(() {
+        _lazyLoadedSections.add(section);
+      });
+    });
   }
 
   void _onScrollForMoveUpFab() {
@@ -1541,25 +1576,10 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
               body: TabBarView(
                 controller: _tabController,
                 children: ProfileSection.values.map((section) {
-                  switch (section) {
-                    case ProfileSection.Home:
-                      return _buildHomeSection();
-                    case ProfileSection.Gallery:
-                      return _buildGallerySection();
-                    case ProfileSection.Scraps:
-                      return _buildScrapsSection();
-                    case ProfileSection.Favs:
-                      return _buildFavoritesSection();
-                    case ProfileSection.Journals:
-                      return _buildJournalsSection();
-                    default:
-                      return Center(
-                        child: Text(
-                          'Unknown section',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      );
-                  }
+                  return KeyedSubtree(
+                    key: ValueKey(section),
+                    child: _buildLazySection(section),
+                  );
                 }).toList(),
               ),
             ),
@@ -1619,6 +1639,39 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
       ),
     );
+  }
+
+  Widget _buildLazySection(ProfileSection section) {
+    if (!_lazyLoadedSections.contains(section)) {
+      // Keep a scrollable child so NestedScrollView/TabBarView behave consistently,
+      // but don't build the real section yet (prevents initState fetches).
+      return CustomScrollView(
+        slivers: [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: PulsatingLoadingIndicator(
+                size: 72.0,
+                assetPath: 'assets/icons/fathemed.png',
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    switch (section) {
+      case ProfileSection.Home:
+        return _buildHomeSection();
+      case ProfileSection.Gallery:
+        return _buildGallerySection();
+      case ProfileSection.Scraps:
+        return _buildScrapsSection();
+      case ProfileSection.Favs:
+        return _buildFavoritesSection();
+      case ProfileSection.Journals:
+        return _buildJournalsSection();
+    }
   }
 
 

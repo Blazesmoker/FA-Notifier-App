@@ -4,14 +4,52 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 typedef _Call<T> = Future<T> Function();
 
 class FAHttp {
   static const Duration defaultTimeout = Duration(seconds: 20);
+  static const String appName = 'FA Notifier';
+  static const String _prefsUserAgentKey = 'fa_notifier.userAgent';
+  static const String _prefsAppVersionKey = 'fa_notifier.appVersion';
+
+  static String appVersion = '0.0.0';
+  static String userAgent = '$appName v0.0.0';
 
   static HttpClient? _http;
   static IOClient? _client;
+
+  static Future<void> init() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final v = info.version.trim();
+      if (v.isNotEmpty) {
+        appVersion = v;
+        userAgent = '$appName v$appVersion';
+        reset();
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_prefsAppVersionKey, appVersion);
+        await prefs.setString(_prefsUserAgentKey, userAgent);
+      }
+    } catch (_) {}
+  }
+
+  static Future<void> initFromPrefs({SharedPreferences? prefs}) async {
+    try {
+      final p = prefs ?? await SharedPreferences.getInstance();
+      final v = (p.getString(_prefsAppVersionKey) ?? '').trim();
+      final ua = (p.getString(_prefsUserAgentKey) ?? '').trim();
+      if (v.isNotEmpty) appVersion = v;
+      if (ua.isNotEmpty) {
+        userAgent = ua;
+      } else {
+        userAgent = '$appName v$appVersion';
+      }
+      reset();
+    } catch (_) {}
+  }
 
   static void reset() {
     try {
@@ -39,7 +77,7 @@ class FAHttp {
       ..idleTimeout = const Duration(seconds: 10)
       ..autoUncompress = true
       ..maxConnectionsPerHost = 8
-      ..userAgent = 'FANotifier/1.0 (+dart:io)';
+      ..userAgent = userAgent;
 
     _http = c;
     _client = IOClient(c);
@@ -74,10 +112,13 @@ class FAHttp {
   }
 
   static Map<String, String> _mergeHeaders(Map<String, String>? headers) {
-    return <String, String>{
+    final out = <String, String>{
       HttpHeaders.acceptEncodingHeader: 'gzip',
       if (headers != null) ...headers,
     };
+    out.removeWhere((k, _) => k.toLowerCase() == 'user-agent');
+    out['User-Agent'] = userAgent;
+    return out;
   }
 
   static Future<R> _withOneRetry<R>(_Call<R> call) async {

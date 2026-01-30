@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter/cupertino.dart';
+import 'fa_http.dart';
 
 /// A singleton service to handle favorite/unfavorite actions:
 /// - 3-second debounce to prevent spam.
@@ -31,7 +32,7 @@ class FavoriteGalleryService {
           Uri.parse(url),
           headers: {
             'Cookie': 'a=$cookieA; b=$cookieB',
-            'User-Agent': 'Mozilla/5.0',
+            'User-Agent': FAHttp.userAgent,
             'Referer': 'https://www.furaffinity.net',
           },
         );

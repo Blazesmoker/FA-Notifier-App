@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import '../model/user_profile.dart';
 import '../model/notifications.dart';
+import 'fa_http.dart';
 
 class FaService {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
@@ -41,9 +42,7 @@ class FaService {
       Uri.parse(url),
       headers: {
         'Cookie': cookiesHeader,
-        'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-            '(KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36',
+        'User-Agent': FAHttp.userAgent,
       },
     );
 
@@ -89,8 +88,7 @@ class FaService {
               Uri.parse(profileUrl),
               headers: {
                 'Cookie': cookiesHeader,
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                    '(KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36',
+                'User-Agent': FAHttp.userAgent,
               },
             );
             debugPrint('[FaService] Classic profile page response: ${profileResponse.statusCode}');
@@ -151,8 +149,7 @@ class FaService {
       Uri.parse(notificationsUrl),
       headers: {
         'Cookie': cookies,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-            '(KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36',
+        'User-Agent': FAHttp.userAgent,
       },
     );
 

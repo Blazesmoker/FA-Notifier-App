@@ -13,6 +13,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as htmlDom;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import '../services/fa_http.dart';
 import '../services/favorite_gallery_service.dart';
 import '../services/fa_thumbnail_parser.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
@@ -238,7 +239,7 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
       Uri.parse(url),
       headers: {
         'Cookie': cookieHeader,
-        'User-Agent': 'Mozilla/5.0',
+        'User-Agent': FAHttp.userAgent,
         'Referer': 'https://www.furaffinity.net',
       },
     );
@@ -349,7 +350,7 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
       Uri.parse(absolute),
       headers: {
         'Cookie': cookieHeader,
-        'User-Agent': 'Mozilla/5.0',
+        'User-Agent': FAHttp.userAgent,
         'Referer': 'https://www.furaffinity.net',
       },
     );

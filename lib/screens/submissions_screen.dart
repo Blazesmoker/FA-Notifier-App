@@ -199,7 +199,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
         Uri.parse(url),
         headers: {
           HttpHeaders.cookieHeader: cookieHeader,
-          'User-Agent': 'Mozilla/5.0',
+          'User-Agent': FAHttp.userAgent,
         },
       );
 
@@ -440,7 +440,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       final url = _baseSubmissionsUrl ?? 'https://www.furaffinity.net/msg/submissions/new/';
       final resp = await http.post(Uri.parse(url), headers: {
         'Cookie': cookieHeader,
-        'User-Agent': 'Mozilla/5.0',
+        'User-Agent': FAHttp.userAgent,
       }, body: {'messagecenter-action': 'nuke_notifications'});
       if (resp.statusCode == 302) {
         setState(() {
@@ -511,7 +511,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       final deleteUrl = _baseSubmissionsUrl ?? 'https://www.furaffinity.net/msg/submissions/new/';
       final resp = await http.post(Uri.parse(deleteUrl), headers: {
         'Cookie': cookieHeader,
-        'User-Agent': 'Mozilla/5.0',
+        'User-Agent': FAHttp.userAgent,
         'Content-Type': 'application/x-www-form-urlencoded',
       }, body: body);
 
@@ -557,10 +557,12 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
 
   void onTileVisibilityChanged(int flatListIndex, bool isVisible) {
     if (flatListIndex < 0 || flatListIndex >= _flatSubmissionsList.length) return;
+    final item = _flatSubmissionsList[flatListIndex];
     if (isVisible) {
       _visibleTileIndices.add(flatListIndex);
-      final item = _flatSubmissionsList[flatListIndex];
-      if (item['detailFetchQueued'] == true) return;
+      final existingHqUrl = item['hqUrl'] as String? ?? '';
+      if (item['detailFetched'] == true || existingHqUrl.isNotEmpty) return;
+      if (item['detailFetchQueued'] == true || item['detailFetchInProgress'] == true) return;
       debugPrint('[Submissions] Visibility => queue HQ for item #$flatListIndex / ${item['postUrl']}');
       item['detailFetchQueued'] = true;
       _submissionQueue.add(_SubmissionQueueItem(
@@ -571,7 +573,8 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     } else {
       _visibleTileIndices.remove(flatListIndex);
       _submissionQueue.removeWhere((qItem) => qItem.indexInFlatList == flatListIndex);
-      _flatSubmissionsList[flatListIndex]['detailFetchQueued'] = false;
+      if (item['detailFetched'] == true || item['detailFetchInProgress'] == true) return;
+      item['detailFetchQueued'] = false;
     }
   }
 
@@ -582,6 +585,12 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       _activeFetches++;
 
       debugPrint('[Submissions] Start detail fetch for $postUrl. Active: $_activeFetches');
+
+      if (qItem.indexInFlatList >= 0 && qItem.indexInFlatList < _flatSubmissionsList.length) {
+        final item = _flatSubmissionsList[qItem.indexInFlatList];
+        item['detailFetchQueued'] = false;
+        item['detailFetchInProgress'] = true;
+      }
 
       _fetchSubmissionData(postUrl).then((data) {
         debugPrint('[Submissions] Fetched detail => $postUrl');
@@ -594,11 +603,16 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
             item['initialIsFav'] = data.isFav;
             item['favUrl'] = data.favUrl;
             item['unfavUrl'] = data.unfavUrl;
+            item['detailFetched'] = true;
           }
         });
       }).catchError((err) {
         debugPrint('[Submissions] Error fetching detail => $err');
       }).whenComplete(() {
+        if (qItem.indexInFlatList >= 0 && qItem.indexInFlatList < _flatSubmissionsList.length) {
+          final item = _flatSubmissionsList[qItem.indexInFlatList];
+          item['detailFetchInProgress'] = false;
+        }
         _activeFetches--;
         debugPrint('[Submissions] Done detail fetch for $postUrl. Active: $_activeFetches');
         _startNextFetches();
@@ -618,7 +632,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       Uri.parse(absoluteUrl),
       headers: {
         HttpHeaders.cookieHeader: cookieHeader,
-        'User-Agent': 'Mozilla/5.0',
+          'User-Agent': FAHttp.userAgent,
         'Referer': 'https://www.furaffinity.net',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },

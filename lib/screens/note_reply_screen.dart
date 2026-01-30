@@ -10,6 +10,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import '../utils.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
+import '../services/fa_http.dart';
 
 class NoteReplyScreen extends StatefulWidget {
   final String subject;
@@ -71,9 +72,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   void _initializeDio() {
     _dio = Dio();
     _dio.interceptors.add(CookieManager(_cookieJar));
-    _dio.options.headers['User-Agent'] =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-        'Chrome/130.0.0.0 Safari/537.36';
+    _dio.options.headers['User-Agent'] = FAHttp.userAgent;
     _dio.options.followRedirects = false;
     _dio.options.validateStatus = (status) =>
     status != null && status >= 200 && status < 400;

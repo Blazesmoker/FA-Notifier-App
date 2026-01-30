@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
+import '../services/fa_http.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 
 class EditCommentScreen extends StatefulWidget {
@@ -68,7 +69,7 @@ class _EditCommentScreenState extends State<EditCommentScreen> {
         Uri.parse(widget.editLink),
         headers: {
           'Cookie': 'a=$cookieA; b=$cookieB',
-          'User-Agent': 'FANotifier/1.0',
+          'User-Agent': FAHttp.userAgent,
           'Referer': widget.editLink,
         },
       );
@@ -112,7 +113,7 @@ class _EditCommentScreenState extends State<EditCommentScreen> {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'Cookie': 'a=$cookieA; b=$cookieB',
-          'User-Agent': 'YourAppName/1.0',
+          'User-Agent': FAHttp.userAgent,
           'Referer': widget.editLink,
         },
         body: {

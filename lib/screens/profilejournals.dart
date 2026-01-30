@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/fa_http.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'openjournal.dart';
 
@@ -135,8 +136,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
       Uri.parse(url),
       headers: {
         'Cookie': cookieHeader,
-        'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+        'User-Agent': FAHttp.userAgent,
         'Referer': 'https://www.furaffinity.net',
       },
     );

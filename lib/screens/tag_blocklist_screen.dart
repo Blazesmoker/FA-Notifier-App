@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../network.dart';
 import '../parsing_utils.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
+import '../services/fa_http.dart';
 
 class TagBlocklistParseResult {
   const TagBlocklistParseResult({
@@ -152,7 +153,7 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
       Uri.parse(url),
       headers: <String, String>{
         'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
-        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        'User-Agent': FAHttp.userAgent,
       },
     );
   }
@@ -205,7 +206,7 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
       Uri.parse(_routeUrl),
       headers: <String, String>{
         'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
-        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        'User-Agent': FAHttp.userAgent,
         'Referer': _profileUrl,
         'Origin': 'https://www.furaffinity.net',
         'Content-Type': 'application/x-www-form-urlencoded',

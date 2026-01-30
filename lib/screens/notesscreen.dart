@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 import '../main.dart';
 import 'package:FANotifier/services/notes_refresh_service.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
@@ -12,6 +13,7 @@ import 'message_detail_screen.dart';
 import 'message_model.dart';
 import 'new_message.dart';
 import '../services/notification_service.dart';
+import '../services/fa_http.dart';
 import '../utils/message_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../custom_drawer/drawer_user_controller.dart';
@@ -50,6 +52,8 @@ class NotesScreenState extends State<NotesScreen>
 
   Timer? _refreshTimer;
   StreamSubscription<void>? _notesRefreshSub;
+  bool _isVisibleInHomeStack = false;
+  AppLifecycleState? _lastLifecycleState;
 
   bool isLoadingInbox = true;
   bool isLoadingMoreInbox = false;
@@ -156,27 +160,43 @@ class NotesScreenState extends State<NotesScreen>
 
   @override
   void didPopNext() {
-    if (!_isDialogOpen) {
+    // NotesScreen lives inside HomeScreen's IndexedStack, so it stays mounted even
+    // when another tab is selected. Only refetch on returning to Home if Notes is
+    // actually visible (selected).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _isDialogOpen || !_isVisibleInHomeStack) return;
       _fetchInboxTwoPagesOnly();
       _currentSentPage = 1;
       _hasMoreSent = true;
       _fetchSent(page: 1, clearOld: false);
-    }
+    });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && mounted && !_isDialogOpen) {
-      errorInbox = '';
-      errorSent = '';
-      _currentInboxPage = 1;
-      _currentSentPage = 1;
-      _hasMoreInbox = true;
-      _hasMoreSent = true;
-      _fetchInbox(page: 1, clearOld: false);
-      _fetchSent(page: 1, clearOld: false);
+    final prev = _lastLifecycleState;
+    _lastLifecycleState = state;
 
-      _startPeriodicFetch();
+    if (state == AppLifecycleState.resumed && mounted && !_isDialogOpen) {
+      // Android notification shade can cause inactive -> resumed.
+      // Don't treat that as a real resume that should refetch.
+      if (prev == AppLifecycleState.inactive) {
+        return;
+      }
+      // Only auto-refetch on resume if Notes is visible (selected).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _isDialogOpen || !_isVisibleInHomeStack) return;
+        errorInbox = '';
+        errorSent = '';
+        _currentInboxPage = 1;
+        _currentSentPage = 1;
+        _hasMoreInbox = true;
+        _hasMoreSent = true;
+        _fetchInbox(page: 1, clearOld: false);
+        _fetchSent(page: 1, clearOld: false);
+
+        _startPeriodicFetch();
+      });
     }
   }
 
@@ -447,6 +467,7 @@ class NotesScreenState extends State<NotesScreen>
         data: formData,
         options: Options(
           headers: {
+            'User-Agent': FAHttp.userAgent,
             'Content-Type': 'application/x-www-form-urlencoded',
             'Referer': 'https://www.furaffinity.net/msg/pms/$pageNum/$msgId/',
             'Origin': 'https://www.furaffinity.net',
@@ -536,6 +557,21 @@ class NotesScreenState extends State<NotesScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Track whether Notes is actually visible (selected) in HomeScreen's IndexedStack.
+    // This prevents RouteAware callbacks from triggering network requests while hidden.
+    //
+    // Note: visibility_detector is already used elsewhere in the app.
+    // We keep periodic fetch behavior unchanged per request.
+    return VisibilityDetector(
+      key: const Key('notes_screen_visibility'),
+      onVisibilityChanged: (info) {
+        _isVisibleInHomeStack = info.visibleFraction > 0.01;
+      },
+      child: _buildNotesScaffold(context),
+    );
+  }
+
+  Widget _buildNotesScaffold(BuildContext context) {
     final bool showInitialLoader =
         (inboxMessages.isEmpty && isLoadingInbox) &&
             (sentMessages.isEmpty && isLoadingSent);

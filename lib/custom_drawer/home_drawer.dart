@@ -13,13 +13,9 @@ import '../screens/openjournal.dart';
 import '../screens/openpost.dart';
 import '../screens/settings_screen.dart';
 import '../screens/user_profile_screen.dart';
-import '../services/fa_service.dart';
+import '../services/fa_notification_service.dart';
 import '../model/drawer_list.dart';
 import '../enums/drawer_index.dart';
-import 'package:FANotifier/services/activities_notification_state.dart';
-import 'package:FANotifier/services/notification_refresh_service.dart';
-import '../services/notification_service.dart';
-import '../utils/notification_counts.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import '../widgets/StarBurstAnimation.dart';
 import '../widgets/notification_badge.dart';
@@ -27,7 +23,6 @@ import 'dart:async';
 import '../app_theme.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
-import '../providers/notification_settings_provider.dart';
 import 'package:http/http.dart' as http;
 
 class HomeDrawer extends StatefulWidget {
@@ -59,10 +54,9 @@ class HomeDrawer extends StatefulWidget {
   _HomeDrawerState createState() => _HomeDrawerState();
 }
 
-class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
+class _HomeDrawerState extends State<HomeDrawer> {
   List<DrawerList>? drawerList;
 
-  // Notifications data
   Notifications _notifications = Notifications(
     submissions: '0',
     watches: '0',
@@ -73,14 +67,9 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
     registeredUsersOnline: '0',
   );
 
-  final FaService _faService = FaService();
-  Timer? _timer;
-  bool _isFetchingNotifications = false;
+  FANotificationService? _faNotificationService;
   bool _sfwEnabled = true;
   static const String NsfwConfirmationDisabled = 'nsfwConfirmationDisabled';
-
-  int _previousTotalSumOfNotifications = 0;
-  static const String kPreviousTotalSumKey = 'previousTotalSumOfNotifications';
 
   GlobalKey _kofiKey = GlobalKey();
   List<Offset>? _starOrigins;
@@ -95,48 +84,25 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     setDrawerListArray();
-    _startTimer();
-    fetchNotifications();
     _loadSfwEnabled();
-    NotificationRefreshService().onRefresh.listen((_) {
-      fetchNotifications();
+    _faNotificationService = Provider.of<FANotificationService>(context, listen: false);
+    _faNotificationService?.addListener(_onFaNotificationServiceChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _onFaNotificationServiceChanged();
     });
     _checkForUpdate();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _timer?.cancel();
+    _faNotificationService?.removeListener(_onFaNotificationServiceChanged);
+    _faNotificationService = null;
     _kofiTimer?.cancel();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed) {
-      _startTimer();
-      fetchNotifications();
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.detached) {
-      _timer?.cancel();
-      _kofiTimer?.cancel();
-      _timer = null;
-    }
-  }
-
-  void _startTimer() {
-    if (_timer == null || !_timer!.isActive) {
-      _timer = Timer.periodic(
-        const Duration(seconds: 120),
-        (Timer t) => fetchNotifications(),
-      );
-    }
-  }
   Future<void> _checkForUpdate() async {
     try {
 
@@ -182,152 +148,30 @@ class _HomeDrawerState extends State<HomeDrawer> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> fetchNotifications() async {
-    if (_isFetchingNotifications) return;
-    _isFetchingNotifications = true;
-    try {
-      Notifications? notifications = await _faService.fetchNotifications();
+  void _onFaNotificationServiceChanged() {
+    final svc = _faNotificationService;
+    if (svc == null) return;
+    final next = svc.latestTopBarNotifications;
 
-      if (mounted) {
-        setState(() {
-          _notifications = notifications != null
-              ? Notifications(
-                  submissions: notifications.submissions.replaceAll(',', ''),
-                  watches: notifications.watches.replaceAll(',', ''),
-                  journals: notifications.journals.replaceAll(',', ''),
-                  notes: notifications.notes.replaceAll(',', ''),
-                  comments: notifications.comments.replaceAll(',', ''),
-                  favorites: notifications.favorites.replaceAll(',', ''),
-                  registeredUsersOnline:
-                      notifications.registeredUsersOnline.replaceAll(',', ''),
-                )
-              : Notifications(
-                  submissions: '0',
-                  watches: '0',
-                  journals: '0',
-                  notes: '0',
-                  comments: '0',
-                  favorites: '0',
-                  registeredUsersOnline: '0',
-                );
-        });
+    final bool changed = _notifications.submissions != next.submissions ||
+        _notifications.watches != next.watches ||
+        _notifications.journals != next.journals ||
+        _notifications.notes != next.notes ||
+        _notifications.comments != next.comments ||
+        _notifications.favorites != next.favorites ||
+        _notifications.registeredUsersOnline != next.registeredUsersOnline;
 
-        int actualNotesCount = int.tryParse(_notifications.notes) ?? 0;
-        widget.onNotesCountChanged(actualNotesCount);
-        widget.onNotificationsUpdated(_notifications);
+    if (!changed) return;
 
-        debugPrint(
-          'Drawer: Notifications - '
-          'Submissions: ${_notifications.submissions}, '
-          'Watches: ${_notifications.watches}, '
-          'Journals: ${_notifications.journals}, '
-          'Notes: ${_notifications.notes}, '
-          'Comments: ${_notifications.comments}, '
-          'Favorites: ${_notifications.favorites}, '
-          'RegisteredUsersOnline: ${_notifications.registeredUsersOnline}',
-        );
-
-        final settings =
-            Provider.of<NotificationSettingsProvider>(context, listen: false);
-
-        // Raw counts (always stored as the baseline, even if a category is disabled).
-        final int rawSubmissions = int.tryParse(_notifications.submissions) ?? 0;
-        final int rawWatches = int.tryParse(_notifications.watches) ?? 0;
-        final int rawComments = int.tryParse(_notifications.comments) ?? 0;
-        final int rawFavorites = int.tryParse(_notifications.favorites) ?? 0;
-        final int rawJournals = int.tryParse(_notifications.journals) ?? 0;
-        final int rawNotes = int.tryParse(_notifications.notes) ?? 0;
-
-        // Visible counts in the notification body (respect per-category toggles).
-        final int submissionsCount =
-            settings.drawerSubmissionsEnabled ? rawSubmissions : 0;
-        final int watchesCount = settings.drawerWatchesEnabled ? rawWatches : 0;
-        final int commentsCount =
-            settings.drawerCommentsEnabled ? rawComments : 0;
-        final int favoritesCount =
-            settings.drawerFavoritesEnabled ? rawFavorites : 0;
-        final int journalsCount =
-            settings.drawerJournalsEnabled ? rawJournals : 0;
-        final int filteredNotesCount = settings.drawerNotesEnabled ? rawNotes : 0;
-
-        final ActivitiesDiff diff = await ActivitiesNotificationStateStore()
-            .diffAndUpdateLastSeen(
-          currentCounts: NotificationCounts(
-            submissions: rawSubmissions,
-            watches: rawWatches,
-            comments: rawComments,
-            favorites: rawFavorites,
-            journals: rawJournals,
-            notes: rawNotes,
-          ),
-        );
-        debugPrint(
-            '[HomeDrawer] Last-seen counts: S:${diff.previous.submissions} W:${diff.previous.watches} C:${diff.previous.comments} F:${diff.previous.favorites} J:${diff.previous.journals} N:${diff.previous.notes}');
-        debugPrint(
-            '[HomeDrawer] Increased by:     S:${diff.increasedBy.submissions} W:${diff.increasedBy.watches} C:${diff.increasedBy.comments} F:${diff.increasedBy.favorites} J:${diff.increasedBy.journals} N:${diff.increasedBy.notes}');
-
-        final NotificationCounts filteredCounts = NotificationCounts(
-          submissions: submissionsCount,
-          watches: watchesCount,
-          comments: commentsCount,
-          favorites: favoritesCount,
-          journals: journalsCount,
-          notes: filteredNotesCount,
-        );
-
-        final String messageBody = _buildNotificationMessage(filteredCounts);
-
-        final bool shouldNotify =
-            (settings.drawerSubmissionsEnabled &&
-                    diff.increasedBy.submissions > 0) ||
-                (settings.drawerWatchesEnabled && diff.increasedBy.watches > 0) ||
-                (settings.drawerCommentsEnabled &&
-                    diff.increasedBy.comments > 0) ||
-                (settings.drawerFavoritesEnabled &&
-                    diff.increasedBy.favorites > 0) ||
-                (settings.drawerJournalsEnabled &&
-                    diff.increasedBy.journals > 0) ||
-                (settings.drawerNotesEnabled && diff.increasedBy.notes > 0);
-
-        if (shouldNotify) {
-          // Keep behavior consistent with the background worker: if both are off,
-          // treat that as "don't show activities notifications".
-          if (settings.soundNewActivitiesEnabled ||
-              settings.vibrationNewActivitiesEnabled) {
-            final NotificationService notificationService =
-                NotificationService();
-            await notificationService.showNotification(
-              999999,
-              'New FA Activity',
-              messageBody,
-              'activity_fa_activity',
-              'activities',
-            );
-
-            debugPrint(
-                '[HomeDrawer] Sent new activities notification: $messageBody');
-          } else {
-            debugPrint(
-                '[HomeDrawer] Activities sound+vibration disabled; not showing notification.');
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Error fetching notifications: $e');
-    } finally {
-      _isFetchingNotifications = false;
+    if (mounted) {
+      setState(() {
+        _notifications = next;
+      });
     }
-  }
 
-  String _buildNotificationMessage(NotificationCounts diff) {
-    List<String> parts = [];
-    if (diff.submissions > 0) parts.add('${diff.submissions}S');
-    if (diff.watches > 0) parts.add('${diff.watches}W');
-    if (diff.comments > 0) parts.add('${diff.comments}C');
-    if (diff.favorites > 0) parts.add('${diff.favorites}F');
-    if (diff.journals > 0) parts.add('${diff.journals}J');
-    if (diff.notes > 0) parts.add('${diff.notes}N');
-    return parts.join(' | ');
+    final int actualNotesCount = int.tryParse(next.notes) ?? 0;
+    widget.onNotesCountChanged(actualNotesCount);
+    widget.onNotificationsUpdated(next);
   }
 
   void setDrawerListArray() {

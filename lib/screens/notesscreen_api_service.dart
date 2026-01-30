@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
@@ -15,6 +16,7 @@ import 'message_model.dart';
 import '../parsing_utils.dart';
 import '../utils.dart';
 import '../utils/notes_notifications_text_edit.dart';
+import '../services/fa_http.dart';
 
 class NotesApiService {
   NotesApiService(this._secureStorage);
@@ -37,7 +39,7 @@ class NotesApiService {
             Uri.parse(url),
             headers: {
               'Cookie': 'a=$cookieA; b=$cookieB; folder=$folder',
-              'User-Agent': 'FANotifier1.0',
+              'User-Agent': FAHttp.userAgent,
               HttpHeaders.connectionHeader: 'close',
               'Accept':
                   'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -64,7 +66,7 @@ class NotesApiService {
     const int maxRetries = 4;
     int retry = 0;
     Duration backoff = const Duration(seconds: 2);
-
+    debugPrint("Fetching page $page in notes screen");
     while (true) {
       try {
         final resp = await _faGet(
@@ -208,7 +210,7 @@ class NotesApiService {
       options: Options(
         responseType: ResponseType.plain,
         headers: {
-          'User-Agent': 'FANotifier1.0',
+          'User-Agent': FAHttp.userAgent,
           'Accept':
               'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
           HttpHeaders.connectionHeader: 'close',

@@ -38,6 +38,7 @@ import 'add_comment_screen.dart';
 import 'avatardownloadscreen.dart';
 import 'openpost_api_service.dart';
 import 'edit_submission_screen.dart';
+import '../services/fa_http.dart';
 import 'editcommentscreen.dart';
 import 'keyword_search_screen.dart';
 import 'new_message.dart';
@@ -236,7 +237,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
     final headers = <String, String>{
       'Cookie': cookieHeader,
-      'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+      'User-Agent': FAHttp.userAgent,
     };
     if (additionalHeaders != null) headers.addAll(additionalHeaders);
 
@@ -512,18 +513,22 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     required bool allowSearch,
   }) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+        Center(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
         ),
         const SizedBox(height: 10),
         Wrap(
+          alignment: WrapAlignment.start,
+          runAlignment: WrapAlignment.start,
           spacing: 10,
           runSpacing: 10,
           children: tags
@@ -696,7 +701,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       Uri.parse(url),
       headers: <String, String>{
         'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
-        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        'User-Agent': FAHttp.userAgent,
         'Referer': 'https://www.furaffinity.net/view/${widget.uniqueNumber}/',
         'Origin': 'https://www.furaffinity.net',
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -797,7 +802,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         Uri.parse(fullUrl),
         headers: {
           'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
-          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+          'User-Agent': FAHttp.userAgent,
           'Referer': 'https://www.furaffinity.net/user/$linkUsername/',
           'Content-Type': 'application/x-www-form-urlencoded',
         },
@@ -1089,7 +1094,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         Uri.parse(url),
         headers: {
           'Cookie': 'a=$cookieA; b=$cookieB',
-          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+          'User-Agent': FAHttp.userAgent,
           'Referer': 'https://www.furaffinity.net/view/${widget.uniqueNumber}/',
           'Content-Type': 'application/x-www-form-urlencoded',
         },
@@ -1237,7 +1242,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         Uri.parse(url),
         headers: {
           'Cookie': 'a=$cookieA; b=$cookieB',
-          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+          'User-Agent': FAHttp.userAgent,
           'Referer': 'https://www.furaffinity.net/controls/submissions/',
           'Content-Type': 'application/x-www-form-urlencoded',
         },
@@ -1482,7 +1487,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         Uint8List bytes;
 
         // Attempt to download the image from the URL
-        final response = await httpClient.get(Uri.parse(imageUrl));
+        final response = await httpClient.get(
+          Uri.parse(imageUrl),
+          headers: {'User-Agent': FAHttp.userAgent},
+        );
         if (response.statusCode == 200) {
           bytes = response.bodyBytes;
         } else {
@@ -1559,7 +1567,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       Uint8List bytes;
 
 
-      final response = await httpClient.get(Uri.parse(imageUrl));
+      final response = await httpClient.get(
+        Uri.parse(imageUrl),
+        headers: {'User-Agent': FAHttp.userAgent},
+      );
       if (response.statusCode == 200) {
         bytes = response.bodyBytes;
       } else {
@@ -2375,7 +2386,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
 
                         child: SubmissionDescriptionWebView(
-                          key: _submissionWebViewKey,
+                          key: ValueKey(submissionDescription.hashCode),
                           submissionId: widget.uniqueNumber,
                           initialHtml: submissionDescription,
                           enableTextSelection: false,

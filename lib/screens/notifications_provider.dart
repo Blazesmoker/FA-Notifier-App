@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
+import '../services/fa_http.dart';
 
 /// Model representing a single notification item.
 class NotificationItem {
@@ -78,9 +79,7 @@ class NotificationsProvider with ChangeNotifier {
 
 
   Future<void> _initializeDio() async {
-    _dio.options.headers['User-Agent'] =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-        '(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+    _dio.options.headers['User-Agent'] = FAHttp.userAgent;
     _dio.options.headers['Accept'] =
     'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,'
         'image/apng,*/*;q=0.8';

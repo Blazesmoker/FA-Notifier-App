@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 
 import '../network.dart';
 import '../parsing_utils.dart';
+import '../services/fa_http.dart';
 
 class OpenJournalFetchResult {
   OpenJournalFetchResult({
@@ -253,7 +254,7 @@ class OpenJournalApiService {
       Uri.parse(journalUrl),
       headers: {
         'Cookie': 'a=${cookies.cookieA}; b=${cookies.cookieB}',
-        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        'User-Agent': FAHttp.userAgent,
         'Accept-Encoding': 'gzip',
       },
     );
@@ -557,7 +558,7 @@ class OpenJournalApiService {
       Uri.parse('https://www.furaffinity.net/controls/journal/delete/$uniqueNumber/'),
       headers: {
         'Cookie': 'a=${cookies.cookieA}; b=${cookies.cookieB}',
-        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        'User-Agent': FAHttp.userAgent,
         'Accept-Encoding': 'gzip',
       },
     );
@@ -578,7 +579,7 @@ class OpenJournalApiService {
       Uri.parse(url),
       headers: {
         'Cookie': 'a=${cookies.cookieA}; b=${cookies.cookieB}',
-        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        'User-Agent': FAHttp.userAgent,
         'Accept-Encoding': 'gzip',
       },
     );

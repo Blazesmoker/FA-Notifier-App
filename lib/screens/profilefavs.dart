@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart';
 import '../services/fa_thumbnail_parser.dart';
+import '../services/fa_http.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'openpost.dart';
 import '../services/favorite_service.dart';
@@ -95,7 +96,7 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
         Uri.parse(_nextPageUrl!),
         headers: {
           'Cookie': cookieHeader,
-          'User-Agent': 'Mozilla/5.0',
+          'User-Agent': FAHttp.userAgent,
           'Referer': 'https://www.furaffinity.net',
         },
       );
@@ -203,7 +204,7 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
         Uri.parse(postUrl),
         headers: {
           'Cookie': cookieHeader,
-          'User-Agent': 'Mozilla/5.0',
+          'User-Agent': FAHttp.userAgent,
         },
       );
       if (response.statusCode == 200) {

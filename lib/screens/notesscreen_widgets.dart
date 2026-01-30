@@ -37,26 +37,73 @@ class MessageList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onRefresh = () async {
+      if (folder == 'inbox') {
+        await refreshInbox();
+      } else {
+        await refreshSent();
+      }
+    };
+
+    // IMPORTANT: allow pull-to-refresh even when list is empty/error/loading.
+    // RefreshIndicator requires a scrollable child.
     if (isLoading && messages.isEmpty) {
-      return const Center(
-        child: PulsatingLoadingIndicator(
-          size: 108.0,
-          assetPath: 'assets/icons/fathemed.png',
+      return RefreshIndicator(
+        color: _accent,
+        backgroundColor: Colors.black,
+        onRefresh: onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            SizedBox(height: 180),
+            Center(
+              child: PulsatingLoadingIndicator(
+                size: 108.0,
+                assetPath: 'assets/icons/fathemed.png',
+              ),
+            ),
+          ],
         ),
       );
-    } else if (errorMessage.isNotEmpty && messages.isEmpty) {
-      return Center(
-        child: Text(
-          errorMessage,
-          style: const TextStyle(color: Colors.red, fontSize: 16),
-          textAlign: TextAlign.center,
+    }
+
+    if (errorMessage.isNotEmpty && messages.isEmpty) {
+      return RefreshIndicator(
+        color: _accent,
+        backgroundColor: Colors.black,
+        onRefresh: onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            const SizedBox(height: 180),
+            Center(
+              child: Text(
+                errorMessage,
+                style: const TextStyle(color: Colors.red, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
         ),
       );
-    } else if (messages.isEmpty) {
-      return const Center(
-        child: Text(
-          'No messages found.',
-          style: TextStyle(color: Colors.white, fontSize: 16),
+    }
+
+    if (messages.isEmpty) {
+      return RefreshIndicator(
+        color: _accent,
+        backgroundColor: Colors.black,
+        onRefresh: onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            SizedBox(height: 180),
+            Center(
+              child: Text(
+                'No messages found.',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -64,13 +111,7 @@ class MessageList extends StatelessWidget {
     return RefreshIndicator(
       color: _accent,
       backgroundColor: Colors.black,
-      onRefresh: () async {
-        if (folder == 'inbox') {
-          await refreshInbox();
-        } else {
-          await refreshSent();
-        }
-      },
+      onRefresh: onRefresh,
       child: ListView.builder(
         controller: scrollController,
         physics: const AlwaysScrollableScrollPhysics(),

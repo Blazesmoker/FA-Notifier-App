@@ -7,6 +7,9 @@ import 'package:dio/dio.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../model/notifications.dart';
+import '../utils/notification_counts.dart';
+import 'fa_http.dart';
 
 /// A semaphore to limit concurrent network requests.
 class SimpleSemaphore {
@@ -130,10 +133,77 @@ class FANotificationService with ChangeNotifier {
   static final SimpleSemaphore _semaphore = SimpleSemaphore(3);
   static final Map<String, String> _avatarCache = {};
   static final Map<String, String> _previewCache = {};
+  static final Map<String, Future<String?>> _previewInFlight = {};
   static bool _didFetchProfileShouts = false;
   static List<Shout> _profileShoutList = [];
   String? displayName;
   String? username;
+  bool shoutsEnriched = false;
+  String _shoutsLightSignature = '';
+  String? _shoutsEnrichedSignature;
+  String get shoutsLightSignature => _shoutsLightSignature;
+  String? get shoutsEnrichedSignature => _shoutsEnrichedSignature;
+
+  bool get shoutsNeedEnrich {
+    final idx = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
+    if (idx == -1) return false;
+    if (_shoutsAppearEnrichedFromMsgOthers()) return false; // classic already has bodies/avatars
+    if (_shoutsLightSignature.isEmpty) return false;
+    return _shoutsEnrichedSignature != _shoutsLightSignature;
+  }
+
+  String _computeShoutsSignatureFromSections(List<NotificationSection> secs) {
+    final idx = secs.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
+    if (idx == -1) return '';
+    final ids = secs[idx]
+        .items
+        .map((it) => it.id.trim())
+        .where((id) => id.isNotEmpty)
+        .toList(growable: false);
+    return ids.join(',');
+  }
+
+  Map<String, NotificationItem> _captureShoutsById() {
+    final idx = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
+    if (idx == -1) return <String, NotificationItem>{};
+    final map = <String, NotificationItem>{};
+    for (final it in sections[idx].items) {
+      map[it.id] = it;
+    }
+    return map;
+  }
+
+  void _applyEnrichedShoutsFromPrevious(Map<String, NotificationItem> prevById) {
+    final idx = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
+    if (idx == -1) return;
+
+    final existing = sections[idx].items;
+    final rebuilt = <NotificationItem>[];
+    for (final it in existing) {
+      final prev = prevById[it.id];
+      final mergedContent = (prev != null && prev.content.isNotEmpty) ? prev.content : it.content;
+      final mergedUsername = (prev != null && (prev.username ?? '').isNotEmpty) ? prev.username : it.username;
+      final mergedLinkUsername =
+          (prev != null && (prev.linkUsername ?? '').isNotEmpty) ? prev.linkUsername : it.linkUsername;
+      final mergedAvatarUrl =
+          (prev != null && (prev.avatarUrl ?? '').isNotEmpty) ? prev.avatarUrl : it.avatarUrl;
+
+      rebuilt.add(NotificationItem(
+        id: it.id,
+        content: mergedContent,
+        username: mergedUsername,
+        linkUsername: mergedLinkUsername,
+        submissionId: it.submissionId,
+        journalId: it.journalId,
+        url: it.url,
+        avatarUrl: mergedAvatarUrl,
+        date: it.date,
+        fullDate: it.fullDate,
+        isChecked: it.isChecked,
+      ));
+    }
+    sections[idx].items = rebuilt;
+  }
   FANotificationService() {
     _initializeDio();
     fetchNotifications();
@@ -141,6 +211,44 @@ class FANotificationService with ChangeNotifier {
 
   /// Stores counts from the message-bar (e.g., {"W": 1, "F": 2, "J": 3}).
   Map<String, int> messageBarCounts = {};
+  NotificationCounts latestCounts = NotificationCounts(
+    submissions: 0,
+    watches: 0,
+    comments: 0,
+    favorites: 0,
+    journals: 0,
+    notes: 0,
+  );
+  Notifications latestTopBarNotifications = Notifications(
+    submissions: '0',
+    watches: '0',
+    journals: '0',
+    notes: '0',
+    comments: '0',
+    favorites: '0',
+    registeredUsersOnline: '0',
+  );
+
+  static int _extractAnyInt(String s) {
+    final m = RegExp(r'\d{1,3}(?:[,.]\d{3})*|\d+').firstMatch(s);
+    if (m == null) return 0;
+    return int.tryParse(m.group(0)!.replaceAll(RegExp(r'[,.]'), '')) ?? 0;
+  }
+
+  static String? _typeKeyFromHrefOrTitle({
+    required String href,
+    required String title,
+  }) {
+    final h = href.toLowerCase();
+    final t = title.toLowerCase();
+    if (h.contains('#submissions') || h.contains('msg/submissions') || t.contains('submission')) return 'S';
+    if (h.contains('#watches') || t.contains('watch')) return 'W';
+    if (h.contains('#comments') || t.contains('comment')) return 'C';
+    if (h.contains('#favorites') || t.contains('favorite')) return 'F';
+    if (h.contains('#journals') || t.contains('journal')) return 'J';
+    if (h.contains('#notes') || h.contains('msg/pms') || t.contains('note')) return 'N';
+    return null;
+  }
 
 
   /// Helper method to extract a username (nicknameLink).
@@ -169,8 +277,7 @@ class FANotificationService with ChangeNotifier {
 
 
   Future<void> _initializeDio() async {
-    _dio.options.headers['User-Agent'] =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+    _dio.options.headers['User-Agent'] = FAHttp.userAgent;
     _dio.options.headers['Accept'] =
     'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8';
     _dio.options.headers['Accept-Encoding'] = 'gzip, deflate, br, zstd';
@@ -219,55 +326,70 @@ class FANotificationService with ChangeNotifier {
 
       final document = html_parser.parse(response.data.toString());
 
-      // Clear existing message-bar counts
-      messageBarCounts.clear();
-
       // Find message-bar in both modern and classic formats
       final messageBar = document.querySelector('li.message-bar-desktop') ??
           document.querySelector('li.noblock');
-
+      messageBarCounts.clear();
       if (messageBar != null) {
         final links = messageBar.querySelectorAll('a.notification-container');
-        for (var link in links) {
+        for (final link in links) {
           final href = link.attributes['href'] ?? '';
           final text = link.text.trim();
-
-          String? typeKey;
-
-          // Determine type key based on href
-          if (href.contains('#watches')) {
-            typeKey = 'W';
-          } else if (href.contains('#favorites')) {
-            typeKey = 'F';
-          } else if (href.contains('#journals')) {
-            typeKey = 'J';
-          }
-
-          // Extract numeric value from text (both modern and classic styles)
-          int count = 0;
-          if (typeKey != null) {
-            // Modern format: e.g. "24S"
-            final modernMatch = RegExp(r'^(\d+)').firstMatch(text);
-            if (modernMatch != null) {
-              count = int.tryParse(modernMatch.group(1)!) ?? 0;
-            } else {
-              // Classic format: e.g. "40<span>S</span>"
-              final classicMatch = RegExp(r'^(\d+)').firstMatch(text);
-              if (classicMatch != null) {
-                count = int.tryParse(classicMatch.group(1)!) ?? 0;
-              }
-            }
-
-            if (count > 0) {
-              messageBarCounts[typeKey] = count;
-            }
+          final title = (link.attributes['title'] ?? '').trim();
+          final typeKey = _typeKeyFromHrefOrTitle(href: href, title: title);
+          if (typeKey == null) continue;
+          final int count = _extractAnyInt(title.isNotEmpty ? title : text);
+          if (count > 0) {
+            messageBarCounts[typeKey] = count;
           }
         }
       }
 
+      final body = document.querySelector('body');
+      final bool isClassic = (body?.attributes['data-static-path'] == '/themes/classic');
+      int registeredUsersOnline = 0;
+      if (isClassic) {
+        final center = document.querySelector('div.footer center');
+        final txt = center?.text ?? '';
+        final m = RegExp(r'(\d+)\s+registered', caseSensitive: false).firstMatch(txt);
+        if (m != null) {
+          registeredUsersOnline = int.tryParse(m.group(1)!.replaceAll(',', '')) ?? 0;
+        }
+      } else {
+        final statsDiv = document.querySelector('div.online-stats');
+        final txt = statsDiv?.text ?? '';
+        final m = RegExp(r'(\d+)\s+registered', caseSensitive: false).firstMatch(txt);
+        if (m != null) {
+          registeredUsersOnline = int.tryParse(m.group(1)!.replaceAll(',', '')) ?? 0;
+        }
+      }
 
+      final int s = messageBarCounts['S'] ?? 0;
+      final int w = messageBarCounts['W'] ?? 0;
+      final int c = messageBarCounts['C'] ?? 0;
+      final int f = messageBarCounts['F'] ?? 0;
+      final int j = messageBarCounts['J'] ?? 0;
+      final int n = messageBarCounts['N'] ?? 0;
+      latestCounts = NotificationCounts(
+        submissions: s,
+        watches: w,
+        comments: c,
+        favorites: f,
+        journals: j,
+        notes: n,
+      );
+      latestTopBarNotifications = Notifications(
+        submissions: '$s',
+        watches: '$w',
+        journals: '$j',
+        notes: '$n',
+        comments: '$c',
+        favorites: '$f',
+        registeredUsersOnline: '$registeredUsersOnline',
+      );
 
-      currentUsername = await _guessMenubarUser();
+      // We already have /msg/others/ HTML, so don't refetch it just to find the user.
+      currentUsername = _extractMenubarUsernameFromDocument(document);
       currentUsernameFromLink = currentUsername;
 
 
@@ -551,7 +673,12 @@ class FANotificationService with ChangeNotifier {
                 fullDate = timeSpan.attributes['title'] ?? date;
                 timeSpan.remove();
               }
-              content = li.text.trim();
+              // Modern msg/others doesn't reliably include the shout body.
+              // Keep the body empty; we'll enrich from /user/<me>/ when Shouts tab is opened.
+              final lower = li.text.toLowerCase();
+              content = lower.contains('shout has been removed')
+                  ? 'Shout has been removed from your page.'
+                  : '';
             }
 
             String finalNicknameLink = _extractNicknameLink(li);
@@ -561,7 +688,8 @@ class FANotificationService with ChangeNotifier {
               id: id,
               content: content,
               username: username,
-              linkUsername: linkUsername,
+              // For shouts, store the user slug here (used for opening profile).
+              linkUsername: finalNicknameLink,
               submissionId: submissionId,
               journalId: journalId,
               url: url,
@@ -619,16 +747,28 @@ class FANotificationService with ChangeNotifier {
       }
 
 
+      final prevEnrichedSig = _shoutsEnrichedSignature;
+      final prevById = (prevEnrichedSig != null) ? _captureShoutsById() : <String, NotificationItem>{};
+
       sections = fetchedSections;
       debugPrint("[fetchNotifications] Parsed sections: "
           "${sections.map((s) => s.title).toList()}");
+      // Shouts signature is used to decide if we need enrichment when the user opens the tab.
+      final newSig = _computeShoutsSignatureFromSections(sections);
+      _shoutsLightSignature = newSig;
 
-
-      final shoutsIndex = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
-      if (shoutsIndex != -1) {
-
-        final dedupedShouts = await FANotificationService.fetchMsgCenterShouts();
-        updateShouts(dedupedShouts);
+      // If we already enriched these exact shout IDs before, preserve the enriched data
+      // across background refreshes without re-fetching.
+      if (newSig.isNotEmpty && prevEnrichedSig != null && prevEnrichedSig == newSig && prevById.isNotEmpty) {
+        _applyEnrichedShoutsFromPrevious(prevById);
+        shoutsEnriched = true;
+        _shoutsEnrichedSignature = newSig;
+      } else if (newSig.isNotEmpty && _shoutsAppearEnrichedFromMsgOthers()) {
+        // Classic msg/others already includes shout bodies/avatars.
+        shoutsEnriched = true;
+        _shoutsEnrichedSignature = newSig;
+      } else {
+        shoutsEnriched = false;
       }
 
 
@@ -662,8 +802,7 @@ class FANotificationService with ChangeNotifier {
       final resp = await http.get(
         Uri.parse(url),
         headers: {
-          'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+          'User-Agent': FAHttp.userAgent,
           if (cookieHeader != null) 'Cookie': cookieHeader,
         },
       );
@@ -778,24 +917,212 @@ class FANotificationService with ChangeNotifier {
   /// Merge shouts from /msg/others/ and the profile page.
   static Future<List<Shout>> fetchMsgCenterShouts() async {
     debugPrint("[fetchMsgCenterShouts] Called");
-    List<Map<String, dynamic>> msgItems = await fetchMsgOthersShouts();
-    debugPrint("[fetchMsgCenterShouts] msgItems count=${msgItems.length}");
-    String myUsername = await _guessMenubarUser();
-    if (myUsername.isEmpty) {
-      debugPrint("[fetchMsgCenterShouts] No user found in menubar; profile parse skipped.");
+    final url = 'https://www.furaffinity.net/msg/others/';
+    try {
+      String? cookieHeader = await _getCookieHeader();
+      final resp = await http.get(
+        Uri.parse(url),
+        headers: {
+          'User-Agent': FAHttp.userAgent,
+          if (cookieHeader != null) 'Cookie': cookieHeader,
+        },
+      );
+      if (resp.statusCode != 200) return <Shout>[];
+      final doc = html_parser.parse(resp.body);
+      return await _fetchMsgCenterShoutsFromDocument(doc);
+    } catch (e, st) {
+      debugPrint("[fetchMsgCenterShouts] Error: $e\n$st");
+      return <Shout>[];
     }
-    List<Shout> profileShouts = [];
-    if (myUsername.isNotEmpty) {
-      profileShouts = await fetchProfileShouts(myUsername, forceRefresh: true);
+  }
+
+  static String _extractMenubarUsernameFromDocument(dom.Document doc) {
+    final body = doc.querySelector('body');
+    final bool isClassic = (body?.attributes['data-static-path'] == '/themes/classic');
+
+    // Classic (and sometimes modern) provides #my-username.
+    final myUsernameElem = doc.getElementById("my-username");
+    if (myUsernameElem != null) {
+      final href = myUsernameElem.attributes['href'];
+      if (href != null) {
+        final match = RegExp(r'^/user/([^/]+)/?$').firstMatch(href);
+        if (match != null) return match.group(1)!;
+      }
     }
-    List<Shout> results = [];
-    for (var m in msgItems) {
-      String id = m["id"] as String? ?? '';
-      bool isRemoved = m["isRemoved"] as bool? ?? false;
-      String postedTitle = (m["postedTitle"] as String? ?? "").trim();
-      String postedAgo = (m["postedAgo"] as String? ?? "").trim();
-      String nick = (m["nickname"] as String? ?? "").trim();
-      String nicknameLink = (m["nicknameLink"] as String? ?? "").trim();
+
+    if (!isClassic) {
+      // Modern menubar user link.
+      final menubarLink =
+          doc.querySelector('div.floatleft.hideonmobile a[href^="/user/"]');
+      final href = menubarLink?.attributes['href'];
+      if (href != null) {
+        final match = RegExp(r'^/user/([^/]+)/?$').firstMatch(href);
+        if (match != null) return match.group(1)!;
+      }
+    }
+
+    return "";
+  }
+
+  static List<Map<String, dynamic>> _parseMsgOthersShoutsFromDocument(dom.Document doc) {
+    final results = <Map<String, dynamic>>[];
+    final bool isClassic =
+        doc.querySelector('body')?.attributes['data-static-path'] == '/themes/classic';
+
+    if (isClassic) {
+      final liItems = doc
+          .querySelectorAll('li')
+          .where((li) => li.querySelector('input[type="checkbox"][name="shouts[]"]') != null)
+          .toList();
+      debugPrint("[fetchMsgOthersShouts] Found ${liItems.length} classic shout <li> items");
+      for (final li in liItems) {
+        final checkbox = li.querySelector('input[type="checkbox"][name="shouts[]"]');
+        final id = checkbox?.attributes['value'] ?? '';
+        final isRemoved = li.text.toLowerCase().contains('shout has been removed');
+        String nickname = "";
+        String nicknameLink = "";
+        if (!isRemoved) {
+          final nameSpan = li.querySelector(
+              'span.c-usernameBlockSimple.username-underlined a span.c-usernameBlockSimple__displayName');
+          if (nameSpan != null) nickname = nameSpan.text.trim();
+          nicknameLink = _extractNicknameLink(li);
+        }
+        String postedAgo = "";
+        String postedTitle = "";
+        final timeSpan = li.querySelector('span.popup_date');
+        if (timeSpan != null) {
+          postedAgo = timeSpan.text.trim();
+          postedTitle = (timeSpan.attributes['title'] ?? postedAgo)
+              .replaceFirst(RegExp(r'^on\s+'), '')
+              .trim();
+        }
+        results.add({
+          "id": id,
+          "nickname": nickname,
+          "nicknameLink": nicknameLink,
+          "postedTitle": postedTitle,
+          "postedAgo": postedAgo,
+          "isRemoved": isRemoved,
+        });
+      }
+
+      final tableShouts = doc.querySelectorAll('table[id^="shout-"]');
+      debugPrint("[fetchMsgOthersShouts] Found ${tableShouts.length} classic shout <table> items");
+      for (final t in tableShouts) {
+        final shoutId = t.id.replaceFirst('shout-', '');
+        final isRemoved = t.text.toLowerCase().contains('shout has been removed');
+
+        String nickname = "";
+        String nicknameLink = "";
+        final nameElem = t.querySelector('div.c-usernameBlock a.c-usernameBlock__displayName');
+        if (nameElem != null) {
+          nickname = nameElem.text.trim();
+          final href = nameElem.attributes['href'];
+          if (href != null) {
+            final match = RegExp(r'^/user/([^/]+)/?$').firstMatch(href);
+            if (match != null) nicknameLink = match.group(1)!;
+          }
+        }
+
+        String postedAgo = "";
+        String postedTitle = "";
+        final dateElem = t.querySelector('span.popup_date');
+        if (dateElem != null) {
+          postedAgo = dateElem.text.trim();
+          postedTitle = (dateElem.attributes['title'] ?? postedAgo)
+              .replaceFirst(RegExp(r'^on\s+'), '')
+              .trim();
+        }
+
+        String textHtml = "";
+        final contentDiv = t.querySelector('td.alt1.addpad div.no_overflow');
+        if (contentDiv != null) {
+          textHtml = contentDiv.innerHtml.trim();
+          textHtml = textHtml.replaceAllMapped(
+            RegExp(r'<i\s+class="smilie\s+([\w-]+)"[^>]*></i>'),
+                (m) => '[smilie-${m.group(1)}]',
+          );
+        }
+
+        String avatarUrl = "";
+        final avatarImg = t.querySelector('td.alt1 a img.avatar');
+        if (avatarImg != null) {
+          avatarUrl = avatarImg.attributes['src'] ?? "";
+          if (avatarUrl.startsWith('//')) avatarUrl = 'https:' + avatarUrl;
+        }
+
+        results.add({
+          "id": shoutId,
+          "nickname": nickname,
+          "nicknameLink": nicknameLink,
+          "postedTitle": postedTitle,
+          "postedAgo": postedAgo,
+          "isRemoved": isRemoved,
+          "avatarUrl": avatarUrl,
+          "textHtml": textHtml,
+        });
+      }
+    } else {
+      final shoutSection = doc.querySelector('section#messages-shouts');
+      if (shoutSection == null) {
+        debugPrint("[fetchMsgOthersShouts] No #messages-shouts section found.");
+        return results;
+      }
+      final ul = shoutSection.querySelector('ul.message-stream');
+      if (ul == null) {
+        debugPrint("[fetchMsgOthersShouts] No .message-stream found in #messages-shouts");
+        return results;
+      }
+      final liItems = ul.querySelectorAll('li');
+      debugPrint("[fetchMsgOthersShouts] Found ${liItems.length} <li> items");
+      for (final li in liItems) {
+        final checkbox = li.querySelector('input[type="checkbox"][name="shouts[]"]');
+        final id = checkbox?.attributes['value'] ?? '';
+        final isRemoved = li.text.toLowerCase().contains('shout has been removed');
+        String nickname = "";
+        String nicknameLink = "";
+        if (!isRemoved) {
+          final nameSpan = li.querySelector(
+              'span.c-usernameBlockSimple.username-underlined a[href^="/user/"] span.c-usernameBlockSimple__displayName');
+          if (nameSpan != null) nickname = nameSpan.text.trim();
+          nicknameLink = _extractNicknameLink(li);
+        }
+        String postedAgo = "";
+        String postedTitle = "";
+        final timeSpan = li.querySelector('div.floatright span.popup_date');
+        if (timeSpan != null) {
+          postedAgo = timeSpan.text.trim();
+          postedTitle = (timeSpan.attributes['title'] ?? postedAgo)
+              .replaceFirst(RegExp(r'^on\s+'), '')
+              .trim();
+        }
+        results.add({
+          "id": id,
+          "nickname": nickname,
+          "nicknameLink": nicknameLink,
+          "postedTitle": postedTitle,
+          "postedAgo": postedAgo,
+          "isRemoved": isRemoved,
+        });
+      }
+    }
+    debugPrint("[fetchMsgOthersShouts] Returning ${results.length} items");
+    return results;
+  }
+
+  static List<Shout> _mergeMsgShoutsWithProfile({
+    required List<Map<String, dynamic>> msgItems,
+    required List<Shout> profileShouts,
+  }) {
+    final results = <Shout>[];
+    for (final m in msgItems) {
+      final id = (m["id"] as String? ?? '').trim();
+      final isRemoved = m["isRemoved"] as bool? ?? false;
+      final postedTitle = (m["postedTitle"] as String? ?? "").trim();
+      final postedAgo = (m["postedAgo"] as String? ?? "").trim();
+      final nick = (m["nickname"] as String? ?? "").trim();
+      final nicknameLink = (m["nicknameLink"] as String? ?? "").trim();
+
       if (isRemoved) {
         results.add(Shout(
           id: id,
@@ -807,236 +1134,111 @@ class FANotificationService with ChangeNotifier {
           textContent: "Shout has been removed from your page.",
           isRemoved: true,
         ));
-      } else {
-
-        Shout shout;
-        List<Shout> matches = profileShouts.where((p) {
-          bool nicknameMatches = p.nickname.trim().toLowerCase() == nick.trim().toLowerCase();
-          bool timeMatches = p.postedTitle == postedTitle;
-          return nicknameMatches && timeMatches;
-        }).toList();
-
-        if (matches.isNotEmpty) {
-
-          Shout profileShout = matches.first;
-          shout = Shout(
-            id: id,
-            nickname: nick,
-            nicknameLink: nicknameLink,
-            postedTitle: postedTitle,
-            avatarUrl: profileShout.avatarUrl,
-            postedAgo: postedAgo,
-            textContent: profileShout.textContent,
-            isRemoved: false,
-          );
-        } else {
-          shout = Shout(
-            id: id,
-            nickname: nick,
-            nicknameLink: nicknameLink,
-            postedTitle: postedTitle,
-            avatarUrl: "",
-            postedAgo: postedAgo,
-            textContent: "left a shout (no exact match in profile by time/nickname)",
-            isRemoved: false,
-          );
-        }
-        results.add(shout);
+        continue;
       }
 
+      // If msg/others already provided full details (classic), prefer those.
+      final msgAvatarUrl = (m["avatarUrl"] as String? ?? "").trim();
+      final msgTextHtml = (m["textHtml"] as String? ?? "").trim();
+      if (msgAvatarUrl.isNotEmpty || msgTextHtml.isNotEmpty) {
+        results.add(Shout(
+          id: id,
+          nickname: nick,
+          nicknameLink: nicknameLink,
+          postedTitle: postedTitle,
+          avatarUrl: msgAvatarUrl,
+          postedAgo: postedAgo,
+          textContent: msgTextHtml.isNotEmpty ? msgTextHtml : "left a shout:",
+          isRemoved: false,
+        ));
+        continue;
+      }
+
+      // Otherwise, merge with profile shouts for avatar/text if possible.
+      final matches = profileShouts.where((p) {
+        final nicknameMatches = p.nickname.trim().toLowerCase() == nick.trim().toLowerCase();
+        final timeMatches = p.postedTitle == postedTitle;
+        return nicknameMatches && timeMatches;
+      }).toList();
+
+      if (matches.isNotEmpty) {
+        final profileShout = matches.first;
+        results.add(Shout(
+          id: id,
+          nickname: nick,
+          nicknameLink: nicknameLink,
+          postedTitle: postedTitle,
+          avatarUrl: profileShout.avatarUrl,
+          postedAgo: postedAgo,
+          textContent: profileShout.textContent,
+          isRemoved: false,
+        ));
+      } else {
+        results.add(Shout(
+          id: id,
+          nickname: nick,
+          nicknameLink: nicknameLink,
+          postedTitle: postedTitle,
+          avatarUrl: "",
+          postedAgo: postedAgo,
+          textContent: "",
+          isRemoved: false,
+        ));
+      }
     }
     debugPrint("[fetchMsgCenterShouts] Final results count: ${results.length}");
     return results;
+  }
+
+  static Future<List<Shout>> _fetchMsgCenterShoutsFromDocument(dom.Document doc) async {
+    final msgItems = _parseMsgOthersShoutsFromDocument(doc);
+    debugPrint("[fetchMsgCenterShouts] msgItems count=${msgItems.length}");
+
+    final myUsername = _extractMenubarUsernameFromDocument(doc);
+    if (myUsername.isEmpty) {
+      debugPrint("[fetchMsgCenterShouts] No user found in menubar; profile parse skipped.");
+      return _mergeMsgShoutsWithProfile(msgItems: msgItems, profileShouts: const []);
+    }
+
+    // If msg/others already contains avatar/text for all non-removed shouts (classic),
+    // don't fetch the profile page.
+    final needsProfileMerge = msgItems.any((m) {
+      final removed = m["isRemoved"] as bool? ?? false;
+      if (removed) return false;
+      final avatar = (m["avatarUrl"] as String? ?? "").trim();
+      final text = (m["textHtml"] as String? ?? "").trim();
+      return avatar.isEmpty && text.isEmpty;
+    });
+    if (!needsProfileMerge) {
+      return _mergeMsgShoutsWithProfile(msgItems: msgItems, profileShouts: const []);
+    }
+
+    final profileShouts = await fetchProfileShouts(myUsername, forceRefresh: true);
+    return _mergeMsgShoutsWithProfile(msgItems: msgItems, profileShouts: profileShouts);
   }
 
   /// Parse /msg/others/ to get shouts.
   static Future<List<Map<String, dynamic>>> fetchMsgOthersShouts() async {
     final url = 'https://www.furaffinity.net/msg/others/';
     debugPrint("[fetchMsgOthersShouts] Checking $url...");
-    List<Map<String, dynamic>> results = [];
     try {
       String? cookieHeader = await _getCookieHeader();
       final resp = await http.get(
         Uri.parse(url),
         headers: {
-          'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+          'User-Agent': FAHttp.userAgent,
           if (cookieHeader != null) 'Cookie': cookieHeader,
         },
       );
 
-      if (resp.statusCode != 200) return results;
+      if (resp.statusCode != 200) return <Map<String, dynamic>>[];
       final doc = html_parser.parse(resp.body);
-
-
-      bool isClassic =
-          doc.querySelector('body')?.attributes['data-static-path'] == '/themes/classic';
-      if (isClassic) {
-
-        List<dom.Element> liItems = doc
-            .querySelectorAll('li')
-            .where((li) => li.querySelector('input[type="checkbox"][name="shouts[]"]') != null)
-            .toList();
-        debugPrint("[fetchMsgOthersShouts] Found ${liItems.length} classic shout <li> items");
-        for (var li in liItems) {
-          dom.Element? checkbox = li.querySelector('input[type="checkbox"][name="shouts[]"]');
-          String id = checkbox?.attributes['value'] ?? '';
-          bool isRemoved = li.text.toLowerCase().contains('shout has been removed');
-          String nickname = "";
-          String nicknameLink = "";
-          if (!isRemoved) {
-            dom.Element? nameSpan = li.querySelector(
-                'span.c-usernameBlockSimple.username-underlined a span.c-usernameBlockSimple__displayName');
-            if (nameSpan != null) {
-              nickname = nameSpan.text.trim();
-            }
-            nicknameLink = _extractNicknameLink(li);
-          }
-          String postedAgo = "";
-          String postedTitle = "";
-          dom.Element? timeSpan = li.querySelector('span.popup_date');
-          if (timeSpan != null) {
-            postedAgo = timeSpan.text.trim();
-            postedTitle = (timeSpan.attributes['title'] ?? postedAgo)
-                .replaceFirst(RegExp(r'^on\s+'), '')
-                .trim();
-          }
-
-          // Adding <li> results
-          results.add({
-            "id": id,
-            "nickname": nickname,
-            "nicknameLink": nicknameLink,
-            "postedTitle": postedTitle,
-            "postedAgo": postedAgo,
-            "isRemoved": isRemoved,
-          });
-        }
-
-
-        List<dom.Element> tableShouts = doc.querySelectorAll('table[id^="shout-"]');
-        debugPrint("[fetchMsgOthersShouts] Found ${tableShouts.length} classic shout <table> items");
-        for (var t in tableShouts) {
-          // e.g. id="shout-56365425" => "56365425"
-          final shoutId = t.id.replaceFirst('shout-', '');
-          bool isRemoved = t.text.toLowerCase().contains('shout has been removed');
-
-          // Nickname / link
-          String nickname = "";
-          String nicknameLink = "";
-          dom.Element? nameElem = t.querySelector('div.c-usernameBlock a.c-usernameBlock__displayName');
-          if (nameElem != null) {
-            nickname = nameElem.text.trim();
-            String? href = nameElem.attributes['href'];
-            if (href != null) {
-              final match = RegExp(r'^/user/([^/]+)/?$').firstMatch(href);
-              if (match != null) {
-                nicknameLink = match.group(1)!;
-              }
-            }
-          }
-
-          // Date
-          String postedAgo = "";
-          String postedTitle = "";
-          dom.Element? dateElem = t.querySelector('span.popup_date');
-          if (dateElem != null) {
-            postedAgo = dateElem.text.trim();
-            postedTitle = (dateElem.attributes['title'] ?? postedAgo)
-                .replaceFirst(RegExp(r'^on\s+'), '')
-                .trim();
-          }
-
-
-          String textHtml = "";
-          dom.Element? contentDiv = t.querySelector('td.alt1.addpad div.no_overflow');
-          if (contentDiv != null) {
-            textHtml = contentDiv.innerHtml.trim();
-            textHtml = textHtml.replaceAllMapped(
-              RegExp(r'<i\s+class="smilie\s+([\w-]+)"[^>]*></i>'),
-                  (m) => '[smilie-${m.group(1)}]',
-            );
-          }
-
-
-
-          // Avatar
-          String avatarUrl = "";
-          dom.Element? avatarImg = t.querySelector('td.alt1 a img.avatar');
-          if (avatarImg != null) {
-            avatarUrl = avatarImg.attributes['src'] ?? "";
-            if (avatarUrl.startsWith('//')) {
-              avatarUrl = 'https:' + avatarUrl;
-            }
-          }
-
-
-
-          // Add <table> results
-          results.add({
-            "id": shoutId,
-            "nickname": nickname,
-            "nicknameLink": nicknameLink,
-            "postedTitle": postedTitle,
-            "postedAgo": postedAgo,
-            "isRemoved": isRemoved,
-            "avatarUrl": avatarUrl,
-            "textHtml": textHtml,
-          });
-        }
-      }
-      else {
-
-        dom.Element? shoutSection = doc.querySelector('section#messages-shouts');
-        if (shoutSection == null) {
-          debugPrint("[fetchMsgOthersShouts] No #messages-shouts section found.");
-          return results;
-        }
-        dom.Element? ul = shoutSection.querySelector('ul.message-stream');
-        if (ul == null) {
-          debugPrint("[fetchMsgOthersShouts] No .message-stream found in #messages-shouts");
-          return results;
-        }
-        List<dom.Element> liItems = ul.querySelectorAll('li');
-        debugPrint("[fetchMsgOthersShouts] Found ${liItems.length} <li> items");
-        for (var li in liItems) {
-          dom.Element? checkbox = li.querySelector('input[type="checkbox"][name="shouts[]"]');
-          String id = checkbox?.attributes['value'] ?? '';
-          bool isRemoved = li.text.toLowerCase().contains('shout has been removed');
-          String nickname = "";
-          String nicknameLink = "";
-          if (!isRemoved) {
-            dom.Element? nameSpan = li.querySelector(
-                'span.c-usernameBlockSimple.username-underlined a[href^="/user/"] span.c-usernameBlockSimple__displayName');
-            if (nameSpan != null) {
-              nickname = nameSpan.text.trim();
-            }
-            nicknameLink = _extractNicknameLink(li);
-          }
-          String postedAgo = "";
-          String postedTitle = "";
-          dom.Element? timeSpan = li.querySelector('div.floatright span.popup_date');
-          if (timeSpan != null) {
-            postedAgo = timeSpan.text.trim();
-            postedTitle = (timeSpan.attributes['title'] ?? postedAgo)
-                .replaceFirst(RegExp(r'^on\s+'), '')
-                .trim();
-          }
-          results.add({
-            "id": id,
-            "nickname": nickname,
-            "nicknameLink": nicknameLink,
-            "postedTitle": postedTitle,
-            "postedAgo": postedAgo,
-            "isRemoved": isRemoved,
-          });
-        }
-      }
+      return _parseMsgOthersShoutsFromDocument(doc);
     } catch (e, st) {
       debugPrint("[fetchMsgOthersShouts] Error: $e\n$st");
     }
-    debugPrint("[fetchMsgOthersShouts] Returning ${results.length} items");
-    return results;
+    // If anything fails, return empty list.
+    return <Map<String, dynamic>>[];
   }
 
   String _normalizeDate(String s) {
@@ -1275,6 +1477,7 @@ class FANotificationService with ChangeNotifier {
             id: sh.id,
             content: sh.textContent,
             username: sh.nickname,
+            linkUsername: sh.nicknameLink,
             avatarUrl: sh.avatarUrl,
             date: sh.postedAgo,
             fullDate: sh.postedTitle,
@@ -1283,6 +1486,7 @@ class FANotificationService with ChangeNotifier {
         id: sh.id,
         content: sh.textContent,
         username: sh.nickname,
+        linkUsername: sh.nicknameLink,
         avatarUrl: sh.avatarUrl,
         date: sh.postedAgo,
         fullDate: sh.postedTitle,
@@ -1290,7 +1494,93 @@ class FANotificationService with ChangeNotifier {
       ));
     }
     sections[idx].items = updated;
+    shoutsEnriched = true;
+    final sig = updated.map((it) => it.id.trim()).where((id) => id.isNotEmpty).join(',');
+    _shoutsLightSignature = sig;
+    _shoutsEnrichedSignature = sig;
     notifyListeners();
+  }
+
+  bool _shoutsAppearEnrichedFromMsgOthers() {
+    final idx = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
+    if (idx == -1) return false;
+    final items = sections[idx].items;
+    if (items.isEmpty) return false;
+    // If any non-removed shout has a non-empty body, consider it enriched (classic msg/others).
+    return items.any((it) {
+      final removed = it.content.toLowerCase().contains('shout has been removed');
+      if (removed) return false;
+      return it.content.trim().isNotEmpty;
+    });
+  }
+
+  static String _normalizeShoutStamp(String s) {
+    return s.replaceFirst(RegExp(r'^on\s+', caseSensitive: false), '').trim();
+  }
+
+  Future<List<Shout>> enrichShoutsFromProfileIfNeeded({bool force = false}) async {
+    final idx = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
+    if (idx == -1) return const <Shout>[];
+    if (!force && shoutsEnriched) {
+      return sections[idx].items.map((it) {
+        return Shout(
+          id: it.id,
+          nickname: it.username ?? '',
+          nicknameLink: it.linkUsername ?? '',
+          postedTitle: it.fullDate,
+          avatarUrl: it.avatarUrl ?? '',
+          postedAgo: it.date,
+          textContent: it.content,
+          isRemoved: it.content.toLowerCase().contains('shout has been removed'),
+          isChecked: it.isChecked,
+        );
+      }).toList();
+    }
+
+    final my = (currentUsername ?? '').trim();
+    if (my.isEmpty) return const <Shout>[];
+
+    final profileShouts = await fetchProfileShouts(my, forceRefresh: true);
+
+    // Merge by nicknameLink (preferred) + timestamp, falling back to display name.
+    final currentItems = sections[idx].items;
+    final enriched = <Shout>[];
+    for (final item in currentItems) {
+      final removed = item.content.toLowerCase().contains('shout has been removed');
+      final wantLink = (item.linkUsername ?? '').trim().toLowerCase();
+      final wantName = (item.username ?? '').trim().toLowerCase();
+      final wantStamp = _normalizeShoutStamp(item.fullDate);
+
+      Shout? match;
+      if (!removed) {
+        for (final p in profileShouts) {
+          final pLink = p.nicknameLink.trim().toLowerCase();
+          final pName = p.nickname.trim().toLowerCase();
+          final pStamp = _normalizeShoutStamp(p.postedTitle);
+          final linkOk = wantLink.isNotEmpty && pLink.isNotEmpty ? (wantLink == pLink) : true;
+          final nameOk = wantName.isNotEmpty ? (pName == wantName) : true;
+          if (pStamp == wantStamp && linkOk && nameOk) {
+            match = p;
+            break;
+          }
+        }
+      }
+
+      enriched.add(Shout(
+        id: item.id,
+        nickname: item.username ?? '',
+        nicknameLink: item.linkUsername ?? '',
+        postedTitle: item.fullDate,
+        avatarUrl: match?.avatarUrl ?? (item.avatarUrl ?? ''),
+        postedAgo: item.date,
+        textContent: match?.textContent ?? item.content,
+        isRemoved: removed,
+        isChecked: item.isChecked,
+      ));
+    }
+
+    updateShouts(enriched);
+    return enriched;
   }
 
   /// Toggle selection of all items in a section.
@@ -1314,64 +1604,6 @@ class FANotificationService with ChangeNotifier {
         break;
       }
     }
-  }
-
-  /// Helper to guess the current user.
-  static Future<String> _guessMenubarUser() async {
-    try {
-      final url = 'https://www.furaffinity.net/msg/others/';
-      String? cookieHeader = await _getCookieHeader();
-      final resp = await http.get(
-        Uri.parse(url),
-        headers: {
-          'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-          if (cookieHeader != null) 'Cookie': cookieHeader,
-        },
-      );
-      if (resp.statusCode == 200) {
-        final doc = html_parser.parse(resp.body);
-
-        final body = doc.querySelector('body');
-        bool isClassic = (body?.attributes['data-static-path'] == '/themes/classic');
-        if (isClassic) {
-
-          dom.Element? myUsernameElem = doc.getElementById("my-username");
-          if (myUsernameElem != null) {
-            String? href = myUsernameElem.attributes['href'];
-            if (href != null) {
-              // Extract username from "/user/username/"
-              RegExp reg = RegExp(r'^/user/([^/]+)/?$');
-              RegExpMatch? match = reg.firstMatch(href);
-              if (match != null) {
-                String username = match.group(1)!;
-                debugPrint("[_guessMenubarUser] Found classic username: $username");
-                return username;
-              }
-            }
-          }
-        } else {
-
-          dom.Element? menubarLink = doc.querySelector('div.floatleft.hideonmobile a[href^="/user/"]');
-          if (menubarLink != null) {
-            String? href = menubarLink.attributes['href'];
-            if (href != null) {
-              // Extract username from "/user/username"
-              RegExp reg = RegExp(r'^/user/([^/]+)/?$');
-              RegExpMatch? match = reg.firstMatch(href);
-              if (match != null) {
-                String username = match.group(1)!;
-                debugPrint("[_guessMenubarUser] Found modern username: $username");
-                return username;
-              }
-            }
-          }
-        }
-      }
-    } catch (e, st) {
-      debugPrint("[_guessMenubarUser] Error: $e\n$st");
-    }
-    return "";
   }
 
 
@@ -1426,8 +1658,7 @@ class FANotificationService with ChangeNotifier {
       final response = await http.get(
         Uri.parse(fullUrl),
         headers: {
-          'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+          'User-Agent': FAHttp.userAgent,
           if (cookieHeader != null) 'Cookie': cookieHeader,
         },
       );
@@ -1466,51 +1697,67 @@ class FANotificationService with ChangeNotifier {
       debugPrint("[fetchSubmissionPreview] Cache hit for submission $submissionId: ${_previewCache[submissionId]}");
       return _previewCache[submissionId];
     }
-    await _semaphore.acquire();
-    try {
-      String? cookieHeader = await _getCookieHeader();
-      final url = 'https://www.furaffinity.net/view/$submissionId/';
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-          if (cookieHeader != null) 'Cookie': cookieHeader,
-        },
-      );
-      debugPrint("[fetchSubmissionPreview] Response code for $submissionId: ${response.statusCode}");
-      if (response.statusCode == 200) {
-        final document = html_parser.parse(response.body);
-        dom.Element? noticeSection = document.querySelector('section.aligncenter.notice-message');
-        if (noticeSection != null && noticeSection.text.contains("This submission contains Mature or Adult content")) {
-          return "assets/images/nsfw.png";
-        }
-        final images = document.querySelectorAll('img');
-        for (var img in images) {
-          if (img.attributes.containsKey('data-preview-src')) {
-            String? src = img.attributes['data-preview-src'];
-            if (src != null && src.isNotEmpty) {
-              if (src.startsWith('//')) src = 'https:' + src;
-              _previewCache[submissionId] = src;
-              return src;
+    // If many rows reference the same submissionId, de-dupe in-flight requests
+    // so we don't spam /view/<id>/.
+    final inFlight = _previewInFlight[submissionId];
+    if (inFlight != null) return inFlight;
+
+    Future<String?> doFetch() async {
+      await _semaphore.acquire();
+      try {
+        // Cache may have been filled while we were queued behind the semaphore.
+        final cached = _previewCache[submissionId];
+        if (cached != null) return cached;
+
+        String? cookieHeader = await _getCookieHeader();
+        final url = 'https://www.furaffinity.net/view/$submissionId/';
+        final response = await http.get(
+          Uri.parse(url),
+          headers: {
+            'User-Agent': FAHttp.userAgent,
+            if (cookieHeader != null) 'Cookie': cookieHeader,
+          },
+        );
+        debugPrint("[fetchSubmissionPreview] Response code for $submissionId: ${response.statusCode}");
+        if (response.statusCode == 200) {
+          final document = html_parser.parse(response.body);
+          dom.Element? noticeSection = document.querySelector('section.aligncenter.notice-message');
+          if (noticeSection != null && noticeSection.text.contains("This submission contains Mature or Adult content")) {
+            // Note: UI treats this as a "bad" URL and shows an errorWidget; that's OK.
+            return "assets/images/nsfw.png";
+          }
+          final images = document.querySelectorAll('img');
+          for (var img in images) {
+            if (img.attributes.containsKey('data-preview-src')) {
+              String? src = img.attributes['data-preview-src'];
+              if (src != null && src.isNotEmpty) {
+                if (src.startsWith('//')) src = 'https:' + src;
+                _previewCache[submissionId] = src;
+                return src;
+              }
+            }
+          }
+          dom.Element? fallbackElement = document.querySelector('img#submissionImg');
+          if (fallbackElement != null) {
+            String? fallbackSrc = fallbackElement.attributes['src'];
+            if (fallbackSrc != null && fallbackSrc.isNotEmpty) {
+              if (fallbackSrc.startsWith('//')) fallbackSrc = 'https:' + fallbackSrc;
+              _previewCache[submissionId] = fallbackSrc;
+              return fallbackSrc;
             }
           }
         }
-        dom.Element? fallbackElement = document.querySelector('img#submissionImg');
-        if (fallbackElement != null) {
-          String? fallbackSrc = fallbackElement.attributes['src'];
-          if (fallbackSrc != null && fallbackSrc.isNotEmpty) {
-            if (fallbackSrc.startsWith('//')) fallbackSrc = 'https:' + fallbackSrc;
-            _previewCache[submissionId] = fallbackSrc;
-            return fallbackSrc;
-          }
-        }
+      } catch (e) {
+        debugPrint("[fetchSubmissionPreview] Error fetching preview for submission $submissionId: $e");
+      } finally {
+        _semaphore.release();
+        _previewInFlight.remove(submissionId);
       }
-    } catch (e) {
-      debugPrint("[fetchSubmissionPreview] Error fetching preview for submission $submissionId: $e");
-    } finally {
-      _semaphore.release();
+      return null;
     }
-    return null;
+
+    final future = doFetch();
+    _previewInFlight[submissionId] = future;
+    return future;
   }
 }

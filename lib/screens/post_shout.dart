@@ -7,6 +7,7 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../services/fa_http.dart';
 
 class PostShoutScreen extends StatefulWidget {
   final String username;
@@ -47,8 +48,7 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
 
   Future<void> _initializeDio() async {
     _dio.interceptors.add(CookieManager(_cookieJar));
-    _dio.options.headers['User-Agent'] =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+    _dio.options.headers['User-Agent'] = FAHttp.userAgent;
     _dio.options.followRedirects = false;
     _dio.options.validateStatus = (status) {
       return status != null && (status >= 200 && status < 400);

@@ -16,6 +16,7 @@ import 'package:linkify/linkify.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:share_plus/share_plus.dart';
 import '../network.dart';
+import '../services/fa_http.dart';
 import '../parsing_utils.dart';
 import '../providers/timezone_provider.dart';
 import '../utils/specialTextSpanBuilder.dart';
@@ -161,9 +162,10 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_onScroll);
     _api = OpenJournalApiService(_secureStorage);
-    _fetchPostDetailsNew().then((_) {
-      _fetchUserPageLinksNew(); // fire & forget
-    });
+    // Only fetch the journal itself on open.
+    // Extra "helper" fetches (user-page links, delete key) are done *on-demand*
+    // when the user taps the relevant action, to avoid spammy requests.
+    _fetchPostDetailsNew();
 
   }
 
@@ -263,10 +265,6 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
       } else if (submissionDescription != null) {
         unawaited(_fetchCommentsNew(submissionDescription!));
       }
-
-      if (isOwner && (deleteLink == null || !_deleteLinkMatchesCurrentId(deleteLink!))) {
-        await _fetchDeleteLinkFallback();
-      }
     } catch (e) {
       setState(() {
         isLoading = false;
@@ -278,11 +276,11 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   Future<void> _fetchDeleteLinkFallback() async {
     try {
       final key = await _api.fetchDeleteKey(widget.uniqueNumber);
-      if (key != null) {
+      if (key != null && key.trim().isNotEmpty) {
         setState(() {
-          deleteLink = key.startsWith('http')
-              ? key
-              : 'https://www.furaffinity.net$key';
+          // Controls page returns a delete "key"; construct a safe delete URL.
+          deleteLink =
+              'https://www.furaffinity.net/controls/deletejournal/${widget.uniqueNumber}/?key=${Uri.encodeQueryComponent(key.trim())}';
         });
       }
     } catch (e) {
@@ -367,7 +365,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         uri,
         headers: {
           'Cookie': 'a=$cookieA; b=$cookieB',
-          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+          'User-Agent': FAHttp.userAgent,
         },
       );
 
@@ -463,7 +461,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         Uri.parse(fullUrl),
         headers: {
           'Cookie': 'a=$cookieA; b=$cookieB',
-          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+          'User-Agent': FAHttp.userAgent,
         },
       );
       if (response.statusCode == 200) {
@@ -512,7 +510,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
           Uri.parse(hideLink),
           headers: {
             'Cookie': 'a=$cookieA; b=$cookieB',
-            'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+            'User-Agent': FAHttp.userAgent,
           },
         );
         if (response.statusCode == 200) {
@@ -556,7 +554,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
           Uri.parse(unhideLink),
           headers: {
             'Cookie': 'a=$cookieA; b=$cookieB',
-            'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+            'User-Agent': FAHttp.userAgent,
           },
         );
         if (response.statusCode == 200) {

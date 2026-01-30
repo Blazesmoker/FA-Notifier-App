@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../app_theme.dart'; // If you need to reference AppTheme.fontName, etc.
 
 import '../main.dart';
+import '../services/fa_http.dart';
 import 'siteSettings.dart';
 import 'appSettings.dart';
 
@@ -178,7 +179,7 @@ class SettingsScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 16.0),
               child: Text(
-                "FA Notifier v1.1.9",
+                FAHttp.userAgent,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: AppTheme.fontName,

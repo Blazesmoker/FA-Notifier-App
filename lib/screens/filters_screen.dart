@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
+import '../services/fa_http.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 
 class FiltersScreen extends StatefulWidget {
@@ -82,7 +83,10 @@ class _FiltersScreenState extends State<FiltersScreen> {
     try {
       debugPrint('Fetching all filters...');
       final response =
-      await http.get(Uri.parse('https://www.furaffinity.net/browse/'));
+      await http.get(
+        Uri.parse('https://www.furaffinity.net/browse/'),
+        headers: {'User-Agent': FAHttp.userAgent},
+      );
       if (response.statusCode == 200) {
         var document = html_parser.parse(response.body);
         Map<String, List<Map<String, String>>> loadedFilterOptions = {};

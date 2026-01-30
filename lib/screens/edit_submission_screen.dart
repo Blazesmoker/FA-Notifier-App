@@ -46,15 +46,20 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) async {
-            // If it returns to a "/view/" page, then success -> pop
-            if (url.contains('furaffinity.net/view/')) {
-              Navigator.pop(context);
-            }
             await _injectCustomCssAndJs();
           },
+
           onPageFinished: (url) async {
             await _injectCustomCssAndJs();
+
+            if (url.startsWith('https://www.furaffinity.net/view/')) {
+              await Future.delayed(const Duration(milliseconds: 50));
+
+              if (!mounted) return;
+              Navigator.pop(context, true);
+            }
           },
+
           onWebResourceError: (error) {
             debugPrint("Web resource error: $error");
           },
@@ -62,9 +67,7 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
       )
       ..loadRequest(Uri.parse(widget.initialUrl));
 
-
     _setCookies();
-
 
     if (Platform.isAndroid) {
       final androidController =
@@ -72,6 +75,7 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
       androidController.setOnShowFileSelector(_androidFilePicker);
     }
   }
+
 
   /// Inject custom CSS to hide navbars, ads, footers
 

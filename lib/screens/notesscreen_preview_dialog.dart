@@ -11,6 +11,7 @@ import 'package:html/parser.dart' as html_parser;
 
 import '../utils/fa_link_handler.dart';
 import '../utils/utils.dart';
+import '../services/fa_http.dart';
 import 'message_model.dart';
 
 /// Dialog content for previewing a note/message.
@@ -64,8 +65,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
   void _initializeDio() {
     _dio = Dio();
     _dio.interceptors.add(CookieManager(_cookieJar));
-    _dio.options.headers['User-Agent'] =
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+    _dio.options.headers['User-Agent'] = FAHttp.userAgent;
     _dio.options.followRedirects = true;
     _dio.options.validateStatus = (status) {
       return status != null && status >= 200 && status < 400;

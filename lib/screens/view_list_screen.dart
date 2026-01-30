@@ -5,6 +5,7 @@ import '../widgets/PulsatingLoadingIndicator.dart';
 import 'user_profile_screen.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../services/fa_http.dart';
 
 class ViewListScreen extends StatefulWidget {
   final String title;
@@ -63,7 +64,7 @@ class _ViewListScreenState extends State<ViewListScreen> {
           Uri.parse(url),
           headers: {
             'Cookie': 'a=$cookieA; b=$cookieB',
-            'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+            'User-Agent': FAHttp.userAgent,
           },
         );
 

@@ -59,7 +59,7 @@ class FreshHttpOverrides extends HttpOverrides {
     client.connectionTimeout = const Duration(seconds: 20);
     client.autoUncompress = true;
     client.maxConnectionsPerHost = 8;
-    client.userAgent = 'FA Notifier';
+    client.userAgent = FAHttp.userAgent;
     return client;
   }
 }
@@ -75,7 +75,6 @@ const String iOSWorkInitTask = "com.blazesmoker.FANotifier.refresh";
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   WidgetsFlutterBinding.ensureInitialized();
-  HttpOverrides.global = FreshHttpOverrides();
   Workmanager().executeTask((task, inputData) async {
     debugPrint("===============================================");
     debugPrint("BACKGROUND TASK TRIGGERED: $task");
@@ -92,6 +91,8 @@ void callbackDispatcher() {
         prefs = await SharedPreferences.getInstance();
         await prefs.reload();
         debugPrint('[BG] SharedPreferences loaded successfully');
+        await FAHttp.initFromPrefs(prefs: prefs);
+        HttpOverrides.global = FreshHttpOverrides();
       } catch (e) {
         debugPrint('[BG ERROR] Failed to load SharedPreferences: $e');
         return Future.value(false);
@@ -327,7 +328,7 @@ Future<List<Message>> _fetchInboxTwoPagesBg() async {
       url,
       headers: {
         'Cookie': 'a=$cookieA; b=$cookieB; folder=inbox',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': FAHttp.userAgent,
       },
     );
     if (resp.statusCode == 200) {
@@ -407,7 +408,7 @@ Future<String> _fetchMessageContentInBackground(String link) async {
     options: Options(
       responseType: ResponseType.plain,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': FAHttp.userAgent,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
       validateStatus: (status) => status != null && status >= 200 && status < 400,
@@ -491,6 +492,7 @@ Future<void> _markAsUnreadBackground(Message msg) async {
     data: formData,
     options: Options(
       headers: {
+        'User-Agent': FAHttp.userAgent,
         'Content-Type': 'application/x-www-form-urlencoded',
         'Referer': 'https://www.furaffinity.net/msg/pms/$pNum/$mId/',
         'Origin': 'https://www.furaffinity.net',
@@ -584,6 +586,7 @@ class AppLifecycleNetworkReset with WidgetsBindingObserver {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await FAHttp.init();
   AppLifecycleNetworkReset.attach();
   HttpOverrides.global = FreshHttpOverrides();
   debugPrint("===============================================");

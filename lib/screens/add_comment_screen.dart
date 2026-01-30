@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import '../services/fa_http.dart';
 
 class AddCommentScreen extends StatefulWidget {
   final String submissionTitle;
@@ -124,7 +125,7 @@ class _AddCommentScreenState extends State<AddCommentScreen> {
       Uri.parse(postUrl),
       headers: {
         'Cookie': 'a=$cookieA; b=$cookieB',
-        'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+        'User-Agent': FAHttp.userAgent,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: body,

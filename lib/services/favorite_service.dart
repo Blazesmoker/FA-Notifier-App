@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'fa_http.dart';
 
 /// Service to handle favorite/unfavorite operations with retry logic.
 class FavoriteService {
@@ -36,7 +37,7 @@ class FavoriteService {
           Uri.parse(url),
           headers: {
             HttpHeaders.cookieHeader: cookieHeader,
-            'User-Agent': 'Mozilla/5.0 (compatible; FANotifier/1.0)',
+            'User-Agent': FAHttp.userAgent,
             'Content-Type': 'application/x-www-form-urlencoded',
           },
         );

@@ -144,7 +144,7 @@ class FAImageGridState extends State<FAImageGrid> {
 
       final headers = {
         HttpHeaders.cookieHeader: cookieHeader,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'User-Agent': FAHttp.userAgent,
         'Referer': 'https://www.furaffinity.net/browse/',
         'Content-Type': 'application/x-www-form-urlencoded',
       };
@@ -175,7 +175,7 @@ class FAImageGridState extends State<FAImageGrid> {
           redirectUri,
           headers: {
             HttpHeaders.cookieHeader: cookieHeader,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            'User-Agent': FAHttp.userAgent,
             'Referer': uri.toString(),
           },
         );
@@ -304,7 +304,7 @@ class FAImageGridState extends State<FAImageGrid> {
         Uri.parse(postUrl),
         headers: {
           HttpHeaders.cookieHeader: cookieHeader,
-          'User-Agent': 'Mozilla/5.0 (compatible; YourApp/1.0)',
+          'User-Agent': FAHttp.userAgent,
         },
       );
       if (response.statusCode == 200) {

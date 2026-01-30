@@ -10,6 +10,7 @@ import 'package:FANotifier/screens/notifications_screen.dart';
 import 'package:FANotifier/screens/search_screen.dart';
 import 'package:FANotifier/screens/submissions_screen.dart';
 import 'package:FANotifier/screens/upload_submission.dart';
+import 'package:FANotifier/services/fa_activities_polling_service.dart';
 import 'package:FANotifier/services/fa_notification_service.dart';
 import 'package:FANotifier/services/notes_refresh_service.dart';
 import 'package:FANotifier/services/notification_refresh_service.dart';
@@ -211,7 +212,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadLoginState();
     if (isLoggedIn) {
       await _setCookiesFromPrefs();
-      bool validSession = await _validateSession();
+      _startActivitiesPolling(triggerImmediate: false);
 
       setState(() {
         isCheckingLoginStatus = false;
@@ -228,21 +229,17 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-
-  Future<bool> _validateSession() async {
+  void _startActivitiesPolling({required bool triggerImmediate}) {
     try {
-      final profile = await _faService.fetchUserProfile();
-      return profile != null;
-    } on SocketException catch (_) {
-      debugPrint('[Session] SocketException → assume still logged in');
-      return true;
-    } on TimeoutException catch (_) {
-      debugPrint('[Session] TimeoutException → assume still logged in');
-      return true;
-    } catch (e) {
-      debugPrint('[Session] Unknown error "$e" → assume still logged in');
-      return true;
-    }
+      final svc = Provider.of<FANotificationService>(context, listen: false);
+      FaActivitiesPollingService().start(faNotificationService: svc);
+      if (triggerImmediate) {
+        unawaited(FaActivitiesPollingService().triggerNow(
+          resetTimer: true,
+          source: 'login_established',
+        ));
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchUserProfile() async {
@@ -413,6 +410,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             await _saveLoginState(true);
             setState(() => isLoggedIn = true);
+            _startActivitiesPolling(triggerImmediate: true);
 
             await _setSfwCookieToNSFW();
 
@@ -515,6 +513,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 final wasLoggedIn = prefs.getBool('isLoggedIn') ?? false;
 
                 await _saveLoginState(true);
+                _startActivitiesPolling(triggerImmediate: true);
                 await _setSfwCookieToNSFW();
 
                 if (!_profileFetched) {
@@ -726,6 +725,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     try {
+      FaActivitiesPollingService().stop();
       await CookieManager.instance().deleteAllCookies();
       debugPrint('[Logout] All cookies deleted.');
 

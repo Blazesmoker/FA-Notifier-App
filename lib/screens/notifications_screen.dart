@@ -10,18 +10,17 @@ import 'package:provider/provider.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/fa_activities_polling_service.dart';
 import '../services/fa_notification_service.dart';
 import '../../custom_drawer/home_drawer.dart';
 import '../../model/notifications.dart';
 import '../../providers/notification_settings_provider.dart';
 import '../../enums/drawer_index.dart';
 import '../custom_drawer/drawer_user_controller.dart';
-import '../services/notification_refresh_service.dart';
 import '../utils/specialTextSpanBuilder.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'openjournal.dart';
 import 'openpost.dart';
-StreamSubscription<void>? _notifRefreshSub;
 /// A widget that toggles between relative and absolute date formats when tapped.
 class ToggleableDate extends StatefulWidget {
   final String relativeDate;
@@ -107,8 +106,13 @@ class AvatarWidget extends StatelessWidget {
 /// A stateful widget for the Shouts section.
 class ShoutsSectionWidget extends StatefulWidget {
   final FANotificationService service;
+  final bool isActive;
 
-  const ShoutsSectionWidget({Key? key, required this.service}) : super(key: key);
+  const ShoutsSectionWidget({
+    Key? key,
+    required this.service,
+    required this.isActive,
+  }) : super(key: key);
 
   @override
   ShoutsSectionWidgetState createState() => ShoutsSectionWidgetState();
@@ -118,6 +122,10 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
     with AutomaticKeepAliveClientMixin {
   late Future<List<Shout>> _shoutsFuture;
   List<Shout>? _shouts; // Local list of parsed shouts
+  bool _serviceListenerAttached = false;
+  bool _isEnriching = false;
+  String? _enrichRequestedForSignature;
+  String? _autoEnrichScheduledForSignature;
 
   @override
   bool get wantKeepAlive => true;
@@ -125,7 +133,122 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
   @override
   void initState() {
     super.initState();
-    _shoutsFuture = _refreshShouts();
+    // Start with whatever msg/others parsed (no network).
+    final cached = _deduplicateShouts(_readShoutsFromService());
+    _shouts = cached;
+    _shoutsFuture = Future.value(cached);
+
+    // Keep shouts UI in sync with service updates (no network).
+    widget.service.addListener(_onServiceChanged);
+    _serviceListenerAttached = true;
+
+    // Only enrich when the Shouts tab is actually active.
+    _maybeAutoEnrich();
+  }
+
+  @override
+  void didUpdateWidget(covariant ShoutsSectionWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive) {
+      _maybeAutoEnrich();
+    }
+  }
+
+  void _maybeAutoEnrich() {
+    if (!widget.isActive) return;
+    // Only enrich when needed (first open, or shout IDs changed since last enrich).
+    if (!widget.service.shoutsNeedEnrich) return;
+
+    final sig = widget.service.shoutsLightSignature;
+    if (sig.isNotEmpty && _enrichRequestedForSignature == sig) return;
+    _enrichRequestedForSignature = sig;
+
+    setState(() {
+      _isEnriching = true;
+      _shoutsFuture = widget.service.enrichShoutsFromProfileIfNeeded(force: true).then((list) {
+        final unique = _deduplicateShouts(list);
+        _shouts = unique;
+        return unique;
+      }).whenComplete(() {
+        if (!mounted) return;
+        setState(() {
+          _isEnriching = false;
+        });
+      });
+    });
+  }
+
+  Widget _buildLoadingList(String label) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const SizedBox(height: 180),
+        Center(
+          child: Column(
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 12),
+              Text(label, style: const TextStyle(color: Colors.white70)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    if (_serviceListenerAttached) {
+      widget.service.removeListener(_onServiceChanged);
+    }
+    super.dispose();
+  }
+
+  void _onServiceChanged() {
+    if (!mounted) return;
+    final latest = _readShoutsFromService();
+    if (latest.isEmpty) return;
+    final unique = _deduplicateShouts(latest);
+    final prev = _shouts;
+    final bool changed = prev == null ||
+        prev.length != unique.length ||
+        (prev.isNotEmpty && unique.isNotEmpty && prev.first.id != unique.first.id);
+    if (!changed) return;
+    if (widget.isActive && _enrichRequestedForSignature == null && widget.service.shoutsNeedEnrich) {
+      _shouts = unique;
+      _maybeAutoEnrich();
+      return;
+    }
+
+    setState(() {
+      _shouts = unique;
+      _shoutsFuture = Future.value(unique);
+    });
+  }
+
+  List<Shout> _readShoutsFromService() {
+    try {
+      final idx = widget.service.sections
+          .indexWhere((s) => s.title.toLowerCase().contains('shouts'));
+      if (idx == -1) return const <Shout>[];
+      final items = widget.service.sections[idx].items;
+      if (items.isEmpty) return const <Shout>[];
+      return items.map((it) {
+        return Shout(
+          id: it.id,
+          nickname: it.username ?? '',
+          nicknameLink: it.linkUsername ?? '',
+          postedTitle: it.fullDate,
+          avatarUrl: it.avatarUrl ?? '',
+          postedAgo: it.date,
+          textContent: it.content,
+          isRemoved: it.content.toLowerCase().contains('shout has been removed'),
+          isChecked: it.isChecked,
+        );
+      }).toList();
+    } catch (_) {
+      return const <Shout>[];
+    }
   }
 
   // Helper to remove duplicates if FA sends the same shout multiple times
@@ -139,6 +262,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
 
   /// Force a fresh fetch of the Shouts from FA
   Future<List<Shout>> _refreshShouts() async {
+    FaActivitiesPollingService().resetSchedule();
     final fetchedShouts = await FANotificationService.fetchMsgCenterShouts();
     final uniqueShouts = _deduplicateShouts(fetchedShouts);
     setState(() {
@@ -227,16 +351,34 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
             child: FutureBuilder<List<Shout>>(
               future: _shoutsFuture,
               builder: (ctx, snapshot) {
+                // If we know we need enrichment, show a loader immediately and don't
+                // render the "light" msg/others view (default avatars / empty text),
+                // even for a single frame.
+                final sig = widget.service.shoutsLightSignature;
+                final shouldBlockLightView =
+                    widget.service.shoutsNeedEnrich &&
+                        !_isEnriching &&
+                        sig.isNotEmpty &&
+                        _enrichRequestedForSignature != sig;
+
+                if (shouldBlockLightView) {
+                  // Start enrichment once the tab is actually active (avoid background fetch).
+                  if (widget.isActive && _autoEnrichScheduledForSignature != sig) {
+                    _autoEnrichScheduledForSignature = sig;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      _autoEnrichScheduledForSignature = null;
+                      _maybeAutoEnrich();
+                    });
+                  }
+                  return _buildLoadingList('Loading shouts…');
+                }
+
+                if (widget.isActive && _isEnriching) {
+                  return _buildLoadingList('Loading shouts…');
+                }
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    children: const [
-                      SizedBox(
-                        height: 200,
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                    ],
-                  );
+                  return _buildLoadingList('Loading…');
                 }
                 if (snapshot.hasError) {
                   return ListView(
@@ -497,7 +639,10 @@ class NotificationSectionWidget extends StatelessWidget {
       builder: (context, service, child) {
         final section = service.sections[sectionIndex];
         return RefreshIndicator(
-          onRefresh: service.fetchNotifications,
+          onRefresh: () => FaActivitiesPollingService().triggerNow(
+            resetTimer: true,
+            source: 'notifications_refresh_indicator',
+          ),
           child: section.items.isEmpty
               ? ListView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -845,21 +990,17 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   bool _isDraggingFromEdge = false;
   double _startDragX = 0.0;
   int _previousSectionCount = 0;
+  int _lastTabIndex = -1;
 
   final GlobalKey<ShoutsSectionWidgetState> _shoutsSectionKey = GlobalKey<ShoutsSectionWidgetState>();
 
   @override
   void initState() {
     super.initState();
-    _notifRefreshSub = NotificationRefreshService().onRefresh.listen((_) async {
-      if (!mounted) return;
-      await context.read<FANotificationService>().fetchNotifications();
-    });
   }
 
   @override
   void dispose() {
-    _notifRefreshSub?.cancel();
     _tabController?.dispose();
     super.dispose();
   }
@@ -951,8 +1092,12 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       _initialTabIndex = sectionCount > 0 ? sectionCount - 1 : 0;
     }
     _tabController = TabController(length: sectionCount, vsync: this, initialIndex: _initialTabIndex);
+    _lastTabIndex = _tabController!.index;
     _tabController!.addListener(() {
-      if (_tabController!.indexIsChanging) {
+      if (!mounted) return;
+      final idx = _tabController!.index;
+      if (idx != _lastTabIndex) {
+        _lastTabIndex = idx;
         setState(() {});
       }
     });
@@ -993,7 +1138,10 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           if (!_didAutoRefetch) {
             _didAutoRefetch = true;
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              service.fetchNotifications();
+              FaActivitiesPollingService().triggerNow(
+                resetTimer: false,
+                source: 'notifications_empty_autorefresh',
+              );
             });
           }
           return Scaffold(
@@ -1019,7 +1167,10 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               ],
             ),
             body: RefreshIndicator(
-              onRefresh: service.fetchNotifications,
+              onRefresh: () => FaActivitiesPollingService().triggerNow(
+                resetTimer: true,
+                source: 'notifications_empty_refresh_indicator',
+              ),
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: const [
@@ -1273,6 +1424,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                 return ShoutsSectionWidget(
                                   key: _shoutsSectionKey,
                                   service: service,
+                                  isActive: (_tabController?.index ?? 0) == index,
                                 );
                               } else {
                                 return NotificationSectionWidget(sectionIndex: index);

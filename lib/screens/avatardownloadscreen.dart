@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:cross_file/cross_file.dart';
 
 import '../widgets/PulsatingLoadingIndicator.dart';
+import '../services/fa_http.dart';
 
 class AvatarDownloadScreen extends StatelessWidget {
   final String imageUrl;
@@ -56,7 +57,10 @@ class AvatarDownloadScreen extends StatelessWidget {
         return;
       }
 
-      final response = await http.get(Uri.parse(imageUrl));
+      final response = await http.get(
+        Uri.parse(imageUrl),
+        headers: {'User-Agent': FAHttp.userAgent},
+      );
       final bytes = response.statusCode == 200 ? response.bodyBytes : await _loadDefaultImageBytes();
       final ext = _extFromUrlOrContentType(imageUrl, response.headers['content-type']);
       final filename = "avatar_${DateTime.now().millisecondsSinceEpoch}$ext";
@@ -103,7 +107,10 @@ class AvatarDownloadScreen extends StatelessWidget {
         return;
       }
 
-      final response = await http.get(Uri.parse(imageUrl));
+      final response = await http.get(
+        Uri.parse(imageUrl),
+        headers: {'User-Agent': FAHttp.userAgent},
+      );
       final bytes = response.statusCode == 200 ? response.bodyBytes : await _loadDefaultImageBytes();
       final ext = _extFromUrlOrContentType(imageUrl, response.headers['content-type']);
       final filename = 'shared_image_${DateTime.now().millisecondsSinceEpoch}$ext';
