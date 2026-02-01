@@ -1,8 +1,10 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_html/flutter_html.dart' as html;
+
 import '../services/fa_http.dart';
+import '../utils/bbcode_context_menu.dart';
 
 class ReplyScreen extends StatefulWidget {
   final Map<String, dynamic> comment;
@@ -25,29 +27,26 @@ class ReplyScreen extends StatefulWidget {
 class _ReplyScreenState extends State<ReplyScreen> {
   final TextEditingController _replyController = TextEditingController();
   bool _isSending = false;
+
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock),
+    iOptions: IOSOptions(
+      accountName: 'flutter_secure_storage_service',
+      accessibility: KeychainAccessibility.first_unlock,
+    ),
   );
 
-  // Extract numeric ID from a classic reply link (e.g. "/replyto/submission/184823275/")
   String? extractClassicCommentId(String input) {
     final regex = RegExp(r'/replyto/submission/(\d+)/');
     final match = regex.firstMatch(input);
-    return match != null ? match.group(1) : input; // fallback if already numeric
+    return match != null ? match.group(1) : input;
   }
 
   void _sendReply() async {
     final replyText = _replyController.text.trim();
     if (replyText.isEmpty) return;
 
-    setState(() {
-      _isSending = true;
-    });
+    setState(() => _isSending = true);
 
-    // In classic mode, use the "replyLink" from the comment object.
-    // Make sure your comment map includes "replyLink" from the <td class="reply-link">.
     String? replyId;
     if (widget.isClassic) {
       replyId = extractClassicCommentId(widget.comment['replyLink'] ?? '');
@@ -55,15 +54,8 @@ class _ReplyScreenState extends State<ReplyScreen> {
       replyId = widget.comment['commentId'];
     }
 
-    // Debug debugPrints
-    debugPrint("Final sending parameters:");
-    debugPrint("Mode: ${widget.isClassic ? 'Classic' : 'Modern'}");
-    debugPrint("Submission ID: ${widget.uniqueNumber}");
-    debugPrint("Reply ID (to be sent as 'replyto'): $replyId");
-    debugPrint("Message: $replyText");
-
     try {
-      bool success = await submitCommentOrReply(
+      final success = await submitCommentOrReply(
         message: replyText,
         commentId: replyId,
         submissionId: widget.uniqueNumber,
@@ -74,35 +66,25 @@ class _ReplyScreenState extends State<ReplyScreen> {
         widget.onSendReply(replyText);
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Reply posted!'),
+          const SnackBar(
+            content: Text('Reply posted!'),
             backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-            const Text('Error posting reply. Please try again.'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        _showError('Error posting reply.');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      _showError(e.toString());
+    } finally {
+      setState(() => _isSending = false);
     }
+  }
 
-    setState(() {
-      _isSending = false;
-    });
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+    );
   }
 
   Future<bool> submitCommentOrReply({
@@ -111,113 +93,66 @@ class _ReplyScreenState extends State<ReplyScreen> {
     String? commentId,
     required bool isClassic,
   }) async {
-
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     if (cookieA == null || cookieB == null) return false;
-
 
     String postUrl;
     Map<String, String> body;
 
     if (isClassic) {
-
-      if (submissionId == null) return false;
       postUrl = 'https://www.furaffinity.net/view/$submissionId/';
-      if (commentId != null && commentId.isNotEmpty) {
-        body = {
-          'action': 'replyto',
-          'replyto': commentId,
-          'reply': message,
-          'submit': 'Post Comment',
-        };
-      } else {
-
-        body = {
-          'action': 'reply',
-          'f': '0',
-          'reply': message,
-          'mysubmit': 'Add Reply',
-        };
-      }
+      body = {
+        'action': 'replyto',
+        'replyto': commentId ?? '',
+        'reply': message,
+        'submit': 'Post Comment',
+      };
     } else {
-      // Modern (beta) style
-      if (commentId != null && commentId.isNotEmpty) {
-        postUrl = 'https://www.furaffinity.net/replyto/submission/$commentId/';
-        body = {
-          'reply': message,
-          'send': 'Submit Comment',
-          'comment': commentId,
-          'name': '',
-        };
-      } else if (submissionId != null) {
-        postUrl = 'https://www.furaffinity.net/view/$submissionId/';
-        body = {
-          'reply': message,
-          'f': '0',
-          'action': 'reply',
-        };
-      } else {
-        return false;
-      }
-    }
-
-    // Debug debugPrints
-    debugPrint("Sending POST request:");
-    debugPrint("POST URL: $postUrl");
-    debugPrint("Request Body: $body");
-
-
-    Map<String, String> headers = {
-      'Cookie': 'a=$cookieA; b=$cookieB',
-      'User-Agent': FAHttp.userAgent,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    };
-
-    if (isClassic && commentId != null && commentId.isNotEmpty) {
-      headers['Referer'] =
-      'https://www.furaffinity.net/journal/$submissionId/#cid:$commentId';
+      postUrl = 'https://www.furaffinity.net/replyto/submission/$commentId/';
+      body = {
+        'reply': message,
+        'send': 'Submit Comment',
+        'comment': commentId ?? '',
+        'name': '',
+      };
     }
 
     final response = await http.post(
       Uri.parse(postUrl),
-      headers: headers,
+      headers: {
+        'Cookie': 'a=$cookieA; b=$cookieB',
+        'User-Agent': FAHttp.userAgent,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
       body: body,
     );
 
-    debugPrint('Status Code: ${response.statusCode}');
-    debugPrint('Response Body: ${response.body}');
-
-    if (response.statusCode == 302 ||
-        response.body.contains('Your comment has been posted')) {
-      return true;
-    } else {
-      return false;
-    }
+    return response.statusCode == 302 ||
+        response.body.contains('Your comment has been posted');
   }
 
   @override
   Widget build(BuildContext context) {
+    final String? htmlComment = widget.comment['html'];
+    final String plainText = widget.comment['text'] ?? '';
+
     return PopScope(
       canPop: false,
       child: Scaffold(
-        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.close),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text("Reply to Comment"),
+          title: const Text('Reply to Comment'),
           actions: [
             IconButton(
               icon: _isSending
                   ? const SizedBox(
                 width: 20,
                 height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
+                child: CircularProgressIndicator(strokeWidth: 2),
               )
                   : const Icon(Icons.send),
               onPressed: _isSending ? null : _sendReply,
@@ -225,11 +160,7 @@ class _ReplyScreenState extends State<ReplyScreen> {
           ],
         ),
         body: SafeArea(
-          bottom: true,
-          maintainBottomViewPadding: true,
           child: SingleChildScrollView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-            physics: const ClampingScrollPhysics(),
             padding: EdgeInsets.fromLTRB(
               16,
               16,
@@ -239,41 +170,22 @@ class _ReplyScreenState extends State<ReplyScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                /// HEADER
                 Row(
                   children: [
                     ClipRRect(
-                      child: widget.comment['profileImage'] != null
-                          ? Image.network(
-                        widget.comment['profileImage']!,
+                      borderRadius: BorderRadius.circular(4),
+                      child: Image.network(
+                        widget.comment['profileImage'] ?? '',
                         width: 36,
                         height: 36,
                         fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) {
-                            return child;
-                          }
-                          return Container(
-                            width: 36,
-                            height: 36,
-                            color: Colors.grey,
-                            child: const Icon(Icons.person, size: 24),
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            width: 36,
-                            height: 36,
-                            color: Colors.grey,
-                            child: const Icon(Icons.person, size: 24),
-                          );
-                        },
-                      )
-
-                          : Container(
-                        width: 36,
-                        height: 36,
-                        color: Colors.grey,
-                        child: const Icon(Icons.person, size: 24),
+                        errorBuilder: (_, __, ___) => Container(
+                          width: 36,
+                          height: 36,
+                          color: Colors.grey,
+                          child: const Icon(Icons.person),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -286,16 +198,18 @@ class _ReplyScreenState extends State<ReplyScreen> {
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 8),
+
+                /// COMMENT PREVIEW (HTML)
                 GestureDetector(
                   onLongPress: () {
                     showDialog(
                       context: context,
-                      builder: (context) => AlertDialog(
+                      builder: (_) => AlertDialog(
                         title: Text(widget.comment['username'] ?? 'Anonymous'),
-                        content: SelectableText(
-                          widget.comment['text'] ?? '',
-                          style: const TextStyle(fontSize: 14),
+                        content: SingleChildScrollView(
+                          child: html.Html(data: htmlComment ?? plainText),
                         ),
                         actions: [
                           TextButton(
@@ -308,35 +222,62 @@ class _ReplyScreenState extends State<ReplyScreen> {
                   },
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Text(
-                      widget.comment['text'] ?? '',
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: htmlComment != null && htmlComment.trim().isNotEmpty
+                        ? html.Html(
+                      data: htmlComment,
+                      style: {
+                        "body": html.Style(
+                          margin: html.Margins.zero,
+                          padding: html.HtmlPaddings.zero,
+                          color: Colors.grey.shade300,
+                          fontSize: html.FontSize(14),
+                        ),
+                        "b": html.Style(fontWeight: FontWeight.bold),
+                        "i": html.Style(fontStyle: FontStyle.italic),
+                        "u": html.Style(
+                            textDecoration: TextDecoration.underline),
+                        ".bbcode_center": html.Style(
+                          display: html.Display.block,
+                          textAlign: TextAlign.center,
+                        ),
+                        ".bbcode_left": html.Style(
+                          display: html.Display.block,
+                          textAlign: TextAlign.left,
+                        ),
+                        ".bbcode_right": html.Style(
+                          display: html.Display.block,
+                          textAlign: TextAlign.right,
+                        ),
+                        "a": html.Style(
+                          color: const Color(0xFFE09321),
+                          textDecoration: TextDecoration.none,
+                        ),
+                      },
+                    )
+                        : Text(
+                      plainText,
                       style: const TextStyle(fontSize: 14),
-                      textAlign: TextAlign.left,
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                const Divider(color: Colors.grey),
-                const SizedBox(height: 16),
-                Container(
-                  constraints: const BoxConstraints(minHeight: 100),
-                  child: TextField(
-                    controller: _replyController,
-                    style: const TextStyle(color: Colors.white),
-                    keyboardType: TextInputType.multiline,
-                    maxLines: null,
-                    enableInteractiveSelection: true,
-                    scrollPhysics: const NeverScrollableScrollPhysics(),
-                    decoration: const InputDecoration(
-                      hintText: 'Write your reply...',
-                      hintStyle: TextStyle(color: Colors.white70),
-                      contentPadding: EdgeInsets.all(8),
-                      border: InputBorder.none,
-                      isDense: true,
-                    ),
-                    textInputAction: TextInputAction.newline,
+
+                const Divider(),
+                const SizedBox(height: 12),
+
+                /// REPLY INPUT
+                TextField(
+                  controller: _replyController,
+                  maxLines: null,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    hintText: 'Write your reply...',
+                    hintStyle: TextStyle(color: Colors.white70),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.all(8),
                   ),
+                  contextMenuBuilder:
+                  BBCodeContextMenu.builder(_replyController),
                 ),
               ],
             ),
@@ -345,5 +286,4 @@ class _ReplyScreenState extends State<ReplyScreen> {
       ),
     );
   }
-
 }

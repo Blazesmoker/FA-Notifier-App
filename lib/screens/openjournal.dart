@@ -855,6 +855,18 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                 margin: html_pkg.Margins.symmetric(vertical: 8),
                                 height: html_pkg.Height(1),
                               ),
+                              ".bbcode_center": html_pkg.Style(
+                                textAlign: TextAlign.center,
+                                display: html_pkg.Display.block,
+                              ),
+                              ".bbcode_right": html_pkg.Style(
+                                textAlign: TextAlign.right,
+                                display: html_pkg.Display.block,
+                              ),
+                              ".bbcode_left": html_pkg.Style(
+                                textAlign: TextAlign.left,
+                                display: html_pkg.Display.block,
+                              ),
 
                             },
                             onLinkTap: (url, _, __) => handleFALink(context, url!, htmlSource: submissionDescription, getFullUrl: _getFullLinkFromFetchedHtml),
@@ -1091,16 +1103,15 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                             builder: (context) => EditJournalCommentScreen(
                               comment: comment,
                               editLink: comment['editLink'],
-                              onUpdateComment: (updatedText) {
-                                setState(() {
-                                  comment['text'] = updatedText;
-                                });
+                              onUpdateComment: () async {
+                                await _fetchPostDetailsNew();
                               },
                             ),
                           ),
                         );
                       }
                           : null,
+
                       onReply: () async {
                         await Navigator.push(
                           context,
@@ -1111,7 +1122,8 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                               onSendReply: (replyText) {},
                               username: comment['username'] ?? 'Anonymous',
                               profileImage: comment['profileImage'] ?? '',
-                              commentText: comment['text'] ?? '',
+                              commentHtml: comment['commentHtml'],
+                              commentText: comment['text'],
                             ),
                           ),
                         ).then((result) {

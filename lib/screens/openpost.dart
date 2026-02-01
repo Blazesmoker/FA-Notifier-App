@@ -86,9 +86,6 @@ final Map<String, String> faTimezoneToIana = {
 class OpenPost extends StatefulWidget {
   final String imageUrl;
   final String uniqueNumber;
-  /// When true, do not fetch author profile on load (saves a request).
-  /// Show "+Watch" until user taps it; then fetch profile and update button or perform watch.
-  /// Set to true when opening from Browse or Search screens.
   final bool skipInitialWatchCheck;
 
   const OpenPost({
@@ -3064,26 +3061,29 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                         builder: (context) => EditCommentScreen(
                           comment: comment,
                           editLink: comment['editLink'],
-                          onUpdateComment: (updatedText) {
-                            setState(() {
-                              comment['text'] = updatedText;
-                            });
+                          onUpdateComment: () async {
+                            await _fetchPostDetails();
                           },
                         ),
                       ),
                     );
                   }
                 },
+
                 onReply: () async {
                   final result = await Navigator.push<bool>(
                     context,
                     MaterialPageRoute(
                       builder: (context) => ReplyScreen(
-                        comment: comment,
+                        comment: {
+                          ...comment,
+                          'html': comment['commentHtml'],
+                        },
                         uniqueNumber: widget.uniqueNumber,
                         isClassic: _isClassicUserPage,
                         onSendReply: (_) {},
                       ),
+
                     ),
                   );
                   if (result == true) {

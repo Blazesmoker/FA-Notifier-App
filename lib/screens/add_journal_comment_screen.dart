@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import '../services/fa_http.dart';
+import '../utils/bbcode_context_menu.dart';
 
 class AddJournalCommentScreen extends StatefulWidget {
   final String submissionTitle;
@@ -200,6 +201,7 @@ class _AddCommentScreenState extends State<AddJournalCommentScreen> {
                       contentPadding: EdgeInsets.zero,
                       border: InputBorder.none,
                     ),
+                    contextMenuBuilder: BBCodeContextMenu.builder(_commentController),
                     textInputAction: TextInputAction.newline,
                   ),
                 ),

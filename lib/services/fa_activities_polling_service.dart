@@ -14,7 +14,7 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
   factory FaActivitiesPollingService() => _i;
   FaActivitiesPollingService._internal();
 
-  static const Duration _interval = Duration(seconds: 120);
+  static const Duration _interval = Duration(seconds: 180);
 
   FANotificationService? _faNotificationService;
   Timer? _timer;

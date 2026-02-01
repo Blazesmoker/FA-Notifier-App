@@ -220,7 +220,7 @@ class OpenJournalApiService {
 
       comment['commentId'] = commentId ?? '';
 
-      comment['text'] = _extractCommentText(c);
+
 
       final hasDeletedInner = c.querySelector('comment-container.deleted-comment-container') != null;
       final lowerAll = c.text.toLowerCase();
@@ -233,12 +233,61 @@ class OpenJournalApiService {
       double width = 100.0;
       final style = c.attributes['style'] ?? '';
       final mw = RegExp(r'width\s*:\s*([0-9.]+)%').firstMatch(style);
+      final commentTextElement =
+          c.querySelector('.comment_text .user-submitted-links') ??
+              c.querySelector('.comment_text') ??
+              c.querySelector('comment-user-text .user-submitted-links') ??
+              c.querySelector('comment-user-text');
+
+      String? commentHtml;
+      String? commentText;
+
+      if (commentTextElement != null) {
+        final cloned = commentTextElement.clone(true) as dom.Element;
+
+        // Remove control junk
+        cloned.querySelectorAll('.floatright, div.floatright').forEach((e) => e.remove());
+
+        String normalizeFaHtml(dom.Element root) {
+          final cloned = root.clone(true) as dom.Element;
+
+          cloned.querySelectorAll('span.bbcode_i').forEach((e) {
+            e.replaceWith(dom.Element.tag('i')..innerHtml = e.innerHtml);
+          });
+
+          cloned.querySelectorAll('span.bbcode_b').forEach((e) {
+            e.replaceWith(dom.Element.tag('b')..innerHtml = e.innerHtml);
+          });
+
+          cloned.querySelectorAll('span.bbcode_u').forEach((e) {
+            e.replaceWith(dom.Element.tag('u')..innerHtml = e.innerHtml);
+          });
+
+          cloned.querySelectorAll('span.bbcode_center').forEach((e) {
+            e.replaceWith(dom.Element.tag('div')
+              ..attributes['style'] = 'text-align:center'
+              ..innerHtml = e.innerHtml);
+          });
+
+          return cloned.innerHtml;
+        }
+
+
+
+        commentHtml = normalizeFaHtml(commentTextElement);
+        commentText = commentTextElement.text.trim();
+
+
+      }
+
+      comment['commentHtml'] = commentHtml;
+      comment['text'] = commentText;
       if (mw != null) {
         width = double.tryParse(mw.group(1)!) ?? 100.0;
       }
       comment['width'] = width;
 
-      comment['commentHtml'] = c.outerHtml;
+
 
       commentBodies.add(comment);
     }

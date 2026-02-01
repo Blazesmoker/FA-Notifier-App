@@ -698,15 +698,7 @@ class OpenPostApiService {
             return '[${cls.replaceAll(' ', '-')}]';
           },
         );
-        rawHtml = rawHtml
-            .replaceAll(RegExp(r'<i\s+class="bbcode\s+bbcode_i"[^>]*>', caseSensitive: false), '[[i]]')
-            .replaceAll(RegExp(r'</i>', caseSensitive: false), '[[/i]]')
-            .replaceAll(RegExp(r'<strong\s+class="bbcode\s+bbcode_b"[^>]*>', caseSensitive: false), '[[b]]')
-            .replaceAll(RegExp(r'</strong>', caseSensitive: false), '[[/b]]')
-            .replaceAll(RegExp(r'<b\s+class="bbcode\s+bbcode_b"[^>]*>', caseSensitive: false), '[[b]]')
-            .replaceAll(RegExp(r'</b>', caseSensitive: false), '[[/b]]')
-            .replaceAll(RegExp(r'<u\s+class="bbcode\s+bbcode_u"[^>]*>', caseSensitive: false), '[[u]]')
-            .replaceAll(RegExp(r'</u>', caseSensitive: false), '[[/u]]');
+
 
         rawHtml = _fixTruncatedLinks(rawHtml);
         final commentDoc = html_parser.parse(rawHtml);

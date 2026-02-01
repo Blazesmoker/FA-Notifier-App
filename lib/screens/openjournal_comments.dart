@@ -1,7 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:extended_text/extended_text.dart';
 import 'package:flutter/material.dart';
-
+import 'package:flutter_html/flutter_html.dart' as fh;
+import 'package:flutter_blurhash/flutter_blurhash.dart';
 import '../utils/specialTextSpanBuilder.dart';
 import 'user_profile_screen.dart';
 
@@ -26,6 +27,7 @@ class CommentWidget extends StatefulWidget {
 
   @override
   _CommentWidgetState createState() => _CommentWidgetState();
+
 }
 
 class _CommentWidgetState extends State<CommentWidget> {
@@ -36,7 +38,8 @@ class _CommentWidgetState extends State<CommentWidget> {
     double widthPercent = (widget.comment['width'] ?? 100).toDouble();
     int nestingLevel = ((100.0 - widthPercent) / 3.0).round().clamp(0, 4);
     double leftPadding = nestingLevel * 16.0;
-
+    final String? commentHtml = widget.comment['commentHtml'];
+    final bool hasHtml = commentHtml != null && commentHtml.trim().isNotEmpty;
     if (widget.comment['deleted'] == true) {
       return Padding(
         padding: EdgeInsets.only(left: leftPadding, bottom: 6.0),
@@ -225,15 +228,74 @@ class _CommentWidgetState extends State<CommentWidget> {
                     selectionHandleColor: const Color(0xFFE09321),
                   ),
                 ),
-                child: ExtendedText(
+                child: hasHtml
+                    ? fh.Html(
+                  data: commentHtml,
+                  onLinkTap: (url, _, __) {
+                    if (url != null) {
+                      widget.handleLink?.call(url);
+                    }
+                  },
+                  style: {
+                    "body": fh.Style(
+                      margin: fh.Margins.zero,
+                      padding: fh.HtmlPaddings.zero,
+                      color: Colors.grey.shade300,
+                      fontSize: fh.FontSize(14),
+                    ),
+
+                    ".bbcode_center": fh.Style(
+                      display: fh.Display.block,
+                      textAlign: TextAlign.center,
+                    ),
+
+                    ".bbcode_left": fh.Style(
+                      display: fh.Display.block,
+                      textAlign: TextAlign.left,
+                    ),
+
+                    ".bbcode_right": fh.Style(
+                      display: fh.Display.block,
+                      textAlign: TextAlign.right,
+                    ),
+
+                    "code": fh.Style(
+                      backgroundColor: Colors.transparent,
+                      padding: fh.HtmlPaddings.zero,
+                      margin: fh.Margins.zero,
+                      fontFamily: 'inherit',
+                      fontSize: fh.FontSize(14),
+                      color: Colors.grey.shade300,
+                    ),
+
+                    "strong": fh.Style(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade300,
+                    ),
+
+                    "em": fh.Style(
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey.shade300,
+                    ),
+
+                    ".bbcode_u": fh.Style(
+                      textDecoration: TextDecoration.underline,
+                      color: Colors.grey.shade300,
+                    ),
+
+                    "a": fh.Style(
+                      color: const Color(0xFFE09321),
+                      textDecoration: TextDecoration.none,
+                    ),
+                  },
+                )
+
+                    : ExtendedText(
                   widget.comment['text'] ?? '',
                   specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
                     onTapLink: widget.handleLink,
                   ),
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade300,
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade300),
                 ),
               ),
             ),

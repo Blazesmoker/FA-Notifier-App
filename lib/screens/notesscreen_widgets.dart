@@ -45,8 +45,7 @@ class MessageList extends StatelessWidget {
       }
     };
 
-    // IMPORTANT: allow pull-to-refresh even when list is empty/error/loading.
-    // RefreshIndicator requires a scrollable child.
+
     if (isLoading && messages.isEmpty) {
       return RefreshIndicator(
         color: _accent,

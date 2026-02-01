@@ -254,7 +254,7 @@ class NotesScreenState extends State<NotesScreen>
 
   void _startPeriodicFetch() {
     _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 80), (_) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 200), (_) {
       if (mounted && !_isDialogOpen) {
         _fetchInboxTwoPagesOnly();
       }

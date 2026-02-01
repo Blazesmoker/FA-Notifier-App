@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
@@ -51,6 +52,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
   String sentDate = '';
   String avatarUrl = '';
   String messageContent = '';
+  String messageContentHtml = '';
   String? messageId;
   String senderUsername = '';
   String senderLink = '';
@@ -247,21 +249,26 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
           final rawHtml = modernHtml ?? classicHtml;
           if (rawHtml == null || rawHtml.isEmpty) {
             messageContent = 'No content';
+            messageContentHtml = '';
           } else {
-
             final innerDoc = html_parser.parse(rawHtml);
-
-
             innerDoc.querySelectorAll('a.auto_link_shortened').forEach((anchor) {
               final fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
               if (fullLink != null) {
                 anchor.innerHtml = fullLink;
               }
             });
-
-
             final updatedText = innerDoc.body?.text.trim() ?? '';
             messageContent = updatedText.isNotEmpty ? updatedText : 'No content';
+            String fixedHtml = innerDoc.body?.innerHtml ?? rawHtml;
+            fixedHtml = fixedHtml.replaceAllMapped(
+              RegExp(r'src="(//[^"]+)"|href="(//[^"]+)"'),
+              (m) {
+                final url = m.group(1) ?? m.group(2);
+                return url != null ? m[0]!.replaceFirst('//', 'https://') : m[0]!;
+              },
+            );
+            messageContentHtml = fixedHtml;
           }
 
           isLoading = false;
@@ -501,24 +508,64 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                             selectionHandleColor: Color(0xFFE09321),
                           ),
                         ),
-                        child: SelectableLinkify(
-                          key: _selectableKey,
-                          onOpen: (link) async {
-                            await handleFALink(context, link.url);
-                          },
-                          text: messageContent,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.white,
-                          ),
-                          linkStyle: const TextStyle(
-                            fontSize: 16,
-                            color: Color(0xFFE09321),
-                            decoration: TextDecoration.none,
-                            decorationColor: Color(0xFFE09321),
-                          ),
-                          selectionControls: MaterialTextSelectionControls(),
-                        ),
+                        child: messageContentHtml.isNotEmpty
+                            ? SelectionArea(
+                                key: _selectableKey,
+                                child: html_pkg.Html(
+                                  data: messageContentHtml,
+                                  style: {
+                                    'body': html_pkg.Style(
+                                      margin: html_pkg.Margins.zero,
+                                      padding: html_pkg.HtmlPaddings.zero,
+                                      color: Colors.white,
+                                      fontSize: html_pkg.FontSize(16),
+                                    ),
+                                    'b': html_pkg.Style(fontWeight: FontWeight.bold),
+                                    'strong': html_pkg.Style(fontWeight: FontWeight.bold),
+                                    'i': html_pkg.Style(fontStyle: FontStyle.italic),
+                                    '.bbcode_i': html_pkg.Style(fontStyle: FontStyle.italic),
+                                    'u': html_pkg.Style(textDecoration: TextDecoration.underline),
+                                    '.bbcode_u': html_pkg.Style(textDecoration: TextDecoration.underline),
+                                    '.bbcode_center': html_pkg.Style(
+                                      display: html_pkg.Display.block,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    '.bbcode_left': html_pkg.Style(
+                                      display: html_pkg.Display.block,
+                                      textAlign: TextAlign.left,
+                                    ),
+                                    '.bbcode_right': html_pkg.Style(
+                                      display: html_pkg.Display.block,
+                                      textAlign: TextAlign.right,
+                                    ),
+                                    'a': html_pkg.Style(
+                                      color: const Color(0xFFE09321),
+                                      textDecoration: TextDecoration.none,
+                                    ),
+                                  },
+                                  onLinkTap: (url, _, __) {
+                                    if (url != null) handleFALink(context, url);
+                                  },
+                                ),
+                              )
+                            : SelectableLinkify(
+                                key: _selectableKey,
+                                onOpen: (link) async {
+                                  await handleFALink(context, link.url);
+                                },
+                                text: messageContent,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                ),
+                                linkStyle: const TextStyle(
+                                  fontSize: 16,
+                                  color: Color(0xFFE09321),
+                                  decoration: TextDecoration.none,
+                                  decorationColor: Color(0xFFE09321),
+                                ),
+                                selectionControls: MaterialTextSelectionControls(),
+                              ),
                       ),
                     ),
                   ),
@@ -538,7 +585,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                           child: const Text('Mark Unread'),
                         ),
                       if (widget.folder != 'sent') const SizedBox(width: 8),
-                      // In MessageDetailScreen, find and replace the entire Reply button ElevatedButton widget with this:
+
 
                       if (widget.folder != 'sent')
                         ElevatedButton(
@@ -549,6 +596,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                                 builder: (context) => NoteReplyScreen(
                                   subject: subject,
                                   originalContent: messageContent,
+                                  originalContentHtml: messageContentHtml.isNotEmpty ? messageContentHtml : null,
                                   username: senderUsername,
                                   messageId: messageId ?? '',
                                   messageLink: widget.messageLink,

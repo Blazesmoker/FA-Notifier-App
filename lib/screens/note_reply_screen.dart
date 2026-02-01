@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:html/parser.dart' as html_parser;
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -9,12 +10,15 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import '../utils.dart';
+import '../utils/bbcode_context_menu.dart';
+import '../utils/fa_link_handler.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import '../services/fa_http.dart';
 
 class NoteReplyScreen extends StatefulWidget {
   final String subject;
   final String originalContent;
+  final String? originalContentHtml;
   final String username;
   final String messageId;
   final String messageLink;
@@ -23,6 +27,7 @@ class NoteReplyScreen extends StatefulWidget {
     Key? key,
     required this.subject,
     required this.originalContent,
+    this.originalContentHtml,
     required this.username,
     required this.messageId,
     required this.messageLink,
@@ -683,10 +688,58 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
                               color: Colors.grey[900],
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: SelectableText(
-                              widget.originalContent,
-                              style: const TextStyle(fontSize: 16, color: Colors.white),
-                            ),
+                            child: (widget.originalContentHtml != null &&
+                                    widget.originalContentHtml!.isNotEmpty)
+                                ? Theme(
+                                    data: Theme.of(context).copyWith(
+                                      textSelectionTheme: TextSelectionThemeData(
+                                        selectionColor: const Color(0xFFE09321).withOpacity(0.4),
+                                        selectionHandleColor: const Color(0xFFE09321),
+                                      ),
+                                    ),
+                                    child: SelectionArea(
+                                      child: html_pkg.Html(
+                                        data: widget.originalContentHtml!,
+                                        style: {
+                                          'body': html_pkg.Style(
+                                            margin: html_pkg.Margins.zero,
+                                            padding: html_pkg.HtmlPaddings.zero,
+                                            color: Colors.white,
+                                            fontSize: html_pkg.FontSize(16),
+                                          ),
+                                          'b': html_pkg.Style(fontWeight: FontWeight.bold),
+                                          'strong': html_pkg.Style(fontWeight: FontWeight.bold),
+                                          'i': html_pkg.Style(fontStyle: FontStyle.italic),
+                                          '.bbcode_i': html_pkg.Style(fontStyle: FontStyle.italic),
+                                          'u': html_pkg.Style(textDecoration: TextDecoration.underline),
+                                          '.bbcode_u': html_pkg.Style(textDecoration: TextDecoration.underline),
+                                          '.bbcode_center': html_pkg.Style(
+                                            display: html_pkg.Display.block,
+                                            textAlign: TextAlign.center,
+                                          ),
+                                          '.bbcode_left': html_pkg.Style(
+                                            display: html_pkg.Display.block,
+                                            textAlign: TextAlign.left,
+                                          ),
+                                          '.bbcode_right': html_pkg.Style(
+                                            display: html_pkg.Display.block,
+                                            textAlign: TextAlign.right,
+                                          ),
+                                          'a': html_pkg.Style(
+                                            color: const Color(0xFFE09321),
+                                            textDecoration: TextDecoration.none,
+                                          ),
+                                        },
+                                        onLinkTap: (url, _, __) {
+                                          if (url != null) handleFALink(context, url);
+                                        },
+                                      ),
+                                    ),
+                                  )
+                                : SelectableText(
+                                    widget.originalContent,
+                                    style: const TextStyle(fontSize: 16, color: Colors.white),
+                                  ),
                           ),
                           const SizedBox(height: 16),
                           Expanded(
@@ -702,7 +755,9 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
                                 labelStyle: TextStyle(color: Colors.white),
                                 alignLabelWithHint: true,
                               ),
+                              contextMenuBuilder: BBCodeContextMenu.builder(_replyController),
                             ),
+
                           ),
                           const SizedBox(height: 16),
                         ],

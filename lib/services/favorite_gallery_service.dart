@@ -7,7 +7,7 @@ import 'fa_http.dart';
 
 /// A singleton service to handle favorite/unfavorite actions:
 /// - 3-second debounce to prevent spam.
-/// - Retries on the final POST request every 2 seconds, up to 10 tries.
+/// - Retries on the final POST request every 3 seconds, up to 5 tries.
 class FavoriteGalleryService {
   FavoriteGalleryService._internal();
 
@@ -21,11 +21,11 @@ class FavoriteGalleryService {
   /// Desired final fav states (true = fav, false = unfav) for each submission.
   final Map<String, bool> _pendingFavStates = {};
 
-  /// Executes a POST request with retries every 2 seconds, up to 10 tries.
+  /// Executes a POST request with retries every 3 seconds, up to 5 tries.
   Future<void> executePostWithRetry(String url, String cookieA, String cookieB) async {
     debugPrint('[FAV SERVICE] Starting executePostWithRetry => $url');
     int attempts = 0;
-    const maxAttempts = 10;
+    const maxAttempts = 5;
     while (attempts < maxAttempts) {
       try {
         final response = await http.post(
@@ -48,8 +48,8 @@ class FavoriteGalleryService {
       }
       attempts++;
       if (attempts < maxAttempts) {
-        // Wait 2 seconds before next retry.
-        await Future.delayed(const Duration(seconds: 2));
+        // Wait 3 seconds before next retry.
+        await Future.delayed(const Duration(seconds: 3));
       } else {
         debugPrint('[FAV SERVICE] Max retry attempts reached for $url');
       }

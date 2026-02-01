@@ -204,9 +204,7 @@ void callbackDispatcher() {
                   enabledIncreases.journals > 0 ||
                   enabledIncreases.notes > 0;
 
-              // Keep notification body consistent with previous behavior:
-              // show the current per-category totals (filtered by enabled categories),
-              // while dedupe is decided by per-category *increases*.
+
               final NotificationCounts filteredCounts = NotificationCounts(
                 submissions: submissionsEnabled ? newCounts.submissions : 0,
                 watches: watchesEnabled ? newCounts.watches : 0,
@@ -217,7 +215,7 @@ void callbackDispatcher() {
               );
               final String messageBody = _buildNotificationMessage(filteredCounts);
 
-              // Only show a system notification on an *increase*.
+              // Only show a system notification on an increase.
               if (shouldNotify) {
                 final bool soundActivitiesEnabled =
                     prefs.getBool('sound_new_activities_enabled') ?? true;
@@ -641,7 +639,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _setAppActive(true);
     _initDeepLinks();
     if (kDebugMode || true) {
-      _stateDebugTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
+      _stateDebugTimer = Timer.periodic(const Duration(minutes: 3), (_) async {
         final prefs = await SharedPreferences.getInstance();
         final isActive = prefs.getBool("isAppActive") ?? false;
         debugPrint("[STATE CHECK] App active: $isActive at ${DateTime.now()}");

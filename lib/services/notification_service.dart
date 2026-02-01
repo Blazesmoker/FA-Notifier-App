@@ -207,7 +207,7 @@ class NotificationService {
 
       final prefs = await SharedPreferences.getInstance();
 
-      // If no UI yet, stash for later processing by lifecycle/Home
+
       final BuildContext? context = navigatorKey.currentContext;
       if (context == null) {
         await prefs.setString('pending_navigation', payload);
@@ -216,26 +216,19 @@ class NotificationService {
       }
 
 
-      // Pop to root to ensure HomeScreen is on top
+
       navigatorKey.currentState?.popUntil((r) => r.isFirst);
 
-      // Remove pending since we're going to handle it now
+
       await prefs.remove('pending_navigation');
 
-      // Defer until the next frame so HomeScreen is definitely built.
-      //
-      // IMPORTANT: `addPostFrameCallback` does NOT schedule a frame by itself.
-      // When the app is already on the root route and idle, tapping a system
-      // notification may deliver the callback without triggering a Flutter
-      // frame. In that case this work would not run until the user touches the
-      // screen (which schedules a frame). We force a visual update below.
       WidgetsBinding.instance.addPostFrameCallback((_) async {
-        // Extra micro-delay helps in release with heavy first-frame work
+
         await Future<void>.delayed(const Duration(milliseconds: 16));
 
         final ctx = navigatorKey.currentContext;
         if (ctx == null) {
-          // If we lost context again, stash and bail
+
           await prefs.setString('pending_navigation', payload);
           debugPrint('[NOTIF] Lost context after frame; re-stashed payload.');
           return;
@@ -248,12 +241,10 @@ class NotificationService {
             payload.contains('DrawerIndex.Notes') ||
             payload == 'note_native';
 
-        // Switch tab first
+
         navProvider.setTargetIndex(isNotes ? 4 : 3);
 
-        // Trigger refresh immediately. Both screens are kept alive in the
-        // HomeScreen `IndexedStack`, so their stream listeners are active even
-        // when not visible.
+
         try {
           if (isNotes) {
             NotesRefreshService().triggerRefresh();
@@ -266,23 +257,21 @@ class NotificationService {
           debugPrint('[_handleTapPayload] refresh error: $e');
         }
 
-        // Mark handled to avoid double-processing
+
         await prefs.setString('last_handled_payload', payload);
       });
 
-      // Ensure the post-frame callback above actually gets a frame to run on.
-      // (Fixes "tap does nothing until I touch the screen".)
       SchedulerBinding.instance.ensureVisualUpdate();
     } catch (e, st) {
       debugPrint('[_handleTapPayload] error: $e\n$st');
-      // As a fallback, stash for lifecycle processing
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pending_navigation', payload);
     }
   }
 
 
-  // For iOS native dictionary -> payload string
+
   String? _extractPayloadFromNative(Map<String, dynamic> native) {
     if (native['payload'] is String &&
         (native['payload'] as String).isNotEmpty) {
@@ -296,7 +285,7 @@ class NotificationService {
     return null;
   }
 
-  // ========= Utility =========
+
   String _capitalize(String s) =>
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 

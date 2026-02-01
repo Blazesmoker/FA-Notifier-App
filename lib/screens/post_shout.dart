@@ -8,6 +8,7 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/fa_http.dart';
+import '../utils/bbcode_context_menu.dart';
 
 class PostShoutScreen extends StatefulWidget {
   final String username;
@@ -29,21 +30,32 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
   int _currentLength = 0;
   final int _maxLength = 222;
   bool _isLoading = false;
+  final ValueNotifier<int> _lengthNotifier = ValueNotifier<int>(0);
 
   @override
   void initState() {
     super.initState();
     _initializeDio();
     _shoutController.addListener(() {
-      setState(() {
-        _currentLength = _shoutController.text.length;
-      });
-      if (_shoutController.text.length > _maxLength) {
+      // Only update when TEXT changes, not selection
+      final newLength = _shoutController.text.length;
+      if (_lengthNotifier.value != newLength) {
+        _lengthNotifier.value = newLength;
+      }
+
+      if (newLength > _maxLength) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Too many characters!')),
         );
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _shoutController.dispose();
+    _lengthNotifier.dispose();
+    super.dispose();
   }
 
   Future<void> _initializeDio() async {
@@ -195,92 +207,76 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _shoutController.dispose();
-    super.dispose();
-  }
+
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-        canPop: false,
-        child: Scaffold(
-      resizeToAvoidBottomInset: true,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text("Compose Shout"),
-        actions: [
-          _isLoading
-              ? Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Center(
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+      canPop: false,
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text("Compose Shout"),
+          actions: [
+            _isLoading
+                ? Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
                 ),
               ),
+            )
+                : IconButton(
+              icon: const Icon(Icons.send),
+              onPressed: _postShout,
             ),
-          )
-              : IconButton(
-            icon: const Icon(Icons.send),
-            onPressed: _postShout,
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: GestureDetector(
-          // Dismisses the keyboard when tapping outside.
-          onTap: () => FocusScope.of(context).unfocus(),
+          ],
+        ),
+        body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16.0),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  // Allows the content to scroll when necessary.
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight,
-                    ),
-                    child: IntrinsicHeight(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _shoutController,
-                              maxLines: null, // Allows the TextField to expand.
-                              keyboardType: TextInputType.multiline,
-                              // Limits the number of characters using inputFormatters.
-                              inputFormatters: [
-                                LengthLimitingTextInputFormatter(_maxLength),
-                              ],
-                              decoration: InputDecoration(
-                                labelText: 'Your Shout',
-                                border: const OutlineInputBorder(),
-                                alignLabelWithHint: true,
-                                // Display the character counter.
-                                counterText: '$_currentLength/$_maxLength',
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                        ],
+            child: Column(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _shoutController,
+                    maxLines: null,
+                    keyboardType: TextInputType.multiline,
+                    style: const TextStyle(color: Colors.white),
+                    inputFormatters: [
+                      LengthLimitingTextInputFormatter(_maxLength),
+                    ],
+                    decoration: InputDecoration(
+                      labelText: 'Your Shout',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      border: const OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                      counterText: null,
+                      counter: ValueListenableBuilder<int>(
+                        valueListenable: _lengthNotifier,
+                        builder: (context, length, child) {
+                          return Text('$length/$_maxLength');
+                        },
                       ),
                     ),
+                    contextMenuBuilder: BBCodeContextMenu.builder(_shoutController),
                   ),
-                );
-              },
+                ),
+              ],
             ),
           ),
         ),
       ),
-    ));
+    );
   }
 }

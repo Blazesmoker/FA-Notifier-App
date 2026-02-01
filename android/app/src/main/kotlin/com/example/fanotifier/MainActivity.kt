@@ -13,13 +13,12 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    // If you have a custom engine group, keep your references:
     private var customEngine: FlutterEngine? = null
     private val CHANNEL = "com.blazesmoker.fanotifier/icon"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // By default, we do nothing here for the icon switching.
+
         Log.d("MainActivity", "🟢 Activity created")
         Log.d("MainActivity", "🟢 onCreate => default static icon is in use.")
     }

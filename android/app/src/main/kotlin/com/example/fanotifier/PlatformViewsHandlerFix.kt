@@ -65,7 +65,7 @@ class PlatformViewsHandlerFix(
         origin.synchronizeToNativeViewHierarchy(yes)
     }
 
-    // 🔥 новые методы, которых не хватало:
+
 
     override fun isHcppEnabled(): Boolean {
         return origin.isHcppEnabled()
@@ -75,7 +75,7 @@ class PlatformViewsHandlerFix(
         origin.createPlatformViewHcpp(request)
     }
 
-    // ===== internals =====
+
 
     private fun replaceHandler() {
         try {

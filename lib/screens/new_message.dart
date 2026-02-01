@@ -7,6 +7,7 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/fa_http.dart';
+import '../utils/bbcode_context_menu.dart';
 
 class NewMessageScreen extends StatelessWidget {
   final TextEditingController _recipientController;
@@ -214,7 +215,7 @@ class NewMessageScreen extends StatelessWidget {
                       Expanded(
                         child: TextField(
                           controller: _messageController,
-                          maxLines: null, // Allows dynamic height
+                          maxLines: null,
                           keyboardType: TextInputType.multiline,
                           style: const TextStyle(color: Colors.white),
                           decoration: const InputDecoration(
@@ -222,6 +223,7 @@ class NewMessageScreen extends StatelessWidget {
                             border: OutlineInputBorder(),
                             alignLabelWithHint: true,
                           ),
+                          contextMenuBuilder: BBCodeContextMenu.builder(_messageController),
                         ),
                       ),
                     ],

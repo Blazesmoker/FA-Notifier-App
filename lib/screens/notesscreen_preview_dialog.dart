@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:html/parser.dart' as html_parser;
 
@@ -49,6 +50,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
   String sentDate = '';
   String avatarUrl = '';
   String messageContent = '';
+  String messageContentHtml = '';
   String? messageId;
   String senderLink = '';
   String senderUsername = '';
@@ -215,6 +217,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
           final rawHtml = modernHtml ?? classicHtml;
           if (rawHtml == null || rawHtml.isEmpty) {
             messageContent = 'No content';
+            messageContentHtml = '';
           } else {
             final innerDoc = html_parser.parse(rawHtml);
             innerDoc.querySelectorAll('a.auto_link_shortened').forEach((anchor) {
@@ -225,6 +228,15 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
             });
             final updatedText = innerDoc.body?.text.trim() ?? '';
             messageContent = updatedText.isNotEmpty ? updatedText : 'No content';
+            String fixedHtml = innerDoc.body?.innerHtml ?? rawHtml;
+            fixedHtml = fixedHtml.replaceAllMapped(
+              RegExp(r'src="(//[^"]+)"|href="(//[^"]+)"'),
+              (m) {
+                final url = m.group(1) ?? m.group(2);
+                return url != null ? m[0]!.replaceFirst('//', 'https://') : m[0]!;
+              },
+            );
+            messageContentHtml = fixedHtml;
           }
 
           isLoading = false;
@@ -377,23 +389,71 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
               ),
 
               const Divider(height: 20, thickness: 1, color: Colors.white54),
-              SelectableLinkify(
-                onOpen: (link) async {
-                  await handleFALink(context, link.url);
-                },
-                text: messageContent,
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Colors.white,
+              if (messageContentHtml.isNotEmpty)
+                Theme(
+                  data: Theme.of(context).copyWith(
+                    textSelectionTheme: TextSelectionThemeData(
+                      selectionColor: const Color(0xFFE09321).withOpacity(0.4),
+                      selectionHandleColor: const Color(0xFFE09321),
+                    ),
+                  ),
+                  child: SelectionArea(
+                    child: html_pkg.Html(
+                      data: messageContentHtml,
+                      style: {
+                        'body': html_pkg.Style(
+                          margin: html_pkg.Margins.zero,
+                          padding: html_pkg.HtmlPaddings.zero,
+                          color: Colors.white,
+                          fontSize: html_pkg.FontSize(16),
+                        ),
+                        'b': html_pkg.Style(fontWeight: FontWeight.bold),
+                        'strong': html_pkg.Style(fontWeight: FontWeight.bold),
+                        'i': html_pkg.Style(fontStyle: FontStyle.italic),
+                        '.bbcode_i': html_pkg.Style(fontStyle: FontStyle.italic),
+                        'u': html_pkg.Style(textDecoration: TextDecoration.underline),
+                        '.bbcode_u': html_pkg.Style(textDecoration: TextDecoration.underline),
+                        '.bbcode_center': html_pkg.Style(
+                          display: html_pkg.Display.block,
+                          textAlign: TextAlign.center,
+                        ),
+                        '.bbcode_left': html_pkg.Style(
+                          display: html_pkg.Display.block,
+                          textAlign: TextAlign.left,
+                        ),
+                        '.bbcode_right': html_pkg.Style(
+                          display: html_pkg.Display.block,
+                          textAlign: TextAlign.right,
+                        ),
+                        'a': html_pkg.Style(
+                          color: const Color(0xFFE09321),
+                          textDecoration: TextDecoration.none,
+                        ),
+                      },
+                      onLinkTap: (url, _, __) {
+                        if (url != null) handleFALink(context, url);
+                      },
+                    ),
+                  ),
+                )
+              else
+                SelectableLinkify(
+                  onOpen: (link) async {
+                    await handleFALink(context, link.url);
+                  },
+                  text: messageContent,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                  ),
+                  linkStyle: const TextStyle(
+                    fontSize: 16,
+                    color: Color(0xFFE09321),
+                    decoration: TextDecoration.none,
+                    decorationColor: Color(0xFFE09321),
+                  ),
+                  selectionControls: MaterialTextSelectionControls(),
                 ),
-                linkStyle: const TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFFE09321),
-                  decoration: TextDecoration.none,
-                  decorationColor: Color(0xFFE09321),
-                ),
-                selectionControls: MaterialTextSelectionControls(),
-              ),
               const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,

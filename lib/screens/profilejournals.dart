@@ -298,6 +298,18 @@ class ProfileJournalsState extends State<ProfileJournals> {
                             margin: Margins.symmetric(vertical: 8),
                             height: Height(1),
                           ),
+                          ".bbcode_center": Style(
+                            textAlign: TextAlign.center,
+                            display: Display.block,
+                          ),
+                          ".bbcode_right": Style(
+                            textAlign: TextAlign.right,
+                            display: Display.block,
+                          ),
+                          ".bbcode_left": Style(
+                            textAlign: TextAlign.left,
+                            display: Display.block,
+                          ),
                         },
                         onLinkTap: (url, _, __) {
                           Navigator.push(

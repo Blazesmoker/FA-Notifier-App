@@ -3,12 +3,13 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 import '../services/fa_http.dart';
+import '../utils/bbcode_context_menu.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 
 class EditCommentScreen extends StatefulWidget {
   final Map<String, dynamic> comment;
   final String editLink;
-  final Function(String) onUpdateComment;
+  final VoidCallback onUpdateComment;
 
   EditCommentScreen({
     required this.comment,
@@ -35,7 +36,7 @@ class _EditCommentScreenState extends State<EditCommentScreen> {
     super.initState();
     _controller.text = widget.comment['text'];
     _client = http.Client();
-    _loadCookies();
+    _loadCookies().then((_) => _loadEditForm());
   }
 
   @override
@@ -44,6 +45,40 @@ class _EditCommentScreenState extends State<EditCommentScreen> {
     _controller.dispose();
     super.dispose();
   }
+  Future<void> _loadEditForm() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await _client.get(
+        Uri.parse(widget.editLink),
+        headers: {
+          'Cookie': 'a=$cookieA; b=$cookieB',
+          'User-Agent': FAHttp.userAgent,
+          'Referer': widget.editLink,
+        },
+      );
+
+      if (response.statusCode != 200) {
+        _showMessage('Failed to load edit page', isError: true);
+        return;
+      }
+
+      final document = html_parser.parse(response.body);
+      final textarea = document.querySelector('textarea[name="message"]');
+
+      if (textarea == null) {
+        _showMessage('BBCode textarea not found', isError: true);
+        return;
+      }
+
+      _controller.text = textarea.text;
+    } catch (e) {
+      _showMessage('Error loading edit form: $e', isError: true);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
 
   Future<void> _loadCookies() async {
     cookieA = await _secureStorage.read(key: 'fa_cookie_a');
@@ -127,7 +162,7 @@ class _EditCommentScreenState extends State<EditCommentScreen> {
       );
 
       if (postResponse.statusCode == 302) {
-        widget.onUpdateComment(updatedText);
+        widget.onUpdateComment();
         _showMessage("Comment successfully updated!", isError: false);
         Navigator.pop(context);
       } else {
@@ -169,10 +204,15 @@ class _EditCommentScreenState extends State<EditCommentScreen> {
             : TextField(
           controller: _controller,
           maxLines: null,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+          ),
           decoration: InputDecoration(
             hintText: 'Edit your comment...',
             border: OutlineInputBorder(),
           ),
+          contextMenuBuilder: BBCodeContextMenu.builder(_controller),
         ),
       ),
     );
