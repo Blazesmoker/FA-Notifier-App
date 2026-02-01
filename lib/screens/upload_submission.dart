@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -287,83 +288,237 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
 
   Future<void> _injectInitialCss() async {
     if (_webViewController == null) return;
-    await _webViewController!.evaluateJavascript(source: '''
-      (function() {
-        var style = document.createElement('style');
-        style.type = 'text/css';
-        style.innerHTML = `
-          .mobile-navigation,
-          #header,
-          #footer,
-          .leaderboardAd,
-          .news-block,
-          .mobile-notification-bar,
-          nav#ddmenu,
-          .online-stats,
-          .footnote,
-          .footerAds,
-          .floatleft,
-          .submenu-trigger,
-          .banner-svg,
-          .leaderboardAd,
-          .newsBlock,
-          .footerAds__column,
-          .online-stats,
-          .message-bar-desktop,
-          .notification-container,
-          .dropdown,
-          .dropzone,
-          .some-other-class {
-            display: none !important;
-          }
 
-          .content {
-            margin: 0 !important;
-            padding: 0 !important;
+    final isIOS = Platform.isIOS;
+
+    if (isIOS) {
+      // On iOS with ad blocking, we can inject CSS more simply
+      // and add a fallback to force Turnstile re-render if needed
+      await _webViewController!.evaluateJavascript(source: '''
+        (function() {
+          // Inject CSS to hide unwanted elements
+          var style = document.createElement('style');
+          style.type = 'text/css';
+          style.innerHTML = \`
+            .mobile-navigation,
+            #header,
+            #footer,
+            .leaderboardAd,
+            .news-block,
+            .mobile-notification-bar,
+            nav#ddmenu,
+            .online-stats,
+            .footnote,
+            .footerAds,
+            .floatleft,
+            .submenu-trigger,
+            .banner-svg,
+            .leaderboardAd,
+            .newsBlock,
+            .footerAds__column,
+            .message-bar-desktop,
+            .notification-container,
+            .dropdown,
+            .some-other-class {
+              display: none !important;
+            }
+
+            .content {
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            
+            /* Ensure captcha containers stay visible */
+            .section-options,
+            .captcha-container,
+            #fa-captcha-main,
+            .cf-turnstile {
+              display: block !important;
+              visibility: visible !important;
+            }
+          \`;
+          document.head.appendChild(style);
+          
+          // Fallback: Force Turnstile re-render after page load
+          function ensureTurnstile() {
+            setTimeout(function() {
+              if (window.turnstile && !document.querySelector('iframe[src*="challenges.cloudflare.com"]')) {
+                console.log('Forcing Turnstile re-render on iOS');
+                var turnstileElements = document.querySelectorAll('.cf-turnstile');
+                turnstileElements.forEach(function(el) {
+                  el.innerHTML = '';
+                  try {
+                    window.turnstile.render(el);
+                  } catch(e) {
+                    console.log('Turnstile re-render failed:', e);
+                  }
+                });
+              }
+            }, 1000);
           }
-        `;
-        document.head.appendChild(style);
-      })();
-    ''');
+          
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', ensureTurnstile);
+          } else {
+            ensureTurnstile();
+          }
+        })();
+      ''');
+    } else {
+      // Android - inject CSS as before
+      await _webViewController!.evaluateJavascript(source: '''
+        (function() {
+          var style = document.createElement('style');
+          style.type = 'text/css';
+          style.innerHTML = \`
+            .mobile-navigation,
+            #header,
+            #footer,
+            .leaderboardAd,
+            .news-block,
+            .mobile-notification-bar,
+            nav#ddmenu,
+            .online-stats,
+            .footnote,
+            .footerAds,
+            .floatleft,
+            .submenu-trigger,
+            .banner-svg,
+            .leaderboardAd,
+            .newsBlock,
+            .footerAds__column,
+            .message-bar-desktop,
+            .notification-container,
+            .dropdown,
+            .dropzone,
+            .some-other-class {
+              display: none !important;
+            }
+
+            .content {
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+          \`;
+          document.head.appendChild(style);
+        })();
+      ''');
+    }
   }
 
   Future<void> _injectFinalizeCss() async {
     if (_webViewController == null) return;
-    await _webViewController!.evaluateJavascript(source: '''
-      (function() {
-        var style = document.createElement('style');
-        style.type = 'text/css';
-        style.innerHTML = `
-          .mobile-navigation,
-          #header,
-          #footer,
-          .leaderboardAd,
-          .news-block,
-          .mobile-notification-bar,
-          nav#ddmenu,
-          .online-stats,
-          .footnote,
-          .footerAds,
-          .floatleft,
-          .submenu-trigger,
-          .banner-svg,
-          .newsBlock,
-          .footerAds__column,
-          .message-bar-desktop,
-          .notification-container,
-          .dropdown,
-          .dropzone {
-            display: none !important;
-          }
 
-          .content {
-            margin: 0 !important;
-            padding: 0 !important;
+    final isIOS = Platform.isIOS;
+
+    if (isIOS) {
+      // On iOS with ad blocking, inject CSS and add Turnstile re-render fallback
+      await _webViewController!.evaluateJavascript(source: '''
+        (function() {
+          // Inject CSS to hide unwanted elements
+          var style = document.createElement('style');
+          style.type = 'text/css';
+          style.innerHTML = \`
+            .mobile-navigation,
+            #header,
+            #footer,
+            .leaderboardAd,
+            .news-block,
+            .mobile-notification-bar,
+            nav#ddmenu,
+            .online-stats,
+            .footnote,
+            .footerAds,
+            .floatleft,
+            .submenu-trigger,
+            .banner-svg,
+            .newsBlock,
+            .footerAds__column,
+            .message-bar-desktop,
+            .notification-container,
+            .dropdown {
+              display: none !important;
+            }
+
+            .content {
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            
+            /* Ensure captcha containers stay visible */
+            .section-options,
+            .captcha-container,
+            #fa-captcha-main,
+            .cf-turnstile {
+              display: block !important;
+              visibility: visible !important;
+            }
+          \`;
+          document.head.appendChild(style);
+          
+          // Fallback: Force Turnstile re-render after page load
+          function ensureTurnstile() {
+            setTimeout(function() {
+              if (window.turnstile && !document.querySelector('iframe[src*="challenges.cloudflare.com"]')) {
+                console.log('Forcing Turnstile re-render on iOS');
+                var turnstileElements = document.querySelectorAll('.cf-turnstile');
+                turnstileElements.forEach(function(el) {
+                  el.innerHTML = '';
+                  try {
+                    window.turnstile.render(el);
+                  } catch(e) {
+                    console.log('Turnstile re-render failed:', e);
+                  }
+                });
+              }
+            }, 1000);
           }
-        `;
-        document.head.appendChild(style);
-      })();
-    ''');
+          
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', ensureTurnstile);
+          } else {
+            ensureTurnstile();
+          }
+        })();
+      ''');
+    } else {
+      // Android - inject CSS as before
+      await _webViewController!.evaluateJavascript(source: '''
+        (function() {
+          var style = document.createElement('style');
+          style.type = 'text/css';
+          style.innerHTML = \`
+            .mobile-navigation,
+            #header,
+            #footer,
+            .leaderboardAd,
+            .news-block,
+            .mobile-notification-bar,
+            nav#ddmenu,
+            .online-stats,
+            .footnote,
+            .footerAds,
+            .floatleft,
+            .submenu-trigger,
+            .banner-svg,
+            .newsBlock,
+            .footerAds__column,
+            .message-bar-desktop,
+            .notification-container,
+            .dropdown,
+            .dropzone {
+              display: none !important;
+            }
+
+            .content {
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+          \`;
+          document.head.appendChild(style);
+        })();
+      ''');
+    }
   }
 
   void _showSnack(String message, {required bool isError}) {
@@ -623,7 +778,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
         debugPrint('Failed to decode JavaScript result');
         return null;
       }
-      
+
       if (map['ok'] != true) {
         final error = map['error'] ?? 'Unknown error';
         debugPrint('JavaScript error reading form: $error');
@@ -705,7 +860,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
 
   Future<void> _saveTemplateFlow() async {
     debugPrint('_saveTemplateFlow called');
-    
+
     if (!_isFinalizeReady) {
       _showSnack('Please navigate to the finalize page first.', isError: true);
       return;
@@ -714,13 +869,13 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     try {
       // Wait a bit to ensure the page is fully loaded
       await Future.delayed(const Duration(milliseconds: 300));
-      
+
       final fields = await _readFinalizeFields();
       if (fields == null) {
         _showSnack('Failed to read finalize form. Make sure you are on the finalize page.', isError: true);
         return;
       }
-      
+
       debugPrint('Successfully read fields: ${fields.toJson()}');
 
       final name = await _promptTemplateName();
@@ -746,7 +901,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       debugPrint('Saving template: ${template.name} (id: ${template.id})');
       await _templateStore.upsertTemplate(template);
       debugPrint('Template saved successfully');
-      
+
       if (!mounted) return;
       _showSnack('Template saved.', isError: false);
     } catch (e) {
@@ -1108,10 +1263,28 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       },
       shouldOverrideUrlLoading: (controller, navigationAction) async {
         final uri = navigationAction.request.url;
-        if (uri != null && uri.host.contains('furaffinity.net')) {
-          return NavigationActionPolicy.ALLOW;
+
+        // Block ad/tracker domains on iOS to allow Turnstile to render
+        if (Platform.isIOS && uri != null) {
+          final blockedHosts = {
+            'www15.smartadserver.com',
+            'securepubads.g.doubleclick.net',
+            'cdn.playwire.com',
+            'z.moatads.com',
+            'pagead2.googlesyndication.com',
+            'cdn.intergient.com',
+            'cdn.intergi.com',
+            'config.playwire.com',
+          };
+
+          if (blockedHosts.contains(uri.host)) {
+            debugPrint('Blocking ad/tracker request on iOS: ${uri.host}');
+            return NavigationActionPolicy.CANCEL;
+          }
         }
-        return NavigationActionPolicy.CANCEL;
+
+
+        return NavigationActionPolicy.ALLOW;
       },
     );
   }

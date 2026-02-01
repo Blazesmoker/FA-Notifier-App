@@ -6,11 +6,34 @@
 	<dict>
 		<key>Info.plist</key>
 		<data>
-		NMOvNjSUOP9ZXbZJc2dNEObptWE=
+		AjgpdvMPEsqOlkFu3KS+i9hMTk0=
+		</data>
+		<key>device_info_plus_privacy.bundle/Info.plist</key>
+		<data>
+		e8W8TOAW1XF+pFHtqFJPuhl12Ww=
+		</data>
+		<key>device_info_plus_privacy.bundle/PrivacyInfo.xcprivacy</key>
+		<data>
+		/LX0ZlwxwIAIhjZaDB8EiH5KpXA=
 		</data>
 	</dict>
 	<key>files2</key>
-	<dict/>
+	<dict>
+		<key>device_info_plus_privacy.bundle/Info.plist</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			HmQn7pRRpx/44XPUIfw1BCu6dvap2ImI92ud3RSR+So=
+			</data>
+		</dict>
+		<key>device_info_plus_privacy.bundle/PrivacyInfo.xcprivacy</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			bS2g2NkwIn1CjB2TY7CtbjoS4sm2jFzilxWKdBL8jDE=
+			</data>
+		</dict>
+	</dict>
 	<key>rules</key>
 	<dict>
 		<key>^.*</key>
