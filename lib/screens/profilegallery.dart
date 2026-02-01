@@ -658,20 +658,20 @@ class _FavImageTile extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              CachedNetworkImage(
-                imageUrl: thumbnailUrl,
+              Image.network(
+                thumbnailUrl,
                 fit: BoxFit.cover,
               ),
               if (hqUrl != null && hqUrl!.isNotEmpty)
-                CachedNetworkImage(
-                  imageUrl: hqUrl!,
+                Image.network(
+                  hqUrl!,
                   fit: BoxFit.cover,
-                  fadeInDuration: Duration.zero,
-                  errorWidget: (context, url, error) {
-                    debugPrint("Error loading image: $url, error: $error");
+                  errorBuilder: (context, error, stackTrace) {
+                    debugPrint("Error loading image: $hqUrl, error: $error");
                     return const Icon(Icons.error);
                   },
                 ),
+
             ],
           ),
         );

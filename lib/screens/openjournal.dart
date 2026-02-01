@@ -220,6 +220,38 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   Future<void> _fetchPostDetailsNew() async {
     try {
       final result = await _api.fetchJournal(widget.uniqueNumber);
+      try {
+        final String titleLower = (result.title ?? '').toLowerCase();
+        final String descLower = (result.submissionDescription ?? '').toLowerCase();
+        final String rawLower = (result.dateTimeRaw ?? '').toLowerCase();
+
+        final bool looksLikeSystemError = titleLower.contains('system error') ||
+            descLower.contains('not in our database') ||
+            descLower.contains('this submission does not exist') ||
+            titleLower.contains('not in our database') ||
+            rawLower.contains('not in our database');
+
+        if (looksLikeSystemError) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('This journal does not exist or has been deleted'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 3),
+              ),
+            );
+
+            Future.delayed(const Duration(milliseconds: 400), () {
+              if (!mounted) return;
+              Navigator.of(context).pop();
+            });
+          });
+          return;
+        }
+      } catch (e) {
+        debugPrint('Error while checking for system-error markers: $e');
+      }
       setState(() {
         isJournalClassic = result.isJournalClassic;
         isOwner = result.ownerEditLink != null;
@@ -266,11 +298,39 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         unawaited(_fetchCommentsNew(submissionDescription!));
       }
     } catch (e) {
-      setState(() {
-        isLoading = false;
-      });
+      setState(() => isLoading = false);
       debugPrint('Failed to fetch journal details: $e');
+
+      if (!mounted) return;
+
+      final lower = e.toString().toLowerCase();
+      final bool isNotFound = (e is JournalNotFoundException) ||
+          lower.contains('not in our database') ||
+          lower.contains('does not exist') ||
+          lower.contains('deleted') ||
+          lower.contains('not found');
+
+      final String message = isNotFound
+          ? 'This journal does not exist or has been deleted'
+          : 'Failed to load journal';
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        Future.delayed(const Duration(milliseconds: 400), () {
+          if (!mounted) return;
+          Navigator.of(context).pop();
+        });
+      });
     }
+
   }
 
   Future<void> _fetchDeleteLinkFallback() async {
@@ -696,20 +756,32 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                       );
                                     }
                                   },
-                                  child: CachedNetworkImage(
-                                    imageUrl: profileImageUrl!,
+                                  child: Image.network(
+                                    profileImageUrl!,
                                     width: 46,
                                     height: 46,
                                     fit: BoxFit.cover,
-                                    placeholder: (context, url) => Image.asset(
-                                      'assets/images/defaultpic.gif',
-                                      width: 46, height: 46, fit: BoxFit.cover,
-                                    ),
-                                    errorWidget: (context, url, error) => Image.asset(
-                                      'assets/images/defaultpic.gif',
-                                      width: 46, height: 46, fit: BoxFit.cover,
-                                    ),
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) {
+                                        return child;
+                                      }
+                                      return Image.asset(
+                                        'assets/images/defaultpic.gif',
+                                        width: 46,
+                                        height: 46,
+                                        fit: BoxFit.cover,
+                                      );
+                                    },
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Image.asset(
+                                        'assets/images/defaultpic.gif',
+                                        width: 46,
+                                        height: 46,
+                                        fit: BoxFit.cover,
+                                      );
+                                    },
                                   ),
+
                                 ),
                               ),
                             Expanded(
@@ -902,42 +974,58 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                   // Check if this image is a profile emoji.
                                   if (resolvedUrl.contains("a.furaffinity.net") &&
                                       resolvedUrl.endsWith(".gif")) {
-                                    return CachedNetworkImage(
-                                      imageUrl: resolvedUrl,
+                                    return Image.network(
+                                      resolvedUrl,
                                       width: 50, // profile emoji size.
                                       height: 50,
                                       fit: BoxFit.contain,
-                                      placeholder: (context, url) => const SizedBox(
-                                        width: 50,
-                                        height: 50,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
-                                      ),
-                                      errorWidget: (context, url, error) => Image.asset(
-                                        'assets/images/defaultpic.gif',
-                                        width: 50,
-                                        height: 50,
-                                        fit: BoxFit.contain,
-                                      ),
+                                      loadingBuilder: (context, child, loadingProgress) {
+                                        if (loadingProgress == null) {
+                                          return child;
+                                        }
+                                        return const SizedBox(
+                                          width: 50,
+                                          height: 50,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        );
+                                      },
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Image.asset(
+                                          'assets/images/defaultpic.gif',
+                                          width: 50,
+                                          height: 50,
+                                          fit: BoxFit.contain,
+                                        );
+                                      },
                                     );
+
                                   }
 
-                                  return CachedNetworkImage(
-                                    imageUrl: resolvedUrl,
+                                  return Image.network(
+                                    resolvedUrl,
                                     width: 50,
                                     height: 50,
                                     fit: BoxFit.cover,
-                                    placeholder: (context, url) => const SizedBox(
-                                      width: 50,
-                                      height: 50,
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                    errorWidget: (context, url, error) => Image.asset(
-                                      'assets/images/defaultpic.gif',
-                                      width: 50,
-                                      height: 50,
-                                      fit: BoxFit.cover,
-                                    ),
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) {
+                                        return child;
+                                      }
+                                      return const SizedBox(
+                                        width: 50,
+                                        height: 50,
+                                        child: CircularProgressIndicator(),
+                                      );
+                                    },
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Image.asset(
+                                        'assets/images/defaultpic.gif',
+                                        width: 50,
+                                        height: 50,
+                                        fit: BoxFit.cover,
+                                      );
+                                    },
                                   );
+
                                 },
                               ),
                             ],
@@ -1171,8 +1259,8 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   }
 }
 
-
 final GlobalKey<SelectionAreaState> _journalSelectionKey = GlobalKey();
-
-/// A stateful widget for an individual comment.
-// CommentWidget moved to openjournal_comments.dart
+class JournalNotFoundException implements Exception {
+  @override
+  String toString() => 'Journal not found';
+}

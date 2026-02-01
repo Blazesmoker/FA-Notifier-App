@@ -108,24 +108,32 @@ class _CommentWidgetState extends State<CommentWidget> {
                           );
                         }
                       },
-                      child: CachedNetworkImage(
-                        imageUrl: widget.comment['profileImage'],
+                      child: Image.network(
+                        widget.comment['profileImage'],
                         width: 46,
                         height: 46,
                         fit: BoxFit.cover,
-                        placeholder: (context, url) => Image.asset(
-                          'assets/images/defaultpic.gif',
-                          width: 46,
-                          height: 46,
-                          fit: BoxFit.cover,
-                        ),
-                        errorWidget: (context, url, error) => Image.asset(
-                          'assets/images/defaultpic.gif',
-                          width: 46,
-                          height: 46,
-                          fit: BoxFit.cover,
-                        ),
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) {
+                            return child;
+                          }
+                          return Image.asset(
+                            'assets/images/defaultpic.gif',
+                            width: 46,
+                            height: 46,
+                            fit: BoxFit.cover,
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Image.asset(
+                            'assets/images/defaultpic.gif',
+                            width: 46,
+                            height: 46,
+                            fit: BoxFit.cover,
+                          );
+                        },
                       ),
+
                     ),
                   ),
                 Expanded(

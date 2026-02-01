@@ -305,11 +305,11 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
                         width: 60,
                         height: 60,
                         color: Colors.transparent,
-                        child: CachedNetworkImage(
-                          imageUrl: 'https:$avatarUrl',
+                        child: Image.network(
+                          'https:$avatarUrl',
                           fit: BoxFit.cover,
                           alignment: Alignment.center,
-                          errorWidget: (context, url, error) {
+                          errorBuilder: (context, error, stackTrace) {
                             return Transform.scale(
                               scale: 1.05,
                               child: Image.asset(
@@ -319,6 +319,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
                             );
                           },
                         ),
+
                       ),
                     )
                   else

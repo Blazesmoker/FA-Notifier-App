@@ -2,16 +2,12 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import 'openpost.dart';
 import 'submission_template_store.dart';
@@ -38,13 +34,14 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
 
   final String initialUrl = 'https://www.furaffinity.net/submit/';
   final String finalizeUrl = 'https://www.furaffinity.net/submit/finalize/';
-  late final WebViewController _webViewController;
+  InAppWebViewController? _webViewController;
+  final GlobalKey webViewKey = GlobalKey();
 
   bool _isWaitingToOpenSubmission = false;
   int? _submissionId;
   int _countdown = 6;
   Timer? _timer;
-
+  bool _isProcessingUploadSuccess = false;
   bool _isFinalizeReady = false;
 
   bool _toolsMenuOpen = false;
@@ -71,7 +68,6 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _toolsMenuController, curve: Curves.easeOutCubic));
 
-    _initializeWebViewController();
   }
 
   bool _isFinalizeUrl(String url) {
@@ -84,6 +80,32 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     final prefs = await SharedPreferences.getInstance();
     final sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
     return sfwEnabled ? '1' : '0';
+  }
+
+  Future<void> _setCookies() async {
+    final cookieManager = CookieManager.instance();
+    final cookieKeys = ['a', 'b', 'cc', 'folder', 'nodesc', 'sz', 'sfw'];
+
+    for (final key in cookieKeys) {
+      String value;
+      if (key == 'sfw') {
+        value = await _getSfwCookieValue();
+      } else {
+        value = await _secureStorage.read(key: 'fa_cookie_$key') ?? '';
+      }
+
+      if (value.isNotEmpty) {
+        await cookieManager.setCookie(
+          url: WebUri('https://www.furaffinity.net'),
+          name: key,
+          value: value,
+          domain: '.furaffinity.net',
+          path: '/',
+          isSecure: true,
+          isHttpOnly: true,
+        );
+      }
+    }
   }
 
   void _setFinalizeReady(bool value) {
@@ -123,55 +145,98 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     }
   }
 
-  void _initializeWebViewController() {
-    _webViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (url) async {
-            debugPrint("Page started loading: $url");
-            _setFinalizeReady(_isFinalizeUrl(url));
+  Future<void> _handleLoadUrl(String? url) async {
+    if (url == null) return;
 
-            if (url.contains('upload-successful')) {
-              final submissionId = _extractSubmissionId(url);
+    debugPrint("Page loading: $url");
+    _setFinalizeReady(_isFinalizeUrl(url));
 
-              if (submissionId != null) {
-                await _webViewController.loadRequest(Uri.parse(initialUrl));
+    // Prevent double-triggering
+    if (url.contains('upload-successful') && !_isProcessingUploadSuccess) {
+      _isProcessingUploadSuccess = true;
 
-                if (!mounted) return;
-                setState(() {
-                  _isWaitingToOpenSubmission = true;
-                  _submissionId = submissionId;
-                  _countdown = 6;
-                });
+      final submissionId = _extractSubmissionId(url);
 
-                _startCountdown();
-              }
-            } else if (url.startsWith(initialUrl)) {
-              await _injectInitialCss();
-            } else if (_isFinalizeUrl(url)) {
-              await _injectFinalizeCss();
-            }
-          },
-          onPageFinished: (url) async {
-            debugPrint("Page finished loading: $url");
-            _setFinalizeReady(_isFinalizeUrl(url));
+      if (submissionId != null) {
 
-            if (url.startsWith(initialUrl)) {
-              await _injectInitialCss();
-            } else if (_isFinalizeUrl(url)) {
-              await _injectFinalizeCss();
-            }
-          },
-          onWebResourceError: (error) {
-            debugPrint("Web resource error: $error");
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(initialUrl));
 
-    addFileSelectionListener();
-    _setCookies();
+        if (!mounted) {
+          _isProcessingUploadSuccess = false;
+          return;
+        }
+
+        setState(() {
+          _isWaitingToOpenSubmission = true;
+          _submissionId = submissionId;
+          _countdown = 6;
+        });
+
+        _startCountdown();
+
+
+        await Future.delayed(const Duration(seconds: 2));
+        _isProcessingUploadSuccess = false;
+      } else {
+        _isProcessingUploadSuccess = false;
+      }
+    } else if (url.startsWith(initialUrl)) {
+      await _injectInitialCss();
+    } else if (_isFinalizeUrl(url)) {
+      await _injectFinalizeCss();
+    }
+  }
+
+  Future<void> _wrapSelection(String tag) async {
+    if (_webViewController == null) return;
+
+    await _webViewController!.evaluateJavascript(source: '''
+(function(){
+  var open='[$tag]';
+  var close='[/$tag]';
+  var active=document.activeElement;
+
+  if (active && (active.tagName==='TEXTAREA' || (active.tagName==='INPUT' && active.type==='text'))) {
+    var s=active.selectionStart, e=active.selectionEnd;
+    if (s!=null && e!=null && e>s) {
+      var before=active.value.substring(0,s);
+      var sel=active.value.substring(s,e);
+      var after=active.value.substring(e);
+      active.value=before+open+sel+close+after;
+      active.selectionStart=before.length+open.length;
+      active.selectionEnd=active.selectionStart+sel.length;
+      active.dispatchEvent(new Event('input',{bubbles:true}));
+    }
+    return;
+  }
+
+  var sel=window.getSelection();
+  if (!sel || sel.rangeCount===0) return;
+  var r=sel.getRangeAt(0);
+  var t=sel.toString();
+  var node=document.createTextNode(open+t+close);
+  r.deleteContents();
+  r.insertNode(node);
+
+  var nr=document.createRange();
+  nr.setStartAfter(node);
+  nr.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(nr);
+})();
+''');
+  }
+
+  ContextMenu _buildContextMenu() {
+    return ContextMenu(
+      menuItems: [
+        ContextMenuItem(id: 1, title: 'Bold', action: () => _wrapSelection('b')),
+        ContextMenuItem(id: 2, title: 'Italic', action: () => _wrapSelection('i')),
+        ContextMenuItem(id: 3, title: 'Underline', action: () => _wrapSelection('u')),
+        ContextMenuItem(id: 4, title: 'Align Left', action: () => _wrapSelection('left')),
+        ContextMenuItem(id: 5, title: 'Align Center', action: () => _wrapSelection('center')),
+        ContextMenuItem(id: 6, title: 'Align Right', action: () => _wrapSelection('right')),
+      ],
+    );
   }
 
   int? _extractSubmissionId(String url) {
@@ -191,6 +256,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     _timer = Timer.periodic(const Duration(seconds: 1), (Timer timer) {
       if (_countdown == 1) {
         timer.cancel();
+
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -201,10 +267,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
           ),
         ).then((_) {
           if (!mounted) return;
-          setState(() {
-            _isWaitingToOpenSubmission = false;
-            _countdown = 6;
-          });
+          Navigator.pop(context);
         });
       } else {
         if (!mounted) return;
@@ -223,7 +286,8 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   }
 
   Future<void> _injectInitialCss() async {
-    await _webViewController.runJavaScript('''
+    if (_webViewController == null) return;
+    await _webViewController!.evaluateJavascript(source: '''
       (function() {
         var style = document.createElement('style');
         style.type = 'text/css';
@@ -264,7 +328,8 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   }
 
   Future<void> _injectFinalizeCss() async {
-    await _webViewController.runJavaScript('''
+    if (_webViewController == null) return;
+    await _webViewController!.evaluateJavascript(source: '''
       (function() {
         var style = document.createElement('style');
         style.type = 'text/css';
@@ -299,94 +364,6 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
         document.head.appendChild(style);
       })();
     ''');
-  }
-
-  void addFileSelectionListener() async {
-    if (Platform.isAndroid) {
-      final androidController = _webViewController.platform as AndroidWebViewController;
-      await androidController.setOnShowFileSelector(_androidFilePicker);
-    }
-  }
-
-  Future<List<String>> _androidFilePicker(FileSelectorParams params) async {
-    final source = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.black,
-        shape: RoundedRectangleBorder(
-          side: const BorderSide(color: _accent, width: 0.5),
-          borderRadius: BorderRadius.circular(22),
-        ),
-        title: const Text('Select source', style: TextStyle(color: _accent)),
-        content: const Text('Choose between Files or Gallery', style: TextStyle(color: Colors.white70)),
-        actionsAlignment: MainAxisAlignment.spaceBetween,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop('files'),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: const [
-                Text('Files', style: TextStyle(color: _accent)),
-                SizedBox(width: 8),
-                Icon(Icons.insert_drive_file, color: _accent),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop('gallery'),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: const [
-                Text('Gallery', style: TextStyle(color: _accent)),
-                SizedBox(width: 8),
-                Icon(Icons.image, color: _accent),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (source == 'files') {
-      final result = await FilePicker.platform.pickFiles(
-        allowMultiple: false,
-        type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'pdf'],
-      );
-
-      if (result != null && result.files.single.path != null) {
-        final file = File(result.files.single.path!);
-        return [file.uri.toString()];
-      }
-    } else if (source == 'gallery') {
-      final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
-      if (pickedFile != null) {
-        final file = File(pickedFile.path);
-        return [file.uri.toString()];
-      }
-    }
-
-    return [];
-  }
-
-  Future<void> _setCookies() async {
-    List<String> cookieKeys = ['a', 'b', 'cc', 'folder', 'nodesc', 'sz', 'sfw'];
-
-    for (var key in cookieKeys) {
-      String cookieValue;
-      if (key == 'sfw') {
-        cookieValue = await _getSfwCookieValue();
-      } else {
-        String storageKey = 'fa_cookie_$key';
-        cookieValue = (await _secureStorage.read(key: storageKey)) ?? '';
-      }
-
-      if (cookieValue.isNotEmpty) {
-        await _webViewController.runJavaScript('''
-          document.cookie = "$key=$cookieValue; path=/; domain=.furaffinity.net; secure";
-        ''');
-      }
-    }
   }
 
   void _showSnack(String message, {required bool isError}) {
@@ -460,8 +437,9 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   }
 
   Future<void> _clearFinalizeFormToDefaults() async {
+    if (_webViewController == null) return;
     try {
-      final res = await _webViewController.runJavaScriptReturningResult('''
+      final res = await _webViewController!.evaluateJavascript(source: '''
         (function() {
           function __b64(o) { return 'B64:' + btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
 
@@ -554,8 +532,9 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   }
 
   Future<SubmissionTemplateFields?> _readFinalizeFields() async {
+    if (_webViewController == null) return null;
     try {
-      final res = await _webViewController.runJavaScriptReturningResult('''
+      final res = await _webViewController!.evaluateJavascript(source: '''
         (function() {
           function __b64(o) { return 'B64:' + btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
           try {
@@ -794,7 +773,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     try {
       final fieldsJson = jsonEncode(template.fields.toJson());
 
-      final res = await _webViewController.runJavaScriptReturningResult('''
+      final res = await _webViewController!.evaluateJavascript(source: '''
         (function() {
           function __b64(o) { return 'B64:' + btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
 
@@ -1099,6 +1078,44 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     );
   }
 
+  Widget _buildWebView() {
+    final settings = InAppWebViewSettings(
+      javaScriptEnabled: true,
+      useShouldOverrideUrlLoading: true,
+      verticalScrollBarEnabled: true,
+      horizontalScrollBarEnabled: false,
+      allowFileAccess: true,
+      allowContentAccess: true,
+      allowFileAccessFromFileURLs: true,
+      allowUniversalAccessFromFileURLs: true,
+    );
+
+    return InAppWebView(
+      key: webViewKey,
+      initialUrlRequest: URLRequest(url: WebUri(initialUrl)),
+      initialSettings: settings,
+      contextMenu: _buildContextMenu(),
+      onWebViewCreated: (controller) async {
+        _webViewController = controller;
+        await _setCookies();
+      },
+      onLoadStart: (controller, uri) async {
+        _webViewController = controller;
+        await _handleLoadUrl(uri?.toString());
+      },
+      onLoadStop: (controller, uri) async {
+        await _handleLoadUrl(uri?.toString());
+      },
+      shouldOverrideUrlLoading: (controller, navigationAction) async {
+        final uri = navigationAction.request.url;
+        if (uri != null && uri.host.contains('furaffinity.net')) {
+          return NavigationActionPolicy.ALLOW;
+        }
+        return NavigationActionPolicy.CANCEL;
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final menuVisible = _isFinalizeReady && (_toolsMenuOpen || _toolsMenuController.value > 0);
@@ -1136,7 +1153,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
         ),
         body: Stack(
           children: [
-            WebViewWidget(controller: _webViewController),
+            _buildWebView(),
             if (menuVisible)
               Positioned.fill(
                 child: GestureDetector(

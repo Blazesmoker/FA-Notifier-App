@@ -57,7 +57,7 @@ dependencies:
   app_links: 6.4.0
 
   package_info_plus: ^8.0.0
-
+  crypto: ^3.0.7
 
 
   badges: ^2.0.3

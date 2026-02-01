@@ -5,7 +5,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter/cupertino.dart';
 
 class CacheMonitorService {
-  static const int maxCacheSize = 100 * 1024 * 1024; // 100 MB
+  static const int maxCacheSize = 200 * 1024 * 1024;
   final CacheManager _cacheManager;
 
   CacheMonitorService(this._cacheManager);
@@ -22,10 +22,14 @@ class CacheMonitorService {
     debugPrint('Data size: ${_formatBytes(dataSize)}');
 
     if (cacheSize > maxCacheSize) {
-      debugPrint('Cache exceeds limit. Clearing cache...');
-      await _clearCacheDirectory(cacheDir);
+      debugPrint('Cache exceeds limit. Using CacheManager to clean...');
+
+      await _cacheManager.emptyCache();
+
+
       await InAppWebViewController.clearAllCache();
 
+      debugPrint('Cache cleaned via CacheManager.');
     }
 
     if (dataSize > maxCacheSize) {
@@ -34,18 +38,6 @@ class CacheMonitorService {
     }
   }
 
-  Future<void> _clearCacheDirectory(Directory cacheDir) async {
-    try {
-      if (await cacheDir.exists()) {
-        for (final file in cacheDir.listSync()) {
-          await file.delete(recursive: true);
-        }
-        debugPrint('Cache directory cleared.');
-      }
-    } catch (e) {
-      debugPrint('Error clearing cache: $e');
-    }
-  }
 
   Future<void> _clearDataDirectory(Directory dataDir) async {
     try {
@@ -54,7 +46,10 @@ class CacheMonitorService {
           if (file is File && !_isProtectedFile(file)) {
             await file.delete();
           } else if (file is Directory && !_isProtectedDirectory(file)) {
-            await file.delete(recursive: true);
+            if (!file.path.contains('customCache') &&
+                !file.path.contains('libCachedImageData')) {
+              await file.delete(recursive: true);
+            }
           }
         }
         debugPrint('Data directory cleaned, except protected files.');
@@ -82,12 +77,18 @@ class CacheMonitorService {
 
   bool _isProtectedFile(File file) {
     final String path = file.path;
-    return path.contains('shared_prefs') || path.contains('secure_storage');
+    return path.contains('shared_prefs') ||
+        path.contains('secure_storage') ||
+        path.contains('customCache') ||
+        path.contains('libCachedImageData');
   }
 
   bool _isProtectedDirectory(Directory dir) {
     final String path = dir.path;
-    return path.contains('shared_prefs') || path.contains('secure_storage');
+    return path.contains('shared_prefs') ||
+        path.contains('secure_storage') ||
+        path.contains('customCache') ||
+        path.contains('libCachedImageData');
   }
 
   String _formatBytes(int bytes, [int decimals = 2]) {

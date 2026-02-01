@@ -82,6 +82,25 @@ class FaPostTag {
 class OpenPostApiService {
   /// Parses the main post document and returns structured data.
   static OpenPostParseResult parsePostDocument(dom.Document document) {
+
+    final titleText =
+        document.querySelector('title')?.text.toLowerCase() ?? '';
+    final h2Text =
+        document.querySelector('h2')?.text.toLowerCase() ?? '';
+    final bodyText =
+        document.body?.text.toLowerCase() ?? '';
+
+    final isSystemError =
+        titleText.contains('system error') ||
+            h2Text.contains('system error') ||
+            bodyText.contains('not in our database');
+
+    if (isSystemError) {
+      throw FaSystemErrorException(
+        'This submission does not exist or has been deleted',
+      );
+    }
+
     // Current logged-in username
     final currentUserElem = logQuery(document, '#my-username') ??
         logQuery(document, 'span#my-username');
@@ -815,3 +834,8 @@ class OpenPostApiService {
   }
 }
 
+class FaSystemErrorException implements Exception {
+  final String message;
+  FaSystemErrorException(this.message);  @override
+  String toString() => message;
+}

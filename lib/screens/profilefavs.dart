@@ -504,20 +504,28 @@ class _FavImageTileFavsState extends State<_FavImageTileFavs> {
               borderRadius: 8,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: CachedNetworkImage(
-                  imageUrl: widget.imageUrl,
+                child: Image.network(
+                  widget.imageUrl,
                   width: widget.width,
                   height: widget.height,
                   fit: BoxFit.cover,
-                  placeholder: (ctx, url) => _buildPlaceholder(widget.width, widget.height),
-                  errorWidget: (ctx, url, err) => Container(
-                    width: widget.width,
-                    height: widget.height,
-                    color: Colors.grey,
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.error, color: Colors.red),
-                  ),
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) {
+                      return child;
+                    }
+                    return _buildPlaceholder(widget.width, widget.height);
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      width: widget.width,
+                      height: widget.height,
+                      color: Colors.grey,
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.error, color: Colors.red),
+                    );
+                  },
                 ),
+
               ),
             ),
           ),

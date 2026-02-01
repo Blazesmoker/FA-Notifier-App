@@ -13,8 +13,8 @@ class CustomCacheManager extends CacheManager {
       : super(
     Config(
       key,
-      stalePeriod: const Duration(days: 4), // Cache validity
-      maxNrOfCacheObjects: 200, // Maximum number of cached objects
+      stalePeriod: const Duration(days: 7), // Cache validity
+      maxNrOfCacheObjects: 1000, // Maximum number of cached objects
     ),
   );
 }

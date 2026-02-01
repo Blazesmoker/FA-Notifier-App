@@ -182,18 +182,25 @@ class AvatarDownloadScreen extends StatelessWidget {
           child: Container(
             color: Colors.black,
             alignment: Alignment.center,
-            child: CachedNetworkImage(
-              imageUrl: imageUrl,
+            child: Image.network(
+              imageUrl,
               fit: BoxFit.contain,
-              placeholder: (context, url) => const Center(
-                child: PulsatingLoadingIndicator(
-                  size: 108.0,
-                  assetPath: 'assets/icons/fathemed.png',
-                ),
-              ),
-              errorWidget: (context, url, error) =>
-                  Image.asset('assets/images/defaultpic.gif'),
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) {
+                  return child;
+                }
+                return const Center(
+                  child: PulsatingLoadingIndicator(
+                    size: 108.0,
+                    assetPath: 'assets/icons/fathemed.png',
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Image.asset('assets/images/defaultpic.gif');
+              },
             ),
+
           ),
         ),
       ),

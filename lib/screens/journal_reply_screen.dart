@@ -192,23 +192,34 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
-                      child: CachedNetworkImage(
-                        imageUrl: widget.profileImage,
+                      child: Image.network(
+                        widget.profileImage,
                         width: 36,
                         height: 36,
                         fit: BoxFit.cover,
-                        placeholder: (_, __) => Container(
-                          width: 36,
-                          height: 36,
-                          color: Colors.grey,
-                        ),
-                        errorWidget: (_, __, ___) => Container(
-                          width: 36,
-                          height: 36,
-                          color: Colors.grey,
-                          child: const Icon(Icons.person, size: 24),
-                        ),
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) {
+                            return child;
+                          }
+                          return Container(
+                            width: 36,
+                            height: 36,
+                            color: Colors.grey,
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 36,
+                            height: 36,
+                            color: Colors.grey,
+                            child: const Icon(
+                              Icons.person,
+                              size: 24,
+                            ),
+                          );
+                        },
                       ),
+
                     ),
                     const SizedBox(width: 12),
                     Text(

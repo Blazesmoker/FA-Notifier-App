@@ -69,17 +69,26 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                       child: Container(
                         width: 46,
                         height: 46,
-                        child: CachedNetworkImage(
-                          imageUrl: widget.shout.avatarUrl,
+                        child: Image.network(
+                          widget.shout.avatarUrl,
                           fit: BoxFit.cover,
                           filterQuality: FilterQuality.low,
-                          placeholder: (context, url) =>
-                          const Center(child: CircularProgressIndicator()),
-                          errorWidget: (context, url, error) => Image.asset(
-                            'assets/images/defaultpic.gif',
-                            fit: BoxFit.cover,
-                          ),
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) {
+                              return child;
+                            }
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return Image.asset(
+                              'assets/images/defaultpic.gif',
+                              fit: BoxFit.cover,
+                            );
+                          },
                         ),
+
                       ),
                     ),
                   ),
@@ -304,19 +313,26 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                       if (src == null) return const SizedBox.shrink();
                       final resolvedUrl =
                       src.startsWith('//') ? 'https:$src' : src;
-                      return CachedNetworkImage(
-                        imageUrl: resolvedUrl,
+                      return Image.network(
+                        resolvedUrl,
                         width: 50,
                         height: 50,
                         fit: BoxFit.cover,
-                        placeholder: (context, url) => const SizedBox(
-                          width: 50,
-                          height: 50,
-                          child: CircularProgressIndicator(),
-                        ),
-                        errorWidget: (context, url, error) =>
-                        const SizedBox.shrink(),
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) {
+                            return child;
+                          }
+                          return const SizedBox(
+                            width: 50,
+                            height: 50,
+                            child: CircularProgressIndicator(),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return const SizedBox.shrink();
+                        },
                       );
+
                     },
                   ),
                 ],

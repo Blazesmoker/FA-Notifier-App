@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_switch/flutter_switch.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import '../model/user_profile.dart';
 import '../model/notifications.dart';
+import '../screens/find_source_screen.dart';
 import '../screens/openjournal.dart';
 import '../screens/openpost.dart';
 import '../screens/settings_screen.dart';
@@ -126,7 +128,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
       if (resp.statusCode == 200) {
 
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
-        final tagName = data['tag_name'] as String;  // e.g. "v1.1.7"
+        final tagName = data['tag_name'] as String;
         final ghVer = tagName.startsWith('v')
             ? tagName.substring(1)
             : tagName;
@@ -183,13 +185,18 @@ class _HomeDrawerState extends State<HomeDrawer> {
       ),
       DrawerList(
         index: DrawerIndex.Help,
-        labelName: 'Settings',
-        icon: const Icon(Icons.settings),
+        labelName: 'Find Source',
+        icon: const Icon(Icons.image_search),
       ),
       DrawerList(
         index: DrawerIndex.Help,
         labelName: 'Open Link',
         icon: const Icon(Icons.open_in_browser),
+      ),
+      DrawerList(
+        index: DrawerIndex.Help,
+        labelName: 'Settings',
+        icon: const Icon(Icons.settings),
       ),
       DrawerList(
         index: DrawerIndex.Help,
@@ -249,11 +256,11 @@ class _HomeDrawerState extends State<HomeDrawer> {
           } else if (listData.labelName == 'Open Link') {
             _showOpenLinkDialog(context);
           } else if (listData.labelName == 'Support us on Ko-Fi!') {
-            /*launchUrlString(
-              'https://ko-fi.com/fanotifier',
-              mode: LaunchMode.externalApplication,
+          } else if (listData.labelName == 'Find Source') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const FindSourceScreen()),
             );
-             */
           } else {
             navigationtoScreen(listData.index!);
           }
@@ -313,7 +320,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
               )
             else
               Container(
-                height: 60.0,
+                height: 54.0,
                 alignment: Alignment.centerLeft,
 
                 child: Row(
@@ -822,7 +829,14 @@ class _HomeDrawerState extends State<HomeDrawer> {
     const bool kForceShowUpdateButton = false;
     final bool showUpdateButton = _updateAvailable || (kDebugMode && kForceShowUpdateButton);
 
-    return Container(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          systemNavigationBarColor: Colors.black, // ✅ black navbar
+          systemNavigationBarIconBrightness: Brightness.light,
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+        ),
+        child: Container(
       color: Color(0xFF111111),
       child: SafeArea(
         child: Column(
@@ -907,25 +921,22 @@ class _HomeDrawerState extends State<HomeDrawer> {
                                               ),
                                             ],
                                           ),
-                                          child: CachedNetworkImage(
-                                            imageUrl: widget
-                                                .userProfile!.profileImageUrl,
+                                          child: Image.network(
+                                            widget.userProfile!.profileImageUrl,
                                             fit: BoxFit.cover,
-                                            placeholder: (context, url) =>
-                                                const Center(
-                                              child: Center(
-                                                child:
-                                                    PulsatingLoadingIndicator(
+                                            loadingBuilder: (context, child, loadingProgress) {
+                                              if (loadingProgress == null) {
+                                                return child;
+                                              }
+                                              return const Center(
+                                                child: PulsatingLoadingIndicator(
                                                   size: 58.0,
-                                                  assetPath:
-                                                      'assets/icons/fathemed.png',
+                                                  assetPath: 'assets/icons/fathemed.png',
                                                 ),
-                                              ),
-                                            ),
-                                            errorWidget: (context, url, error) {
-                                              if (error
-                                                  .toString()
-                                                  .contains('404')) {
+                                              );
+                                            },
+                                            errorBuilder: (context, error, stackTrace) {
+                                              if (error.toString().contains('404')) {
                                                 return Image.asset(
                                                   'assets/images/defaultpic.gif',
                                                   fit: BoxFit.cover,
@@ -939,6 +950,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
                                               }
                                             },
                                           ),
+
                                         ),
                                       ),
                                     );
@@ -1007,54 +1019,53 @@ class _HomeDrawerState extends State<HomeDrawer> {
                         padding: EdgeInsets.zero,
                         itemCount: drawerList!.length + (showUpdateButton ? 1 : 0),
                         itemBuilder: (context, index) {
-                          if (index < drawerList!.length) {
-                            return inkwell(drawerList![index]);
-                          }
-
-                          return Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 200,
-                                ),
-                                child: Material(
-                                  color: const Color(0xFF3ACD3E),
-                                  borderRadius: BorderRadius.circular(26),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: InkWell(
-                                    onTap: () => launchUrlString(
-                                      'https://t.me/+xTEmmXoDW5tkMGFi',
-                                      mode: LaunchMode.externalApplication,
-                                    ),
-                                    child: const SizedBox(
-                                      height: 46,
-                                      child: Center(
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.cached, color: Colors.white),
-                                            SizedBox(width: 6),
-                                            Text(
-                                              'Update Available!',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 16,
+                          if (showUpdateButton && index == 0) {
+                            return Padding(
+                              padding: const EdgeInsets.fromLTRB(16.0, 14.0, 16.0, 4.0),
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 200),
+                                  child: Material(
+                                    color: const Color(0xFF3ACD3E),
+                                    borderRadius: BorderRadius.circular(26),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: InkWell(
+                                      onTap: () => launchUrlString(
+                                        'https://t.me/+xTEmmXoDW5tkMGFi',
+                                        mode: LaunchMode.externalApplication,
+                                      ),
+                                      child: const SizedBox(
+                                        height: 44,
+                                        child: Center(
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.cached, color: Colors.white),
+                                              SizedBox(width: 6),
+                                              Text(
+                                                'Update Available!',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 16,
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                          );
+                            );
+                          }
 
+                          final int drawerIndex = showUpdateButton ? index - 1 : index;
+                          return inkwell(drawerList![drawerIndex]);
                         },
+
                       ),
                     ),
 
@@ -1062,8 +1073,8 @@ class _HomeDrawerState extends State<HomeDrawer> {
                     // NSFW Toggle
                     Padding(
                       padding: const EdgeInsets.only(
-                        bottom: 12.0,
-                        top: 11.0,
+                        bottom: 10.0,
+                        top: 6.0,
                         right: 16.0,
                         left: 16.0,
                       ),
@@ -1127,6 +1138,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
           ],
         ),
       ),
+        ),
     );
   }
 }

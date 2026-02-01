@@ -11,6 +11,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../custom_cache_manager.dart';
 import '../main.dart';
 import '../model/shout.dart';
 import '../model/user_link.dart';
@@ -271,9 +272,6 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
   late TabController _tabController;
 
-  // Avoid "pass-through" tab animation causing background tabs to initialize and fetch.
-  // We only build (and thus allow initState-fetches) for a tab after it has remained
-  // selected for a short settle period.
   static const Duration _tabSettleDelay = Duration(milliseconds: 100);
   Timer? _tabSettleTimer;
   final Set<ProfileSection> _lazyLoadedSections = <ProfileSection>{};
@@ -355,6 +353,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
     sanitizedUsername = _sanitizeUsername(widget.nickname);
 
     _initAsyncFetch();
+
   }
 
   void _scheduleLazyLoadForIndex(int index) {
@@ -840,14 +839,24 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
           child: child,
         );
       },
-      child: CachedNetworkImage(
-        imageUrl: profileBannerUrl ??
+      child: Image.network(
+        profileBannerUrl ??
             'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg',
         fit: BoxFit.cover,
         alignment: Alignment(alignmentX, 0),
-        placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-        errorWidget: (context, url, error) => Container(color: Colors.grey),
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) {
+            return child;
+          }
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          return Container(color: Colors.grey);
+        },
       ),
+
     );
   }
 
@@ -893,27 +902,40 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
       },
       child: GestureDetector(
         onTap: () {},
-        child: CachedNetworkImage(
-          imageUrl: profileImageUrl ?? '',
+        child: profileImageUrl == null || profileImageUrl!.isEmpty
+            ? Image.asset(
+          'assets/images/defaultpic.gif',
           width: avatarSize,
           height: avatarSize,
-          filterQuality: FilterQuality.low,
           fit: BoxFit.cover,
-          placeholder: (context, url) => SizedBox(
-            width: avatarSize / 2,
-            height: avatarSize / 2,
-            child: const Center(
-              child: CircularProgressIndicator(strokeWidth: 2.0),
-            ),
-          ),
-          errorWidget: (context, url, error) => Image.asset(
-            'assets/images/defaultpic.gif',
-            width: avatarSize,
-            height: avatarSize,
-            fit: BoxFit.cover,
-          ),
+        )
+            : Image.network(
+          profileImageUrl!,
+          width: avatarSize,
+          height: avatarSize,
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.low,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return SizedBox(
+              width: avatarSize / 2,
+              height: avatarSize / 2,
+              child: const Center(
+                child: CircularProgressIndicator(strokeWidth: 2.0),
+              ),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            return Image.asset(
+              'assets/images/defaultpic.gif',
+              width: avatarSize,
+              height: avatarSize,
+              fit: BoxFit.cover,
+            );
+          },
         ),
       ),
+
     );
   }
 
@@ -1120,7 +1142,15 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
             !_webViewLoaded &&
             _tabController.index == ProfileSection.Home.index);
 
-    return DefaultTabController(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          systemNavigationBarColor: Color(0xCC000000),
+          systemNavigationBarIconBrightness: Brightness.light,
+
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+        ),
+        child: DefaultTabController(
       length: ProfileSection.values.length,
       child: Scaffold(
         backgroundColor: Colors.black,
@@ -1638,6 +1668,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
 
       ),
+        ),
     );
   }
 

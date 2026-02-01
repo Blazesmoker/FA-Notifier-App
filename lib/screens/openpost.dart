@@ -86,9 +86,17 @@ final Map<String, String> faTimezoneToIana = {
 class OpenPost extends StatefulWidget {
   final String imageUrl;
   final String uniqueNumber;
+  /// When true, do not fetch author profile on load (saves a request).
+  /// Show "+Watch" until user taps it; then fetch profile and update button or perform watch.
+  /// Set to true when opening from Browse or Search screens.
+  final bool skipInitialWatchCheck;
 
-  const OpenPost({required this.imageUrl, required this.uniqueNumber, Key? key})
-      : super(key: key);
+  const OpenPost({
+    required this.imageUrl,
+    required this.uniqueNumber,
+    this.skipInitialWatchCheck = false,
+    Key? key,
+  }) : super(key: key);
 
   @override
   _OpenPostState createState() => _OpenPostState();
@@ -128,6 +136,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   String? unwatchLink;
   String? blockLink;
   bool isWatching = false;
+  bool _watchLinksLoading = false;
   String? unblockLink;
   bool isBlocked = false;
   String? category;
@@ -170,7 +179,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       _loadSfwEnabled(),
       _fetchPostDetails(),
     ]).then((_) {
-      if (username != null) {
+      if (username != null && !widget.skipInitialWatchCheck) {
         _fetchUserPageLinks();
       }
     });
@@ -231,9 +240,12 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     if (cookieA != null && cookieB != null) {
       cookieHeader = 'a=$cookieA; b=$cookieB';
     }
+
     if (!skipSfw && _sfwEnabled && !_nsfwAllowed) {
       cookieHeader += '; sfw=1';
     }
+
+    debugPrint('Cookie header being sent: $cookieHeader');
 
     final headers = <String, String>{
       'Cookie': cookieHeader,
@@ -243,9 +255,14 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
     final response = await httpClient.get(Uri.parse(url), headers: headers);
 
-    if (_sfwEnabled && !_nsfwAllowed && !skipSfw && response.statusCode == 200) {
-      String decodedBody;
+    debugPrint('Response status: ${response.statusCode}');
 
+
+    final ct = (response.headers['content-type'] ?? '').toLowerCase();
+    if (response.statusCode == 200 &&
+        (ct.contains('text/html') || ct.contains('application/xhtml'))) {
+
+      String decodedBody;
       try {
         decodedBody = utf8.decode(response.bodyBytes);
       } on FormatException {
@@ -256,28 +273,71 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         }
       }
 
-      final ct = (response.headers['content-type'] ?? '').toLowerCase();
-      if (ct.contains('text/html') || ct.contains('application/xhtml')) {
-        final document = html_parser.parse(decodedBody);
+      final document = html_parser.parse(decodedBody);
 
-        final body = document.querySelector('body');
-        final isOldMatureError =
-            body?.attributes['id'] == 'pageid-matureimage-error';
 
-        final noticeSection =
-            document.querySelector('section.notice-message') ??
-                document.querySelector('.notice-message');
+      final allSections = document.querySelectorAll('section');
+      for (var section in allSections) {
+        final header = section.querySelector('.section-header h2') ??
+            section.querySelector('h2');
+        final body = section.querySelector('.section-body');
 
-        bool isNewMatureError = false;
+        if (header != null && body != null) {
+          final headerText = header.text.toLowerCase().trim();
+          final bodyText = body.text.toLowerCase().trim();
+
+          if (headerText.contains('system error') &&
+              bodyText.contains('not in our database')) {
+            debugPrint('DETECTED: Submission not found error');
+            throw Exception("Submission not found in database");
+          }
+        }
+      }
+
+
+      if (!skipSfw) {
+        final noticeSection = document.querySelector('section.notice-message');
+
         if (noticeSection != null) {
-          final noticeText = noticeSection.text.toLowerCase();
-          isNewMatureError =
-              noticeText.contains('this content is rated mature or adult') ||
-                  (noticeText.contains('mature or adult') &&
-                      noticeText.contains('account settings'));
+          final noticeText = noticeSection.text.toLowerCase().trim();
+
+
+          final isMatureWarning =
+              (noticeText.contains('mature') || noticeText.contains('adult')) &&
+                  (noticeText.contains('rated') || noticeText.contains('content')) &&
+                  (noticeText.contains('account settings') ||
+                      noticeText.contains('log in') ||
+                      noticeText.contains('enable'));
+
+          if (isMatureWarning && !_nsfwAllowed) {
+            debugPrint('DETECTED: Mature/Adult content warning - showing dialog');
+
+            final userAgreed = await _showNSFWConfirmationDialog();
+            debugPrint('User response: $userAgreed');
+
+            if (userAgreed) {
+              setState(() => _nsfwAllowed = true);
+              debugPrint('Retrying request with NSFW allowed');
+              final retryResponse = await _getWithSfwCookie(
+                url,
+                additionalHeaders: additionalHeaders,
+                skipSfw: true,
+              );
+              debugPrint('Retry response status: ${retryResponse.statusCode}');
+              return retryResponse;
+            } else {
+              debugPrint('User declined NSFW content');
+              throw Exception("User declined to view NSFW content.");
+            }
+          }
         }
 
-        if (isOldMatureError || isNewMatureError) {
+
+        final body = document.querySelector('body');
+        final isOldMatureError = body?.attributes['id'] == 'pageid-matureimage-error';
+
+        if (isOldMatureError && !_nsfwAllowed) {
+          debugPrint('DETECTED: Old style mature error - showing dialog');
           final userAgreed = await _showNSFWConfirmationDialog();
           if (userAgreed) {
             setState(() => _nsfwAllowed = true);
@@ -292,7 +352,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         }
       }
     }
-
 
     return response;
   }
@@ -730,6 +789,13 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   }
 
   Future<void> _handleBlockUnblock() async {
+    // When we skipped initial fetch, load links on first use (same as Watch)
+    if (blockLink == null && unblockLink == null && username != null) {
+      setState(() => _watchLinksLoading = true);
+      await _fetchUserPageLinks();
+      if (!mounted) return;
+      setState(() => _watchLinksLoading = false);
+    }
     if (isBlocked) {
       if (unblockLink == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -885,6 +951,15 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   }
 
   Future<void> _handleWatchButtonPressed() async {
+    // When we skipped initial fetch (Browse/Search), fetch links on first tap
+    if (watchLink == null && unwatchLink == null && username != null) {
+      if (_watchLinksLoading) return;
+      setState(() => _watchLinksLoading = true);
+      await _fetchUserPageLinks();
+      if (!mounted) return;
+      setState(() => _watchLinksLoading = false);
+      // After fetch: if already watching, button will show -Watch; else send watch request below
+    }
     if (isWatching) {
       if (unwatchLink == null) return;
       await _sendWatchUnwatchRequest(unwatchLink!, shouldWatch: false);
@@ -1004,72 +1079,143 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     }
 
     final postUrl = 'https://www.furaffinity.net/view/${widget.uniqueNumber}/';
-    final response = await _getWithSfwCookie(postUrl);
-    if (response.statusCode != 200) {
-      debugPrint('Failed to fetch post details: ${response.statusCode}');
-      setState(() => isLoading = false);
-      return;
-    }
 
-    String decodedBody;
     try {
-      decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-    } catch (_) {
-      try {
-        decodedBody = latin1.decode(response.bodyBytes);
-      } catch (e2) {
-        debugPrint('Failed to decode response body: $e2');
+      final response = await _getWithSfwCookie(postUrl);
+
+      if (response.statusCode != 200) {
+        debugPrint('Failed to fetch post details: ${response.statusCode}');
         setState(() => isLoading = false);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to load submission'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          Navigator.of(context).pop();
+        }
         return;
       }
-    }
 
-    final document = await compute(parseHtml, decodedBody);
-    final parsedPost = OpenPostApiService.parsePostDocument(document);
-    final parsedComments = OpenPostApiService.parseComments(document);
-
-    setState(() {
-      currentUsername = parsedPost.currentUsername;
-      username = parsedPost.username;
-      linkUsername = parsedPost.linkUsername;
-      profileImageUrl = parsedPost.profileImageUrl;
-      submissionTitle = parsedPost.submissionTitle;
-      fullViewImageUrl = parsedPost.fullViewImageUrl;
-      submissionDescription = parsedPost.submissionDescription;
-      rating = parsedPost.rating;
-
-      if (parsedPost.publicationTimeRaw != null &&
-          parsedPost.publicationTimeRaw!.isNotEmpty) {
-        _parsePublicationTime(parsedPost.publicationTimeRaw!);
+      String decodedBody;
+      try {
+        decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
+      } catch (_) {
+        try {
+          decodedBody = latin1.decode(response.bodyBytes);
+        } catch (e2) {
+          debugPrint('Failed to decode response body: $e2');
+          setState(() => isLoading = false);
+          return;
+        }
       }
 
-      favoritesCount = parsedPost.favoritesCount;
-      viewCount = parsedPost.viewCount;
-      commentsCount = parsedPost.commentsCount;
+      // Parse the document from the CORRECT response (after retry if needed)
+      final document = await compute(parseHtml, decodedBody);
 
-      favLink = parsedPost.favLink;
-      unfavLink = parsedPost.unfavLink;
-      isFavorited = parsedPost.isFavorited;
+      // Double-check: make sure we didn't get an error page
+      final noticeSection = document.querySelector('section.notice-message');
+      if (noticeSection != null) {
+        final noticeText = noticeSection.text.toLowerCase().trim();
+        final isMatureWarning =
+            (noticeText.contains('mature') || noticeText.contains('adult')) &&
+                (noticeText.contains('rated') || noticeText.contains('content'));
 
-      category = parsedPost.category;
-      type = parsedPost.type;
-      species = parsedPost.species;
-      gender = parsedPost.gender;
-      size = parsedPost.size;
-      fileSize = parsedPost.fileSize;
-      keywords = parsedPost.keywords;
-      keywordTags = parsedPost.keywordTags;
-      metaKeywordTags = parsedPost.metaKeywordTags;
-      tagBlocklistNonce = parsedPost.tagBlocklistNonce;
+        if (isMatureWarning) {
+          debugPrint('ERROR: Still got mature warning after retry - this should not happen');
+          setState(() => isLoading = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Failed to load NSFW content'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            Navigator.of(context).pop();
+          }
+          return;
+        }
+      }
 
-      imageWidth = parsedPost.imageWidth;
-      imageHeight = parsedPost.imageHeight;
+      final parsedPost = OpenPostApiService.parsePostDocument(document);
+      final parsedComments = OpenPostApiService.parseComments(document);
 
-      comments = parsedComments;
-      commentsCount = parsedComments.length;
-      _detailsLoaded = true;
-      isLoading = false;
-    });
+      setState(() {
+        currentUsername = parsedPost.currentUsername;
+        username = parsedPost.username;
+        linkUsername = parsedPost.linkUsername;
+        profileImageUrl = parsedPost.profileImageUrl;
+        submissionTitle = parsedPost.submissionTitle;
+        fullViewImageUrl = parsedPost.fullViewImageUrl;
+        submissionDescription = parsedPost.submissionDescription;
+        rating = parsedPost.rating;
+
+        if (parsedPost.publicationTimeRaw != null &&
+            parsedPost.publicationTimeRaw!.isNotEmpty) {
+          _parsePublicationTime(parsedPost.publicationTimeRaw!);
+        }
+
+        favoritesCount = parsedPost.favoritesCount;
+        viewCount = parsedPost.viewCount;
+        commentsCount = parsedPost.commentsCount;
+
+        favLink = parsedPost.favLink;
+        unfavLink = parsedPost.unfavLink;
+        isFavorited = parsedPost.isFavorited;
+
+        category = parsedPost.category;
+        type = parsedPost.type;
+        species = parsedPost.species;
+        gender = parsedPost.gender;
+        size = parsedPost.size;
+        fileSize = parsedPost.fileSize;
+        keywords = parsedPost.keywords;
+        keywordTags = parsedPost.keywordTags;
+        metaKeywordTags = parsedPost.metaKeywordTags;
+        tagBlocklistNonce = parsedPost.tagBlocklistNonce;
+
+        imageWidth = parsedPost.imageWidth;
+        imageHeight = parsedPost.imageHeight;
+
+        comments = parsedComments;
+        commentsCount = parsedComments.length;
+        _detailsLoaded = true;
+        isLoading = false;
+      });
+
+      debugPrint('Post loaded successfully: $submissionTitle');
+
+    } catch (e) {
+      debugPrint('Error fetching post details: $e');
+      setState(() => isLoading = false);
+
+      if (mounted) {
+        String errorMessage = 'Failed to load submission';
+
+        if (e.toString().contains('not found in database')) {
+          errorMessage = 'This submission does not exist or has been deleted';
+        } else if (e.toString().contains('declined to view NSFW')) {
+          errorMessage = 'NSFW content viewing declined';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        // Navigate back after a short delay
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+        });
+      }
+    }
   }
 
 
@@ -1903,13 +2049,19 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-    // The loading overlay remains visible until both details and webview are loaded.
     bool showLoadingIndicator = !_detailsLoaded || !_webViewLoaded;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF111111),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          systemNavigationBarColor: Colors.black,
+          systemNavigationBarIconBrightness: Brightness.light,
+          statusBarColor: Color(0xFF111111),
+          statusBarIconBrightness: Brightness.light,
+        ),
+        child: Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF111111),
+        backgroundColor: Colors.black,
         scrolledUnderElevation: 0,
         title: const Text("Post"),
         leading: IconButton(
@@ -2074,16 +2226,30 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                         color: Colors.transparent,
                                         borderRadius: BorderRadius.zero,
                                       ),
-                                      child: CachedNetworkImage(
-                                        imageUrl: profileImageUrl!,
+                                      child: Image.network(
+                                        profileImageUrl!,
                                         fit: BoxFit.cover,
                                         alignment: Alignment.center,
-                                        errorWidget: (context, url, error) =>
-                                            Image.asset(
-                                              'assets/images/defaultpic.gif',
-                                              fit: BoxFit.cover,
-                                            ),
+
+                                        // Shows while loading (no infinite spinner risk)
+                                        loadingBuilder: (context, child, loadingProgress) {
+                                          if (loadingProgress == null) {
+                                            return child;
+                                          }
+                                          return const Center(
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          );
+                                        },
+
+                                        // Handles errors safely
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Image.asset(
+                                            'assets/images/defaultpic.gif',
+                                            fit: BoxFit.cover,
+                                          );
+                                        },
                                       ),
+
                                     ),
                                     const SizedBox(width: 10),
                                     Flexible(
@@ -2144,7 +2310,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                               width: 94,
                               height: 24,
                               child: ElevatedButton(
-                                onPressed: () => _handleWatchButtonPressed(),
+                                onPressed: _watchLinksLoading
+                                    ? null
+                                    : () => _handleWatchButtonPressed(),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor:
                                   isWatching ? Colors.black : const Color(0xFFE09321),
@@ -2155,13 +2323,22 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                 ),
                                 child: FittedBox(
                                   fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    isWatching ? "-Watch" : "+Watch",
-                                    style: TextStyle(
-                                      color: isWatching ? Colors.white : Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                                  child: _watchLinksLoading
+                                      ? const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : Text(
+                                          isWatching ? "-Watch" : "+Watch",
+                                          style: TextStyle(
+                                            color: isWatching ? Colors.white : Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                 ),
                               ),
                             ),
@@ -2271,17 +2448,17 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
                   const Divider(
                     height: 5.0,
-                    color: Colors.black,
+                    color: Color(0xFF111111),
                     thickness: 5.0,
                   ),
                   const Divider(
                     height: 3.0,
-                    color: Color(0xFF111111),
+                    color: Colors.black,
                     thickness: 3.0,
                   ),
                   const Divider(
                     height: 3.0,
-                    color: Colors.black,
+                    color: Color(0xFF111111),
                     thickness: 3.0,
                   ),
 
@@ -2325,17 +2502,17 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
                   const Divider(
                     height: 5.0,
-                    color: Colors.black,
+                    color: Color(0xFF111111),
                     thickness: 5.0,
                   ),
                   const Divider(
                     height: 2.0,
-                    color: Color(0xFF111111),
+                    color: Colors.black,
                     thickness: 2.0,
                   ),
                   const Divider(
                     height: 3.0,
-                    color: Colors.black,
+                    color: Color(0xFF111111),
                     thickness: 3.0,
                   ),
                   if (_isWebViewVisible && submissionDescription != null)
@@ -2409,17 +2586,17 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
                   const Divider(
                     height: 2.0,
-                    color: Colors.black,
+                    color: Color(0xFF111111),
                     thickness: 2.0,
                   ),
                   const Divider(
                     height: 3.0,
-                    color: Color(0xFF111111),
+                    color: Colors.black,
                     thickness: 3.0,
                   ),
                   const Divider(
                     height: 4.0,
-                    color: Colors.black,
+                    color: Color(0xFF111111),
                     thickness: 4.0,
                   ),
                   Padding(
@@ -2433,7 +2610,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                           padding: const EdgeInsets.only(bottom: 0.0, top: 11.0),
                           child: const Divider(
                             height: 3.0,
-                            color: Colors.black,
+                            color: Color(0xFF111111),
                             thickness: 3.0,
                           ),
                         ),
@@ -2603,12 +2780,12 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                   ),
                   const Divider(
                     height: 3.0,
-                    color: Colors.black,
+                    color: Color(0xFF111111),
                     thickness: 3.0,
                   ),
                   const Divider(
                     height: 4.0,
-                    color: Color(0xFF111111),
+                    color: Colors.black,
                     thickness: 4.0,
                   ),
                       ],
@@ -2633,7 +2810,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
             ),
           if (showLoadingIndicator)
             Container(
-              color: const Color(0xFF111111),
+              color: const Color(0xFF000000),
               child: const Center(
                 child: PulsatingLoadingIndicator(
                   size: 78.0,
@@ -2738,7 +2915,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           ),
         ),
       ),
-
+        ),
     );
   }
 
@@ -2772,7 +2949,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                   color: Colors.white,
                 ),
               ),
-              const SizedBox(width: 2),
+              const SizedBox(width: 4),
               const Text(
                 'Views',
                 style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -2795,7 +2972,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                   color: Colors.white,
                 ),
               ),
-              const SizedBox(width: 2),
+              const SizedBox(width: 4),
               const Text(
                 'Favs',
                 style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -2818,7 +2995,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                   color: Colors.white,
                 ),
               ),
-              const SizedBox(width: 2),
+              const SizedBox(width: 4),
               const Text(
                 'Comments',
                 style: TextStyle(fontSize: 12, color: Colors.grey),

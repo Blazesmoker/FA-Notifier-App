@@ -243,24 +243,32 @@ class _ReplyScreenState extends State<ReplyScreen> {
                   children: [
                     ClipRRect(
                       child: widget.comment['profileImage'] != null
-                          ? CachedNetworkImage(
-                        imageUrl: widget.comment['profileImage']!,
+                          ? Image.network(
+                        widget.comment['profileImage']!,
                         width: 36,
                         height: 36,
                         fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
-                          width: 36,
-                          height: 36,
-                          color: Colors.grey,
-                          child: const Icon(Icons.person, size: 24),
-                        ),
-                        errorWidget: (context, url, error) => Container(
-                          width: 36,
-                          height: 36,
-                          color: Colors.grey,
-                          child: const Icon(Icons.person, size: 24),
-                        ),
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) {
+                            return child;
+                          }
+                          return Container(
+                            width: 36,
+                            height: 36,
+                            color: Colors.grey,
+                            child: const Icon(Icons.person, size: 24),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 36,
+                            height: 36,
+                            color: Colors.grey,
+                            child: const Icon(Icons.person, size: 24),
+                          );
+                        },
                       )
+
                           : Container(
                         width: 36,
                         height: 36,

@@ -220,15 +220,25 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
                 child: Center(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8.0),
-                    child: CachedNetworkImage(
-                      imageUrl: userProfileImageUrl!,
+                    child: Image.network(
+                      userProfileImageUrl!,
                       fit: BoxFit.cover,
-                      placeholder: (context, url) => const SizedBox(
-                        height: 200,
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                      errorWidget: (context, url, error) => const SizedBox(),
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) {
+                          return child;
+                        }
+                        return const SizedBox(
+                          height: 200,
+                          child: Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return const SizedBox();
+                      },
                     ),
+
                   ),
                 ),
               ),

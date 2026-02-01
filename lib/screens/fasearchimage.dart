@@ -557,6 +557,7 @@ class FASearchImageState extends State<FASearchImage> {
                     builder: (_) => OpenPost(
                       imageUrl: image['url'],
                       uniqueNumber: image['uniqueNumber'],
+                      skipInitialWatchCheck: true,
                     ),
                   ),
                 );
@@ -606,6 +607,7 @@ class FASearchImageState extends State<FASearchImage> {
                     builder: (_) => OpenPost(
                       imageUrl: left['url'],
                       uniqueNumber: left['uniqueNumber'],
+                      skipInitialWatchCheck: true,
                     ),
                   ),
                 );
@@ -626,6 +628,7 @@ class FASearchImageState extends State<FASearchImage> {
                     builder: (_) => OpenPost(
                       imageUrl: right['url'],
                       uniqueNumber: right['uniqueNumber'],
+                      skipInitialWatchCheck: true,
                     ),
                   ),
                 );

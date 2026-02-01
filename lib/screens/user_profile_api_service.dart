@@ -185,7 +185,7 @@ class UserProfileApiService {
   UserProfileApiService(this._secureStorage);
 
   final FlutterSecureStorage _secureStorage;
-  final RegExp _usernameSanitizeRegex = RegExp(r'[^a-zA-Z0-9\\-_.~]');
+  final RegExp _usernameSanitizeRegex = RegExp(r'[^a-zA-Z0-9_.~-]');
 
   String _sanitizeUsername(String username) {
     return username.replaceAll(_usernameSanitizeRegex, '').toLowerCase();
@@ -623,6 +623,7 @@ class UserProfileApiService {
     profileImageUrl = profilePicElem != null
         ? (profilePicElem.attributes['src']?.replaceFirst('//', 'https://'))
         : null;
+    print("DEBUG api: $profileImageUrl");
 
     final displayNameElem = document.querySelector('a.c-usernameBlock__displayName .js-displayName')
         ?? document.querySelector('a.js-displayName-block .js-displayName');

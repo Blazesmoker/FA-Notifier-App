@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:webview_flutter_android/webview_flutter_android.dart';
+
 import 'openjournal.dart';
-import 'openpost.dart';
 
 class CreateJournalScreen extends StatefulWidget {
   final String? uniqueNumber;
@@ -25,7 +24,9 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
           accessibility: KeychainAccessibility.first_unlock));
   late final String initialUrl;
   final String finalizeUrlPrefix = 'https://www.furaffinity.net/journal/';
-  late final WebViewController _webViewController;
+
+  InAppWebViewController? _webViewController;
+  final GlobalKey webViewKey = GlobalKey();
 
   bool _sfwEnabled = true;
 
@@ -45,13 +46,12 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
 
     if (widget.uniqueNumber != null) {
       initialUrl =
-      'https://www.furaffinity.net/controls/journal/1/${widget.uniqueNumber}/';
+          'https://www.furaffinity.net/controls/journal/1/${widget.uniqueNumber}/';
     } else {
       initialUrl = 'https://www.furaffinity.net/controls/journal/';
     }
     _handledCurrentJournal = false;
     _loadSfwEnabled();
-    _initializeWebViewController();
   }
 
   void _loadSfwEnabled() async {
@@ -61,9 +61,9 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     });
   }
 
-  Future<void> _handlePossibleJournalSuccess(String url) async {
+  Future<void> _handlePossibleJournalSuccess(String? url) async {
     if (_handledCurrentJournal) return;
-    if (!url.startsWith(finalizeUrlPrefix)) return;
+    if (url == null || !url.startsWith(finalizeUrlPrefix)) return;
 
     final journalId = _extractJournalId(url);
     if (journalId == null) return;
@@ -71,7 +71,8 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     _handledCurrentJournal = true;
     debugPrint("Journal created with ID: $journalId");
 
-    await _webViewController.loadRequest(Uri.parse(initialUrl));
+    await _webViewController?.loadUrl(
+        urlRequest: URLRequest(url: WebUri(initialUrl)));
 
     setState(() {
       _isWaitingToOpenJournal = true;
@@ -80,47 +81,6 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     });
 
     _startCountdown();
-  }
-
-  void _initializeWebViewController() {
-    _webViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (url) async {
-            debugPrint("Page started loading: $url");
-
-            if (url.startsWith(initialUrl)) {
-              _handledCurrentJournal = false;
-              debugPrint("Injecting journal form CSS and JavaScript");
-              await _injectJournalFormCss();
-            }
-
-            await _handlePossibleJournalSuccess(url);
-          },
-          onPageFinished: (url) async {
-            debugPrint("Page finished loading: $url");
-            if (url.startsWith(initialUrl)) {
-              await _injectJournalFormCss();
-            }
-          },
-          onUrlChange: (change) async {
-            final url = change.url;
-            if (url == null) return;
-            if (Platform.isIOS) {
-              debugPrint("URL changed: $url");
-              await _handlePossibleJournalSuccess(url);
-            }
-          },
-          onWebResourceError: (error) {
-            debugPrint("Web resource error: $error");
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(initialUrl));
-
-    addFileSelectionListener();
-    _setCookies();
   }
 
   String? _extractJournalId(String url) {
@@ -166,9 +126,78 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     super.dispose();
   }
 
+  bool _isOnEditorPage(String? url) {
+    if (url == null) return false;
+    return url.contains('/controls/journal');
+  }
+
+  Future<void> _detectJournalViaDom(String? currentUrl) async {
+    if (_handledCurrentJournal) return;
+    if (_webViewController == null) return;
+    if (_isOnEditorPage(currentUrl)) return;
+
+    final result = await _webViewController!.evaluateJavascript(source: '''
+(function() {
+  const links = document.querySelectorAll('a[href^="/journal/"]');
+  for (const link of links) {
+    const href = link.getAttribute('href');
+    if (href && href.endsWith('/')) return href;
+  }
+  return null;
+})();
+''');
+
+    if (result == null) return;
+
+    final fullUrl = 'https://www.furaffinity.net' + result;
+    final journalId = _extractJournalId(fullUrl);
+    if (journalId == null) return;
+
+    _handledCurrentJournal = true;
+
+    setState(() {
+      _isWaitingToOpenJournal = true;
+      _journalId = journalId;
+      _countdown = 6;
+    });
+
+    _startCountdown();
+  }
+
+
+  Future<void> _setCookies() async {
+    final cookieManager = CookieManager.instance();
+    final prefs = await SharedPreferences.getInstance();
+    final sfwValue = (prefs.getBool('sfwEnabled') ?? true) ? '1' : '0';
+    final cookieKeys = ['a', 'b', 'cc', 'folder', 'nodesc', 'sz', 'sfw'];
+
+    for (final key in cookieKeys) {
+      final value = key == 'sfw'
+          ? sfwValue
+          : (await _secureStorage.read(key: 'fa_cookie_$key') ?? '');
+
+      if (value.isNotEmpty) {
+        await cookieManager.setCookie(
+          url: WebUri('https://www.furaffinity.net'),
+          name: key,
+          value: value,
+          domain: '.furaffinity.net',
+          path: '/',
+          isSecure: true,
+          isHttpOnly: true,
+        );
+      }
+    }
+  }
+
   Future<void> _injectJournalFormCss() async {
-    await _webViewController.runJavaScript('''
+    if (_webViewController == null) return;
+
+    await _webViewController!.evaluateJavascript(source: '''
       (function() {
+        if (window.__journalCssInjected) return;
+        window.__journalCssInjected = true;
+
         var style = document.createElement('style');
         style.type = 'text/css';
         style.innerHTML = \`
@@ -226,57 +255,69 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     debugPrint("CSS and JavaScript injection completed.");
   }
 
-  void addFileSelectionListener() async {
-    if (Platform.isAndroid) {
-      final androidController =
-      _webViewController.platform as AndroidWebViewController;
-      await androidController.setOnShowFileSelector(_androidFilePicker);
+  Future<void> _wrapSelection(String tag) async {
+    if (_webViewController == null) return;
+
+    await _webViewController!.evaluateJavascript(source: '''
+(function(){
+  var open='[$tag]';
+  var close='[/$tag]';
+  var active=document.activeElement;
+
+  if (active && (active.tagName==='TEXTAREA' || (active.tagName==='INPUT' && active.type==='text'))) {
+    var s=active.selectionStart, e=active.selectionEnd;
+    if (s!=null && e!=null && e>s) {
+      var before=active.value.substring(0,s);
+      var sel=active.value.substring(s,e);
+      var after=active.value.substring(e);
+      active.value=before+open+sel+close+after;
+      active.selectionStart=before.length+open.length;
+      active.selectionEnd=active.selectionStart+sel.length;
+      active.dispatchEvent(new Event('input',{bubbles:true}));
     }
+    return;
   }
 
-  Future<List<String>> _androidFilePicker(FileSelectorParams params) async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        allowMultiple: false,
-        type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'pdf'],
-      );
-      if (result != null && result.files.single.path != null) {
-        final file = File(result.files.single.path!);
-        return [file.uri.toString()];
-      }
-    } catch (e) {
-      debugPrint("Error selecting file: $e");
-    }
-    return [];
+  var sel=window.getSelection();
+  if (!sel || sel.rangeCount===0) return;
+  var r=sel.getRangeAt(0);
+  var t=sel.toString();
+  var node=document.createTextNode(open+t+close);
+  r.deleteContents();
+  r.insertNode(node);
+
+  var nr=document.createRange();
+  nr.setStartAfter(node);
+  nr.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(nr);
+})();
+''');
   }
 
-  Future<void> _setCookies() async {
-    List<String> secureCookieKeys = ['a', 'b', 'cc', 'folder', 'nodesc', 'sz'];
-    for (var key in secureCookieKeys) {
-      String storageKey = 'fa_cookie_$key';
-      String? cookieValue = await _secureStorage.read(key: storageKey);
-      if (cookieValue != null && cookieValue.isNotEmpty) {
-        await _webViewController.runJavaScript(
-          '''
-          document.cookie = "$key=$cookieValue; path=/; domain=.furaffinity.net; secure; httponly";
-          ''',
-        );
-      }
-    }
-
-    if (_sfwEnabled) {
-      await _webViewController.runJavaScript(
-        '''
-        document.cookie = "sfw=1; path=/; domain=.furaffinity.net; secure; httponly";
-        ''',
-      );
-    }
+  ContextMenu _buildContextMenu() {
+    return ContextMenu(
+      menuItems: [
+        ContextMenuItem(id: 1, title: 'Bold', action: () => _wrapSelection('b')),
+        ContextMenuItem(id: 2, title: 'Italic', action: () => _wrapSelection('i')),
+        ContextMenuItem(id: 3, title: 'Underline', action: () => _wrapSelection('u')),
+        ContextMenuItem(id: 4, title: 'Align Left', action: () => _wrapSelection('left')),
+        ContextMenuItem(id: 5, title: 'Align Center', action: () => _wrapSelection('center')),
+        ContextMenuItem(id: 6, title: 'Align Right', action: () => _wrapSelection('right')),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final settings = InAppWebViewSettings(
+      javaScriptEnabled: true,
+      useShouldOverrideUrlLoading: false,
+      verticalScrollBarEnabled: true,
+      horizontalScrollBarEnabled: false,
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Create Journal'),
@@ -285,7 +326,40 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
       body: SafeArea(
         child: Stack(
           children: [
-            WebViewWidget(controller: _webViewController),
+            InAppWebView(
+              key: webViewKey,
+              initialUrlRequest: URLRequest(url: WebUri(initialUrl)),
+              initialSettings: settings,
+              contextMenu: _buildContextMenu(),
+              onWebViewCreated: (controller) async {
+                _webViewController = controller;
+                await _setCookies();
+              },
+              onLoadStart: (controller, uri) async {
+                _webViewController = controller;
+                debugPrint("Page started loading: $uri");
+                if (uri != null && uri.toString().startsWith(initialUrl)) {
+                  debugPrint("Injecting journal form CSS and JavaScript");
+                  await _injectJournalFormCss();
+                }
+              },
+              onLoadStop: (controller, uri) async {
+                debugPrint("Page finished loading: $uri");
+
+                if (uri != null && uri.toString().startsWith(initialUrl)) {
+                  await _injectJournalFormCss();
+                }
+
+                await _handlePossibleJournalSuccess(uri?.toString());
+                await _detectJournalViaDom(uri?.toString());
+              },
+              onUpdateVisitedHistory: (controller, uri, androidIsReload) async {
+                if (uri != null) {
+                  await _handlePossibleJournalSuccess(uri.toString());
+                }
+              },
+
+            ),
             if (_isWaitingToOpenJournal)
               Positioned.fill(
                 child: Container(
@@ -296,8 +370,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
                       children: [
                         const Text(
                           'Waiting to open your journal',
-                          style:
-                          TextStyle(color: Colors.white, fontSize: 24),
+                          style: TextStyle(color: Colors.white, fontSize: 24),
                         ),
                         const SizedBox(height: 16),
                         Text(

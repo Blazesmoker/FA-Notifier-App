@@ -201,23 +201,31 @@ List<html_pkg.HtmlExtension> buildUserProfileBBCodeExtensions() {
 
         final resolvedUrl = src.startsWith('//') ? 'https:$src' : src;
 
-        return CachedNetworkImage(
-          imageUrl: resolvedUrl,
+        return Image.network(
+          resolvedUrl,
           width: 50,
           height: 50,
           fit: BoxFit.cover,
-          placeholder: (context, url) => const SizedBox(
-            width: 50,
-            height: 50,
-            child: CircularProgressIndicator(),
-          ),
-          errorWidget: (context, url, error) => Image.asset(
-            'assets/images/defaultpic.gif',
-            width: 50,
-            height: 50,
-            fit: BoxFit.cover,
-          ),
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) {
+              return child;
+            }
+            return const SizedBox(
+              width: 50,
+              height: 50,
+              child: CircularProgressIndicator(),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            return Image.asset(
+              'assets/images/defaultpic.gif',
+              width: 50,
+              height: 50,
+              fit: BoxFit.cover,
+            );
+          },
         );
+
       },
     ),
   ];

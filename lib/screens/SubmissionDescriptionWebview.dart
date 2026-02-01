@@ -203,7 +203,7 @@ user-select: none !important;
       html, body {
         margin: 0 !important;
         padding: 0 !important;
-        background-color: #111111 !important;
+        background-color: #000 !important;
         color: $textColor !important;
         font-family: 'Open Sans', sans-serif;
         $selectionCss

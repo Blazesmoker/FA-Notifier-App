@@ -78,22 +78,14 @@ class AvatarWidget extends StatelessWidget {
     return Container(
       width: radius * 2,
       height: radius * 2,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: Colors.transparent,
         borderRadius: BorderRadius.zero,
       ),
       child: (imageUrl != null && imageUrl!.isNotEmpty)
-          ? CachedNetworkImage(
+          ? _AvatarFadeInImage(
         imageUrl: imageUrl!,
-        fit: BoxFit.cover,
-        placeholder: (context, url) => Image.asset(
-          fallbackAsset,
-          fit: BoxFit.cover,
-        ),
-        errorWidget: (context, url, error) => Image.asset(
-          fallbackAsset,
-          fit: BoxFit.cover,
-        ),
+        fallbackAsset: fallbackAsset,
       )
           : Image.asset(
         fallbackAsset,
@@ -101,6 +93,7 @@ class AvatarWidget extends StatelessWidget {
       ),
     );
   }
+
 }
 
 /// A stateful widget for the Shouts section.
@@ -927,13 +920,17 @@ class NotificationSectionWidget extends StatelessWidget {
                                                   return Container(color: const Color(0xFF1F1F1F));
                                                 }
                                                 final bool sfwEnabled = sfwSnapshot.data!;
-                                                return CachedNetworkImage(
+                                                return FadeInNetworkImage(
                                                   imageUrl: snapshot.data!,
                                                   fit: BoxFit.cover,
                                                   alignment: Alignment.topCenter,
-                                                  placeholder: (context, url) => Container(color: const Color(0xFF1F1F1F)),
-                                                  errorWidget: (context, url, error) => Image.asset(
-                                                    sfwEnabled ? 'assets/images/nsfw.png' : 'assets/images/defaultpic.gif',
+                                                  placeholder: Container(
+                                                    color: const Color(0xFF1F1F1F),
+                                                  ),
+                                                  errorWidget: Image.asset(
+                                                    sfwEnabled
+                                                        ? 'assets/images/nsfw.png'
+                                                        : 'assets/images/defaultpic.gif',
                                                     fit: BoxFit.cover,
                                                     alignment: Alignment.topCenter,
                                                   ),
@@ -944,6 +941,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                           );
                                         },
                                       ),
+
                                     ),
                                     const SizedBox(height: 4),
                                     SizedBox(
@@ -1480,6 +1478,122 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           ),
         );
       },
+    );
+  }
+}
+class FadeInNetworkImage extends StatefulWidget {
+  final String imageUrl;
+  final BoxFit fit;
+  final Alignment alignment;
+  final Duration duration;
+  final Widget placeholder;
+  final Widget errorWidget;
+
+  const FadeInNetworkImage({
+    Key? key,
+    required this.imageUrl,
+    required this.placeholder,
+    required this.errorWidget,
+    this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
+    this.duration = const Duration(milliseconds: 250),
+  }) : super(key: key);
+
+  @override
+  State<FadeInNetworkImage> createState() => _FadeInNetworkImageState();
+}
+
+class _FadeInNetworkImageState extends State<FadeInNetworkImage> {
+  bool _visible = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Placeholder is always visible
+        widget.placeholder,
+
+        // Image fades in smoothly
+        Image.network(
+          widget.imageUrl,
+          fit: widget.fit,
+          alignment: widget.alignment,
+          frameBuilder: (context, child, frame, _) {
+            if (frame != null && !_visible) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) setState(() => _visible = true);
+              });
+            }
+
+            return AnimatedOpacity(
+              opacity: _visible ? 1.0 : 0.0,
+              duration: widget.duration,
+              curve: Curves.easeOut,
+              child: child,
+            );
+          },
+          errorBuilder: (_, __, ___) => widget.errorWidget,
+        ),
+      ],
+    );
+  }
+}
+class _AvatarFadeInImage extends StatefulWidget {
+  final String imageUrl;
+  final String fallbackAsset;
+
+  const _AvatarFadeInImage({
+    required this.imageUrl,
+    required this.fallbackAsset,
+  });
+
+  @override
+  State<_AvatarFadeInImage> createState() => _AvatarFadeInImageState();
+}
+
+class _AvatarFadeInImageState extends State<_AvatarFadeInImage> {
+  bool _visible = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Placeholder (always visible)
+        Image.asset(
+          widget.fallbackAsset,
+          fit: BoxFit.cover,
+        ),
+
+        // Real image fades in on top
+        Image.network(
+          widget.imageUrl,
+          fit: BoxFit.cover,
+          frameBuilder: (context, child, frame, _) {
+            if (frame != null && !_visible) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  setState(() => _visible = true);
+                }
+              });
+            }
+
+            return AnimatedOpacity(
+              opacity: _visible ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              child: child,
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            return Image.asset(
+              widget.fallbackAsset,
+              fit: BoxFit.cover,
+            );
+          },
+        ),
+      ],
     );
   }
 }

@@ -1170,23 +1170,30 @@ class _FavImageTile extends StatelessWidget {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          CachedNetworkImage(
-                            imageUrl: displayUrl,
-                            fit: BoxFit.cover,
-                            fadeInDuration: const Duration(milliseconds: 300),
-                            placeholder: (context, url) => CachedNetworkImage(
-                              imageUrl: thumbnailUrl,
-                              fit: BoxFit.cover,
-                              fadeInDuration: Duration.zero,
-                              errorWidget: (ctx, url, err) => Container(
-                                color: Colors.grey[300],
-                                child: const Icon(Icons.error, color: Colors.red),
+                          Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              // --- THUMBNAIL (always visible) ---
+                              Image.network(
+                                thumbnailUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (ctx, err, stack) => Container(
+                                  color: Colors.grey[300],
+                                  child: const Icon(Icons.error, color: Colors.red),
+                                ),
                               ),
-                            ),
-                            errorWidget: (ctx, url, err) => Container(
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.error, color: Colors.red),
-                            ),
+
+                              // --- FULL IMAGE (fades in on top) ---
+                              _FadeInNetworkImage(
+                                imageUrl: displayUrl,
+                                fit: BoxFit.cover,
+                                duration: const Duration(milliseconds: 300),
+                                errorBuilder: (ctx, err, stack) => Container(
+                                  color: Colors.grey[300],
+                                  child: const Icon(Icons.error, color: Colors.red),
+                                ),
+                              ),
+                            ],
                           ),
                           if (selectionMode)
                             Container(
@@ -1216,6 +1223,51 @@ class _FavImageTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+class _FadeInNetworkImage extends StatefulWidget {
+  final String imageUrl;
+  final BoxFit fit;
+  final Duration duration;
+  final Widget Function(BuildContext, Object, StackTrace?) errorBuilder;
+
+  const _FadeInNetworkImage({
+    required this.imageUrl,
+    required this.fit,
+    required this.duration,
+    required this.errorBuilder,
+  });
+
+  @override
+  State<_FadeInNetworkImage> createState() => _FadeInNetworkImageState();
+}
+
+class _FadeInNetworkImageState extends State<_FadeInNetworkImage> {
+  bool _visible = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.network(
+      widget.imageUrl,
+      fit: widget.fit,
+      frameBuilder: (context, child, frame, _) {
+        if (frame != null && !_visible) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() => _visible = true);
+            }
+          });
+        }
+
+        return AnimatedOpacity(
+          opacity: _visible ? 1.0 : 0.0,
+          duration: widget.duration,
+          curve: Curves.easeOut,
+          child: child,
+        );
+      },
+      errorBuilder: widget.errorBuilder,
     );
   }
 }

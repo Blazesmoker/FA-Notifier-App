@@ -505,6 +505,7 @@ class FAImageGridState extends State<FAImageGrid> {
                     builder: (context) => OpenPost(
                       imageUrl: image['url'],
                       uniqueNumber: image['uniqueNumber'],
+                      skipInitialWatchCheck: true,
                     ),
                   ),
                 );
@@ -556,6 +557,7 @@ class FAImageGridState extends State<FAImageGrid> {
                     builder: (context) => OpenPost(
                       imageUrl: left['url'],
                       uniqueNumber: left['uniqueNumber'],
+                      skipInitialWatchCheck: true,
                     ),
                   ),
                 );
@@ -575,6 +577,7 @@ class FAImageGridState extends State<FAImageGrid> {
                     builder: (context) => OpenPost(
                       imageUrl: right['url'],
                       uniqueNumber: right['uniqueNumber'],
+                      skipInitialWatchCheck: true,
                     ),
                   ),
                 );

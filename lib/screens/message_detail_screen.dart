@@ -421,11 +421,11 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                             width: 60,
                             height: 60,
                             color: Colors.transparent,
-                            child: CachedNetworkImage(
-                              imageUrl: 'https:$avatarUrl',
+                            child: Image.network(
+                              'https:$avatarUrl',
                               fit: BoxFit.cover,
                               alignment: Alignment.center,
-                              errorWidget: (context, url, error) {
+                              errorBuilder: (context, error, stackTrace) {
                                 return Transform.scale(
                                   scale: 1.05,
                                   child: Image.asset(
@@ -435,6 +435,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                                 );
                               },
                             ),
+
                           ),
                         )
                       else
