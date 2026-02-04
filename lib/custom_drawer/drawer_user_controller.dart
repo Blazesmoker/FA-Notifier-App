@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'home_drawer.dart';
 import '../enums/drawer_index.dart';
-import '../model/drawer_list.dart';
 import '../model/user_profile.dart';
 import '../app_theme.dart';
 import '../model/notifications.dart';

@@ -1,6 +1,5 @@
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
-import '../parsing_utils.dart';
 import '../utils/html_tags_debug.dart';
 
 
@@ -743,7 +742,7 @@ class OpenPostApiService {
       }
       if (commentId == null) {
         final tableId = commentContainer.id; // e.g. "cid:167658070"
-        if (tableId != null && tableId.startsWith('cid:')) {
+        if (tableId.startsWith('cid:')) {
           commentId = tableId.replaceFirst('cid:', '').trim();
         }
       }

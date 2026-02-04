@@ -3,7 +3,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'fasearchimage.dart';
 import 'search_filters_screen.dart';
 

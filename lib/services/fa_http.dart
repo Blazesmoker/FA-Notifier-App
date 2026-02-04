@@ -125,7 +125,7 @@ class FAHttp {
     try {
       return await call();
     } catch (e) {
-      if (e is Object && _isRecoverable(e)) {
+      if (_isRecoverable(e)) {
         reset();
         await Future.delayed(const Duration(milliseconds: 250));
         return await call();

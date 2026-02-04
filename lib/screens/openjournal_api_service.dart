@@ -1,15 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
-import 'package:http/http.dart' as http;
 
 import '../network.dart';
-import '../parsing_utils.dart';
 import '../services/fa_http.dart';
 
 class OpenJournalFetchResult {
@@ -135,7 +132,7 @@ class OpenJournalApiService {
 
     if (textEl == null) return '';
 
-    final cleaned = textEl.clone(true) as dom.Element;
+    final cleaned = textEl.clone(true);
     cleaned.querySelectorAll('div.floatright, .floatright').forEach((e) => e.remove());
 
     return cleaned.text.replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -243,13 +240,13 @@ class OpenJournalApiService {
       String? commentText;
 
       if (commentTextElement != null) {
-        final cloned = commentTextElement.clone(true) as dom.Element;
+        final cloned = commentTextElement.clone(true);
 
         // Remove control junk
         cloned.querySelectorAll('.floatright, div.floatright').forEach((e) => e.remove());
 
         String normalizeFaHtml(dom.Element root) {
-          final cloned = root.clone(true) as dom.Element;
+          final cloned = root.clone(true);
 
           cloned.querySelectorAll('span.bbcode_i').forEach((e) {
             e.replaceWith(dom.Element.tag('i')..innerHtml = e.innerHtml);
@@ -355,7 +352,7 @@ class OpenJournalApiService {
               document.querySelector('userpage-nav-header span.user-title');
 
       if (utSpan != null) {
-        final cleaned = utSpan.clone(true) as dom.Element;
+        final cleaned = utSpan.clone(true);
         cleaned.querySelectorAll('.hideonmobile, .popup_date').forEach((e) => e.remove());
 
         var t = cleaned.text
@@ -373,7 +370,7 @@ class OpenJournalApiService {
           }
         }
       }
-    } else if (isJournalClassic && classicTitleBox != null) {
+    } else if (isJournalClassic) {
       dom.Element? classicTable;
       dom.Node? cur = classicTitleBox;
       while (cur != null && (cur is! dom.Element || cur.localName != 'table')) {

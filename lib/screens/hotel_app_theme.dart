@@ -37,7 +37,6 @@ class HotelAppTheme {
     return base.copyWith(
       colorScheme: colorScheme,
       primaryColor: primaryColor,
-      indicatorColor: Colors.white,
       splashColor: Colors.white24,
       splashFactory: InkRipple.splashFactory,
       canvasColor: Colors.white,
@@ -48,7 +47,7 @@ class HotelAppTheme {
       ),
       textTheme: _buildTextTheme(base.textTheme),
       primaryTextTheme: _buildTextTheme(base.primaryTextTheme),
-      platform: TargetPlatform.iOS,
+      platform: TargetPlatform.iOS, tabBarTheme: TabBarThemeData(indicatorColor: Colors.white),
     );
   }
 }

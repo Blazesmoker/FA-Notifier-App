@@ -1,21 +1,15 @@
 import 'dart:async';
-import 'dart:collection';
 import 'package:FANotifier/screens/user_profile_screen.dart';
 import 'package:extended_text/extended_text.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
-import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/fa_activities_polling_service.dart';
 import '../services/fa_notification_service.dart';
-import '../../custom_drawer/home_drawer.dart';
-import '../../model/notifications.dart';
 import '../../providers/notification_settings_provider.dart';
-import '../../enums/drawer_index.dart';
 import '../custom_drawer/drawer_user_controller.dart';
 import '../utils/specialTextSpanBuilder.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
@@ -1018,7 +1012,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       SwitchListTile(
-                        activeColor: const Color(0xFFE09321),
+                        activeThumbColor: const Color(0xFFE09321),
                         title: const Text('Watchers'),
                         value: settings.watchersEnabled,
                         onChanged: (bool value) {
@@ -1026,7 +1020,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                         },
                       ),
                       SwitchListTile(
-                        activeColor: const Color(0xFFE09321),
+                        activeThumbColor: const Color(0xFFE09321),
                         title: const Text('Journals'),
                         value: settings.journalsEnabled,
                         onChanged: (bool value) {
@@ -1034,7 +1028,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                         },
                       ),
                       SwitchListTile(
-                        activeColor: const Color(0xFFE09321),
+                        activeThumbColor: const Color(0xFFE09321),
                         title: const Text('Comments'),
                         subtitle: const Text('(includes journal + submission)'),
                         value: settings.commentsEnabled,
@@ -1043,7 +1037,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                         },
                       ),
                       SwitchListTile(
-                        activeColor: const Color(0xFFE09321),
+                        activeThumbColor: const Color(0xFFE09321),
                         title: const Text('Favorites'),
                         value: settings.favoritesEnabled,
                         onChanged: (bool value) {
@@ -1051,7 +1045,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                         },
                       ),
                       SwitchListTile(
-                        activeColor: const Color(0xFFE09321),
+                        activeThumbColor: const Color(0xFFE09321),
                         title: const Text('Shouts'),
                         value: settings.shoutsEnabled,
                         onChanged: (bool value) {

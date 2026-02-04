@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_switch/flutter_switch.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import '../model/user_profile.dart';
 import '../model/notifications.dart';
@@ -23,7 +22,6 @@ import '../widgets/StarBurstAnimation.dart';
 import '../widgets/notification_badge.dart';
 import 'dart:async';
 import '../app_theme.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 

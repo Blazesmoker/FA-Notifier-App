@@ -20,7 +20,7 @@ class ThumbnailDisplaySettingsScreen extends StatelessWidget {
           SwitchListTile(
             title: const Text('Show rating outline'),
             value: settings.showRatingOutline,
-            activeColor: _accent,
+            activeThumbColor: _accent,
             onChanged: (val) => settings.setShowRatingOutline(val),
           ),
           const Divider(
@@ -31,7 +31,7 @@ class ThumbnailDisplaySettingsScreen extends StatelessWidget {
           SwitchListTile(
             title: const Text('Show title & author'),
             value: settings.showTitleAuthor,
-            activeColor: _accent,
+            activeThumbColor: _accent,
             onChanged: (val) => settings.setShowTitleAuthor(val),
           ),
           const Divider(

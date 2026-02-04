@@ -1,37 +1,26 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:extended_text/extended_text.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:FANotifier/screens/reply_screen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart';
 import '../network.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:provider/provider.dart';
 import 'package:saver_gallery/saver_gallery.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:like_button/like_button.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:linkify/linkify.dart';
-import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../app_theme.dart';
 import '../parsing_utils.dart';
-import '../providers/timezone_provider.dart';
 import '../utils/html_tags_debug.dart';
-import '../utils/specialTextSpanBuilder.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'SubmissionDescriptionWebview.dart';
 import 'add_comment_screen.dart';
@@ -1425,7 +1414,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           ),
         );
       }
-    } catch (e, stackTrace) {
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('An error occurred while deleting the submission.'),
@@ -2518,7 +2507,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                       child: GestureDetector(
                         onLongPressStart: (LongPressStartDetails details) async {
                           final RenderBox overlay =
-                          Overlay.of(context)!.context.findRenderObject() as RenderBox;
+                          Overlay.of(context).context.findRenderObject() as RenderBox;
                           final RelativeRect position = RelativeRect.fromRect(
                             details.globalPosition & const Size(40, 40),
                             Offset.zero & overlay.size,
@@ -2935,25 +2924,24 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        if (viewCount != null)
-          Row(
-            children: [
-              Text(
-                '$viewCount',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+        Row(
+          children: [
+            Text(
+              '$viewCount',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
-              const SizedBox(width: 4),
-              const Text(
-                'Views',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ],
-          ),
-        if (viewCount != null && favoritesCount >= 0)
+            ),
+            const SizedBox(width: 4),
+            const Text(
+              'Views',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        if (favoritesCount >= 0)
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 5.0),
             child: Icon(Icons.circle, size: 4, color: Colors.grey),

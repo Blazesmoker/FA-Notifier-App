@@ -1,11 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 import 'package:FANotifier/providers/NotificationNavigationProvider.dart';
 import 'package:FANotifier/screens/faimagegrid.dart';
 import 'package:FANotifier/screens/filters_screen.dart';
 import 'package:FANotifier/screens/notesscreen.dart';
-import 'package:FANotifier/screens/notifications_provider.dart';
 import 'package:FANotifier/screens/notifications_screen.dart';
 import 'package:FANotifier/screens/search_screen.dart';
 import 'package:FANotifier/screens/submissions_screen.dart';
@@ -22,8 +19,6 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as html_parser;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'custom_drawer/drawer_user_controller.dart';
@@ -32,9 +27,6 @@ import 'model/user_profile.dart';
 import 'model/notifications.dart';
 import 'services/fa_service.dart';
 import 'enums/drawer_index.dart';
-import 'services/notification_service.dart';
-import 'utils.dart';
-import 'utils/message_storage.dart';
 import 'providers/notification_settings_provider.dart';
 
 class HomeScreen extends StatefulWidget {

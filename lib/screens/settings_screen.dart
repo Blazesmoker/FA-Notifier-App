@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../app_theme.dart'; // If you need to reference AppTheme.fontName, etc.
 
-import '../main.dart';
 import '../services/fa_http.dart';
 import 'siteSettings.dart';
 import 'appSettings.dart';

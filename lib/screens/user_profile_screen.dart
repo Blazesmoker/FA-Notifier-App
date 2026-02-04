@@ -7,11 +7,9 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../custom_cache_manager.dart';
 import '../main.dart';
 import '../model/shout.dart';
 import '../model/user_link.dart';
@@ -103,7 +101,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
   /// Handles long-press on the user description for copy/select actions.
   Future<void> _handleDescriptionLongPress(LongPressStartDetails details) async {
-    final RenderBox overlay = Overlay.of(context)!.context.findRenderObject() as RenderBox;
+    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final RelativeRect position = RelativeRect.fromRect(
       details.globalPosition & const Size(40, 40),
       Offset.zero & overlay.size,
@@ -1368,7 +1366,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                                   crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
                                     MediaQuery(
-                                      data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
+                                      data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(1.0)),
                                       child: Expanded(
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1547,7 +1545,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
 
                         MediaQuery(
                           data: MediaQuery.of(context)
-                              .copyWith(textScaleFactor: 1.0),
+                              .copyWith(textScaler: TextScaler.linear(1.0)),
                           child: Padding(
                             padding:
                             const EdgeInsets.only(top: 8.0),

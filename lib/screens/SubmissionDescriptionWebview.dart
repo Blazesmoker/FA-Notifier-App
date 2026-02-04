@@ -6,7 +6,6 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
-import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import '../services/fa_http.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
@@ -314,11 +313,9 @@ user-select: none !important;
     debugPrint("full URL: $fullUrlToMatch");
     if (url.contains('.....')) {
       final recoveredLink = _getFullLinkFromFetchedHtml(url, htmlSource: htmlSource);
-      if (recoveredLink != null) {
-        fullUrlToMatch = recoveredLink;
-        debugPrint("Recovered full URL: $fullUrlToMatch");
-      }
-    }
+      fullUrlToMatch = recoveredLink;
+      debugPrint("Recovered full URL: $fullUrlToMatch");
+        }
 
     final Uri uri = Uri.parse(fullUrlToMatch);
     final String urlToMatch = uri.toString();

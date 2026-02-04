@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
@@ -11,7 +10,6 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:html/parser.dart' as html_parser;
 
 import '../utils/fa_link_handler.dart';
-import '../utils/utils.dart';
 import '../services/fa_http.dart';
 import 'message_model.dart';
 

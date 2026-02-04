@@ -18,7 +18,7 @@ Future<void> handleFALink(
   if (url.contains('.....')) {
     if (getFullUrl != null) {
       final recovered = getFullUrl(url, htmlSource: htmlSource);
-      if (recovered != null) fullUrlToMatch = recovered;
+      fullUrlToMatch = recovered;
     }
     // Fallback to htmlSource parsing if available (legacy screens)
     else if (htmlSource != null) {

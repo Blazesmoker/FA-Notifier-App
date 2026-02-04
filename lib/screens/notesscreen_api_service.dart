@@ -13,7 +13,6 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 import 'message_model.dart';
-import '../parsing_utils.dart';
 import '../utils.dart';
 import '../utils/notes_notifications_text_edit.dart';
 import '../services/fa_http.dart';

@@ -655,7 +655,7 @@ class _FindSourceScreenState extends State<FindSourceScreen>
                       if (mapping == null) return const SizedBox();
 
                       if (isHeader) {
-                        return _buildSectionHeader(mapping!.link ?? '');
+                        return _buildSectionHeader(mapping.link ?? '');
                       } else {
                         return _buildLinkTile(link!);
                       }
