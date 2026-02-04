@@ -54,6 +54,7 @@ class NotesScreenState extends State<NotesScreen>
   StreamSubscription<void>? _notesRefreshSub;
   bool _isVisibleInHomeStack = false;
   AppLifecycleState? _lastLifecycleState;
+  bool _iosForegroundTimerSuspended = false;
 
   bool isLoadingInbox = true;
   bool isLoadingMoreInbox = false;
@@ -177,7 +178,24 @@ class NotesScreenState extends State<NotesScreen>
     final prev = _lastLifecycleState;
     _lastLifecycleState = state;
 
+    if (Platform.isIOS &&
+        (state == AppLifecycleState.inactive ||
+            state == AppLifecycleState.paused)) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+      _iosForegroundTimerSuspended = true;
+      return;
+    }
+
     if (state == AppLifecycleState.resumed && mounted && !_isDialogOpen) {
+      if (Platform.isIOS && _iosForegroundTimerSuspended) {
+        if (prev == AppLifecycleState.inactive) {
+          _iosForegroundTimerSuspended = false;
+          _startPeriodicFetch();
+          return;
+        }
+        _iosForegroundTimerSuspended = false;
+      }
       // Android notification shade can cause inactive -> resumed.
       // Don't treat that as a real resume that should refetch.
       if (prev == AppLifecycleState.inactive) {

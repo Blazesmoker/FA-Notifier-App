@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -178,7 +179,8 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       return;
     }
 
-    if (state == AppLifecycleState.paused ||
+    if ((Platform.isIOS && state == AppLifecycleState.inactive) ||
+        state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
       _timer?.cancel();
@@ -187,4 +189,3 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     }
   }
 }
-

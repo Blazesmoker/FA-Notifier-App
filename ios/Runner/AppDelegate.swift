@@ -12,6 +12,8 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 @main
 @objc class AppDelegate: FlutterAppDelegate {
 
+    var flutterEngine: FlutterEngine?
+
     private let backgroundTaskIdentifier = "com.blazesmoker.FANotifier.refresh"
 
     private func fLog(_ msg: String) {
@@ -23,9 +25,30 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     private var notifChannel: FlutterMethodChannel?
     private var pendingNotificationPayload: [String: Any]?
 
-    private func setupNotificationChannelIfNeeded() {
+    private func findFlutterViewController() -> FlutterViewController? {
+        if let vc = window?.rootViewController as? FlutterViewController {
+            return vc
+        }
+        if #available(iOS 13.0, *) {
+            for scene in UIApplication.shared.connectedScenes {
+                guard let windowScene = scene as? UIWindowScene else { continue }
+                for w in windowScene.windows {
+                    if let fc = w.rootViewController as? FlutterViewController {
+                        return fc
+                    }
+                    if let nav = w.rootViewController as? UINavigationController,
+                       let fc = nav.viewControllers.first(where: { $0 is FlutterViewController }) as? FlutterViewController {
+                        return fc
+                    }
+                }
+            }
+        }
+        return nil
+    }
+
+    func setupNotificationChannelIfNeeded() {
         guard notifChannel == nil,
-              let controller = window?.rootViewController as? FlutterViewController
+              let controller = findFlutterViewController()
         else { return }
 
         let channel = FlutterMethodChannel(
@@ -88,6 +111,16 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     ) -> Bool {
 
         fLog("Application launching...")
+
+        let isBackgroundLaunch = application.applicationState == .background
+        if isBackgroundLaunch {
+            fLog("Background launch detected - skipping FlutterEngine.run for UI entrypoint")
+        } else {
+            let engine = FlutterEngine(name: "shared_engine")
+            engine.run()
+            self.flutterEngine = engine
+            GeneratedPluginRegistrant.register(with: engine)
+        }
         GeneratedPluginRegistrant.register(with: self)
         setupNotificationChannelIfNeeded()
         UNUserNotificationCenter.current().delegate = self
