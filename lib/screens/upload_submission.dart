@@ -1598,25 +1598,21 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
           ),
           centerTitle: false,
           titleSpacing: 0,
-          title: Expanded(
-            child: Center(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.center,
-                    child: Text(
-                      'Upload Submission',
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.visible,
-                      style: Theme.of(context).appBarTheme.titleTextStyle,
-                    ),
-                  );
-                },
+          title: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: const Text(
+                'Upload Submission',
+                maxLines: 1,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ),
+
           actions: [
             Row(
               mainAxisSize: MainAxisSize.min,
