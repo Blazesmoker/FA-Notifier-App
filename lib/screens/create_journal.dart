@@ -5,6 +5,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../widgets/tags_and_codes_webview_widget.dart';
 import 'openjournal.dart';
 
 class CreateJournalScreen extends StatefulWidget {
@@ -321,6 +322,13 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
       appBar: AppBar(
         title: const Text('Create Journal'),
         centerTitle: true,
+        actions: [
+          InfoIconButton(
+            url: 'https://www.furaffinity.net/help/#tags-and-codes',
+            title: 'Tags & Codes',
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(
         child: Stack(

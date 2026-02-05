@@ -826,8 +826,22 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Consumer2<NotificationSettingsProvider, FANotificationService>(
       builder: (context, settings, faNotificationService, child) {
-        return Scaffold(
-          body: isLoggedIn ? _buildMainAppScreen(context) : _buildWebView(),
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (bool didPop, dynamic result) {
+            if (didPop) return;
+            // On Notes tab: first back closes selection mode if active
+            if (_selectedIndex == 4) {
+              final notesState = _notesKey.currentState;
+              if (notesState != null && notesState.isInSelectionMode) {
+                notesState.exitSelectionMode();
+                return;
+              }
+            }
+            // Otherwise back is consumed and app stays open (main/home screen protection)
+          },
+          child: Scaffold(
+            body: isLoggedIn ? _buildMainAppScreen(context) : _buildWebView(),
           bottomNavigationBar: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -929,6 +943,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+          ),
           ),
         );
       },

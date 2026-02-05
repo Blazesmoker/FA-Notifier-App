@@ -14,6 +14,10 @@ class SentTab extends StatelessWidget {
   final Future<void> Function() refreshSent;
   final Future<void> Function() loadMore;
   final void Function(Message msg) onOpenMessage;
+  final bool isSelectionMode;
+  final Set<String> selectedIds;
+  final void Function(Message msg) onLongPressItem;
+  final void Function(Message msg) onTapItem;
 
   const SentTab({
     Key? key,
@@ -27,6 +31,10 @@ class SentTab extends StatelessWidget {
     required this.refreshSent,
     required this.loadMore,
     required this.onOpenMessage,
+    required this.isSelectionMode,
+    required this.selectedIds,
+    required this.onLongPressItem,
+    required this.onTapItem,
   }) : super(key: key);
 
   @override
@@ -43,6 +51,10 @@ class SentTab extends StatelessWidget {
       refreshSent: refreshSent,
       loadMore: loadMore,
       onOpenMessage: onOpenMessage,
+      isSelectionMode: isSelectionMode,
+      selectedIds: selectedIds,
+      onLongPressItem: onLongPressItem,
+      onTapItem: onTapItem,
     );
   }
 }

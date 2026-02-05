@@ -250,6 +250,7 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
                 Expanded(
                   child: TextField(
                     controller: _shoutController,
+                    minLines: 6,
                     maxLines: null,
                     keyboardType: TextInputType.multiline,
                     style: const TextStyle(color: Colors.white),

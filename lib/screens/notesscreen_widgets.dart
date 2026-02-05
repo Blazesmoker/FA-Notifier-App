@@ -18,6 +18,10 @@ class MessageList extends StatelessWidget {
   final Future<void> Function() loadMore;
   final void Function(Message msg) onOpenMessage;
   final void Function(Message msg)? onPreviewMessage;
+  final bool isSelectionMode;
+  final Set<String> selectedIds;
+  final void Function(Message msg)? onLongPressItem;
+  final void Function(Message msg)? onTapItem;
 
   const MessageList({
     Key? key,
@@ -33,6 +37,10 @@ class MessageList extends StatelessWidget {
     required this.loadMore,
     required this.onOpenMessage,
     this.onPreviewMessage,
+    this.isSelectionMode = false,
+    this.selectedIds = const {},
+    this.onLongPressItem,
+    this.onTapItem,
   }) : super(key: key);
 
   @override
@@ -135,12 +143,25 @@ class MessageList extends StatelessWidget {
           }
 
           final msg = messages[index];
+          final isInbox = folder == 'inbox';
+          final isSelected = selectedIds.contains(msg.id);
           return GestureDetector(
-            onTap: () => onOpenMessage(msg),
+            onLongPress: onLongPressItem != null
+                ? () => onLongPressItem!(msg)
+                : null,
+            onTap: () {
+              if (onTapItem != null) {
+                onTapItem!(msg);
+              } else {
+                onOpenMessage(msg);
+              }
+            },
             child: Column(
               children: [
                 Container(
-                  color: Colors.black,
+                  color: isSelected
+                      ? _accent.withOpacity(0.35)
+                      : Colors.black,
                   padding: const EdgeInsets.symmetric(
                     vertical: 8.0,
                     horizontal: 16.0,
@@ -171,7 +192,9 @@ class MessageList extends StatelessWidget {
                             const SizedBox(height: 4),
 
                             Text(
-                              'From: ${msg.sender}',
+                              isInbox
+                                  ? 'From: ${msg.sender}'
+                                  : 'To: ${msg.recipient.isNotEmpty ? msg.recipient : msg.sender}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -200,10 +223,13 @@ class MessageList extends StatelessWidget {
                         ),
                       ),
                       if (folder == 'inbox' && onPreviewMessage != null)
-                        IconButton(
-                          icon: const Icon(Icons.preview, color: Colors.white),
-                          tooltip: 'Preview',
-                          onPressed: () => onPreviewMessage!(msg),
+                        IconTheme(
+                          data: const IconThemeData(color: Colors.white),
+                          child: IconButton(
+                            icon: const Icon(Icons.preview, color: Colors.white),
+                            tooltip: 'Preview',
+                            onPressed: () => onPreviewMessage!(msg),
+                          ),
                         ),
                     ],
                   ),

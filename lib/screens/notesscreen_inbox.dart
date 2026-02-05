@@ -15,6 +15,10 @@ class InboxTab extends StatelessWidget {
   final Future<void> Function() loadMore;
   final void Function(Message msg) onOpenMessage;
   final void Function(Message msg) onPreviewMessage;
+  final bool isSelectionMode;
+  final Set<String> selectedIds;
+  final void Function(Message msg) onLongPressItem;
+  final void Function(Message msg) onTapItem;
 
   const InboxTab({
     Key? key,
@@ -29,6 +33,10 @@ class InboxTab extends StatelessWidget {
     required this.loadMore,
     required this.onOpenMessage,
     required this.onPreviewMessage,
+    required this.isSelectionMode,
+    required this.selectedIds,
+    required this.onLongPressItem,
+    required this.onTapItem,
   }) : super(key: key);
 
   @override
@@ -46,6 +54,10 @@ class InboxTab extends StatelessWidget {
       loadMore: loadMore,
       onOpenMessage: onOpenMessage,
       onPreviewMessage: onPreviewMessage,
+      isSelectionMode: isSelectionMode,
+      selectedIds: selectedIds,
+      onLongPressItem: onLongPressItem,
+      onTapItem: onTapItem,
     );
   }
 }

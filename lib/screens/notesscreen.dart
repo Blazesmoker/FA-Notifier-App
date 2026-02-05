@@ -83,6 +83,10 @@ class NotesScreenState extends State<NotesScreen>
   bool _isDraggingFromEdge = false;
   double _startDragX = 0.0;
 
+  bool _selectionMode = false;
+  final Set<String> _selectedIds = {};
+  int _prevTabIndex = 0;
+
   @override
   void initState() {
     super.initState();
@@ -90,6 +94,7 @@ class NotesScreenState extends State<NotesScreen>
 
     _notesApi = NotesApiService(_secureStorage);
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_onTabChanged);
 
     if (widget.forceRefresh) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -123,8 +128,107 @@ class NotesScreenState extends State<NotesScreen>
     });
   }
 
+  void _onTabChanged() {
+    if (!_tabController.indexIsChanging && mounted &&
+        _tabController.index != _prevTabIndex) {
+      _prevTabIndex = _tabController.index;
+      setState(() {
+        _selectionMode = false;
+        _selectedIds.clear();
+      });
+    }
+  }
+
+  void _enterSelectionModeAndSelect(Message msg) {
+    setState(() {
+      _selectionMode = true;
+      _selectedIds.add(msg.id);
+    });
+  }
+
+  void _toggleSelection(Message msg) {
+    setState(() {
+      if (_selectedIds.contains(msg.id)) {
+        _selectedIds.remove(msg.id);
+        if (_selectedIds.isEmpty) _selectionMode = false;
+      } else {
+        _selectedIds.add(msg.id);
+      }
+    });
+  }
+
+  void _handleTapItem(Message msg) {
+    if (_selectionMode) {
+      _toggleSelection(msg);
+    } else {
+      if (_tabController.index == 0) {
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => MessageDetailScreen(
+            messageLink: msg.link,
+            folder: 'inbox',
+          ),
+        )).then((result) {
+          if (result == 'refresh' || result == 'marked_unread') {
+            _currentInboxPage = 1;
+            _currentSentPage = 1;
+            _hasMoreInbox = true;
+            _hasMoreSent = true;
+            _fetchInbox(page: 1, clearOld: false);
+            _fetchSent(page: 1, clearOld: false);
+          }
+        });
+      } else {
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => MessageDetailScreen(
+            messageLink: msg.link,
+            folder: 'sent',
+          ),
+        )).then((result) {
+          if (result == 'refresh' || result == 'marked_unread') {
+            _currentInboxPage = 1;
+            _currentSentPage = 1;
+            _hasMoreInbox = true;
+            _hasMoreSent = true;
+            _fetchInbox(page: 1, clearOld: false);
+            _fetchSent(page: 1, clearOld: false);
+          }
+        });
+      }
+    }
+  }
+
+  Future<void> _trashSelected() async {
+    if (_selectedIds.isEmpty) return;
+    final folder = _tabController.index == 0 ? 'inbox' : 'sent';
+    final ids = _selectedIds.toList();
+    try {
+      await _notesApi.moveNotesToTrash(ids: ids, folder: folder);
+      if (!mounted) return;
+      setState(() {
+        _selectionMode = false;
+        _selectedIds.clear();
+      });
+      if (folder == 'inbox') {
+        _currentInboxPage = 1;
+        _hasMoreInbox = true;
+        await _fetchInbox(page: 1, clearOld: false);
+      } else {
+        _currentSentPage = 1;
+        _hasMoreSent = true;
+        await _fetchSent(page: 1, clearOld: false);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to move to Trash: $e')),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     WidgetsBinding.instance.removeObserver(this);
     routeObserver.unsubscribe(this);
 
@@ -515,6 +619,42 @@ class NotesScreenState extends State<NotesScreen>
     );
   }
 
+  void _onTrashPressed() {
+    if (_selectedIds.isEmpty) return;
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text('Move to Trash', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Are you sure you want to send selected Notes to Trash folder?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Trash', style: TextStyle(color: _accent, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    ).then((confirmed) {
+      if (confirmed == true) _trashSelected();
+    });
+  }
+
+  void exitSelectionMode() {
+    setState(() {
+      _selectionMode = false;
+      _selectedIds.clear();
+    });
+  }
+
+  bool get isInSelectionMode => _selectionMode;
+
   Widget _buildNewMessageAppBarButton() {
     return Padding(
       padding: const EdgeInsets.only(right: 20.0),
@@ -622,6 +762,25 @@ class NotesScreenState extends State<NotesScreen>
             centerTitle: true,
             backgroundColor: Colors.black,
             actions: [
+              if (_selectionMode) ...[
+                Row(
+                  children: [
+                    InkResponse(
+                      onTap: exitSelectionMode,
+                      radius: 18,
+                      child: const Icon(Icons.close, color: Colors.white),
+                    ),
+                    const SizedBox(width: 16),
+                    InkResponse(
+                      onTap: _selectedIds.isEmpty ? null : _onTrashPressed,
+                      radius: 18,
+                      child: const Icon(Icons.delete_outline, color: Colors.white),
+                    ),
+                    const SizedBox(width: 16),
+                  ],
+                ),
+
+              ],
               _buildNewMessageAppBarButton(),
             ],
             bottom: TabBar(
@@ -697,6 +856,10 @@ class NotesScreenState extends State<NotesScreen>
                       });
                     },
                     onPreviewMessage: (msg) => _showPreviewDialog(msg, 'inbox'),
+                    isSelectionMode: _selectionMode,
+                    selectedIds: _selectedIds,
+                    onLongPressItem: _enterSelectionModeAndSelect,
+                    onTapItem: _handleTapItem,
                   ),
                   SentTab(
                     isLoading: isLoadingSent,
@@ -735,6 +898,10 @@ class NotesScreenState extends State<NotesScreen>
                         }
                       });
                     },
+                    isSelectionMode: _selectionMode,
+                    selectedIds: _selectedIds,
+                    onLongPressItem: _enterSelectionModeAndSelect,
+                    onTapItem: _handleTapItem,
                   ),
                 ],
               ),

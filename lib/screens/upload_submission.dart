@@ -4,12 +4,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import '../widgets/tags_and_codes_webview_widget.dart';
 import 'openpost.dart';
 import 'submission_template_store.dart';
 import 'submission_templates_screen.dart';
@@ -51,9 +53,106 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   late final Animation<double> _toolsMenuFade;
   late final Animation<Offset> _toolsMenuSlide;
 
+
+  ValueNotifier<String>? _uploadedFileUri;
+  List<int>? _uploadedFileBytes;
+  String? _uploadedFileName;
+
+
+  Future<JsPromptResponse?> _handleFileChooser(
+      InAppWebViewController controller,
+      JsPromptRequest jsPromptRequest,
+      ) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif'],
+        allowMultiple: false,
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return JsPromptResponse(
+          message: '',
+          handledByClient: true,
+        );
+      }
+
+      final file = result.files.first;
+      _uploadedFileName = file.name;
+      _uploadedFileBytes = file.bytes?.toList();
+
+      if (_uploadedFileBytes == null && file.path != null) {
+        final fileFromPath = File(file.path!);
+        _uploadedFileBytes = await fileFromPath.readAsBytes();
+      }
+
+      if (_uploadedFileBytes == null) {
+        debugPrint('Failed to read file bytes');
+        return JsPromptResponse(
+          message: '',
+          handledByClient: true,
+        );
+      }
+
+      final base64Data = base64Encode(_uploadedFileBytes!);
+
+      await controller.evaluateJavascript(source: '''
+      (function() {
+        try {
+          var base64 = "$base64Data";
+          var binary = atob(base64);
+          var array = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i++) {
+            array[i] = binary.charCodeAt(i);
+          }
+          
+          var blob = new Blob([array], { type: 'image/${file.extension ?? 'png'}' });
+          var file = new File([blob], "$_uploadedFileName", { 
+            type: 'image/${file.extension ?? 'png'}',
+            lastModified: Date.now()
+          });
+          
+          var dt = new DataTransfer();
+          dt.items.add(file);
+          
+          var input = document.querySelector('input[name="submission"]');
+          if (input) {
+            input.files = dt.files;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            
+            if (window.submissionUploader && window.submissionUploader.updateFileInfo) {
+              window.submissionUploader.updateFileInfo();
+            }
+          }
+          
+          return true;
+        } catch(e) {
+          console.error('Error setting file:', e);
+          return false;
+        }
+      })();
+    ''');
+
+      debugPrint('File loaded successfully: $_uploadedFileName');
+      return JsPromptResponse(
+        message: 'success',
+        handledByClient: true,
+      );
+
+    } catch (e) {
+      debugPrint('Error in file chooser: $e');
+      return JsPromptResponse(
+        message: '',
+        handledByClient: true,
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _requestPermissions();
 
     _toolsMenuController = AnimationController(
       vsync: this,
@@ -75,6 +174,15 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     final u = Uri.tryParse(url);
     if (u == null) return false;
     return u.path.startsWith('/submit/finalize');
+  }
+
+  Future<void> _requestPermissions() async {
+    if (Platform.isAndroid) {
+      await [
+        Permission.storage,
+        Permission.photos,
+      ].request();
+    }
   }
 
   Future<String> _getSfwCookieValue() async {
@@ -365,7 +473,6 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
         })();
       ''');
     } else {
-      // Android - inject CSS as before
       await _webViewController!.evaluateJavascript(source: '''
         (function() {
           var style = document.createElement('style');
@@ -482,7 +589,6 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
         })();
       ''');
     } else {
-      // Android - inject CSS as before
       await _webViewController!.evaluateJavascript(source: '''
         (function() {
           var style = document.createElement('style');
@@ -1253,18 +1359,27 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       onWebViewCreated: (controller) async {
         _webViewController = controller;
         await _setCookies();
+
+        controller.addJavaScriptHandler(
+          handlerName: 'selectFile',
+          callback: (args) async {
+            await _selectAndInjectFile();
+          },
+        );
       },
+
       onLoadStart: (controller, uri) async {
         _webViewController = controller;
         await _handleLoadUrl(uri?.toString());
       },
       onLoadStop: (controller, uri) async {
         await _handleLoadUrl(uri?.toString());
+
+        await _injectFilePickerHandler();
       },
       shouldOverrideUrlLoading: (controller, navigationAction) async {
         final uri = navigationAction.request.url;
 
-        // Block ad/tracker domains on iOS to allow Turnstile to render
         if (Platform.isIOS && uri != null) {
           final blockedHosts = {
             'www15.smartadserver.com',
@@ -1289,10 +1404,182 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     );
   }
 
+  Future<void> _injectFilePickerHandler() async {
+    if (_webViewController == null) return;
+
+    await _webViewController!.evaluateJavascript(source: '''
+    (function() {
+      var input = document.querySelector('input[name="submission"]');
+      if (!input) return;
+      
+      var originalClick = input.onclick;
+      input.onclick = null;
+      
+      input.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.flutter_inappwebview.callHandler('selectFile');
+        return false;
+      }, true);
+      
+      // Also intercept the drag-drop area clicks
+      var dragDrop = document.querySelector('#submissionFileDragDropArea');
+      if (dragDrop) {
+        dragDrop.addEventListener('click', function(e) {
+          if (e.target.tagName !== 'INPUT') {
+            e.preventDefault();
+            e.stopPropagation();
+            window.flutter_inappwebview.callHandler('selectFile');
+            return false;
+          }
+        }, true);
+      }
+    })();
+  ''');
+  }
+
+  Future<void> _selectAndInjectFile() async {
+    try {
+      final source = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: Colors.black,
+          shape: RoundedRectangleBorder(
+            side: const BorderSide(color: _accent, width: 0.5),
+            borderRadius: BorderRadius.circular(22),
+          ),
+          title: const Text(
+            'Select source',
+            style: TextStyle(color: _accent),
+          ),
+          content: const Text(
+            'Choose between Files or Gallery',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actionsAlignment: MainAxisAlignment.spaceBetween,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('files'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Text(
+                    'Files',
+                    style: TextStyle(color: _accent),
+                  ),
+                  SizedBox(width: 8),
+                  Icon(Icons.insert_drive_file, color: _accent),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('gallery'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Text(
+                    'Gallery',
+                    style: TextStyle(color: _accent),
+                  ),
+                  SizedBox(width: 8),
+                  Icon(Icons.image, color: _accent),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+
+      if (source == null) return;
+
+      File? selectedFile;
+      String? fileName;
+
+      if (source == 'files') {
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['jpg', 'jpeg', 'png', 'gif'],
+          allowMultiple: false,
+          withData: true,
+        );
+
+        if (result == null || result.files.isEmpty) return;
+
+        final file = result.files.first;
+        fileName = file.name;
+        _uploadedFileBytes = file.bytes?.toList();
+
+        if (_uploadedFileBytes == null && file.path != null) {
+          selectedFile = File(file.path!);
+          _uploadedFileBytes = await selectedFile.readAsBytes();
+        }
+      } else if (source == 'gallery') {
+        final ImagePicker picker = ImagePicker();
+        final XFile? pickedFile = await picker.pickImage(
+          source: ImageSource.gallery,
+        );
+
+        if (pickedFile == null) return;
+
+        selectedFile = File(pickedFile.path);
+        fileName = pickedFile.name;
+        _uploadedFileBytes = await selectedFile.readAsBytes();
+      }
+
+      if (_uploadedFileBytes == null || fileName == null) {
+        debugPrint('Failed to read file bytes');
+        return;
+      }
+
+      _uploadedFileName = fileName;
+      final base64Data = base64Encode(_uploadedFileBytes!);
+
+
+      final extension = fileName.split('.').last.toLowerCase();
+
+      await _webViewController!.evaluateJavascript(source: '''
+      (function() {
+        try {
+          var base64 = "$base64Data";
+          var binary = atob(base64);
+          var array = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i++) {
+            array[i] = binary.charCodeAt(i);
+          }
+          
+          var blob = new Blob([array], { type: 'image/$extension' });
+          var file = new File([blob], "$fileName", { 
+            type: 'image/$extension',
+            lastModified: Date.now()
+          });
+          
+          var dt = new DataTransfer();
+          dt.items.add(file);
+          
+          var input = document.querySelector('input[name="submission"]');
+          if (input) {
+            input.files = dt.files;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            
+            if (window.submissionUploader && window.submissionUploader.updateFileInfo) {
+              window.submissionUploader.updateFileInfo();
+            }
+          }
+        } catch(e) {
+          console.error('Error setting file:', e);
+        }
+      })();
+    ''');
+
+      debugPrint('File loaded successfully: $fileName');
+    } catch (e) {
+      debugPrint('Error selecting file: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final menuVisible = _isFinalizeReady && (_toolsMenuOpen || _toolsMenuController.value > 0);
-
     return SafeArea(
       top: false,
       child: Scaffold(
@@ -1309,21 +1596,58 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
               Navigator.pop(context);
             },
           ),
-          title: const Text('Upload Submission'),
-          centerTitle: true,
-          actions: _isFinalizeReady
-              ? [
-            IconButton(
-              tooltip: 'More',
-              icon: Icon(
-                (_toolsMenuOpen || _toolsMenuController.value > 0) ? Icons.close : Icons.more_vert,
-                color: _accent,
+          centerTitle: false,
+          titleSpacing: 0,
+          title: Expanded(
+            child: Center(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.center,
+                    child: Text(
+                      'Upload Submission',
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.visible,
+                      style: Theme.of(context).appBarTheme.titleTextStyle,
+                    ),
+                  );
+                },
               ),
-              onPressed: _toggleToolsMenu,
             ),
-          ]
-              : null,
+          ),
+          actions: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Transform.translate(
+                  offset: _isFinalizeReady
+                      ? const Offset(14.0, 0)
+                      : Offset.zero,
+                  child: InfoIconButton(
+                    url: 'https://www.furaffinity.net/help/#tags-and-codes',
+                    title: 'Tags & Codes',
+                  ),
+                ),
+                if (_isFinalizeReady)
+                  IconButton(
+                    tooltip: 'More',
+                    icon: Icon(
+                      (_toolsMenuOpen || _toolsMenuController.value > 0)
+                          ? Icons.close
+                          : Icons.more_vert,
+                      color: _accent,
+                    ),
+                    onPressed: _toggleToolsMenu,
+                  ),
+              ],
+            ),
+          ],
+
         ),
+
+
         body: Stack(
           children: [
             _buildWebView(),

@@ -49,6 +49,8 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
   String? messageId;
   String senderUsername = '';
   String senderLink = '';
+  String recipientLink = '';
+  String recipientUsername = '';
   int pageNumber = 1;
   bool isClassic = false;
   bool _shouldShowReplySuccess = false;
@@ -161,6 +163,21 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
         )
             ?.attributes['href'];
 
+        // Extracting the recipient link (second .c-usernameBlock in .addresses)
+        String? tempRecipientLink;
+        final addressBlocks =
+            document.querySelectorAll('.message-center-note-information .addresses .c-usernameBlock');
+        if (addressBlocks.length > 1) {
+          tempRecipientLink = addressBlocks[1].querySelector('a[href^="/user/"]')?.attributes['href'];
+        }
+        if (tempRecipientLink == null || tempRecipientLink.isEmpty) {
+          final classicRecipientBlocks = document
+              .querySelectorAll('span[style*="color: #999999"] .c-usernameBlock');
+          if (classicRecipientBlocks.length > 1) {
+            tempRecipientLink = classicRecipientBlocks[1].querySelector('a[href^="/user/"]')?.attributes['href'];
+          }
+        }
+
         setState(() {
           subject = document.querySelector('#message h2')?.text.trim() ??
               document.querySelector('td.cat font b')?.text.trim() ??
@@ -221,6 +238,17 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                 : 'Unknown';
           } else {
             senderUsername = 'Unknown';
+          }
+
+          // Recipient link and username (for Sent view: link goes to "To:" person)
+          if (tempRecipientLink != null && tempRecipientLink.isNotEmpty) {
+            recipientLink = tempRecipientLink;
+            recipientUsername = Uri.parse(tempRecipientLink).pathSegments.length >= 2
+                ? Uri.parse(tempRecipientLink).pathSegments[1]
+                : '';
+          } else {
+            recipientLink = '';
+            recipientUsername = '';
           }
 
 
@@ -413,8 +441,9 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                       if (!isClassic)
                         GestureDetector(
                           onTap: () {
-                            if (senderLink.isNotEmpty) {
-                              handleFALink(context, senderLink);
+                            final link = widget.folder == 'sent' ? recipientLink : senderLink;
+                            if (link.isNotEmpty) {
+                              handleFALink(context, link);
                             }
                           },
                           child: Container(
@@ -452,27 +481,50 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                                 'Sent by: ',
                                 style: TextStyle(fontSize: 16, color: Colors.white),
                               ),
-                              InkWell(
-                                onTap: senderLink.isNotEmpty
-                                    ? () => handleFALink(context, senderLink)
-                                    : null,
-                                child: Text(
-                                  sender.isNotEmpty ? sender : 'Unknown sender',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    color: Color(0xFFE09321),
-                                    decoration: TextDecoration.none,
-                                  ),
-                                ),
-                              ),
+                              widget.folder == 'sent'
+                                  ? Text(
+                                      sender.isNotEmpty ? sender : 'Unknown sender',
+                                      style: const TextStyle(fontSize: 16, color: Colors.white),
+                                    )
+                                  : InkWell(
+                                      onTap: senderLink.isNotEmpty
+                                          ? () => handleFALink(context, senderLink)
+                                          : null,
+                                      child: Text(
+                                        sender.isNotEmpty ? sender : 'Unknown sender',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          color: Color(0xFFE09321),
+                                          decoration: TextDecoration.none,
+                                        ),
+                                      ),
+                                    ),
                             ],
                           ),
-                          Text(
-                            'To: $recipient',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.white,
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'To: ',
+                                style: TextStyle(fontSize: 16, color: Colors.white),
+                              ),
+                              widget.folder == 'sent' && recipientLink.isNotEmpty
+                                  ? InkWell(
+                                      onTap: () => handleFALink(context, recipientLink),
+                                      child: Text(
+                                        recipient.isNotEmpty ? recipient : 'Unknown recipient',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          color: Color(0xFFE09321),
+                                          decoration: TextDecoration.none,
+                                        ),
+                                      ),
+                                    )
+                                  : Text(
+                                      recipient.isNotEmpty ? recipient : 'Unknown recipient',
+                                      style: const TextStyle(fontSize: 16, color: Colors.white),
+                                    ),
+                            ],
                           ),
                           FittedBox(
                             fit: BoxFit.scaleDown,
@@ -583,6 +635,9 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                       if (widget.folder != 'sent')
                         ElevatedButton(
                           onPressed: () {
+                            final replyToUsername = widget.folder == 'sent'
+                                ? recipientUsername
+                                : senderUsername;
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -590,7 +645,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                                   subject: subject,
                                   originalContent: messageContent,
                                   originalContentHtml: messageContentHtml.isNotEmpty ? messageContentHtml : null,
-                                  username: senderUsername,
+                                  username: replyToUsername.isNotEmpty ? replyToUsername : senderUsername,
                                   messageId: messageId ?? '',
                                   messageLink: widget.messageLink,
                                 ),

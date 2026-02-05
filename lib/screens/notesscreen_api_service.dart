@@ -124,6 +124,12 @@ class NotesApiService {
                     .trim() ??
                 'Unknown sender';
 
+            // Recipient: second .c-usernameBlock (after "To") when present in list row
+            final displayNameEls = noteEl.querySelectorAll('.c-usernameBlock__displayName .js-displayName');
+            final recipient = displayNameEls.length > 1
+                ? (displayNameEls.elementAt(1).text.trim())
+                : '';
+
             final date = noteEl
                     .querySelector('.note-list-senddate span')
                     ?.attributes['title'] ??
@@ -152,6 +158,7 @@ class NotesApiService {
               id: id,
               subject: subject,
               sender: sender,
+              recipient: recipient,
               date: date,
               link: link,
               isUnread: isUnread,
@@ -268,6 +275,50 @@ class NotesApiService {
       return 'No content';
     } else {
       throw Exception('Failed to fetch => ${resp.statusCode}');
+    }
+  }
+
+  /// Moves the given note ids to Trash. [folder] is 'inbox' or 'sent'.
+  /// POST to https://www.furaffinity.net/msg/pms/ with manage_notes=1, move_to=trash, items[]=id...
+  Future<void> moveNotesToTrash({
+    required List<String> ids,
+    required String folder,
+  }) async {
+    if (ids.isEmpty) return;
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    if (cookieA == null || cookieB == null) {
+      throw Exception('No cookies => user not logged in?');
+    }
+    final body = 'manage_notes=1&move_to=trash&'
+        '${ids.map((id) => 'items[]=${Uri.encodeComponent(id)}').join('&')}';
+    final ioHttp = HttpClient()
+      ..idleTimeout = Duration.zero
+      ..connectionTimeout = const Duration(seconds: 20);
+    final client = IOClient(ioHttp);
+    try {
+      final resp = await client
+          .post(
+            Uri.parse('https://www.furaffinity.net/msg/pms/'),
+            headers: {
+              'Cookie': 'a=$cookieA; b=$cookieB; folder=$folder',
+              'User-Agent': FAHttp.userAgent,
+              HttpHeaders.connectionHeader: 'close',
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept':
+                  'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+              'Referer': 'https://www.furaffinity.net/msg/pms/',
+              'Origin': 'https://www.furaffinity.net',
+            },
+            body: body,
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200 && resp.statusCode != 302) {
+        throw Exception('Trash request failed: ${resp.statusCode}');
+      }
+    } finally {
+      client.close();
+      ioHttp.close(force: true);
     }
   }
 }

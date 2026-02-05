@@ -362,6 +362,7 @@ Future<List<Message>> _fetchInboxTwoPagesBg() async {
           id: id,
           subject: subject,
           sender: sender,
+          recipient: '',
           date: date,
           link: link,
           isUnread: isUnread,
