@@ -27,7 +27,6 @@ class _FindSourceScreenState extends State<FindSourceScreen>
   List<String> _results = [];
   double? _accuracy;
 
-
   bool _selectionMode = false;
   final Set<String> _selectedLinks = {};
 
@@ -36,17 +35,16 @@ class _FindSourceScreenState extends State<FindSourceScreen>
   static const Duration _cooldown = Duration(seconds: 10);
 
   static const String _iqdbEndpoint = 'https://e621.net/iqdb_queries.json';
+  static const String _fluffleEndpoint = 'https://api.fluffle.xyz/exact-search-by-file';
 
   static const Color _orange = Color(0xFFE09321);
 
   static final Color _selectedBg = _orange.withValues(alpha: 0.15);
 
-
   List<String> _faAuthorLinks = [];
   List<String> _faPostLinks = [];
   List<String> _e621PostLinks = [];
 
-  // Whitelist
   static const Set<String> _allowedDomains = {
     'furaffinity.net',
     'www.furaffinity.net',
@@ -58,10 +56,18 @@ class _FindSourceScreenState extends State<FindSourceScreen>
     return '${FAHttp.appName}/${FAHttp.appVersion} (by Blazesmoker on e621)';
   }
 
+  String _fluffleUserAgent() {
+    return '${FAHttp.appName}/${FAHttp.appVersion} (by Blazesmoker on GitHub)';
+  }
+
   bool _isAllowed(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null) return false;
     return _allowedDomains.contains(uri.host.toLowerCase());
+  }
+
+  String _normalizeUrl(String url) {
+    return url.endsWith('/') ? url.substring(0, url.length - 1) : url;
   }
 
   void _clearState() {
@@ -114,6 +120,65 @@ class _FindSourceScreenState extends State<FindSourceScreen>
     return DateTime.now().difference(_lastRequestTime!) > _cooldown;
   }
 
+  Future<dynamic> _searchE621(File file) async {
+    try {
+      final request = http.MultipartRequest('POST', Uri.parse(_iqdbEndpoint));
+      request.headers['User-Agent'] = _e621UserAgent();
+      request.headers['Accept'] = 'application/json';
+      request.files.add(
+        await http.MultipartFile.fromPath('file', file.path),
+      );
+
+      final response =
+      await request.send().timeout(const Duration(seconds: 30));
+      final body = await response.stream.bytesToString();
+
+      debugPrint('e621 IQDB response (${response.statusCode}):');
+      debugPrint(body);
+
+      if (response.statusCode != 200) {
+        throw _Error('e621 IQDB failed (${response.statusCode})');
+      }
+
+      final decoded = json.decode(body);
+      if (decoded is List) {
+        return {'results': decoded};
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('e621 IQDB error: $e');
+      return {};
+    }
+  }
+
+  Future<dynamic> _searchFluffle(File file) async {
+    try {
+      final request = http.MultipartRequest('POST', Uri.parse(_fluffleEndpoint));
+      request.headers['User-Agent'] = _fluffleUserAgent();
+      request.fields['limit'] = '8';
+      request.files.add(
+        await http.MultipartFile.fromPath('file', file.path),
+      );
+
+      final response =
+      await request.send().timeout(const Duration(seconds: 30));
+      final body = await response.stream.bytesToString();
+
+      debugPrint('Fluffle API response (${response.statusCode}):');
+      debugPrint(body);
+
+      if (response.statusCode != 200) {
+        debugPrint('Fluffle API failed with status ${response.statusCode}');
+        return {};
+      }
+
+      return json.decode(body);
+    } catch (e) {
+      debugPrint('Fluffle API error: $e');
+      return {};
+    }
+  }
+
   Future<void> _search() async {
     if (_image == null) {
       setState(() => _error = 'Pick an image first');
@@ -146,31 +211,19 @@ class _FindSourceScreenState extends State<FindSourceScreen>
     });
 
     try {
-      final request = http.MultipartRequest('POST', Uri.parse(_iqdbEndpoint));
-      request.headers['User-Agent'] = _e621UserAgent();
-      request.headers['Accept'] = 'application/json';
-      request.files.add(
-        await http.MultipartFile.fromPath('file', file.path),
-      );
+      final results = await Future.wait([
+        _searchE621(file),
+        _searchFluffle(file),
+      ]);
 
-      final response =
-      await request.send().timeout(const Duration(seconds: 30));
-      final body = await response.stream.bytesToString();
-
-      debugPrint('e621 IQDB response (${response.statusCode}):');
-      debugPrint(body);
-
-      if (response.statusCode != 200) {
-        throw _FriendlyError('IQDB failed (${response.statusCode})');
-      }
-
-      final decoded = json.decode(body);
+      final e621Data = results[0];
+      final fluffleData = results[1];
 
       final rawSources = <String>{};
       final postIds = <int>{};
       double? bestScore;
 
-      void collect(dynamic v) {
+      void collectE621(dynamic v) {
         if (v is Map) {
           if (v['score'] != null && bestScore == null) {
             bestScore = double.tryParse(v['score'].toString());
@@ -180,7 +233,11 @@ class _FindSourceScreenState extends State<FindSourceScreen>
           if (source is String) {
             for (final line in source.split('\n')) {
               final link = line.trim();
-              if (link.isNotEmpty) rawSources.add(link);
+              if (link.isNotEmpty) {
+                final normalized = _normalizeUrl(link);
+                rawSources.add(normalized);
+                debugPrint('[e621 IQDB] Found source: $normalized');
+              }
             }
           }
 
@@ -188,18 +245,73 @@ class _FindSourceScreenState extends State<FindSourceScreen>
           if (postId != null) {
             try {
               postIds.add(int.parse(postId.toString()));
+              debugPrint('[e621 IQDB] Found post ID: $postId');
             } catch (_) {}
           }
 
-          v.values.forEach(collect);
+          v.values.forEach(collectE621);
         } else if (v is List) {
           for (final e in v) {
-            collect(e);
+            collectE621(e);
           }
         }
       }
 
-      collect(decoded);
+      void collectFluffle(dynamic data) {
+        if (data is Map) {
+          final results = data['results'];
+          if (results is List) {
+            for (final result in results) {
+              if (result is Map) {
+                final match = result['match'];
+                if (match != 'exact') {
+                  debugPrint('[Fluffle] Skipping non-exact match: $match');
+                  continue;
+                }
+
+                if (result['distance'] != null && bestScore == null) {
+                  final distance = double.tryParse(result['distance'].toString());
+                  if (distance != null) {
+                    bestScore = distance * 100;
+                  }
+                }
+
+                final platform = result['platform'];
+                final url = result['url'];
+
+                if (url is String && url.isNotEmpty) {
+                  final normalized = _normalizeUrl(url);
+                  rawSources.add(normalized);
+                  debugPrint('[Fluffle] Found URL from $platform: $normalized');
+                }
+
+                if (platform == 'furAffinity') {
+                  final authors = result['authors'];
+                  if (authors is List) {
+                    for (final author in authors) {
+                      if (author is Map) {
+                        final authorId = author['id'];
+                        if (authorId is String && authorId.isNotEmpty) {
+                          final authorUrl = 'https://www.furaffinity.net/user/$authorId';
+                          rawSources.add(authorUrl);
+                          debugPrint('[Fluffle] Found FA author: $authorUrl');
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      collectE621(e621Data);
+      collectFluffle(fluffleData);
+
+      debugPrint('=== API COLLECTION SUMMARY ===');
+      debugPrint('Total raw sources collected: ${rawSources.length}');
+      debugPrint('Total e621 post IDs: ${postIds.length}');
 
       final hasDisallowedSource = rawSources.any((s) {
         final uri = Uri.tryParse(s);
@@ -209,46 +321,48 @@ class _FindSourceScreenState extends State<FindSourceScreen>
         return !_allowedDomains.contains(host);
       });
 
-
       final faAuthor = <String>{};
       final faPosts = <String>{};
-
       final e621Posts = <String>{};
-
 
       for (final s in rawSources) {
         if (!_isAllowed(s)) continue;
         if (s.contains('furaffinity.net')) {
           if (s.contains('/user/') || s.contains('/profile/')) {
             faAuthor.add(s);
+            debugPrint('FA Author link added: $s');
           } else {
             faPosts.add(s);
+            debugPrint('FA Post link added: $s');
           }
         }
       }
 
-      // add e621 posts only if there's no disallowed source (user requested)
       if (!hasDisallowedSource) {
         for (final id in postIds) {
-          e621Posts.add('https://e621.net/posts/$id');
+          final link = 'https://e621.net/posts/$id';
+          e621Posts.add(link);
+          debugPrint('e621 Post link added: $link');
         }
       } else {
-        // If disallowed sources exist, we intentionally omit e621 links per request
         debugPrint('Disallowed source detected — suppressing e621 post links.');
       }
 
-      // If nothing whitelist-matching found, show specific message
       if (faAuthor.isEmpty && faPosts.isEmpty && e621Posts.isEmpty) {
-        setState(() => _error = 'Couldn’t find source from FurAffinity.net');
+        setState(() => _error = 'Couldn\'t find source from FurAffinity.net');
         return;
       }
 
-      // Maintain original _results list for copy-all / legacy code compatibility
       final combined = <String>[];
-      // single FA header logic: authors first then posts
       combined.addAll(faAuthor);
       combined.addAll(faPosts);
       combined.addAll(e621Posts);
+
+      debugPrint('Total FA Author links: ${faAuthor.length}');
+      debugPrint('Total FA Post links: ${faPosts.length}');
+      debugPrint('Total e621 Post links: ${e621Posts.length}');
+      debugPrint('=== DISPLAY BREAKDOWN ===');
+      debugPrint('Final combined results: ${combined.length} links');
 
       setState(() {
         _faAuthorLinks = faAuthor.toList()..sort();
@@ -263,7 +377,7 @@ class _FindSourceScreenState extends State<FindSourceScreen>
       setState(() => _error = 'Request timed out');
     } on SocketException {
       setState(() => _error = 'No internet connection');
-    } on _FriendlyError catch (e) {
+    } on _Error catch (e) {
       setState(() => _error = e.message);
     } catch (e, st) {
       debugPrint('Unexpected error: $e\n$st');
@@ -355,7 +469,6 @@ class _FindSourceScreenState extends State<FindSourceScreen>
         backgroundColor: const Color(0xFF111111),
         elevation: 0,
         actions: [
-          // NEW: info button left of the clear icon
           IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: _showInfoDialog,
@@ -377,7 +490,6 @@ class _FindSourceScreenState extends State<FindSourceScreen>
       builder: (ctx) {
         return AlertDialog(
           backgroundColor: const Color(0xFF1E1E1E),
-
           title: const Center(
             child: Text(
               'Important info',
@@ -388,7 +500,6 @@ class _FindSourceScreenState extends State<FindSourceScreen>
               ),
             ),
           ),
-
           content: RichText(
             text: TextSpan(
               style: const TextStyle(
@@ -406,6 +517,16 @@ class _FindSourceScreenState extends State<FindSourceScreen>
                       handleFALink(context, 'https://e621.net');
                     },
                 ),
+                const TextSpan(text: ' and '),
+                TextSpan(
+                  text: 'Fluffle',
+                  style: TextStyle(color: _orange),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () {
+                      Navigator.of(ctx).pop();
+                      handleFALink(context, 'https://fluffle.xyz');
+                    },
+                ),
                 const TextSpan(
                   text: ' for FurAffinity–related image sources.\n\n',
                 ),
@@ -419,7 +540,6 @@ class _FindSourceScreenState extends State<FindSourceScreen>
               ],
             ),
           ),
-
           actionsAlignment: MainAxisAlignment.end,
           actions: [
             TextButton(
@@ -434,8 +554,6 @@ class _FindSourceScreenState extends State<FindSourceScreen>
       },
     );
   }
-
-
 
   Widget _buildSectionHeader(String title) {
     return Padding(
@@ -521,157 +639,151 @@ class _FindSourceScreenState extends State<FindSourceScreen>
         ),
       ),
     );
-
   }
 
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-        value: const SystemUiOverlayStyle(
-          systemNavigationBarColor: Color(0xFF111111),
-          systemNavigationBarIconBrightness: Brightness.light,
-          statusBarColor: Color(0xFF111111),
-          statusBarIconBrightness: Brightness.light,
-        ),
-        child: WillPopScope(
-      onWillPop: () async {
-        if (_selectionMode) {
-          _exitSelectionMode();
-          return false;
-        }
-        return true;
-      },
-      child: Scaffold(
-        backgroundColor: const Color(0xFF111111),
-        appBar: _buildAppBar(),
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-            child: Column(
-              children: [
-                GestureDetector(
-                  onTap: _pickImage,
-                  child: Container(
-                    height: 250,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2A2A2A),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: const Color(0xFF1A1A1A),
-                        width: 3,
-                      ),
-                    ),
-                    child: _image == null
-                        ? Center(
-                      child: Text(
-                        'Tap here to load image',
-                        style: TextStyle(color: _orange),
-                      ),
-                    )
-                        : ClipRRect(
-                      borderRadius: BorderRadius.circular(11),
-                      child: Image.file(
-                        File(_image!.path),
-                        fit: BoxFit.contain,
-                        width: double.infinity,
-                        height: double.infinity,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  child: _accuracy == null
-                      ? SizedBox(
-                    width: double.infinity,
-                    key: const ValueKey('search'),
-                    child: ElevatedButton(
-                      onPressed: _loading ? null : _search,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _orange,
-                        padding:
-                        const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      child: _loading
-                          ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child:
-                        CircularProgressIndicator(strokeWidth: 2),
-                      )
-                          : const Text('Search'),
-                    ),
-                  )
-                      : Row(
-                    key: const ValueKey('accuracy'),
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: Text(
-                          'Accuracy: ${_accuracy!.toStringAsFixed(2)}%',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
+      value: const SystemUiOverlayStyle(
+        systemNavigationBarColor: Color(0xFF111111),
+        systemNavigationBarIconBrightness: Brightness.light,
+        statusBarColor: Color(0xFF111111),
+        statusBarIconBrightness: Brightness.light,
+      ),
+      child: WillPopScope(
+        onWillPop: () async {
+          if (_selectionMode) {
+            _exitSelectionMode();
+            return false;
+          }
+          return true;
+        },
+        child: Scaffold(
+          backgroundColor: const Color(0xFF111111),
+          appBar: _buildAppBar(),
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              child: Column(
+                children: [
+                  GestureDetector(
+                    onTap: _pickImage,
+                    child: Container(
+                      height: 250,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A2A2A),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: const Color(0xFF1A1A1A),
+                          width: 3,
                         ),
                       ),
-                      TextButton.icon(
-                        onPressed: _results.isEmpty ? null : _copyAllLinks,
-                        icon: Icon(Icons.copy, size: 16, color: _orange),
-                        label: Text(
-                          'Copy all',
+                      child: _image == null
+                          ? Center(
+                        child: Text(
+                          'Tap here to load image',
                           style: TextStyle(color: _orange),
                         ),
+                      )
+                          : ClipRRect(
+                        borderRadius: BorderRadius.circular(11),
+                        child: Image.file(
+                          File(_image!.path),
+                          fit: BoxFit.contain,
+                          width: double.infinity,
+                          height: double.infinity,
+                        ),
                       ),
-                    ],
-                  ),
-                ),
-
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      _error!,
-                      style: const TextStyle(color: Colors.redAccent),
                     ),
                   ),
-
-                const SizedBox(height: 6),
-
-                Expanded(
-                  child: ListView.separated(
-                    itemCount: _computeListItemCount(),
-                    separatorBuilder: (_, __) => const Divider(color: Colors.white12),
-                    itemBuilder: (context, index) {
-                      final mapping = _mapIndexToLink(index);
-                      final link = mapping?.link;
-                      final isHeader = mapping?.isHeader ?? false;
-
-                      if (mapping == null) return const SizedBox();
-
-                      if (isHeader) {
-                        return _buildSectionHeader(mapping.link ?? '');
-                      } else {
-                        return _buildLinkTile(link!);
-                      }
-                    },
+                  const SizedBox(height: 10),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    child: _accuracy == null
+                        ? SizedBox(
+                      width: double.infinity,
+                      key: const ValueKey('search'),
+                      child: ElevatedButton(
+                        onPressed: _loading ? null : _search,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _orange,
+                          padding:
+                          const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: _loading
+                            ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2),
+                        )
+                            : const Text('Search'),
+                      ),
+                    )
+                        : Row(
+                      key: const ValueKey('accuracy'),
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Text(
+                            'Accuracy: ${_accuracy!.toStringAsFixed(2)}%',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed:
+                          _results.isEmpty ? null : _copyAllLinks,
+                          icon: Icon(Icons.copy, size: 16, color: _orange),
+                          label: Text(
+                            'Copy all',
+                            style: TextStyle(color: _orange),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
+                    ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: _computeListItemCount(),
+                      separatorBuilder: (_, __) =>
+                      const Divider(color: Colors.white12),
+                      itemBuilder: (context, index) {
+                        final mapping = _mapIndexToLink(index);
+                        final link = mapping?.link;
+                        final isHeader = mapping?.isHeader ?? false;
+
+                        if (mapping == null) return const SizedBox();
+
+                        if (isHeader) {
+                          return _buildSectionHeader(mapping.link ?? '');
+                        } else {
+                          return _buildLinkTile(link!);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
     );
-
   }
-
 
   int _computeListItemCount() {
     var count = 0;
@@ -692,9 +804,13 @@ class _FindSourceScreenState extends State<FindSourceScreen>
 
     final hasFa = _faAuthorLinks.isNotEmpty || _faPostLinks.isNotEmpty;
     if (hasFa) {
-      if (i == 0) return _IndexMapping(link: 'Fur Affinity.net', isHeader: true);
+      if (i == 0) {
+        return _IndexMapping(link: 'Fur Affinity.net', isHeader: true);
+      }
       i -= 1;
-      if (i < _faAuthorLinks.length) return _IndexMapping(link: _faAuthorLinks[i]);
+      if (i < _faAuthorLinks.length) {
+        return _IndexMapping(link: _faAuthorLinks[i]);
+      }
       i -= _faAuthorLinks.length;
       if (i < _faPostLinks.length) return _IndexMapping(link: _faPostLinks[i]);
       i -= _faPostLinks.length;
@@ -703,7 +819,9 @@ class _FindSourceScreenState extends State<FindSourceScreen>
     if (_e621PostLinks.isNotEmpty) {
       if (i == 0) return _IndexMapping(link: 'e621.net', isHeader: true);
       i -= 1;
-      if (i < _e621PostLinks.length) return _IndexMapping(link: _e621PostLinks[i]);
+      if (i < _e621PostLinks.length) {
+        return _IndexMapping(link: _e621PostLinks[i]);
+      }
       i -= _e621PostLinks.length;
     }
 
@@ -717,7 +835,7 @@ class _IndexMapping {
   _IndexMapping({this.link, this.isHeader = false});
 }
 
-class _FriendlyError implements Exception {
+class _Error implements Exception {
   final String message;
-  const _FriendlyError(this.message);
+  const _Error(this.message);
 }
