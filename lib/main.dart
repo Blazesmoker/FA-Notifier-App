@@ -8,6 +8,7 @@ import 'package:FANotifier/services/fa_http.dart';
 import 'package:FANotifier/services/fa_notification_service.dart';
 import 'package:FANotifier/services/pending_navigation.dart';
 import 'package:FANotifier/utils/notes_notifications_text_edit.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
@@ -23,6 +24,7 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:html/parser.dart' as html_parser;
+import 'analytics_privacy.dart';
 import 'custom_cache_manager.dart';
 import 'custom_drawer/drawer_user_controller.dart';
 import 'model/notifications.dart';
@@ -577,6 +579,8 @@ class AppLifecycleNetworkReset with WidgetsBindingObserver {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  await setupAnalyticsPrivacy();
   await FAHttp.init();
   AppLifecycleNetworkReset.attach();
   HttpOverrides.global = FreshHttpOverrides();

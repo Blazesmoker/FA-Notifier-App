@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "973288032187",
+    "project_id": "fa-notifier-2e7c4",
+    "storage_bucket": "fa-notifier-2e7c4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:973288032187:android:d8c41abf8f7afaed4b669e",
+        "android_client_info": {
+          "package_name": "com.blazesmoker.fanotifier"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDWEZDRpmBvIFXRRxAyT_Am02__8nkH1EA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
