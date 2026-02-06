@@ -50,6 +50,21 @@
 	<string>We need access to your photo library to save images.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We need access to your photo library to save images.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
@@ -69,22 +84,6 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-<key>UIApplicationSceneManifest</key>
-<dict>
-  <key>UIApplicationSupportsMultipleScenes</key>
-  <false/>
-  <key>UISceneConfigurations</key>
-  <dict>
-    <key>UIWindowSceneSessionRoleApplication</key>
-    <array>
-      <dict>
-        <key>UISceneDelegateClassName</key>
-        <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
-      </dict>
-    </array>
-  </dict>
-</dict>
-
 	<key>UNUserNotificationCenterUsageDescription</key>
 	<string>We need permission to send you local notifications for new notes and activity.</string>
 </dict>
