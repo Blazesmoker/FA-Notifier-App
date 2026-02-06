@@ -212,7 +212,21 @@ class NotesScreenState extends State<NotesScreen>
       if (folder == 'inbox') {
         _currentInboxPage = 1;
         _hasMoreInbox = true;
-        await _fetchInbox(page: 1, clearOld: false);
+        await _fetchInbox(
+          page: 1,
+          clearOld: false,
+          suppressNewUnreadNotifications: true,
+        );
+        try {
+          final page2Messages = await _notesApi.fetchNotesPage(folder: 'inbox', page: 2);
+          final unread = page2Messages.where((m) => m.isUnread).toList();
+          if (unread.isNotEmpty) {
+            final unreadIds = unread.map((m) => m.id).toList();
+            await MessageStorage.addShownNoteIds(unreadIds);
+          }
+        } catch (e) {
+          debugPrint('[_trashSelected] Failed to pre-mark page 2: $e');
+        }
       } else {
         _currentSentPage = 1;
         _hasMoreSent = true;
@@ -397,7 +411,11 @@ class NotesScreenState extends State<NotesScreen>
     }
   }
 
-  Future<void> _fetchInbox({int page = 1, bool clearOld = false}) async {
+  Future<void> _fetchInbox({
+    int page = 1,
+    bool clearOld = false,
+    bool suppressNewUnreadNotifications = false,
+  }) async {
     if (page == 1) {
       setState(() {
         if (clearOld) inboxMessages.clear();
@@ -431,14 +449,14 @@ class NotesScreenState extends State<NotesScreen>
         });
       }
 
-      if (page > 1) {
+      if (page == 1 && !suppressNewUnreadNotifications) {
+        await _handleNewUnreadMessages(newMessages);
+      } else {
         final unread = newMessages.where((m) => m.isUnread).toList();
         if (unread.isNotEmpty) {
           final unreadIds = unread.map((m) => m.id).toList();
           await MessageStorage.addShownNoteIds(unreadIds);
         }
-      } else {
-        await _handleNewUnreadMessages(newMessages);
       }
     } catch (e) {
       setState(() {
