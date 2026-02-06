@@ -5,6 +5,7 @@ import 'package:flutter_html/flutter_html.dart' as html;
 
 import '../services/fa_http.dart';
 import '../utils/bbcode_context_menu.dart';
+import '../widgets/confirm_close_dialog.dart';
 
 class ReplyScreen extends StatefulWidget {
   final Map<String, dynamic> comment;
@@ -87,6 +88,11 @@ class _ReplyScreenState extends State<ReplyScreen> {
     );
   }
 
+  Future<void> _onRequestClose() async {
+    final confirmed = await ConfirmCloseDialog.show(context);
+    if (confirmed && mounted) Navigator.pop(context);
+  }
+
   Future<bool> submitCommentOrReply({
     required String message,
     String? submissionId,
@@ -139,11 +145,14 @@ class _ReplyScreenState extends State<ReplyScreen> {
 
     return PopScope(
       canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (!didPop) _onRequestClose();
+      },
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.close),
-            onPressed: () => Navigator.pop(context),
+            onPressed: _onRequestClose,
           ),
           title: const Text('Reply to Comment'),
           actions: [

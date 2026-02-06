@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import '../services/fa_http.dart';
 import '../utils/bbcode_context_menu.dart';
+import '../widgets/confirm_close_dialog.dart';
 
 class AddJournalCommentScreen extends StatefulWidget {
   final String submissionTitle;
@@ -84,6 +85,11 @@ class _AddCommentScreenState extends State<AddJournalCommentScreen> {
 
 
 
+  Future<void> _onRequestClose() async {
+    final confirmed = await ConfirmCloseDialog.show(context);
+    if (confirmed && mounted) Navigator.pop(context);
+  }
+
   @override
   void dispose() {
     _commentController.dispose();
@@ -150,11 +156,14 @@ class _AddCommentScreenState extends State<AddJournalCommentScreen> {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (!didPop) _onRequestClose();
+      },
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.close),
-            onPressed: () => Navigator.pop(context),
+            onPressed: _onRequestClose,
           ),
           title: const Text("Add Comment"),
           actions: [

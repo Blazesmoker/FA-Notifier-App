@@ -12,6 +12,7 @@ import '../utils.dart';
 import '../utils/bbcode_context_menu.dart';
 import '../utils/fa_link_handler.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
+import '../widgets/confirm_close_dialog.dart';
 import '../services/fa_http.dart';
 
 class NoteReplyScreen extends StatefulWidget {
@@ -65,6 +66,11 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     super.initState();
     _initializeDio();
     _fetchMessageDetails();
+  }
+
+  Future<void> _onRequestClose() async {
+    final confirmed = await ConfirmCloseDialog.show(context);
+    if (confirmed && mounted) Navigator.pop(context);
   }
 
   @override
@@ -593,11 +599,14 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
     return PopScope(
       canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (!didPop) _onRequestClose();
+      },
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.close),
-            onPressed: () => Navigator.pop(context),
+            onPressed: _onRequestClose,
           ),
           title: const Text("Reply to Note"),
           actions: [

@@ -6,6 +6,9 @@ import 'message_model.dart';
 class MessageList extends StatelessWidget {
   static const Color _accent = Color(0xFFE09321);
 
+  /// Regulate selection highlight opacity here (0.0–1.0). Lower = more semi-transparent.
+  static const double selectionOpacity = 0.07;
+
   final bool isLoading;
   final bool isLoadingMore;
   final String errorMessage;
@@ -145,6 +148,9 @@ class MessageList extends StatelessWidget {
           final msg = messages[index];
           final isInbox = folder == 'inbox';
           final isSelected = selectedIds.contains(msg.id);
+          final toFromLabel = isInbox
+              ? 'From: ${msg.sender}'
+              : 'To: ${msg.recipient.isNotEmpty ? msg.recipient : msg.sender}';
           return GestureDetector(
             onLongPress: onLongPressItem != null
                 ? () => onLongPressItem!(msg)
@@ -160,7 +166,7 @@ class MessageList extends StatelessWidget {
               children: [
                 Container(
                   color: isSelected
-                      ? _accent.withOpacity(0.35)
+                      ? _accent.withOpacity(selectionOpacity)
                       : Colors.black,
                   padding: const EdgeInsets.symmetric(
                     vertical: 8.0,
@@ -168,11 +174,18 @@ class MessageList extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeInOut,
+                        child: isSelectionMode
+                            ? _buildCheckbox(msg)
+                            : const SizedBox.shrink(),
+                      ),
                       if (msg.isUnread)
                         Container(
                           width: 10,
                           height: 10,
-                          margin: const EdgeInsets.only(right: 16),
+                          margin: const EdgeInsets.only(right: 12),
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
                             color: _accent,
@@ -192,9 +205,7 @@ class MessageList extends StatelessWidget {
                             const SizedBox(height: 4),
 
                             Text(
-                              isInbox
-                                  ? 'From: ${msg.sender}'
-                                  : 'To: ${msg.recipient.isNotEmpty ? msg.recipient : msg.sender}',
+                              toFromLabel,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -243,6 +254,35 @@ class MessageList extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildCheckbox(Message msg) {
+    final isSelected = selectedIds.contains(msg.id);
+    return Padding(
+      padding: const EdgeInsets.only(right: 12.0),
+      child: IgnorePointer(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: Checkbox(
+            value: isSelected,
+            onChanged: (_) {},
+            fillColor: WidgetStateProperty.resolveWith((_) {
+              if (isSelected) return _accent;
+              return Colors.transparent;
+            }),
+            checkColor: Colors.white,
+            side: BorderSide(
+              color: isSelected ? _accent : Colors.grey,
+              width: 1.5,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ),
       ),
     );
   }

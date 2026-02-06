@@ -8,6 +8,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/fa_http.dart';
 import '../utils/bbcode_context_menu.dart';
+import '../widgets/confirm_close_dialog.dart';
 
 class NewMessageScreen extends StatelessWidget {
   final TextEditingController _recipientController;
@@ -164,13 +165,20 @@ class NewMessageScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Future<void> onRequestClose() async {
+      final confirmed = await ConfirmCloseDialog.show(context);
+      if (confirmed && context.mounted) Navigator.pop(context);
+    }
     return PopScope(
-        canPop: false,
-        child: Scaffold(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (!didPop) onRequestClose();
+      },
+      child: Scaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
+          onPressed: onRequestClose,
         ),
         title: const Text("Compose New Message", overflow: TextOverflow.visible,),
         actions: [
@@ -215,6 +223,7 @@ class NewMessageScreen extends StatelessWidget {
                       Expanded(
                         child: TextField(
                           controller: _messageController,
+                          minLines: 6,
                           maxLines: null,
                           keyboardType: TextInputType.multiline,
                           style: const TextStyle(color: Colors.white),

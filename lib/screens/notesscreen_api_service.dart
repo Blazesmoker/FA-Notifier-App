@@ -278,6 +278,64 @@ class NotesApiService {
     }
   }
 
+  /// Fetches trash notes. Uses folder=trash in cookie with /msg/pms/.
+  Future<List<Message>> fetchTrashPage({required int page}) async {
+    return fetchNotesPage(folder: 'trash', page: page);
+  }
+
+  /// Restores notes from Trash. POST with move_to=restore, folder=trash in cookie.
+  Future<void> restoreNotesFromTrash({required List<String> ids}) async {
+    if (ids.isEmpty) return;
+    await _moveNotesInTrash(ids: ids, moveTo: 'restore');
+  }
+
+  /// Permanently deletes notes from Trash. POST with move_to=delete, folder=trash in cookie.
+  Future<void> deleteNotesPermanently({required List<String> ids}) async {
+    if (ids.isEmpty) return;
+    await _moveNotesInTrash(ids: ids, moveTo: 'delete');
+  }
+
+  Future<void> _moveNotesInTrash({
+    required List<String> ids,
+    required String moveTo,
+  }) async {
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    if (cookieA == null || cookieB == null) {
+      throw Exception('No cookies => user not logged in?');
+    }
+    final body = 'manage_notes=1&move_to=$moveTo&'
+        '${ids.map((id) => 'items[]=${Uri.encodeComponent(id)}').join('&')}';
+    final ioHttp = HttpClient()
+      ..idleTimeout = Duration.zero
+      ..connectionTimeout = const Duration(seconds: 20);
+    final client = IOClient(ioHttp);
+    try {
+      final resp = await client
+          .post(
+            Uri.parse('https://www.furaffinity.net/msg/pms/'),
+            headers: {
+              'Cookie': 'a=$cookieA; b=$cookieB; folder=trash',
+              'User-Agent': FAHttp.userAgent,
+              HttpHeaders.connectionHeader: 'close',
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept':
+                  'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+              'Referer': 'https://www.furaffinity.net/controls/switchbox/trash/',
+              'Origin': 'https://www.furaffinity.net',
+            },
+            body: body,
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200 && resp.statusCode != 302) {
+        throw Exception('$moveTo request failed: ${resp.statusCode}');
+      }
+    } finally {
+      client.close();
+      ioHttp.close(force: true);
+    }
+  }
+
   /// Moves the given note ids to Trash. [folder] is 'inbox' or 'sent'.
   /// POST to https://www.furaffinity.net/msg/pms/ with manage_notes=1, move_to=trash, items[]=id...
   Future<void> moveNotesToTrash({

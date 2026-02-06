@@ -9,6 +9,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/fa_http.dart';
 import '../utils/bbcode_context_menu.dart';
+import '../widgets/confirm_close_dialog.dart';
 
 class PostShoutScreen extends StatefulWidget {
   final String username;
@@ -207,18 +208,24 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
     }
   }
 
-
+  Future<void> _onRequestClose() async {
+    final confirmed = await ConfirmCloseDialog.show(context);
+    if (confirmed && mounted) Navigator.pop(context);
+  }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (!didPop) _onRequestClose();
+      },
       child: Scaffold(
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.close),
-            onPressed: () => Navigator.pop(context),
+            onPressed: _onRequestClose,
           ),
           title: const Text("Compose Shout"),
           actions: [

@@ -21,6 +21,7 @@ import 'notesscreen_api_service.dart';
 import 'notesscreen_preview_dialog.dart';
 import 'notesscreen_inbox.dart';
 import 'notesscreen_sent.dart';
+import 'trash_screen.dart';
 
 class NotesScreen extends StatefulWidget {
   final GlobalKey<DrawerUserControllerState> drawerKey;
@@ -430,7 +431,7 @@ class NotesScreenState extends State<NotesScreen>
         });
       }
 
-      if (page > 2) {
+      if (page > 1) {
         final unread = newMessages.where((m) => m.isUnread).toList();
         if (unread.isNotEmpty) {
           final unreadIds = unread.map((m) => m.id).toList();
@@ -741,6 +742,22 @@ class NotesScreenState extends State<NotesScreen>
           centerTitle: true,
           backgroundColor: Colors.black,
           actions: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(width: 52),
+                InkResponse(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const TrashScreen()),
+                    );
+                  },
+                  radius: 18,
+                  child: const Icon(Icons.delete_outline, color: Colors.white),
+                ),
+                const SizedBox(width: 16),
+              ],
+            ),
             _buildNewMessageAppBarButton(),
           ],
         ),
@@ -762,25 +779,41 @@ class NotesScreenState extends State<NotesScreen>
             centerTitle: true,
             backgroundColor: Colors.black,
             actions: [
-              if (_selectionMode) ...[
-                Row(
-                  children: [
-                    InkResponse(
-                      onTap: exitSelectionMode,
-                      radius: 18,
-                      child: const Icon(Icons.close, color: Colors.white),
-                    ),
-                    const SizedBox(width: 16),
-                    InkResponse(
-                      onTap: _selectedIds.isEmpty ? null : _onTrashPressed,
-                      radius: 18,
-                      child: const Icon(Icons.delete_outline, color: Colors.white),
-                    ),
-                    const SizedBox(width: 16),
-                  ],
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 52,
+                    child: _selectionMode
+                        ? InkResponse(
+                            onTap: exitSelectionMode,
+                            radius: 18,
+                            child: const Icon(Icons.close, color: Colors.white),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
 
-              ],
+                  InkResponse(
+                    onTap: () {
+                      if (_selectionMode && _selectedIds.isNotEmpty) {
+                        _onTrashPressed();
+                      } else if (!_selectionMode) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const TrashScreen()),
+                        );
+                      }
+                    },
+                    radius: 18,
+                    child: Icon(
+                      Icons.delete_outline,
+                      color: _selectionMode && _selectedIds.isEmpty
+                          ? Colors.grey
+                          : Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                ],
+              ),
               _buildNewMessageAppBarButton(),
             ],
             bottom: TabBar(
