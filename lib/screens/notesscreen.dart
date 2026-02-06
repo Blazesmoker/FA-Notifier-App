@@ -64,6 +64,7 @@ class NotesScreenState extends State<NotesScreen>
   bool _isFetchingMoreInbox = false;
   int _currentInboxPage = 1;
   bool _hasMoreInbox = true;
+  String? _lastInboxTopId;
 
   bool isLoadingSent = true;
   bool isLoadingMoreSent = false;
@@ -457,6 +458,9 @@ class NotesScreenState extends State<NotesScreen>
           final unreadIds = unread.map((m) => m.id).toList();
           await MessageStorage.addShownNoteIds(unreadIds);
         }
+        if (page == 1 && newMessages.isNotEmpty) {
+          _lastInboxTopId = newMessages.first.id;
+        }
       }
     } catch (e) {
       setState(() {
@@ -537,7 +541,11 @@ class NotesScreenState extends State<NotesScreen>
 
   Future<void> _handleNewUnreadMessages(List<Message> fetchedInbox) async {
     try {
-      final shownIds = await MessageStorage.getShownNoteIds();
+      final previousTopId = _lastInboxTopId;
+      if (fetchedInbox.isNotEmpty) {
+        _lastInboxTopId = fetchedInbox.first.id;
+      }
+
       final unread = fetchedInbox.where((m) => m.isUnread).toList();
       if (unread.isEmpty) return;
 
@@ -545,8 +553,29 @@ class NotesScreenState extends State<NotesScreen>
         return;
       }
 
-      final newUnread = unread.where((m) => !shownIds.contains(m.id)).toList();
-      if (newUnread.isEmpty) return;
+      final shownIds = await MessageStorage.getShownNoteIds();
+      final unreadNotShown =
+          unread.where((m) => !shownIds.contains(m.id)).toList();
+      if (unreadNotShown.isEmpty) return;
+
+      int anchorIndex = -1;
+      if (previousTopId != null) {
+        anchorIndex =
+            fetchedInbox.indexWhere((m) => m.id == previousTopId);
+      }
+
+      final Set<String> eligibleIds = {};
+      if (anchorIndex > 0) {
+        for (var i = 0; i < anchorIndex; i++) {
+          eligibleIds.add(fetchedInbox[i].id);
+        }
+      }
+
+      final newUnread = eligibleIds.isEmpty
+          ? <Message>[]
+          : unreadNotShown
+              .where((m) => eligibleIds.contains(m.id))
+              .toList();
 
       for (var msg in newUnread) {
         try {
@@ -563,7 +592,7 @@ class NotesScreenState extends State<NotesScreen>
         } catch (_) {}
       }
 
-      final newIds = newUnread.map((m) => m.id).toList();
+      final newIds = unreadNotShown.map((m) => m.id).toList();
       await MessageStorage.addShownNoteIds(newIds);
     } catch (_) {}
   }
