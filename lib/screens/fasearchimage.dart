@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
 import '../services/fa_thumbnail_parser.dart';
@@ -113,7 +114,7 @@ class FASearchImageState extends State<FASearchImage> {
   }
 
   Future<String> _getAllCookies() async {
-    final cookieNames = ['a', 'b', 'cc', 'folder', 'nodesc', 'sz'];
+    final cookieNames = ['a', 'b', 'cc', 'cf_clearance', 'folder', 'nodesc', 'sz'];
     final cookies = <String>[];
 
     for (var name in cookieNames) {
@@ -227,7 +228,8 @@ class FASearchImageState extends State<FASearchImage> {
     final response = await FAHttp.get(
       uri,
       headers: {
-        HttpHeaders.cookieHeader: cookieHeader,
+        HttpHeaders.cookieHeader:
+            await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
         'User-Agent': FAHttp.userAgent,
         'Referer': 'https://www.furaffinity.net/search/',
         'Accept':
@@ -371,7 +373,8 @@ class FASearchImageState extends State<FASearchImage> {
       final response = await FAHttp.get(
         Uri.parse(absolute),
         headers: {
-          HttpHeaders.cookieHeader: cookie,
+          HttpHeaders.cookieHeader:
+              await FaCookieHelper.appendCfClearanceToCookieHeader(cookie),
           'User-Agent': FAHttp.userAgent,
         },
       );

@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter/cupertino.dart';
+import 'fa_cookie_helper.dart';
 import 'fa_http.dart';
 
 /// A singleton service to handle favorite/unfavorite actions:
@@ -31,7 +32,9 @@ class FavoriteGalleryService {
         final response = await http.post(
           Uri.parse(url),
           headers: {
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
             'User-Agent': FAHttp.userAgent,
             'Referer': 'https://www.furaffinity.net',
           },

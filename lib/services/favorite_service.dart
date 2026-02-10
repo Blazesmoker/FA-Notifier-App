@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'fa_cookie_helper.dart';
 import 'fa_http.dart';
 
 /// Service to handle favorite/unfavorite operations with retry logic.
@@ -69,6 +70,6 @@ class FavoriteService {
     if (cookieA == null || cookieA.isEmpty || cookieB == null || cookieB.isEmpty) {
       return '';
     }
-    return 'a=$cookieA; b=$cookieB';
+    return FaCookieHelper.appendCfClearanceToCookieHeader('a=$cookieA; b=$cookieB');
   }
 }

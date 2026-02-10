@@ -4,6 +4,7 @@ import 'package:FANotifier/providers/NotificationNavigationProvider.dart';
 import 'package:FANotifier/providers/timezone_provider.dart';
 import 'package:FANotifier/screens/message_model.dart';
 import 'package:FANotifier/services/CacheMonitorService.dart';
+import 'package:FANotifier/services/fa_cookie_helper.dart';
 import 'package:FANotifier/services/fa_http.dart';
 import 'package:FANotifier/services/fa_notification_service.dart';
 import 'package:FANotifier/services/pending_navigation.dart';
@@ -319,7 +320,9 @@ Future<List<Message>> _fetchInboxTwoPagesBg() async {
     final resp = await http.get(
       url,
       headers: {
-        'Cookie': 'a=$cookieA; b=$cookieB; folder=inbox',
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=$cookieA; b=$cookieB; folder=inbox',
+        ),
         'User-Agent': FAHttp.userAgent,
       },
     );
@@ -394,7 +397,9 @@ Future<String> _fetchMessageContentInBackground(String link) async {
   dio.interceptors.add(CookieManager(cookieJar));
   cookieJar.saveFromResponse(
     Uri.parse('https://www.furaffinity.net'),
-    [Cookie('a', cookieA), Cookie('b', cookieB)],
+    await FaCookieHelper.addCfClearanceCookie(
+      [Cookie('a', cookieA), Cookie('b', cookieB)],
+    ),
   );
   final resp = await dio.get(
     'https://www.furaffinity.net$link',
@@ -462,7 +467,9 @@ Future<void> _markAsUnreadBackground(Message msg) async {
   dio.interceptors.add(CookieManager(cookieJar));
   cookieJar.saveFromResponse(
     Uri.parse('https://www.furaffinity.net'),
-    [Cookie('a', cookieA), Cookie('b', cookieB)],
+    await FaCookieHelper.addCfClearanceCookie(
+      [Cookie('a', cookieA), Cookie('b', cookieB)],
+    ),
   );
   int pNum = extractPageNumber(msg.link);
   String mId = extractMessageId(msg.link);

@@ -68,7 +68,7 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
 
 
   Future<String> _getAllCookies() async {
-    final cookieNames = ['a', 'b', 'cc', 'folder', 'nodesc', 'sz', 'sfw'];
+    final cookieNames = ['a', 'b', 'cc', 'cf_clearance', 'folder', 'nodesc', 'sz', 'sfw'];
     final cookies = <String>[];
     for (final name in cookieNames) {
       String? cookieValue;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../utils/bbcode_context_menu.dart';
 import '../widgets/confirm_close_dialog.dart';
@@ -131,7 +132,9 @@ class _AddCommentScreenState extends State<AddCommentScreen> {
     final response = await http.post(
       Uri.parse(postUrl),
       headers: {
-        'Cookie': 'a=$cookieA; b=$cookieB',
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=$cookieA; b=$cookieB',
+        ),
         'User-Agent': FAHttp.userAgent,
         'Content-Type': 'application/x-www-form-urlencoded',
       },

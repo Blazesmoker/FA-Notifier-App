@@ -9,6 +9,7 @@ import '../network.dart';
 import '../model/shout.dart';
 import '../model/user_link.dart';
 import 'package:flutter/cupertino.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 
 class UserProfileParsed {
@@ -209,7 +210,9 @@ class UserProfileApiService {
     final response = await httpClient.get(
       Uri.parse(profileUrl),
       headers: {
-        'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+        ),
         'User-Agent': FAHttp.userAgent,
       },
     );
@@ -252,7 +255,9 @@ class UserProfileApiService {
     final response = await http.post(
       Uri.parse(url),
       headers: {
-        'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+        ),
         'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent': FAHttp.userAgent,
         'Referer': 'https://www.furaffinity.net/user/$sanitizedUsername/',
@@ -317,7 +322,9 @@ class UserProfileApiService {
       final response = await httpClient.get(
         Uri.parse(fullUrl),
         headers: {
-          'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+          ),
           'User-Agent': FAHttp.userAgent,
         },
       );
@@ -379,8 +386,10 @@ class UserProfileApiService {
       final uriTarget = Uri.parse(targetUrl);
 
       final headers = <String, String>{
-        'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
-      'User-Agent': FAHttp.userAgent,
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+        ),
+        'User-Agent': FAHttp.userAgent,
         'Referer': 'https://www.furaffinity.net/user/$refererUsername/',
       };
 
@@ -451,7 +460,9 @@ class UserProfileApiService {
       final response = await http.post(
         Uri.parse(url),
         headers: {
-          'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+          ),
           'Content-Type': 'application/x-www-form-urlencoded',
           'User-Agent': FAHttp.userAgent,
           'Referer': 'https://www.furaffinity.net/controls/shouts/',

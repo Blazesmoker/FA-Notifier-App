@@ -218,7 +218,7 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
   Future<String> _buildCookieHeader() async {
     final sfwValue = await _getSfwCookieValue();
-    final keys = ['a', 'b', 'cc', 'folder', 'nodesc', 'sz'];
+    final keys = ['a', 'b', 'cc', 'cf_clearance', 'folder', 'nodesc', 'sz'];
     final parts = <String>[];
     for (final k in keys) {
       final val = await _secureStorage.read(key: 'fa_cookie_$k');

@@ -7,6 +7,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 import '../network.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 
 class OpenJournalFetchResult {
@@ -299,7 +300,9 @@ class OpenJournalApiService {
     final response = await httpClient.get(
       Uri.parse(journalUrl),
       headers: {
-        'Cookie': 'a=${cookies.cookieA}; b=${cookies.cookieB}',
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=${cookies.cookieA}; b=${cookies.cookieB}',
+        ),
         'User-Agent': FAHttp.userAgent,
         'Accept-Encoding': 'gzip',
       },
@@ -603,7 +606,9 @@ class OpenJournalApiService {
     final resp = await httpClient.get(
       Uri.parse('https://www.furaffinity.net/controls/journal/delete/$uniqueNumber/'),
       headers: {
-        'Cookie': 'a=${cookies.cookieA}; b=${cookies.cookieB}',
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=${cookies.cookieA}; b=${cookies.cookieB}',
+        ),
         'User-Agent': FAHttp.userAgent,
         'Accept-Encoding': 'gzip',
       },
@@ -624,7 +629,9 @@ class OpenJournalApiService {
     final response = await httpClient.get(
       Uri.parse(url),
       headers: {
-        'Cookie': 'a=${cookies.cookieA}; b=${cookies.cookieB}',
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=${cookies.cookieA}; b=${cookies.cookieB}',
+        ),
         'User-Agent': FAHttp.userAgent,
         'Accept-Encoding': 'gzip',
       },

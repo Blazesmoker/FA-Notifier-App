@@ -193,7 +193,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
 
   Future<void> _setCookies() async {
     final cookieManager = CookieManager.instance();
-    final cookieKeys = ['a', 'b', 'cc', 'folder', 'nodesc', 'sz', 'sfw'];
+    final cookieKeys = ['a', 'b', 'cc', 'cf_clearance', 'folder', 'nodesc', 'sz', 'sfw'];
 
     for (final key in cookieKeys) {
       String value;

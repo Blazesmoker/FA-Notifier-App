@@ -12,6 +12,7 @@ import '../widgets/PulsatingLoadingIndicator.dart';
 import 'note_reply_screen.dart';
 import '../utils/fa_link_handler.dart';
 import '../utils/utils.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 
 class MessageDetailScreen extends StatefulWidget {
@@ -82,7 +83,10 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
     cookies.add(Cookie('folder', widget.folder));
 
     Uri uri = Uri.parse('https://www.furaffinity.net');
-    _cookieJar.saveFromResponse(uri, cookies);
+    _cookieJar.saveFromResponse(
+      uri,
+      await FaCookieHelper.addCfClearanceCookie(cookies),
+    );
   }
 
   Future<void> _fetchMessageDetails() async {

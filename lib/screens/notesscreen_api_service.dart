@@ -15,6 +15,7 @@ import 'package:http/io_client.dart';
 import 'message_model.dart';
 import '../utils.dart';
 import '../utils/notes_notifications_text_edit.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 
 class NotesApiService {
@@ -37,7 +38,9 @@ class NotesApiService {
           .get(
             Uri.parse(url),
             headers: {
-              'Cookie': 'a=$cookieA; b=$cookieB; folder=$folder',
+              'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+                'a=$cookieA; b=$cookieB; folder=$folder',
+              ),
               'User-Agent': FAHttp.userAgent,
               HttpHeaders.connectionHeader: 'close',
               'Accept':
@@ -209,7 +212,9 @@ class NotesApiService {
     dio.interceptors.add(CookieManager(cookieJar));
     cookieJar.saveFromResponse(
       Uri.parse('https://www.furaffinity.net'),
-      [Cookie('a', cookieA), Cookie('b', cookieB)],
+      await FaCookieHelper.addCfClearanceCookie(
+        [Cookie('a', cookieA), Cookie('b', cookieB)],
+      ),
     );
     final resp = await dio.get(
       'https://www.furaffinity.net$link',
@@ -315,7 +320,9 @@ class NotesApiService {
           .post(
             Uri.parse('https://www.furaffinity.net/msg/pms/'),
             headers: {
-              'Cookie': 'a=$cookieA; b=$cookieB; folder=trash',
+              'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+                'a=$cookieA; b=$cookieB; folder=trash',
+              ),
               'User-Agent': FAHttp.userAgent,
               HttpHeaders.connectionHeader: 'close',
               'Content-Type': 'application/x-www-form-urlencoded',
@@ -359,7 +366,9 @@ class NotesApiService {
           .post(
             Uri.parse('https://www.furaffinity.net/msg/pms/'),
             headers: {
-              'Cookie': 'a=$cookieA; b=$cookieB; folder=$folder',
+              'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+                'a=$cookieA; b=$cookieB; folder=$folder',
+              ),
               'User-Agent': FAHttp.userAgent,
               HttpHeaders.connectionHeader: 'close',
               'Content-Type': 'application/x-www-form-urlencoded',
@@ -380,4 +389,3 @@ class NotesApiService {
     }
   }
 }
-

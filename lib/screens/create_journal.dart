@@ -169,7 +169,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     final cookieManager = CookieManager.instance();
     final prefs = await SharedPreferences.getInstance();
     final sfwValue = (prefs.getBool('sfwEnabled') ?? true) ? '1' : '0';
-    final cookieKeys = ['a', 'b', 'cc', 'folder', 'nodesc', 'sz', 'sfw'];
+    final cookieKeys = ['a', 'b', 'cc', 'cf_clearance', 'folder', 'nodesc', 'sz', 'sfw'];
 
     for (final key in cookieKeys) {
       final value = key == 'sfw'

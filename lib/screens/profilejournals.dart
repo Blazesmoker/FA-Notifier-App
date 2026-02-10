@@ -75,6 +75,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
       'a',
       'b',
       'cc',
+      'cf_clearance',
       'folder',
       'nodesc',
       'sz',

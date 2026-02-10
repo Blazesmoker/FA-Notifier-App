@@ -10,6 +10,7 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
 import '../services/fa_thumbnail_parser.dart';
@@ -189,6 +190,8 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       }
       var cookieHeader = 'a=$cookieA; b=$cookieB';
       if (_sfwEnabled) cookieHeader += '; sfw=1';
+      cookieHeader =
+          await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader);
 
       final url = _nextPageUrl ??
           _baseSubmissionsUrl ??
@@ -393,7 +396,9 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     if (cookieA.isEmpty || cookieB.isEmpty) {
       return '';
     }
-    return 'a=$cookieA; b=$cookieB';
+    return FaCookieHelper.appendCfClearanceToCookieHeader(
+      'a=$cookieA; b=$cookieB',
+    );
   }
 
   Future<void> _onNukePressed() async {

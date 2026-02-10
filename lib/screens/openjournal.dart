@@ -5,6 +5,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import '../network.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'add_journal_comment_screen.dart';
@@ -403,7 +404,9 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
       final resp = await httpClient.get(
         uri,
         headers: {
-          'Cookie': 'a=$cookieA; b=$cookieB',
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB',
+          ),
           'User-Agent': FAHttp.userAgent,
         },
       );
@@ -499,7 +502,9 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
       final response = await httpClient.get(
         Uri.parse(fullUrl),
         headers: {
-          'Cookie': 'a=$cookieA; b=$cookieB',
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB',
+          ),
           'User-Agent': FAHttp.userAgent,
         },
       );
@@ -548,7 +553,9 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         final response = await httpClient.get(
           Uri.parse(hideLink),
           headers: {
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
             'User-Agent': FAHttp.userAgent,
           },
         );
@@ -592,7 +599,9 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
         final response = await httpClient.get(
           Uri.parse(unhideLink),
           headers: {
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
             'User-Agent': FAHttp.userAgent,
           },
         );

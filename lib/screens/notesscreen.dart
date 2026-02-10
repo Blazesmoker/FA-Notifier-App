@@ -13,6 +13,7 @@ import 'message_detail_screen.dart';
 import 'message_model.dart';
 import 'new_message.dart';
 import '../services/notification_service.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../utils/message_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -623,7 +624,9 @@ class NotesScreenState extends State<NotesScreen>
       dio.interceptors.add(CookieManager(cookieJar));
       cookieJar.saveFromResponse(
         Uri.parse('https://www.furaffinity.net'),
-        [Cookie('a', cookieA), Cookie('b', cookieB)],
+        await FaCookieHelper.addCfClearanceCookie(
+          [Cookie('a', cookieA), Cookie('b', cookieB)],
+        ),
       );
 
       final Map<String, dynamic> formData = {

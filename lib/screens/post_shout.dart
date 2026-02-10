@@ -7,6 +7,7 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../utils/bbcode_context_menu.dart';
 import '../widgets/confirm_close_dialog.dart';
@@ -78,7 +79,10 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
     if (cookieB != null) cookies.add(Cookie('b', cookieB));
 
     Uri uri = Uri.parse('https://www.furaffinity.net');
-    await _cookieJar.saveFromResponse(uri, cookies);
+    await _cookieJar.saveFromResponse(
+      uri,
+      await FaCookieHelper.addCfClearanceCookie(cookies),
+    );
   }
 
   Future<String?> _fetchShoutKey() async {
@@ -94,7 +98,9 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
       options: Options(
         headers: {
           'Referer': 'https://www.furaffinity.net/user/${widget.username}/',
-          'Cookie': 'a=$cookieA; b=$cookieB',
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB',
+          ),
         },
       ),
     );
@@ -174,7 +180,9 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
             'Origin': 'https://www.furaffinity.net',
             'Referer': 'https://www.furaffinity.net/user/${widget.username}/',
             'DNT': '1',
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
           },
           followRedirects: false,
         ),

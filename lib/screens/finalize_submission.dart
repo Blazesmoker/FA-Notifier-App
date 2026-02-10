@@ -9,6 +9,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 
 class FinalizeSubmissionScreen extends StatefulWidget {
@@ -119,7 +120,10 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
 
 
       Uri uri = Uri.parse('https://www.furaffinity.net');
-      await _cookieJar.saveFromResponse(uri, cookies);
+      await _cookieJar.saveFromResponse(
+        uri,
+        await FaCookieHelper.addCfClearanceCookie(cookies),
+      );
 
       List<Cookie> savedCookies = await _cookieJar.loadForRequest(uri);
       for (var cookie in savedCookies) {

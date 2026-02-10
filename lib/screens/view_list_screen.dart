@@ -5,6 +5,7 @@ import '../widgets/PulsatingLoadingIndicator.dart';
 import 'user_profile_screen.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 
 class ViewListScreen extends StatefulWidget {
@@ -63,7 +64,9 @@ class _ViewListScreenState extends State<ViewListScreen> {
         final response = await http.get(
           Uri.parse(url),
           headers: {
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
             'User-Agent': FAHttp.userAgent,
           },
         );

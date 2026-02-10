@@ -13,6 +13,7 @@ import '../utils/bbcode_context_menu.dart';
 import '../utils/fa_link_handler.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import '../widgets/confirm_close_dialog.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 
 class NoteReplyScreen extends StatefulWidget {
@@ -96,7 +97,10 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     if (cookieB != null) cookies.add(Cookie('b', cookieB));
 
     final uri = Uri.parse('https://www.furaffinity.net');
-    _cookieJar.saveFromResponse(uri, cookies);
+    _cookieJar.saveFromResponse(
+      uri,
+      await FaCookieHelper.addCfClearanceCookie(cookies),
+    );
   }
 
   Future<void> _fetchMessageDetails() async {
@@ -397,7 +401,9 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
         options: Options(
           headers: {
             'Referer': getUrl,
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
           },
           followRedirects: false,
         ),
@@ -431,7 +437,9 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
             'Content-Type': 'application/x-www-form-urlencoded',
             'Origin': 'https://www.furaffinity.net',
             'Referer': getUrl,
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
           },
           followRedirects: false,
         ),

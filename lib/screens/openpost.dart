@@ -27,6 +27,7 @@ import 'add_comment_screen.dart';
 import 'avatardownloadscreen.dart';
 import 'openpost_api_service.dart';
 import 'edit_submission_screen.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import 'editcommentscreen.dart';
 import 'keyword_search_screen.dart';
@@ -234,7 +235,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     debugPrint('Cookie header being sent: $cookieHeader');
 
     final headers = <String, String>{
-      'Cookie': cookieHeader,
+      'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
       'User-Agent': FAHttp.userAgent,
     };
     if (additionalHeaders != null) headers.addAll(additionalHeaders);
@@ -745,7 +746,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     final response = await httpClient.post(
       Uri.parse(url),
       headers: <String, String>{
-        'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+        ),
         'User-Agent': FAHttp.userAgent,
         'Referer': 'https://www.furaffinity.net/view/${widget.uniqueNumber}/',
         'Origin': 'https://www.furaffinity.net',
@@ -853,7 +856,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       final response = await httpClient.post(
         Uri.parse(fullUrl),
         headers: {
-          'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+          ),
           'User-Agent': FAHttp.userAgent,
           'Referer': 'https://www.furaffinity.net/user/$linkUsername/',
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -1225,7 +1230,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       final response = await httpClient.post(
         Uri.parse(url),
         headers: {
-          'Cookie': 'a=$cookieA; b=$cookieB',
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB',
+          ),
           'User-Agent': FAHttp.userAgent,
           'Referer': 'https://www.furaffinity.net/view/${widget.uniqueNumber}/',
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -1373,7 +1380,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       final response = await httpClient.post(
         Uri.parse(url),
         headers: {
-          'Cookie': 'a=$cookieA; b=$cookieB',
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB',
+          ),
           'User-Agent': FAHttp.userAgent,
           'Referer': 'https://www.furaffinity.net/controls/submissions/',
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -3094,7 +3103,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     ];
   }
 }
-
 
 
 

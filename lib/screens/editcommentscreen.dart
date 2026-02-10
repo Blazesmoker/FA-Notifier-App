@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../utils/bbcode_context_menu.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
@@ -52,7 +53,9 @@ class _EditCommentScreenState extends State<EditCommentScreen> {
       final response = await _client.get(
         Uri.parse(widget.editLink),
         headers: {
-          'Cookie': 'a=$cookieA; b=$cookieB',
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB',
+          ),
           'User-Agent': FAHttp.userAgent,
           'Referer': widget.editLink,
         },
@@ -103,7 +106,9 @@ class _EditCommentScreenState extends State<EditCommentScreen> {
       final getResponse = await _client.get(
         Uri.parse(widget.editLink),
         headers: {
-          'Cookie': 'a=$cookieA; b=$cookieB',
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB',
+          ),
           'User-Agent': FAHttp.userAgent,
           'Referer': widget.editLink,
         },
@@ -147,7 +152,9 @@ class _EditCommentScreenState extends State<EditCommentScreen> {
         postUri,
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Cookie': 'a=$cookieA; b=$cookieB',
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB',
+          ),
           'User-Agent': FAHttp.userAgent,
           'Referer': widget.editLink,
         },

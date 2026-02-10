@@ -9,6 +9,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../model/notifications.dart';
 import '../utils/notification_counts.dart';
+import 'fa_cookie_helper.dart';
 import 'fa_http.dart';
 
 /// A semaphore to limit concurrent network requests.
@@ -315,7 +316,9 @@ class FANotificationService with ChangeNotifier {
         'https://www.furaffinity.net/msg/others/',
         options: Options(
           headers: {
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
             'Referer': 'https://www.furaffinity.net/msg/others/',
           },
         ),
@@ -1296,7 +1299,9 @@ class FANotificationService with ChangeNotifier {
           headers: {
             'Referer': 'https://www.furaffinity.net/msg/others/',
             'Content-Type': 'application/x-www-form-urlencoded',
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
           },
         ),
       );
@@ -1369,7 +1374,9 @@ class FANotificationService with ChangeNotifier {
           headers: {
             'Referer': 'https://www.furaffinity.net/msg/others/',
             'Content-Type': 'multipart/form-data',
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
           },
         ),
       );
@@ -1445,7 +1452,9 @@ class FANotificationService with ChangeNotifier {
             headers: {
               'Referer': 'https://www.furaffinity.net/msg/others/',
               'Content-Type': 'application/x-www-form-urlencoded',
-              'Cookie': 'a=$cookieA; b=$cookieB',
+              'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+                'a=$cookieA; b=$cookieB',
+              ),
             },
           ),
         );
@@ -1629,6 +1638,7 @@ class FANotificationService with ChangeNotifier {
         cookieHeader += 'sfw=1;';
       }
       cookieHeader = cookieHeader.trim();
+      cookieHeader = await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader);
       debugPrint("[_getCookieHeader] $cookieHeader");
       return cookieHeader;
     } catch (e) {

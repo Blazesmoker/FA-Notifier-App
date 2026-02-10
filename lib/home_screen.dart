@@ -8,7 +8,9 @@ import 'package:FANotifier/screens/search_screen.dart';
 import 'package:FANotifier/screens/submissions_screen.dart';
 import 'package:FANotifier/screens/upload_submission.dart';
 import 'package:FANotifier/services/fa_activities_polling_service.dart';
+import 'package:FANotifier/services/fa_cookie_helper.dart';
 import 'package:FANotifier/services/fa_notification_service.dart';
+import 'package:FANotifier/services/fa_http.dart';
 import 'package:FANotifier/services/notes_refresh_service.dart';
 import 'package:FANotifier/services/notification_refresh_service.dart';
 import 'package:FANotifier/widgets/PulsatingLoadingIndicator.dart';
@@ -19,6 +21,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'custom_drawer/drawer_user_controller.dart';
@@ -26,6 +29,7 @@ import 'app_theme.dart';
 import 'model/user_profile.dart';
 import 'model/notifications.dart';
 import 'services/fa_service.dart';
+import 'screens/cloudflare_check_screen.dart';
 import 'enums/drawer_index.dart';
 import 'providers/notification_settings_provider.dart';
 
@@ -202,6 +206,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _initializeAndLoadLoginState() async {
     await _loadLoginState();
+    final canProceed = await _runStartupCloudflareCheck();
+    if (!canProceed) {
+      setState(() {
+        isCheckingLoginStatus = false;
+        isLoggedIn = false;
+      });
+      return;
+    }
+
     if (isLoggedIn) {
       await _setCookiesFromPrefs();
       _startActivitiesPolling(triggerImmediate: false);
@@ -219,6 +232,62 @@ class _HomeScreenState extends State<HomeScreen> {
         isCheckingLoginStatus = false;
       });
     }
+  }
+
+  Future<bool> _runStartupCloudflareCheck() async {
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    final rawCookieHeader = (cookieA != null && cookieB != null)
+        ? 'a=$cookieA; b=$cookieB'
+        : '';
+    final cookieHeader =
+        await FaCookieHelper.appendCfClearanceToCookieHeader(rawCookieHeader);
+    final headers = <String, String>{
+      'User-Agent': FAHttp.userAgent,
+    };
+    if (cookieHeader.isNotEmpty) {
+      headers['Cookie'] = cookieHeader;
+    }
+
+    http.Response response;
+    try {
+      response = await http.get(
+        Uri.parse(postLoginUrl),
+        headers: headers,
+      );
+    } catch (e) {
+      debugPrint('[Cloudflare] Startup check request failed: $e');
+      return true;
+    }
+
+    final refreshedCf = FaCookieHelper.extractCfClearanceFromSetCookieHeader(
+      response.headers['set-cookie'],
+    );
+    if (refreshedCf != null && refreshedCf.isNotEmpty) {
+      await FaCookieHelper.writeCfClearance(refreshedCf);
+    }
+
+    final needsChallenge = FaCookieHelper.isCloudflareChallengePage(
+      body: response.body,
+      statusCode: response.statusCode,
+    );
+    if (!needsChallenge) {
+      return true;
+    }
+    if (!mounted) {
+      return false;
+    }
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) {
+      return false;
+    }
+
+    final passed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => const CloudflareCheckScreen(),
+      ),
+    );
+    return passed == true;
   }
 
   void _startActivitiesPolling({required bool triggerImmediate}) {
@@ -566,7 +635,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _setCookiesFromPrefs() async {
-    List<String> cookieKeys = ['a', 'b', 'cc', 'folder', 'nodesc', 'sz', 'sfw'];
+    List<String> cookieKeys = [
+      'a',
+      'b',
+      'cc',
+      'cf_clearance',
+      'folder',
+      'nodesc',
+      'sz',
+      'sfw'
+    ];
     for (var key in cookieKeys) {
       String storageKey = 'fa_cookie_$key';
       String? cookieValue = await _secureStorage.read(key: storageKey);

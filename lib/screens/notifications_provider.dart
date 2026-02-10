@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 
 /// Model representing a single notification item.
@@ -108,7 +109,9 @@ class NotificationsProvider with ChangeNotifier {
         'https://www.furaffinity.net/msg/others/',
         options: Options(
           headers: {
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
             'Referer': 'https://www.furaffinity.net/msg/others/',
           },
         ),
@@ -402,7 +405,9 @@ class NotificationsProvider with ChangeNotifier {
         profileUrl,
         options: Options(
           headers: {
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
             'Referer': profileUrl,
           },
         ),
@@ -541,7 +546,9 @@ class NotificationsProvider with ChangeNotifier {
           headers: {
             'Referer': 'https://www.furaffinity.net/msg/others/',
             'Content-Type': 'application/x-www-form-urlencoded',
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
           },
         ),
       );
@@ -665,7 +672,9 @@ class NotificationsProvider with ChangeNotifier {
           headers: {
             'Referer': 'https://www.furaffinity.net/msg/others/',
             'Content-Type': 'application/x-www-form-urlencoded',
-            'Cookie': 'a=$cookieA; b=$cookieB',
+            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+              'a=$cookieA; b=$cookieB',
+            ),
           },
         ),
       );
@@ -744,7 +753,9 @@ class NotificationsProvider with ChangeNotifier {
             headers: {
               'Referer': 'https://www.furaffinity.net/msg/others/',
               'Content-Type': 'application/x-www-form-urlencoded',
-              'Cookie': 'a=$cookieA; b=$cookieB',
+              'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+                'a=$cookieA; b=$cookieB',
+              ),
             },
           ),
         );

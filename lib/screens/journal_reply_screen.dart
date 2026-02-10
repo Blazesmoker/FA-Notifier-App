@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:flutter_html/flutter_html.dart' as html;
 
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../utils/bbcode_context_menu.dart';
 
@@ -123,7 +124,9 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
     final resp = await http.post(
       Uri.parse(postUrl),
       headers: {
-        'Cookie': 'a=$cookieA; b=$cookieB',
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=$cookieA; b=$cookieB',
+        ),
         'User-Agent': FAHttp.userAgent,
         'Content-Type': 'application/x-www-form-urlencoded',
         'Referer': '$postUrl#cid:$sanitized',

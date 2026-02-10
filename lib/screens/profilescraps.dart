@@ -71,6 +71,7 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
       'a',
       'b',
       'cc',
+      'cf_clearance',
       'folder',
       'nodesc',
       'sz',

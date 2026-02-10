@@ -445,6 +445,8 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
   Future<void> _setupWebviewCookies() async {
     String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    String? cfClearance =
+        await _secureStorage.read(key: 'fa_cookie_cf_clearance');
 
     if (cookieA != null && cookieB != null) {
       final cookieManager = CookieManager.instance();
@@ -462,6 +464,14 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
         name: 'b',
         value: cookieB,
       );
+
+      if (cfClearance != null && cfClearance.isNotEmpty) {
+        await cookieManager.setCookie(
+          url: WebUri('https://www.furaffinity.net'),
+          name: 'cf_clearance',
+          value: cfClearance,
+        );
+      }
     }
   }
 

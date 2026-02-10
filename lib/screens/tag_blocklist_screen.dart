@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../network.dart';
 import '../parsing_utils.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 
 class TagBlocklistParseResult {
@@ -152,7 +153,9 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
     return httpClient.get(
       Uri.parse(url),
       headers: <String, String>{
-        'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+        ),
         'User-Agent': FAHttp.userAgent,
       },
     );
@@ -205,7 +208,9 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
     final response = await httpClient.post(
       Uri.parse(_routeUrl),
       headers: <String, String>{
-        'Cookie': 'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+        ),
         'User-Agent': FAHttp.userAgent,
         'Referer': _profileUrl,
         'Origin': 'https://www.furaffinity.net',
@@ -506,5 +511,4 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
     );
   }
 }
-
 

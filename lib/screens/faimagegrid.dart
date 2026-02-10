@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
 import '../services/fa_thumbnail_parser.dart';
@@ -143,7 +144,8 @@ class FAImageGridState extends State<FAImageGrid> {
       final uri = Uri.parse('https://www.furaffinity.net/browse/$pageNumber');
 
       final headers = {
-        HttpHeaders.cookieHeader: cookieHeader,
+        HttpHeaders.cookieHeader:
+            await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
         'User-Agent': FAHttp.userAgent,
         'Referer': 'https://www.furaffinity.net/browse/',
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -174,7 +176,8 @@ class FAImageGridState extends State<FAImageGrid> {
         resp = await FAHttp.get(
           redirectUri,
           headers: {
-            HttpHeaders.cookieHeader: cookieHeader,
+            HttpHeaders.cookieHeader:
+                await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
             'User-Agent': FAHttp.userAgent,
             'Referer': uri.toString(),
           },
@@ -215,7 +218,7 @@ class FAImageGridState extends State<FAImageGrid> {
   }
 
   Future<String> _getAllCookies() async {
-    final cookieNames = ['a', 'b', 'cc', 'folder', 'nodesc', 'sz'];
+    final cookieNames = ['a', 'b', 'cc', 'cf_clearance', 'folder', 'nodesc', 'sz'];
     final cookies = <String>[];
     for (var name in cookieNames) {
       final storageKey = 'fa_cookie_$name';
@@ -303,7 +306,8 @@ class FAImageGridState extends State<FAImageGrid> {
       final response = await FAHttp.get(
         Uri.parse(postUrl),
         headers: {
-          HttpHeaders.cookieHeader: cookieHeader,
+          HttpHeaders.cookieHeader:
+              await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
           'User-Agent': FAHttp.userAgent,
         },
       );

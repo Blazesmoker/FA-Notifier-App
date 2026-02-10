@@ -10,6 +10,7 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:html/parser.dart' as html_parser;
 
 import '../utils/fa_link_handler.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import 'message_model.dart';
 
@@ -80,7 +81,10 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
     if (cookieB != null) cookies.add(Cookie('b', cookieB));
     cookies.add(Cookie('folder', widget.folder));
     final uri = Uri.parse('https://www.furaffinity.net');
-    _cookieJar.saveFromResponse(uri, cookies);
+    _cookieJar.saveFromResponse(
+      uri,
+      await FaCookieHelper.addCfClearanceCookie(cookies),
+    );
   }
 
   Future<void> _fetchMessageDetails() async {
@@ -473,4 +477,3 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
     );
   }
 }
-

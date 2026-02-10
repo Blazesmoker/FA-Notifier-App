@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -400,18 +399,9 @@ class _InfoWebViewDialogState extends State<InfoWebViewDialog> {
     super.dispose();
   }
 
-  String _dataUriForHtml(String html) {
-    return Uri.dataFromString(
-      html,
-      mimeType: 'text/html',
-      encoding: utf8,
-    ).toString();
-  }
-
   @override
   Widget build(BuildContext context) {
     final ds = MediaQuery.of(context).size;
-    final dataUri = _dataUriForHtml(_hardcodedHtml);
 
     return Dialog(
       insetPadding: EdgeInsets.zero,
@@ -458,7 +448,12 @@ class _InfoWebViewDialogState extends State<InfoWebViewDialog> {
             body: Stack(
               children: [
                 InAppWebView(
-                  initialUrlRequest: URLRequest(url: WebUri(dataUri)),
+                  initialData: InAppWebViewInitialData(
+                    data: _hardcodedHtml,
+                    baseUrl: WebUri('https://www.furaffinity.net/help/#tags-and-codes'),
+                    encoding: 'utf-8',
+                    mimeType: 'text/html',
+                  ),
                   initialSettings: InAppWebViewSettings(
                     javaScriptEnabled: true,
                     verticalScrollBarEnabled: true,
@@ -466,18 +461,46 @@ class _InfoWebViewDialogState extends State<InfoWebViewDialog> {
                     transparentBackground: true,
                   ),
                   shouldOverrideUrlLoading: (controller, navigationAction) async {
-                    return NavigationActionPolicy.CANCEL;
+                    final url = navigationAction.request.url;
+                    if (url == null) {
+                      return NavigationActionPolicy.ALLOW;
+                    }
+
+                    if (!navigationAction.isForMainFrame) {
+                      return NavigationActionPolicy.ALLOW;
+                    }
+
+                    if (navigationAction.navigationType == NavigationType.LINK_ACTIVATED) {
+                      final uri = Uri.tryParse(url.toString());
+                      if (uri != null && await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                      return NavigationActionPolicy.CANCEL;
+                    }
+
+                    return NavigationActionPolicy.ALLOW;
                   },
                   onWebViewCreated: (controller) {
                     _controller = controller;
                   },
                   onLoadStop: (controller, uri) {
+                    if (!mounted) return;
                     setState(() {
                       _isLoading = false;
                       _errorMessage = null;
                     });
                   },
+                  onContentSizeChanged: (controller, oldContentSize, newContentSize) {
+                    if (!mounted || !_isLoading) return;
+                    if (newContentSize.width > 0 || newContentSize.height > 0) {
+                      setState(() {
+                        _isLoading = false;
+                        _errorMessage = null;
+                      });
+                    }
+                  },
                   onLoadError: (controller, uri, code, message) {
+                    if (!mounted) return;
                     setState(() {
                       _isLoading = false;
                       _errorMessage = 'Page load error: $message (code $code)';

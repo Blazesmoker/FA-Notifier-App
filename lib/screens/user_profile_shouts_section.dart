@@ -116,6 +116,14 @@ class UserProfileShoutsSection extends StatelessWidget {
                                         width: 40,
                                         height: 40,
                                         fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Image.asset(
+                                            'assets/images/defaultpic.gif',
+                                            width: 40,
+                                            height: 40,
+                                            fit: BoxFit.cover,
+                                          );
+                                        },
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -225,5 +233,4 @@ class UserProfileShoutsSection extends StatelessWidget {
     );
   }
 }
-
 

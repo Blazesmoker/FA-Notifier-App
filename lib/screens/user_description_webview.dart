@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:url_launcher/url_launcher_string.dart';
+import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'openjournal.dart';
@@ -126,7 +127,9 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     final response = await http.get(
       Uri.parse(url),
       headers: {
-        'Cookie': 'a=$cookieA; b=$cookieB',
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=$cookieA; b=$cookieB',
+        ),
         'User-Agent': FAHttp.userAgent,
       },
     );
@@ -587,4 +590,3 @@ class UserDescriptionWebViewScreen extends StatelessWidget {
     );
   }
 }
-
