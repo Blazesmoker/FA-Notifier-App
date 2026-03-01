@@ -12,6 +12,7 @@ import '../services/fa_thumbnail_parser.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import '../widgets/heart_animation.dart';
 import '../widgets/fa_thumbnail_display.dart';
+import 'cloudflare_check_screen.dart';
 import 'openpost.dart';
 
 class FASearchImage extends StatefulWidget {
@@ -52,6 +53,7 @@ class FASearchImageState extends State<FASearchImage> {
 
   int _detailsEpoch = 0;
   final Map<String, Future<void>> _detailsInFlight = {};
+  bool _isHandlingCloudflareChallenge = false;
 
   @override
   void initState() {
@@ -129,7 +131,11 @@ class FASearchImageState extends State<FASearchImage> {
     return cookies.join('; ');
   }
 
-  Future<void> _fetchImages(int pageNumber, {bool isRefresh = false}) async {
+  Future<void> _fetchImages(
+    int pageNumber, {
+    bool isRefresh = false,
+    bool allowCloudflareRecovery = true,
+  }) async {
     setState(() {
       isLoading = true;
     });
@@ -158,11 +164,52 @@ class FASearchImageState extends State<FASearchImage> {
         _preloadImagesImmediately(filteredImages);
         isLoading = false;
       });
+    } on _CloudflareChallengeException catch (e) {
+      debugPrint('Cloudflare challenge detected while fetching search images.');
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+
+      if (!allowCloudflareRecovery) {
+        return;
+      }
+
+      final passed = await _showCloudflareDialog(initialUrl: e.initialUrl);
+      if (!passed || !mounted) {
+        return;
+      }
+
+      await _fetchImages(
+        pageNumber,
+        isRefresh: isRefresh,
+        allowCloudflareRecovery: false,
+      );
+      return;
     } catch (e) {
       debugPrint('Error fetching images: $e');
       setState(() {
         isLoading = false;
       });
+    }
+  }
+
+  Future<bool> _showCloudflareDialog({String? initialUrl}) async {
+    if (!mounted || _isHandlingCloudflareChallenge) return false;
+    _isHandlingCloudflareChallenge = true;
+    try {
+      final result = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        useSafeArea: false,
+        builder: (_) => CloudflareCheckScreen(
+          initialUrl: initialUrl ?? 'https://www.furaffinity.net/',
+        ),
+      );
+      return result == true;
+    } finally {
+      _isHandlingCloudflareChallenge = false;
     }
   }
 
@@ -237,6 +284,21 @@ class FASearchImageState extends State<FASearchImage> {
       },
     );
 
+    final refreshedCf = FaCookieHelper.extractCfClearanceFromSetCookieHeader(
+      response.headers['set-cookie'],
+    );
+    if (refreshedCf != null && refreshedCf.isNotEmpty) {
+      await FaCookieHelper.writeCfClearance(refreshedCf);
+    }
+
+    final isChallenge = FaCookieHelper.isCloudflareChallengePage(
+      body: response.body,
+      statusCode: response.statusCode,
+    );
+    if (isChallenge) {
+      throw _CloudflareChallengeException(initialUrl: uri.toString());
+    }
+
     if (response.statusCode == 200) {
       return await parseHtml(response.body);
     } else {
@@ -305,7 +367,8 @@ class FASearchImageState extends State<FASearchImage> {
   void _scrollListener() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent * 0.4 &&
-        !isLoading) {
+        !isLoading &&
+        !_isHandlingCloudflareChallenge) {
       currentPage++;
       _fetchImages(currentPage);
     }
@@ -640,6 +703,12 @@ class FASearchImageState extends State<FASearchImage> {
       },
     );
   }
+}
+
+class _CloudflareChallengeException implements Exception {
+  final String? initialUrl;
+
+  const _CloudflareChallengeException({this.initialUrl});
 }
 
 class _FavSearchTile extends StatefulWidget {

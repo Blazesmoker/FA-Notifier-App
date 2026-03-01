@@ -3,9 +3,15 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../services/fa_cookie_helper.dart';
+import '../services/fa_http.dart';
 
 class CloudflareCheckScreen extends StatefulWidget {
-  const CloudflareCheckScreen({super.key});
+  final String initialUrl;
+
+  const CloudflareCheckScreen({
+    super.key,
+    this.initialUrl = 'https://www.furaffinity.net/',
+  });
 
   @override
   State<CloudflareCheckScreen> createState() => _CloudflareCheckScreenState();
@@ -14,6 +20,8 @@ class CloudflareCheckScreen extends StatefulWidget {
 class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
   InAppWebViewController? _controller;
   bool _didComplete = false;
+  bool _hasSeenChallenge = false;
+  String? _initialCfClearance;
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     iOptions: IOSOptions(
@@ -87,8 +95,16 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
     final body = (html ?? '').toString();
     final isChallenge = FaCookieHelper.isCloudflareChallengePage(body: body);
     final cfClearance = await _secureStorage.read(key: 'fa_cookie_cf_clearance');
+    final hasCf = cfClearance != null && cfClearance.isNotEmpty;
+    final cfChanged =
+        hasCf && (_initialCfClearance == null || _initialCfClearance != cfClearance);
 
-    if (!isChallenge && cfClearance != null && cfClearance.isNotEmpty) {
+    if (isChallenge) {
+      _hasSeenChallenge = true;
+      return;
+    }
+
+    if ((_hasSeenChallenge && hasCf) || cfChanged) {
       _didComplete = true;
       if (mounted) {
         Navigator.of(context).pop(true);
@@ -105,6 +121,17 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
           automaticallyImplyLeading: false,
           title: const Text('Cloudflare Check'),
           centerTitle: true,
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(false);
+              },
+              child: const Text(
+                'Close',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
         ),
         body: InAppWebView(
           initialUrlRequest: URLRequest(
@@ -115,13 +142,19 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
             useShouldOverrideUrlLoading: true,
             clearCache: false,
             supportZoom: true,
+            userAgent: FAHttp.userAgent,
           ),
+          shouldOverrideUrlLoading: (controller, navigationAction) async {
+            return NavigationActionPolicy.ALLOW;
+          },
           onWebViewCreated: (controller) async {
             _controller = controller;
+            _initialCfClearance =
+                await _secureStorage.read(key: 'fa_cookie_cf_clearance');
             await _setCookiesFromSecureStorage();
             await controller.loadUrl(
               urlRequest: URLRequest(
-                url: WebUri('https://www.furaffinity.net/'),
+                url: WebUri(widget.initialUrl),
               ),
             );
           },
