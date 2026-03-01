@@ -2,7 +2,6 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import '../utils/html_tags_debug.dart';
 
-
 class OpenPostParseResult {
   OpenPostParseResult({
     required this.currentUsername,
@@ -42,6 +41,7 @@ class OpenPostParseResult {
   final String? fullViewImageUrl;
   final String? submissionDescription;
   final String? publicationTimeRaw;
+
   /// "general" | "mature" | "adult" | null
   final String? rating;
   final int favoritesCount;
@@ -81,18 +81,13 @@ class FaPostTag {
 class OpenPostApiService {
   /// Parses the main post document and returns structured data.
   static OpenPostParseResult parsePostDocument(dom.Document document) {
+    final titleText = document.querySelector('title')?.text.toLowerCase() ?? '';
+    final h2Text = document.querySelector('h2')?.text.toLowerCase() ?? '';
+    final bodyText = document.body?.text.toLowerCase() ?? '';
 
-    final titleText =
-        document.querySelector('title')?.text.toLowerCase() ?? '';
-    final h2Text =
-        document.querySelector('h2')?.text.toLowerCase() ?? '';
-    final bodyText =
-        document.body?.text.toLowerCase() ?? '';
-
-    final isSystemError =
-        titleText.contains('system error') ||
-            h2Text.contains('system error') ||
-            bodyText.contains('not in our database');
+    final isSystemError = titleText.contains('system error') ||
+        h2Text.contains('system error') ||
+        bodyText.contains('not in our database');
 
     if (isSystemError) {
       throw FaSystemErrorException(
@@ -120,11 +115,10 @@ class OpenPostApiService {
       '.submission-id-avatar img, td.alt1 .avatar img, .classic-submission-title.avatar a img, .classic-submissiont-title.avatar a img',
     );
 
-    var usernameAnchor =
-        logQuery(document, '.submission-id-sub-container a[href^="/user/"]') ??
-            logQuery(
-                document,
-                '.classic-submission-title.information span.c-usernameBlockSimple.username-underlined a[href^="/user/"]');
+    var usernameAnchor = logQuery(
+            document, '.submission-id-sub-container a[href^="/user/"]') ??
+        logQuery(document,
+            '.classic-submission-title.information span.c-usernameBlockSimple.username-underlined a[href^="/user/"]');
 
     String? extractedUsername;
     final userSpan = usernameAnchor?.querySelector('span');
@@ -144,20 +138,21 @@ class OpenPostApiService {
     }
 
     // Submission title
-    final titleElem =
-        logQuery(document, '.submission-title h2 p, .classic-submission-title.information h2');
+    final titleElem = logQuery(document,
+        '.submission-title h2 p, .classic-submission-title.information h2');
 
     // Full image
-    final imageElem =
-        logQuery(document, '.submission-area img#submissionImg[src], img#submissionImg[src]');
-    String? fullViewUrl = imageElem?.attributes['data-fullview-src']?.replaceFirst('//', 'https://');
-    fullViewUrl ??= imageElem?.attributes['src']?.replaceFirst('//', 'https://');
-
+    final imageElem = logQuery(document,
+        '.submission-area img#submissionImg[src], img#submissionImg[src]');
+    String? fullViewUrl = imageElem?.attributes['data-fullview-src']
+        ?.replaceFirst('//', 'https://');
+    fullViewUrl ??=
+        imageElem?.attributes['src']?.replaceFirst('//', 'https://');
 
     // Description
-    var descElem = logQuery(document, '.submission-description.user-submitted-links') ??
-        logQuery(
-            document,
+    var descElem = logQuery(
+            document, '.submission-description.user-submitted-links') ??
+        logQuery(document,
             '.submission-description, td.alt1[width="70%"][valign="top"][align="left"][style*="padding:8px"]');
     String fixedDescription = '';
 
@@ -208,7 +203,8 @@ class OpenPostApiService {
         }
       }
     }
-    final parsedViewCount = int.tryParse(viewCountElem?.text.trim() ?? '0') ?? 0;
+    final parsedViewCount =
+        int.tryParse(viewCountElem?.text.trim() ?? '0') ?? 0;
 
     // Comments count
     var commentsCountElem = logQuery(document, '.comments .font-large');
@@ -234,13 +230,13 @@ class OpenPostApiService {
         }
       }
     }
-    final parsedCommentsCount = int.tryParse(commentsCountElem?.text.trim() ?? '0') ?? 0;
+    final parsedCommentsCount =
+        int.tryParse(commentsCountElem?.text.trim() ?? '0') ?? 0;
 
     // Rating (General/Mature/Adult)
     String? rating;
-    dom.Element? ratingElem =
-        logQuery(document, '.rating .font-large') ??
-            logQuery(document, 'span[class*="c-contentRating--"]');
+    dom.Element? ratingElem = logQuery(document, '.rating .font-large') ??
+        logQuery(document, 'span[class*="c-contentRating--"]');
     if (ratingElem == null) {
       // Classic fallback: parse from stats container labels.
       final statsContainer = logQuery(document, 'td.alt1.stats-container');
@@ -252,7 +248,8 @@ class OpenPostApiService {
             if (nodes != null) {
               final index = nodes.indexOf(b);
               if (index != -1 && index < nodes.length - 1) {
-                final ratingText = nodes[index + 1].text?.trim().toLowerCase() ?? '';
+                final ratingText =
+                    nodes[index + 1].text?.trim().toLowerCase() ?? '';
                 if (ratingText.contains('general')) rating = 'general';
                 if (ratingText.contains('mature')) rating = 'mature';
                 if (ratingText.contains('adult')) rating = 'adult';
@@ -264,9 +261,12 @@ class OpenPostApiService {
       }
     }
     if (rating == null && ratingElem != null) {
-      if (ratingElem.classes.contains('c-contentRating--general')) rating = 'general';
-      if (ratingElem.classes.contains('c-contentRating--mature')) rating = 'mature';
-      if (ratingElem.classes.contains('c-contentRating--adult')) rating = 'adult';
+      if (ratingElem.classes.contains('c-contentRating--general'))
+        rating = 'general';
+      if (ratingElem.classes.contains('c-contentRating--mature'))
+        rating = 'mature';
+      if (ratingElem.classes.contains('c-contentRating--adult'))
+        rating = 'adult';
     }
     if (rating == null && ratingElem != null) {
       final t = ratingElem.text.trim().toLowerCase();
@@ -276,7 +276,8 @@ class OpenPostApiService {
     }
 
     // Info section
-    final infoSection = logQuery(document, 'section.info.text, td.alt1.stats-container');
+    final infoSection =
+        logQuery(document, 'section.info.text, td.alt1.stats-container');
     String? category;
     String? type;
     String? species;
@@ -323,19 +324,23 @@ class OpenPostApiService {
         }
       } else {
         final infoHtml = infoSection.innerHtml;
-        category ??= RegExp(r'<b>\s*Category:\s*</b>\s*([^<]+)<br\s*/?>', caseSensitive: false)
+        category ??= RegExp(r'<b>\s*Category:\s*</b>\s*([^<]+)<br\s*/?>',
+                caseSensitive: false)
             .firstMatch(infoHtml)
             ?.group(1)
             ?.trim();
-        type ??= RegExp(r'<b>\s*Theme:\s*</b>\s*([^<]+)<br\s*/?>', caseSensitive: false)
+        type ??= RegExp(r'<b>\s*Theme:\s*</b>\s*([^<]+)<br\s*/?>',
+                caseSensitive: false)
             .firstMatch(infoHtml)
             ?.group(1)
             ?.trim();
-        species ??= RegExp(r'<b>\s*Species:\s*</b>\s*([^<]+)<br\s*/?>', caseSensitive: false)
+        species ??= RegExp(r'<b>\s*Species:\s*</b>\s*([^<]+)<br\s*/?>',
+                caseSensitive: false)
             .firstMatch(infoHtml)
             ?.group(1)
             ?.trim();
-        gender ??= RegExp(r'<b>\s*Gender:\s*</b>\s*([^<]+)<br\s*/?>', caseSensitive: false)
+        gender ??= RegExp(r'<b>\s*Gender:\s*</b>\s*([^<]+)<br\s*/?>',
+                caseSensitive: false)
             .firstMatch(infoHtml)
             ?.group(1)
             ?.trim();
@@ -344,7 +349,8 @@ class OpenPostApiService {
           caseSensitive: false,
         ).firstMatch(infoHtml);
         if (sizeMatch != null) {
-          size = '${sizeMatch.group(1)?.trim()} x ${sizeMatch.group(2)?.trim()}';
+          size =
+              '${sizeMatch.group(1)?.trim()} x ${sizeMatch.group(2)?.trim()}';
         }
         fileSize ??= RegExp(
           r'<b>\s*File Size:\s*</b>\s*([^<]+)<br\s*/?>',
@@ -402,15 +408,16 @@ class OpenPostApiService {
     // because meta-only posts still use `tags-row` with the `tags-row--meta`
     // modifier. If we accidentally select that, we end up duplicating meta tags
     // in the normal "Keywords" list.
-    dom.Element? keywordSection =
-        document.querySelector('section.tags-row:not(.tags-row--meta)') ??
-            document.querySelector('section.tags-mobile:not(.tags-mobile--meta)') ??
-            logQuery(document, 'section.tags-row:not(.tags-row--meta)') ??
-            logQuery(document, 'section.tags-mobile:not(.tags-mobile--meta)') ??
-            logQuery(document, '#keywords');
+    dom.Element? keywordSection = document
+            .querySelector('section.tags-row:not(.tags-row--meta)') ??
+        document.querySelector('section.tags-mobile:not(.tags-mobile--meta)') ??
+        logQuery(document, 'section.tags-row:not(.tags-row--meta)') ??
+        logQuery(document, 'section.tags-mobile:not(.tags-mobile--meta)') ??
+        logQuery(document, '#keywords');
 
-    dom.Element? metaKeywordSection = document.querySelector('section.tags-row.tags-row--meta') ??
-        document.querySelector('section.tags-mobile.tags-mobile--meta');
+    dom.Element? metaKeywordSection =
+        document.querySelector('section.tags-row.tags-row--meta') ??
+            document.querySelector('section.tags-mobile.tags-mobile--meta');
 
     final keywordTags = _parseTagsFromSection(
       keywordSection,
@@ -464,15 +471,18 @@ class OpenPostApiService {
         }
       }
     }
-    final localFavoritesCount = int.tryParse(favCountElem?.text.trim() ?? '0') ?? 0;
+    final localFavoritesCount =
+        int.tryParse(favCountElem?.text.trim() ?? '0') ?? 0;
 
     // Fav/unfav links
     var favLinkElement = logQuery(document, '.favorite-nav a[href^="/fav/"]') ??
         logQuery(document, 'a[href^="/fav/"].button');
-    var unfavLinkElement = logQuery(document, '.favorite-nav a[href^="/unfav/"]') ??
-        logQuery(document, 'a[href^="/unfav/"].button');
+    var unfavLinkElement =
+        logQuery(document, '.favorite-nav a[href^="/unfav/"]') ??
+            logQuery(document, 'a[href^="/unfav/"].button');
     if (favLinkElement == null) {
-      final actionsContainers = logQueryAll(document, 'div.alt1.actions.aligncenter');
+      final actionsContainers =
+          logQueryAll(document, 'div.alt1.actions.aligncenter');
       for (final actionsDiv in actionsContainers) {
         final boldElements = actionsDiv.getElementsByTagName('b');
         for (final b in boldElements) {
@@ -486,7 +496,8 @@ class OpenPostApiService {
       }
     }
     if (unfavLinkElement == null) {
-      final actionsContainers = logQueryAll(document, 'div.alt1.actions.aligncenter');
+      final actionsContainers =
+          logQueryAll(document, 'div.alt1.actions.aligncenter');
       for (final actionsDiv in actionsContainers) {
         final boldElements = actionsDiv.getElementsByTagName('b');
         for (final b in boldElements) {
@@ -506,7 +517,8 @@ class OpenPostApiService {
       currentUsername: currentUsername,
       username: extractedUsername,
       linkUsername: linkUser,
-      profileImageUrl: profileIcon?.attributes['src']?.replaceFirst('//', 'https://'),
+      profileImageUrl:
+          profileIcon?.attributes['src']?.replaceFirst('//', 'https://'),
       submissionTitle: titleElem?.text.trim(),
       fullViewImageUrl: fullViewUrl,
       submissionDescription: fixedDescription,
@@ -555,11 +567,9 @@ class OpenPostApiService {
 
       String? fallbackLabel;
       if (!isSearchable) {
-        fallbackLabel = tagContainer
-                .querySelector('span.tag-invalid')
-                ?.text
-                .trim() ??
-            tagContainer.querySelector('a')?.text.trim();
+        fallbackLabel =
+            tagContainer.querySelector('span.tag-invalid')?.text.trim() ??
+                tagContainer.querySelector('a')?.text.trim();
       }
 
       final name = (dataTagName ?? label ?? fallbackLabel ?? '').trim();
@@ -567,7 +577,8 @@ class OpenPostApiService {
       if (tags.any((t) => t.name == name)) continue;
 
       final normalizedName = name.toLowerCase();
-      final isBlocked = isBlockedFromClass || blockedTags.contains(normalizedName);
+      final isBlocked =
+          isBlockedFromClass || blockedTags.contains(normalizedName);
 
       tags.add(
         FaPostTag(
@@ -585,22 +596,25 @@ class OpenPostApiService {
   /// Parses comment containers from the provided FA post document.
   /// Returns a list of maps compatible with the existing CommentWidget.
   static List<Map<String, dynamic>> parseComments(dom.Document document) {
-    final commentContainers =
-        document.querySelectorAll('.comment_container, table.container-comment');
+    final commentContainers = document
+        .querySelectorAll('.comment_container, table.container-comment');
 
     final List<Map<String, dynamic>> loadedComments = [];
 
     for (final commentContainer in commentContainers) {
       final bool isClassic = (commentContainer.localName == 'table');
 
-      final innerContainer = commentContainer.querySelector('comment-container');
+      final innerContainer =
+          commentContainer.querySelector('comment-container');
       bool isDeleted =
-          innerContainer?.classes.contains('deleted-comment-container') ?? false;
+          innerContainer?.classes.contains('deleted-comment-container') ??
+              false;
 
       bool isClassicDeleted = false;
       dom.Element? classicDeletedCell;
       if (isClassic) {
-        classicDeletedCell = commentContainer.querySelector('td.comment-deleted');
+        classicDeletedCell =
+            commentContainer.querySelector('td.comment-deleted');
         if (classicDeletedCell != null) {
           isClassicDeleted = true;
           isDeleted = true;
@@ -630,56 +644,65 @@ class OpenPostApiService {
           ?.attributes['src']
           ?.replaceFirst('//', 'https://');
 
-      final displayNameAnchor =
-          commentContainer.querySelector('a.c-usernameBlock__displayName span.js-displayName');
+      final displayNameAnchor = commentContainer
+          .querySelector('a.c-usernameBlock__displayName span.js-displayName');
       final String? displayName = displayNameAnchor?.text.trim();
 
       String parsedSymbol = '';
       String parsedUserName = '';
-      final userNameAnchor = commentContainer.querySelector('a.c-usernameBlock__userName');
+      final userNameAnchor =
+          commentContainer.querySelector('a.c-usernameBlock__userName');
       if (userNameAnchor != null) {
-        final symbolElement = userNameAnchor.querySelector('span.c-usernameBlock__symbol');
+        final symbolElement =
+            userNameAnchor.querySelector('span.c-usernameBlock__symbol');
         if (symbolElement != null) {
           parsedSymbol = symbolElement.text.trim();
         }
         final fullText = userNameAnchor.text.trim();
         parsedUserName = fullText.replaceFirst(parsedSymbol, '').trim();
       }
-      final effectiveUserName = parsedUserName.isNotEmpty ? parsedUserName : displayName;
+      final effectiveUserName =
+          parsedUserName.isNotEmpty ? parsedUserName : displayName;
       final usernameForUI = effectiveUserName ?? 'Anonymous';
 
-      final userTitleElement = commentContainer.querySelector(
-          'comment-title.custom-title, span.custom-title');
+      final userTitleElement = commentContainer
+          .querySelector('comment-title.custom-title, span.custom-title');
       final String? userTitle = userTitleElement?.text.trim();
 
       final iconBeforeElements =
           commentContainer.querySelectorAll('usericon-block-before img');
-      final List<String> iconBeforeUrls = iconBeforeElements.map((elem) {
-        final src = elem.attributes['src'];
-        if (src != null) {
-          if (src.startsWith('//')) return 'https:$src';
-          if (src.startsWith('/')) return 'https://www.furaffinity.net$src';
-          return src;
-        }
-        return '';
-      }).where((url) => url.isNotEmpty).toList();
+      final List<String> iconBeforeUrls = iconBeforeElements
+          .map((elem) {
+            final src = elem.attributes['src'];
+            if (src != null) {
+              if (src.startsWith('//')) return 'https:$src';
+              if (src.startsWith('/')) return 'https://www.furaffinity.net$src';
+              return src;
+            }
+            return '';
+          })
+          .where((url) => url.isNotEmpty)
+          .toList();
 
       final iconAfterElements =
           commentContainer.querySelectorAll('usericon-block-after img');
-      final List<String> iconAfterUrls = iconAfterElements.map((elem) {
-        final src = elem.attributes['src'];
-        if (src != null) {
-          if (src.startsWith('//')) return 'https:$src';
-          if (src.startsWith('/')) return 'https://www.furaffinity.net$src';
-          return src;
-        }
-        return '';
-      }).where((url) => url.isNotEmpty).toList();
+      final List<String> iconAfterUrls = iconAfterElements
+          .map((elem) {
+            final src = elem.attributes['src'];
+            if (src != null) {
+              if (src.startsWith('//')) return 'https:$src';
+              if (src.startsWith('/')) return 'https://www.furaffinity.net$src';
+              return src;
+            }
+            return '';
+          })
+          .where((url) => url.isNotEmpty)
+          .toList();
 
       String? commentText;
       String? commentHtml;
-      final commentTextElement = commentContainer.querySelector(
-          '.comment_text, .message-text, .replyto-message');
+      final commentTextElement = commentContainer
+          .querySelector('.comment_text, .message-text, .replyto-message');
 
       if (isClassicDeleted && classicDeletedCell != null) {
         commentText = classicDeletedCell.text.trim();
@@ -698,11 +721,11 @@ class OpenPostApiService {
           },
         );
 
-
         rawHtml = _fixTruncatedLinks(rawHtml);
         final commentDoc = html_parser.parse(rawHtml);
         commentDoc.querySelectorAll('a.auto_link_shortened').forEach((element) {
-          final fullLink = element.attributes['title'] ?? element.attributes['href'];
+          final fullLink =
+              element.attributes['title'] ?? element.attributes['href'];
           if (fullLink != null) {
             element.innerHtml = fullLink;
           }
@@ -717,7 +740,9 @@ class OpenPostApiService {
       final popupDateRelative = dateElem?.text.trim();
 
       String? hideLink;
-      final unhideLink = commentContainer.querySelector('a[href*="action=unhide_comment"]');
+      final unhideLink =
+          commentContainer.querySelector('a[href*="action=unhide_comment"]');
+      final bool hasUnhideAction = unhideLink != null;
       if (unhideLink != null) {
         hideLink = unhideLink.attributes['href'];
       } else {
@@ -731,11 +756,26 @@ class OpenPostApiService {
         hideLink = 'https://www.furaffinity.net$hideLink';
       }
 
+      final combinedHiddenSource = '${commentText ?? ''} ${commentHtml ?? ''}';
+      final hiddenByOwner = RegExp(
+        r'comment\s+hidden\s+by\s+its\s+owner',
+        caseSensitive: false,
+      ).hasMatch(combinedHiddenSource);
+      final hiddenCommentDetected = RegExp(
+        r'comment\s+hidden',
+        caseSensitive: false,
+      ).hasMatch(combinedHiddenSource);
+      isDeleted = isDeleted ||
+          hasUnhideAction ||
+          hiddenByOwner ||
+          hiddenCommentDetected;
+
       String? commentId;
       final replyLinkHref =
           commentContainer.querySelector('.replyto_link')?.attributes['href'];
       if (replyLinkHref != null) {
-        final match = RegExp(r'/replyto/[\w]+/(\d+)/').firstMatch(replyLinkHref);
+        final match =
+            RegExp(r'/replyto/[\w]+/(\d+)/').firstMatch(replyLinkHref);
         if (match != null) {
           commentId = match.group(1);
         }
@@ -762,7 +802,8 @@ class OpenPostApiService {
         editLink = 'https://www.furaffinity.net$editLink';
       }
 
-      final replyLinkElement = commentContainer.querySelector('td.reply-link a');
+      final replyLinkElement =
+          commentContainer.querySelector('td.reply-link a');
       final String? replyLink = replyLinkElement?.attributes['href'];
 
       final commentMap = <String, dynamic>{
@@ -792,15 +833,23 @@ class OpenPostApiService {
         String hiddenText = commentText ?? '';
         hiddenText = hiddenText
             .replaceAll(
-                RegExp(r'Unhide\s+Comment(\s*<span.*?<\/span>)?', caseSensitive: false),
+                RegExp(r'Unhide\s+Comment(\s*<span.*?<\/span>)?',
+                    caseSensitive: false),
                 '')
             .trim();
-        commentMap['text'] = hiddenText;
+        commentMap['text'] =
+            hiddenText.isNotEmpty ? hiddenText : 'Comment hidden by its owner';
+        commentMap['commentHtml'] = null;
         commentMap['profileImage'] = null;
         commentMap['displayName'] = null;
         commentMap['userName'] = null;
+        commentMap['username'] = null;
+        commentMap['symbol'] = '';
+        commentMap['userTitle'] = null;
       } else {
-        if (profileImage == null || effectiveUserName == null || commentText == null) {
+        if (profileImage == null ||
+            effectiveUserName == null ||
+            commentText == null) {
           continue;
         }
       }
@@ -827,6 +876,7 @@ class OpenPostApiService {
 
 class FaSystemErrorException implements Exception {
   final String message;
-  FaSystemErrorException(this.message);  @override
+  FaSystemErrorException(this.message);
+  @override
   String toString() => message;
 }

@@ -55,7 +55,8 @@ class UserProfileHomeSection extends StatelessWidget {
   final String? featuredImageUrl;
   final String? featuredImageTitle;
   final String? featuredPostNumber;
-  final void Function(BuildContext context, String imageUrl, String uniqueNumber) onOpenPost;
+  final void Function(
+      BuildContext context, String imageUrl, String uniqueNumber) onOpenPost;
 
   final String? userProfileImageUrl;
   final String? userProfilePostNumber;
@@ -87,7 +88,9 @@ class UserProfileHomeSection extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 8.0),
       children: [
-        if (hasRealUserProfile && userDescription != null && userDescription!.trim().isNotEmpty)
+        if (hasRealUserProfile &&
+            userDescription != null &&
+            userDescription!.trim().isNotEmpty)
           GestureDetector(
             onLongPressStart: onDescriptionLongPressStart,
             child: UserDescriptionWebView(
@@ -105,17 +108,16 @@ class UserProfileHomeSection extends StatelessWidget {
             featuredImageTitle != null &&
             featuredImageTitle!.isNotEmpty &&
             featuredPostNumber != null &&
-            featuredPostNumber!.isNotEmpty)
-          ...[
-            FeaturedSubmissionSection(
-              imageUrl: featuredImageUrl!,
-              title: featuredImageTitle!,
-              onTap: () {
-                onOpenPost(context, featuredImageUrl!, featuredPostNumber!);
-              },
-            ),
-            const SizedBox(height: 8.0),
-          ],
+            featuredPostNumber!.isNotEmpty) ...[
+          FeaturedSubmissionSection(
+            imageUrl: featuredImageUrl!,
+            title: featuredImageTitle!,
+            onTap: () {
+              onOpenPost(context, featuredImageUrl!, featuredPostNumber!);
+            },
+          ),
+          const SizedBox(height: 8.0),
+        ],
         if (hasRealUserProfile &&
             userProfileTexts != null &&
             userProfileTexts!.isNotEmpty &&
@@ -141,6 +143,7 @@ class UserProfileHomeSection extends StatelessWidget {
           UserGridSection(
             title: 'Recent Watchers',
             viewListText: 'Watched by $recentWatchersCount',
+            totalUsersCount: recentWatchersCount,
             users: recentWatchers,
             sanitizedUsername: sanitizedUsername,
           ),
@@ -149,6 +152,7 @@ class UserProfileHomeSection extends StatelessWidget {
           UserGridSection(
             title: 'Recently Watched',
             viewListText: 'Watching $recentlyWatchedCount',
+            totalUsersCount: recentlyWatchedCount,
             users: recentlyWatched,
             sanitizedUsername: sanitizedUsername,
           ),
@@ -188,7 +192,8 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
   final bool isClassicMarkup;
   final bool acceptingTrades;
   final bool acceptingCommissions;
-  final void Function(BuildContext context, String imageUrl, String uniqueNumber) onOpenPost;
+  final void Function(
+      BuildContext context, String imageUrl, String uniqueNumber) onOpenPost;
   final Future<void> Function(BuildContext context, String url) onHandleFALink;
 
   @override
@@ -206,14 +211,18 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
           children: [
             const Text(
               'User Profile',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white),
             ),
             const SizedBox(height: 8.0),
             if (userProfileImageUrl != null)
               GestureDetector(
                 onTap: () {
                   if (userProfilePostNumber != null) {
-                    onOpenPost(context, userProfileImageUrl!, userProfilePostNumber!);
+                    onOpenPost(
+                        context, userProfileImageUrl!, userProfilePostNumber!);
                   }
                 },
                 child: Center(
@@ -237,7 +246,6 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
                         return const SizedBox();
                       },
                     ),
-
                   ),
                 ),
               ),
@@ -272,5 +280,3 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
     );
   }
 }
-
-

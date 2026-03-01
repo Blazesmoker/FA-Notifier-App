@@ -42,8 +42,8 @@ ext {
     flutter = [
             minSdkVersion : 26,
             targetSdkVersion : 36,
-            versionCode : 18,
-            versionName : "1.2.2"
+            versionCode : 19,
+            versionName : "1.2.3"
     ]
     compileSdkVersion = 36
     targetSdkVersion = 36

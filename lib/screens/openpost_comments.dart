@@ -38,6 +38,8 @@ class _CommentWidgetState extends State<CommentWidget> {
     final double leftPadding = nestingLevel * 16.0;
     final String? commentHtml = widget.comment['commentHtml'];
     final bool hasHtml = commentHtml != null && commentHtml.trim().isNotEmpty;
+    final String normalizedCommentHtml =
+        hasHtml ? normalizeSmilieTokensToHtml(commentHtml) : '';
 
     if (widget.comment['deleted'] == true) {
       return Padding(
@@ -80,7 +82,8 @@ class _CommentWidgetState extends State<CommentWidget> {
     return Padding(
       padding: EdgeInsets.only(left: leftPadding, bottom: 6.0),
       child: Container(
-        padding: const EdgeInsets.only(right: 12.0, left: 12.0, top: 8.0, bottom: 2.0),
+        padding: const EdgeInsets.only(
+            right: 12.0, left: 12.0, top: 8.0, bottom: 2.0),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
@@ -106,7 +109,8 @@ class _CommentWidgetState extends State<CommentWidget> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => UserProfileScreen(nickname: nick),
+                              builder: (context) =>
+                                  UserProfileScreen(nickname: nick),
                             ),
                           );
                         }
@@ -136,7 +140,6 @@ class _CommentWidgetState extends State<CommentWidget> {
                           );
                         },
                       ),
-
                     ),
                   ),
                 Expanded(
@@ -157,7 +160,8 @@ class _CommentWidgetState extends State<CommentWidget> {
                                     width: 16,
                                     height: 16,
                                     color: isEditedIcon ? Colors.white : null,
-                                    colorBlendMode: isEditedIcon ? BlendMode.srcIn : null,
+                                    colorBlendMode:
+                                        isEditedIcon ? BlendMode.srcIn : null,
                                   ),
                                 );
                               },
@@ -179,7 +183,8 @@ class _CommentWidgetState extends State<CommentWidget> {
                             ...widget.comment['iconAfterUrls'].map(
                               (url) => Padding(
                                 padding: const EdgeInsets.only(left: 4.0),
-                                child: Image.network(url, width: 16, height: 16),
+                                child:
+                                    Image.network(url, width: 16, height: 16),
                               ),
                             ),
                           if (widget.comment['isOP'] == true)
@@ -188,7 +193,7 @@ class _CommentWidgetState extends State<CommentWidget> {
                               child: Text(
                                 'OP',
                                 style: TextStyle(
-                                  color: Colors.blue,
+                                  color: Color(0xFFE09321),
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -218,7 +223,8 @@ class _CommentWidgetState extends State<CommentWidget> {
             ),
 
             Padding(
-              padding: const EdgeInsets.only(left: 0.0, right: 0.0, top: 8.0, bottom: 1.0),
+              padding: const EdgeInsets.only(
+                  left: 0.0, right: 0.0, top: 8.0, bottom: 1.0),
               child: Theme(
                 data: Theme.of(context).copyWith(
                   textSelectionTheme: TextSelectionThemeData(
@@ -228,74 +234,86 @@ class _CommentWidgetState extends State<CommentWidget> {
                 ),
                 child: hasHtml
                     ? Html(
-                  data: commentHtml,
-                  onLinkTap: (url, _, __) {
-                    if (url != null) {
-                      widget.handleLink?.call(url);
-                    }
-                  },
-                  style: {
-                    "body": Style(
-                      margin: Margins.zero,
-                      padding: HtmlPaddings.zero,
-                      color: Colors.grey.shade300,
-                      fontSize: FontSize(14),
-                    ),
-
-
-                    ".bbcode_center": Style(
-                      display: Display.block,
-                      textAlign: TextAlign.center,
-                    ),
-                    ".bbcode_left": Style(
-                      display: Display.block,
-                      textAlign: TextAlign.left,
-                    ),
-                    ".bbcode_right": Style(
-                      display: Display.block,
-                      textAlign: TextAlign.right,
-                    ),
-
-                    "code": Style(
-                      backgroundColor: Colors.transparent,
-                      padding: HtmlPaddings.zero,
-                      margin: Margins.zero,
-                      fontFamily: 'inherit',
-                      fontSize: FontSize(14),
-                      color: Colors.grey.shade300,
-                    ),
-
-                    "strong": Style(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade300,
-                    ),
-
-
-                    "em": Style(
-                      fontStyle: FontStyle.italic,
-                      color: Colors.grey.shade300,
-                    ),
-
-
-                    ".bbcode_u": Style(
-                      textDecoration: TextDecoration.underline,
-                      color: Colors.grey.shade300,
-                    ),
-
-
-                    "a": Style(
-                      color: const Color(0xFFE09321),
-                      textDecoration: TextDecoration.none,
-                    ),
-                  },
-                )
+                        data: normalizedCommentHtml,
+                        onLinkTap: (url, _, __) {
+                          if (url != null) {
+                            widget.handleLink?.call(url);
+                          }
+                        },
+                        extensions: [
+                          TagExtension.inline(
+                            tagsToExtend: {'i'},
+                            builder: (context) {
+                              final assetPath = emojiAssetForSmilieClass(
+                                  context.attributes['class']);
+                              if (assetPath != null) {
+                                return WidgetSpan(
+                                  child: Image.asset(assetPath,
+                                      width: 20, height: 20),
+                                );
+                              }
+                              return TextSpan(
+                                style: const TextStyle(
+                                    fontStyle: FontStyle.italic),
+                                children: context.inlineSpanChildren ??
+                                    const <InlineSpan>[],
+                              );
+                            },
+                          ),
+                        ],
+                        style: {
+                          "body": Style(
+                            margin: Margins.zero,
+                            padding: HtmlPaddings.zero,
+                            color: Colors.grey.shade300,
+                            fontSize: FontSize(14),
+                          ),
+                          ".bbcode_center": Style(
+                            display: Display.block,
+                            textAlign: TextAlign.center,
+                          ),
+                          ".bbcode_left": Style(
+                            display: Display.block,
+                            textAlign: TextAlign.left,
+                          ),
+                          ".bbcode_right": Style(
+                            display: Display.block,
+                            textAlign: TextAlign.right,
+                          ),
+                          "code": Style(
+                            backgroundColor: Colors.transparent,
+                            padding: HtmlPaddings.zero,
+                            margin: Margins.zero,
+                            fontFamily: 'inherit',
+                            fontSize: FontSize(14),
+                            color: Colors.grey.shade300,
+                          ),
+                          "strong": Style(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade300,
+                          ),
+                          "em": Style(
+                            fontStyle: FontStyle.italic,
+                            color: Colors.grey.shade300,
+                          ),
+                          ".bbcode_u": Style(
+                            textDecoration: TextDecoration.underline,
+                            color: Colors.grey.shade300,
+                          ),
+                          "a": Style(
+                            color: const Color(0xFFE09321),
+                            textDecoration: TextDecoration.none,
+                          ),
+                        },
+                      )
                     : ExtendedText(
-                  widget.comment['text'] ?? '',
-                  specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
-                    onTapLink: widget.handleLink,
-                  ),
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade300),
-                ),
+                        widget.comment['text'] ?? '',
+                        specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
+                          onTapLink: widget.handleLink,
+                        ),
+                        style: TextStyle(
+                            fontSize: 14, color: Colors.grey.shade300),
+                      ),
               ),
             ),
 
@@ -318,8 +336,8 @@ class _CommentWidgetState extends State<CommentWidget> {
                           child: Text(
                             _showFullDate
                                 ? (widget.comment['popupDateFull'] ??
-                                widget.comment['popupDateRelative'] ??
-                                '')
+                                    widget.comment['popupDateRelative'] ??
+                                    '')
                                 : (widget.comment['popupDateRelative'] ?? ''),
                             maxLines: 1,
                             softWrap: false,
@@ -341,7 +359,8 @@ class _CommentWidgetState extends State<CommentWidget> {
                       IconButton(
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        icon: const Icon(Icons.visibility_off, size: 16, color: Colors.white),
+                        icon: const Icon(Icons.visibility_off,
+                            size: 16, color: Colors.white),
                         onPressed: widget.onHide,
                       ),
                     if (widget.comment['editLink'] != null)
@@ -357,7 +376,9 @@ class _CommentWidgetState extends State<CommentWidget> {
                           children: const [
                             Icon(Icons.edit, size: 16, color: Colors.white),
                             SizedBox(width: 4),
-                            Text('Edit', style: TextStyle(color: Colors.white, fontSize: 14)),
+                            Text('Edit',
+                                style: TextStyle(
+                                    color: Colors.white, fontSize: 14)),
                           ],
                         ),
                       ),
@@ -373,7 +394,9 @@ class _CommentWidgetState extends State<CommentWidget> {
                         children: const [
                           Icon(Icons.reply, size: 19, color: Colors.white),
                           SizedBox(width: 4),
-                          Text('Reply', style: TextStyle(color: Colors.white, fontSize: 14)),
+                          Text('Reply',
+                              style:
+                                  TextStyle(color: Colors.white, fontSize: 14)),
                         ],
                       ),
                     ),
@@ -381,11 +404,9 @@ class _CommentWidgetState extends State<CommentWidget> {
                 ),
               ],
             ),
-
           ],
         ),
       ),
     );
   }
 }
-

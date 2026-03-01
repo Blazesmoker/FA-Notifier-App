@@ -16,7 +16,9 @@ import 'package:FANotifier/services/notification_refresh_service.dart';
 import 'package:FANotifier/widgets/PulsatingLoadingIndicator.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,6 +26,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
+import 'package:FANotifier/widgets/confirm_close_dialog.dart';
 import 'custom_drawer/drawer_user_controller.dart';
 import 'app_theme.dart';
 import 'model/user_profile.dart';
@@ -60,7 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _previousSum = 0;
 
   final GlobalKey<DrawerUserControllerState> _drawerKey =
-  GlobalKey<DrawerUserControllerState>();
+      GlobalKey<DrawerUserControllerState>();
 
   Map<String, String> browseFilters = {
     'cat': '1',
@@ -87,8 +90,8 @@ class _HomeScreenState extends State<HomeScreen> {
     'range_to': '',
   };
 
-  final ValueNotifier<Map<String, List<Map<String, String>>>> filterOptionsNotifier =
-  ValueNotifier({});
+  final ValueNotifier<Map<String, List<Map<String, String>>>>
+      filterOptionsNotifier = ValueNotifier({});
 
   InAppWebViewController? _webViewController;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
@@ -111,9 +114,10 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _notificationsInitialSection;
 
   final GlobalKey<SubmissionsScreenState> _submissionsKey =
-  GlobalKey<SubmissionsScreenState>();
+      GlobalKey<SubmissionsScreenState>();
   final GlobalKey<FAImageGridState> _browseKey = GlobalKey<FAImageGridState>();
-  final GlobalKey<SearchScreenState> _searchKey = GlobalKey<SearchScreenState>();
+  final GlobalKey<SearchScreenState> _searchKey =
+      GlobalKey<SearchScreenState>();
   final GlobalKey<NotesScreenState> _notesKey = GlobalKey<NotesScreenState>();
 
   // Gate login SnackBar to only show once per real login
@@ -134,7 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     final navProvider =
-    Provider.of<NotificationNavigationProvider>(context, listen: false);
+        Provider.of<NotificationNavigationProvider>(context, listen: false);
     navProvider.addListener(_handleNavProviderChange);
   }
 
@@ -145,7 +149,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _elementCheckTimer?.cancel();
     filterOptionsNotifier.dispose();
     final navProvider =
-    Provider.of<NotificationNavigationProvider>(context, listen: false);
+        Provider.of<NotificationNavigationProvider>(context, listen: false);
     navProvider.removeListener(_handleNavProviderChange);
     super.dispose();
   }
@@ -154,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
 
     final navProvider =
-    Provider.of<NotificationNavigationProvider>(context, listen: false);
+        Provider.of<NotificationNavigationProvider>(context, listen: false);
     final int? next = navProvider.takeTargetIndex();
     if (next == null) return;
     if (next == _selectedIndex) return;
@@ -176,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final navProvider =
-    Provider.of<NotificationNavigationProvider>(context, listen: false);
+        Provider.of<NotificationNavigationProvider>(context, listen: false);
     final bool isNotes = pendingPayload.startsWith('note_') ||
         pendingPayload.contains('DrawerIndex.Notes') ||
         pendingPayload == 'note_native';
@@ -186,7 +190,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (isNotes) {
       navProvider.setTargetIndex(4);
-      setState(() => _forceNotesRefresh = true); // keep if you rely on it elsewhere
+      setState(
+          () => _forceNotesRefresh = true); // keep if you rely on it elsewhere
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         NotesRefreshService().triggerRefresh();
@@ -237,9 +242,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<bool> _runStartupCloudflareCheck() async {
     final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    final rawCookieHeader = (cookieA != null && cookieB != null)
-        ? 'a=$cookieA; b=$cookieB'
-        : '';
+    final rawCookieHeader =
+        (cookieA != null && cookieB != null) ? 'a=$cookieA; b=$cookieB' : '';
     final cookieHeader =
         await FaCookieHelper.appendCfClearanceToCookieHeader(rawCookieHeader);
     final headers = <String, String>{
@@ -306,7 +310,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _fetchUserProfile() async {
     try {
       UserProfile? profile =
-      await _faService.fetchUserProfile(context: context);
+          await _faService.fetchUserProfile(context: context);
       setState(() {
         _userProfile = profile;
         isLoadingProfile = false;
@@ -340,12 +344,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   int _getNotificationsEnabledSum(
-      NotificationSettingsProvider settings,
-      FANotificationService faNotificationService,
-      ) {
+    NotificationSettingsProvider settings,
+    FANotificationService faNotificationService,
+  ) {
     _previousSum = faNotificationService.sections.fold<int>(
       0,
-          (sum, s) => sum + s.items.length,
+      (sum, s) => sum + s.items.length,
     );
 
     int visible = 0;
@@ -354,10 +358,12 @@ class _HomeScreenState extends State<HomeScreen> {
       final n = section.items.length;
       if (title.contains('Watches') && settings.watchersEnabled) visible += n;
       if (title.contains('Journals') && settings.journalsEnabled) visible += n;
-      if (title.contains('Submission Comments') &&
-          settings.commentsEnabled) visible += n;
-      if (title.contains('Journal Comments') && settings.commentsEnabled) visible += n;
-      if (title.contains('Favorites') && settings.favoritesEnabled) visible += n;
+      if (title.contains('Submission Comments') && settings.commentsEnabled)
+        visible += n;
+      if (title.contains('Journal Comments') && settings.commentsEnabled)
+        visible += n;
+      if (title.contains('Favorites') && settings.favoritesEnabled)
+        visible += n;
       if (title.contains('Shouts') && settings.shoutsEnabled) visible += n;
     }
     return visible;
@@ -430,7 +436,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _webViewController = controller;
       },
       onLoadStart: (InAppWebViewController controller, WebUri? url) async {
-        debugPrint('WebView Loading Started: ${url?.toString() ?? "Unknown URL"}');
+        debugPrint(
+            'WebView Loading Started: ${url?.toString() ?? "Unknown URL"}');
         _cancelStabilityTimer();
         if (url?.toString().startsWith(loginUrl) == true) {
           await _injectLoginCss();
@@ -533,71 +540,71 @@ class _HomeScreenState extends State<HomeScreen> {
     _cancelStabilityTimer();
     _elementCheckTimer =
         Timer.periodic(const Duration(milliseconds: 500), (timer) async {
-          if (_webViewController == null) return;
+      if (_webViewController == null) return;
 
-          String? html = await _webViewController!
-              .evaluateJavascript(source: "document.documentElement.outerHTML;");
+      String? html = await _webViewController!
+          .evaluateJavascript(source: "document.documentElement.outerHTML;");
 
-          bool isClassicTheme =
-              html != null && html.contains('data-static-path=\"/themes/classic\"');
+      bool isClassicTheme =
+          html != null && html.contains('data-static-path=\"/themes/classic\"');
 
-          bool usernameElementFound = isClassicTheme &&
-              RegExp(r'<(?:a|span) id="my-username"').hasMatch(html);
+      bool usernameElementFound = isClassicTheme &&
+          RegExp(r'<(?:a|span) id="my-username"').hasMatch(html);
 
-          bool avatarElementFound =
-              !isClassicTheme && html != null && html.contains('loggedin_user_avatar');
+      bool avatarElementFound = !isClassicTheme &&
+          html != null &&
+          html.contains('loggedin_user_avatar');
 
-          bool elementFound = usernameElementFound || avatarElementFound;
+      bool elementFound = usernameElementFound || avatarElementFound;
 
-          if (elementFound) {
-            if (_firstTimeElementFound == null) {
-              _firstTimeElementFound = DateTime.now();
-            } else {
-              final elapsed =
-              DateTime.now().difference(_firstTimeElementFound!);
-              if (elapsed >= const Duration(seconds: 1)) {
-                setState(() {
-                  _mainPageStable = true;
-                  isLoggedIn = true;
-                });
-                _cancelStabilityTimer();
+      if (elementFound) {
+        if (_firstTimeElementFound == null) {
+          _firstTimeElementFound = DateTime.now();
+        } else {
+          final elapsed = DateTime.now().difference(_firstTimeElementFound!);
+          if (elapsed >= const Duration(seconds: 1)) {
+            setState(() {
+              _mainPageStable = true;
+              isLoggedIn = true;
+            });
+            _cancelStabilityTimer();
 
-                final cookies = await CookieManager.instance().getCookies(
-                  url: WebUri("https://www.furaffinity.net"),
-                );
-                for (var c in cookies) {
-                  await _secureStorage.write(
-                      key: 'fa_cookie_${c.name}', value: c.value);
-                }
-
-                final prefs = await SharedPreferences.getInstance();
-                final wasLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-
-                await _saveLoginState(true);
-                _startActivitiesPolling(triggerImmediate: true);
-                await _setSfwCookieToNSFW();
-
-                if (!_profileFetched) {
-                  _profileFetched = true;
-                  await _fetchUserProfile();
-                }
-
-                if (!wasLoggedIn && !_loginSnackShownThisRun && mounted) {
-                  _loginSnackShownThisRun = true;
-                  ScaffoldMessenger.of(context).clearSnackBars();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Logged in successfully!'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              }
+            final cookies = await CookieManager.instance().getCookies(
+              url: WebUri("https://www.furaffinity.net"),
+            );
+            for (var c in cookies) {
+              await _secureStorage.write(
+                  key: 'fa_cookie_${c.name}', value: c.value);
             }
-          } else {
-            _firstTimeElementFound = null;
+
+            final prefs = await SharedPreferences.getInstance();
+            final wasLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+
+            await _saveLoginState(true);
+            _startActivitiesPolling(triggerImmediate: true);
+            await _setSfwCookieToNSFW();
+
+            if (!_profileFetched) {
+              _profileFetched = true;
+              await _fetchUserProfile();
+            }
+
+            if (!wasLoggedIn && !_loginSnackShownThisRun && mounted) {
+              _loginSnackShownThisRun = true;
+              ScaffoldMessenger.of(context).clearSnackBars();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Logged in successfully!'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
           }
-        });
+        }
+      } else {
+        _firstTimeElementFound = null;
+      }
+    });
   }
 
   void _cancelStabilityTimer() {
@@ -657,8 +664,9 @@ class _HomeScreenState extends State<HomeScreen> {
           path: '/',
           isHttpOnly: true,
           isSecure: true,
-          expiresDate:
-          DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch,
+          expiresDate: DateTime.now()
+              .add(const Duration(days: 30))
+              .millisecondsSinceEpoch,
         );
       }
     }
@@ -689,10 +697,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: IconButton(
                   icon: const Icon(Icons.filter_list),
                   onPressed: () async {
-                    final updatedFilters = await Navigator.push<Map<String, String>>(
+                    final updatedFilters =
+                        await Navigator.push<Map<String, String>>(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => FiltersScreen(selectedFilters: browseFilters),
+                        builder: (context) =>
+                            FiltersScreen(selectedFilters: browseFilters),
                       ),
                     );
                     if (updatedFilters != null) {
@@ -743,8 +753,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       Navigator.push(
         context,
-        MaterialPageRoute(
-            builder: (context) => const UploadSubmissionScreen()),
+        MaterialPageRoute(builder: (context) => const UploadSubmissionScreen()),
       ).then((_) {
         if (!mounted) return;
         setState(() {
@@ -809,7 +818,7 @@ class _HomeScreenState extends State<HomeScreen> {
       debugPrint('[Logout] Image cache cleared.');
 
       final faNotificationService =
-      Provider.of<FANotificationService>(context, listen: false);
+          Provider.of<FANotificationService>(context, listen: false);
       faNotificationService.clearAllNotifications();
 
       setState(() {
@@ -828,7 +837,7 @@ class _HomeScreenState extends State<HomeScreen> {
         context,
         MaterialPageRoute(
             builder: (BuildContext context) => const HomeScreen()),
-            (route) => false,
+        (route) => false,
       );
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -896,8 +905,22 @@ class _HomeScreenState extends State<HomeScreen> {
       isHttpOnly: true,
       isSecure: true,
       expiresDate:
-      DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch,
+          DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch,
     );
+  }
+
+  Future<void> _onRequestCloseApp() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+
+    final confirmed = await ConfirmCloseDialog.show(
+      context,
+      title: 'Confirm app closing',
+      message: 'Are you sure you want to close the app?',
+    );
+
+    if (confirmed && mounted) {
+      await SystemNavigator.pop();
+    }
   }
 
   @override
@@ -916,112 +939,114 @@ class _HomeScreenState extends State<HomeScreen> {
                 return;
               }
             }
-            // Otherwise back is consumed and app stays open (main/home screen protection)
+            _onRequestCloseApp();
           },
           child: Scaffold(
             body: isLoggedIn ? _buildMainAppScreen(context) : _buildWebView(),
-          bottomNavigationBar: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Divider(
-                height: 1.0,
-                color: Color(0xFF111111),
-                thickness: 3.0,
-              ),
-              Theme(
-                data: Theme.of(context).copyWith(
-                  splashFactory: NoSplash.splashFactory,
+            bottomNavigationBar: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Divider(
+                  height: 1.0,
+                  color: Color(0xFF111111),
+                  thickness: 3.0,
                 ),
-                child: BottomNavigationBar(
-                  type: BottomNavigationBarType.shifting,
-                  items: [
-                    BottomNavigationBarItem(
-                      icon: const Icon(Icons.home),
-                      label: 'Browse',
-                      backgroundColor: AppTheme.background,
-                    ),
-                    BottomNavigationBarItem(
-                      icon: const Icon(Icons.search),
-                      label: 'Search',
-                      backgroundColor: AppTheme.background,
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Image.asset(
-                        'assets/icons/submissions.png',
-                        width: 27,
-                        height: 27,
-                        color: Colors.grey,
+                Theme(
+                  data: Theme.of(context).copyWith(
+                    splashFactory: NoSplash.splashFactory,
+                  ),
+                  child: BottomNavigationBar(
+                    type: BottomNavigationBarType.shifting,
+                    items: [
+                      BottomNavigationBarItem(
+                        icon: const Icon(Icons.home),
+                        label: 'Browse',
+                        backgroundColor: AppTheme.background,
                       ),
-                      activeIcon: Image.asset(
-                        'assets/icons/submissions.png',
-                        width: 27,
-                        height: 27,
-                        color: const Color(0xFFE09321),
+                      BottomNavigationBarItem(
+                        icon: const Icon(Icons.search),
+                        label: 'Search',
+                        backgroundColor: AppTheme.background,
                       ),
-                      label: 'Submissions',
-                      backgroundColor: AppTheme.background,
-                    ),
-                    BottomNavigationBarItem(
-                      icon: badges.Badge(
-                        badgeContent: SizedBox(
-                          width: 13,
-                          height: 13,
-                          child: Center(
-                            child: FittedBox(
-                              child: Text(
-                                _getNotificationsEnabledSum(
-                                    settings, faNotificationService)
-                                    .toString(),
-                                style: const TextStyle(color: Colors.white),
+                      BottomNavigationBarItem(
+                        icon: Image.asset(
+                          'assets/icons/submissions.png',
+                          width: 27,
+                          height: 27,
+                          color: Colors.grey,
+                        ),
+                        activeIcon: Image.asset(
+                          'assets/icons/submissions.png',
+                          width: 27,
+                          height: 27,
+                          color: const Color(0xFFE09321),
+                        ),
+                        label: 'Submissions',
+                        backgroundColor: AppTheme.background,
+                      ),
+                      BottomNavigationBarItem(
+                        icon: badges.Badge(
+                          badgeContent: SizedBox(
+                            width: 13,
+                            height: 13,
+                            child: Center(
+                              child: FittedBox(
+                                child: Text(
+                                  _getNotificationsEnabledSum(
+                                          settings, faNotificationService)
+                                      .toString(),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
                               ),
                             ),
                           ),
+                          showBadge: _getNotificationsEnabledSum(
+                                  settings, faNotificationService) >
+                              0,
+                          child: const Icon(Icons.notifications),
+                          position:
+                              badges.BadgePosition.topEnd(top: -5, end: -7),
+                          padding: const EdgeInsets.all(2),
+                          badgeColor: Colors.red,
                         ),
-                        showBadge:
-                        _getNotificationsEnabledSum(settings, faNotificationService) >
-                            0,
-                        child: const Icon(Icons.notifications),
-                        position: badges.BadgePosition.topEnd(top: -5, end: -7),
-                        padding: const EdgeInsets.all(2),
-                        badgeColor: Colors.red,
+                        label: 'Notifications',
+                        backgroundColor: AppTheme.background,
                       ),
-                      label: 'Notifications',
-                      backgroundColor: AppTheme.background,
-                    ),
-                    BottomNavigationBarItem(
-                      icon: badges.Badge(
-                        badgeContent: SizedBox(
-                          width: 13,
-                          height: 13,
-                          child: Center(
-                            child: FittedBox(
-                              child: Text(
-                                _unreadCount.toString(),
-                                style: const TextStyle(color: Colors.white),
+                      BottomNavigationBarItem(
+                        icon: badges.Badge(
+                          badgeContent: SizedBox(
+                            width: 13,
+                            height: 13,
+                            child: Center(
+                              child: FittedBox(
+                                child: Text(
+                                  _unreadCount.toString(),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
                               ),
                             ),
                           ),
+                          showBadge: _unreadCount > 0,
+                          child: const Icon(Icons.mail),
+                          position:
+                              badges.BadgePosition.topEnd(top: -5, end: -7),
+                          padding: const EdgeInsets.all(2),
+                          badgeColor: Colors.red,
                         ),
-                        showBadge: _unreadCount > 0,
-                        child: const Icon(Icons.mail),
-                        position: badges.BadgePosition.topEnd(top: -5, end: -7),
-                        padding: const EdgeInsets.all(2),
-                        badgeColor: Colors.red,
+                        label: 'Notes',
+                        backgroundColor: AppTheme.background,
                       ),
-                      label: 'Notes',
-                      backgroundColor: AppTheme.background,
-                    ),
-                  ],
-                  currentIndex: _selectedIndex,
-                  selectedItemColor: const Color(0xFFE09321),
-                  unselectedItemColor: Colors.grey,
-                  onTap: _onBottomNavigationItemTapped,
-                  showSelectedLabels: true,
-                  showUnselectedLabels: false,
+                    ],
+                    currentIndex: _selectedIndex,
+                    selectedItemColor: const Color(0xFFE09321),
+                    unselectedItemColor: Colors.grey,
+                    onTap: _onBottomNavigationItemTapped,
+                    showSelectedLabels: true,
+                    showUnselectedLabels: false,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           ),
         );
       },

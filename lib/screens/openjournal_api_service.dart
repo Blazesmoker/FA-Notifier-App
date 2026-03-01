@@ -124,17 +124,18 @@ class OpenJournalApiService {
   }
 
   String _extractCommentText(dom.Element c) {
-    final textEl =
-        c.querySelector('comment-user-text.comment_text') ??
-            c.querySelector('comment-user-text') ??
-            c.querySelector('.comment_text') ??
-            c.querySelector('.comment_text .user-submitted-links') ??
-            c.querySelector('comment-user-text .user-submitted-links');
+    final textEl = c.querySelector('comment-user-text.comment_text') ??
+        c.querySelector('comment-user-text') ??
+        c.querySelector('.comment_text') ??
+        c.querySelector('.comment_text .user-submitted-links') ??
+        c.querySelector('comment-user-text .user-submitted-links');
 
     if (textEl == null) return '';
 
     final cleaned = textEl.clone(true);
-    cleaned.querySelectorAll('div.floatright, .floatright').forEach((e) => e.remove());
+    cleaned
+        .querySelectorAll('div.floatright, .floatright')
+        .forEach((e) => e.remove());
 
     return cleaned.text.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
@@ -156,13 +157,14 @@ class OpenJournalApiService {
       commentId ??= _normalizeCommentId(c.attributes['data-id']);
       commentId ??= _normalizeCommentId(c.attributes['id']);
 
-      final avatarImg =
-          c.querySelector('img.comment_useravatar') ?? c.querySelector('img.avatar');
+      final avatarImg = c.querySelector('img.comment_useravatar') ??
+          c.querySelector('img.avatar');
       comment['profileImage'] = _absFaUrl(avatarImg?.attributes['src']);
 
       final usernameBlock = c.querySelector('.c-usernameBlock');
       final displayNameSpan = usernameBlock?.querySelector('.js-displayName');
-      final userNameA = usernameBlock?.querySelector('.c-usernameBlock__userName');
+      final userNameA =
+          usernameBlock?.querySelector('.c-usernameBlock__userName');
 
       String? username;
       if (userNameA != null) {
@@ -175,26 +177,33 @@ class OpenJournalApiService {
       comment['username'] = (username ?? '').isNotEmpty
           ? username
           : (displayNameSpan?.text.trim() ?? '');
-      comment['displayName'] =
-          displayNameSpan?.text.trim() ?? (comment['username'] as String? ?? '');
+      comment['displayName'] = displayNameSpan?.text.trim() ??
+          (comment['username'] as String? ?? '');
 
-      comment['symbol'] =
-          usernameBlock?.querySelector('.c-usernameBlock__symbol')?.text.trim() ?? '';
+      comment['symbol'] = usernameBlock
+              ?.querySelector('.c-usernameBlock__symbol')
+              ?.text
+              .trim() ??
+          '';
 
-      comment['userTitle'] = c.querySelector('comment-title')?.text.trim() ?? '';
+      comment['userTitle'] =
+          c.querySelector('comment-title')?.text.trim() ?? '';
       comment['isOP'] = c.querySelector('.comment_op_marker') != null;
 
       final popup = c.querySelector('.popup_date');
       comment['popupDateRelative'] = popup?.text.trim() ?? '';
       comment['popupDateFull'] = popup?.attributes['title'] ?? '';
 
-      final hideA = c.querySelector('a[href*="action=hide_comment"][href*="comment_id="]');
-      final unhideA = c.querySelector('a[href*="action=unhide_comment"][href*="comment_id="]');
+      final hideA = c
+          .querySelector('a[href*="action=hide_comment"][href*="comment_id="]');
+      final unhideA = c.querySelector(
+          'a[href*="action=unhide_comment"][href*="comment_id="]');
+      final hasAnyUnhideAction =
+          c.querySelector('a[href*="action=unhide_comment"]') != null;
 
-      final editA =
-          c.querySelector('a.edit_link') ??
-              c.querySelector('a[title*="Edit this Comment"]') ??
-              c.querySelector('a[href*="/edit/"]');
+      final editA = c.querySelector('a.edit_link') ??
+          c.querySelector('a[title*="Edit this Comment"]') ??
+          c.querySelector('a[href*="/edit/"]');
 
       final deleteA = c.querySelector('a[href*="action=delete_comment"]') ??
           c.querySelector('a[title*="Delete"]');
@@ -218,15 +227,14 @@ class OpenJournalApiService {
 
       comment['commentId'] = commentId ?? '';
 
-
-
-      final hasDeletedInner = c.querySelector('comment-container.deleted-comment-container') != null;
+      final hasDeletedInner =
+          c.querySelector('comment-container.deleted-comment-container') !=
+              null;
       final lowerAll = c.text.toLowerCase();
-      comment['deleted'] =
-          hasDeletedInner ||
-              (unhideLink != null) ||
-              lowerAll.contains('comment hidden') ||
-              lowerAll.contains('hidden by its owner');
+      comment['deleted'] = hasDeletedInner ||
+          hasAnyUnhideAction ||
+          lowerAll.contains('comment hidden') ||
+          lowerAll.contains('hidden by its owner');
 
       double width = 100.0;
       final style = c.attributes['style'] ?? '';
@@ -244,7 +252,9 @@ class OpenJournalApiService {
         final cloned = commentTextElement.clone(true);
 
         // Remove control junk
-        cloned.querySelectorAll('.floatright, div.floatright').forEach((e) => e.remove());
+        cloned
+            .querySelectorAll('.floatright, div.floatright')
+            .forEach((e) => e.remove());
 
         String normalizeFaHtml(dom.Element root) {
           final cloned = root.clone(true);
@@ -270,29 +280,55 @@ class OpenJournalApiService {
           return cloned.innerHtml;
         }
 
-
-
         commentHtml = normalizeFaHtml(commentTextElement);
         commentText = commentTextElement.text.trim();
-
-
       }
 
       comment['commentHtml'] = commentHtml;
       comment['text'] = commentText;
+
+      final combinedHiddenSource = '${commentText ?? ''} ${commentHtml ?? ''}';
+      final hiddenByOwner = RegExp(
+        r'comment\s+hidden\s+by\s+its\s+owner',
+        caseSensitive: false,
+      ).hasMatch(combinedHiddenSource);
+      final hiddenCommentDetected = RegExp(
+        r'comment\s+hidden',
+        caseSensitive: false,
+      ).hasMatch(combinedHiddenSource);
+      comment['deleted'] = (comment['deleted'] == true) ||
+          hiddenByOwner ||
+          hiddenCommentDetected;
+
+      if (comment['deleted'] == true) {
+        String hiddenText = commentText ?? '';
+        hiddenText = hiddenText
+            .replaceAll(
+              RegExp(r'Unhide\s+Comment(\s*<span.*?<\/span>)?',
+                  caseSensitive: false),
+              '',
+            )
+            .trim();
+        comment['text'] =
+            hiddenText.isNotEmpty ? hiddenText : 'Comment hidden by its owner';
+        comment['commentHtml'] = null;
+        comment['profileImage'] = null;
+        comment['displayName'] = null;
+        comment['username'] = null;
+        comment['symbol'] = '';
+        comment['userTitle'] = null;
+      }
+
       if (mw != null) {
         width = double.tryParse(mw.group(1)!) ?? 100.0;
       }
       comment['width'] = width;
-
-
 
       commentBodies.add(comment);
     }
 
     return commentBodies;
   }
-
 
   Future<OpenJournalFetchResult> fetchJournal(String uniqueNumber) async {
     final cookies = await _getCookies();
@@ -309,7 +345,8 @@ class OpenJournalApiService {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to fetch journal ($uniqueNumber): ${response.statusCode}');
+      throw Exception(
+          'Failed to fetch journal ($uniqueNumber): ${response.statusCode}');
     }
 
     final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
@@ -317,7 +354,8 @@ class OpenJournalApiService {
 
     final modernDetails = document.querySelector('userpage-nav-user-details');
     final classicTitleBox = document.querySelector('td.journal-title-box');
-    final isJournalClassic = (modernDetails == null) && (classicTitleBox != null);
+    final isJournalClassic =
+        (modernDetails == null) && (classicTitleBox != null);
 
     dom.Element? profileImgEl;
     String? profileImageUrl;
@@ -327,20 +365,24 @@ class OpenJournalApiService {
     String? userTitle;
 
     profileImgEl = document.querySelector('userpage-nav-avatar img');
-    dom.Element? profileAvatarAnchor = document.querySelector('userpage-nav-avatar a');
+    dom.Element? profileAvatarAnchor =
+        document.querySelector('userpage-nav-avatar a');
 
     if (!isJournalClassic && modernDetails != null) {
       final modernHeader = modernDetails.parent;
-      profileImgEl = profileImgEl ?? modernHeader?.querySelector('userpage-nav-avatar img');
+      profileImgEl = profileImgEl ??
+          modernHeader?.querySelector('userpage-nav-avatar img');
 
       displayName = modernDetails
           .querySelector('a.c-usernameBlock__displayName span.js-displayName')
           ?.text
           .trim();
 
-      final userNameA = modernDetails.querySelector('a.c-usernameBlock__userName') ??
-          modernDetails.querySelector('a.c-usernameBlock__displayName');
-      symbol = userNameA?.querySelector('span.c-usernameBlock__symbol')?.text.trim();
+      final userNameA =
+          modernDetails.querySelector('a.c-usernameBlock__userName') ??
+              modernDetails.querySelector('a.c-usernameBlock__displayName');
+      symbol =
+          userNameA?.querySelector('span.c-usernameBlock__symbol')?.text.trim();
 
       final href = userNameA?.attributes['href'];
       if (href != null) {
@@ -349,14 +391,15 @@ class OpenJournalApiService {
         if (m != null) authorSlug = m.group(1);
       }
 
-      dom.Element? utSpan =
-          modernDetails.querySelector('span.user-title') ??
-              modernHeader?.querySelector('span.user-title') ??
-              document.querySelector('userpage-nav-header span.user-title');
+      dom.Element? utSpan = modernDetails.querySelector('span.user-title') ??
+          modernHeader?.querySelector('span.user-title') ??
+          document.querySelector('userpage-nav-header span.user-title');
 
       if (utSpan != null) {
         final cleaned = utSpan.clone(true);
-        cleaned.querySelectorAll('.hideonmobile, .popup_date').forEach((e) => e.remove());
+        cleaned
+            .querySelectorAll('.hideonmobile, .popup_date')
+            .forEach((e) => e.remove());
 
         var t = cleaned.text
             .replaceAll('\u00A0', ' ')
@@ -390,9 +433,11 @@ class OpenJournalApiService {
           ?.text
           .trim();
 
-      final userNameA = classicTitleBox.querySelector('a.c-usernameBlock__userName') ??
-          classicTitleBox.querySelector('a.c-usernameBlock__displayName');
-      symbol = userNameA?.querySelector('span.c-usernameBlock__symbol')?.text.trim();
+      final userNameA =
+          classicTitleBox.querySelector('a.c-usernameBlock__userName') ??
+              classicTitleBox.querySelector('a.c-usernameBlock__displayName');
+      symbol =
+          userNameA?.querySelector('span.c-usernameBlock__symbol')?.text.trim();
 
       final href = userNameA?.attributes['href'];
       if (href != null) {
@@ -411,11 +456,15 @@ class OpenJournalApiService {
     }
 
     if (profileImgEl == null) {
-      final ogImage = document.querySelector('meta[property="og:image"]')?.attributes['content'];
+      final ogImage = document
+          .querySelector('meta[property="og:image"]')
+          ?.attributes['content'];
       if (ogImage != null && ogImage.isNotEmpty) {
         profileImageUrl = ogImage.startsWith('//')
             ? 'https:$ogImage'
-            : (ogImage.startsWith('http') ? ogImage : 'https://www.furaffinity.net$ogImage');
+            : (ogImage.startsWith('http')
+                ? ogImage
+                : 'https://www.furaffinity.net$ogImage');
       }
     }
 
@@ -431,8 +480,9 @@ class OpenJournalApiService {
       profileImageUrl = src;
     }
 
-    final ownerEditLink =
-    document.querySelector('a.owner_edit_journal.action-link')?.attributes['href'];
+    final ownerEditLink = document
+        .querySelector('a.owner_edit_journal.action-link')
+        ?.attributes['href'];
 
     String? favoriteLink;
     String? unfavoriteLink;
@@ -481,11 +531,13 @@ class OpenJournalApiService {
     DateTime? publicationTime;
     String? publicationTimeRaw;
 
-    title = document.querySelector('#c-journalTitleTop__subject h3')?.text.trim();
+    title =
+        document.querySelector('#c-journalTitleTop__subject h3')?.text.trim();
     title ??= document.querySelector('td.journal-title-box h2')?.text.trim();
     title ??= document.querySelector('title')?.text.trim();
 
-    final dateElem = document.querySelector('#c-journalTitleTop__date .popup_date');
+    final dateElem =
+        document.querySelector('#c-journalTitleTop__date .popup_date');
     if (dateElem != null) {
       final unix = int.tryParse(dateElem.attributes['data-time'] ?? '');
       if (unix != null) {
@@ -497,7 +549,8 @@ class OpenJournalApiService {
 
       if (publicationTime == null && publicationTimeRaw != null) {
         try {
-          publicationTime = DateFormat('MMMM d, yyyy hh:mm:ss a').parseUtc(publicationTimeRaw);
+          publicationTime = DateFormat('MMMM d, yyyy hh:mm:ss a')
+              .parseUtc(publicationTimeRaw);
         } catch (_) {}
       }
     }
@@ -519,11 +572,14 @@ class OpenJournalApiService {
     String? gender;
     final keywords = <String>[];
 
-    final statsTable = document.querySelector('table.maintable table.stats-container');
+    final statsTable =
+        document.querySelector('table.maintable table.stats-container');
     if (statsTable != null) {
       final rows = statsTable.querySelectorAll('tr');
       for (var row in rows) {
-        final label = row.querySelector('td:nth-child(1)')?.text.toLowerCase().trim() ?? '';
+        final label =
+            row.querySelector('td:nth-child(1)')?.text.toLowerCase().trim() ??
+                '';
         final value = row.querySelector('td:nth-child(2)')?.text.trim() ?? '';
         switch (label) {
           case 'category':
@@ -554,7 +610,8 @@ class OpenJournalApiService {
 
     int commentsCount = 0;
     String? footerCountText;
-    final footerCountElem = document.querySelector('#comments-journal .section-footer .font-large') ??
+    final footerCountElem = document
+            .querySelector('#comments-journal .section-footer .font-large') ??
         document.querySelector('.section-footer.aligncenter .font-large') ??
         document.querySelector('.section-footer .font-large');
     footerCountText = footerCountElem?.text.trim();
@@ -565,7 +622,8 @@ class OpenJournalApiService {
       commentsCount = commentBodies.length;
     }
 
-    final deleteLink = document.querySelector('a.delete_journal')?.attributes['href'];
+    final deleteLink =
+        document.querySelector('a.delete_journal')?.attributes['href'];
 
     return OpenJournalFetchResult(
       profileImageUrl: profileImageUrl,
@@ -604,7 +662,8 @@ class OpenJournalApiService {
   Future<String?> fetchDeleteKey(String uniqueNumber) async {
     final cookies = await _getCookies();
     final resp = await httpClient.get(
-      Uri.parse('https://www.furaffinity.net/controls/journal/delete/$uniqueNumber/'),
+      Uri.parse(
+          'https://www.furaffinity.net/controls/journal/delete/$uniqueNumber/'),
       headers: {
         'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
           'a=${cookies.cookieA}; b=${cookies.cookieB}',
@@ -616,14 +675,20 @@ class OpenJournalApiService {
     if (resp.statusCode != 200) {
       throw Exception('Failed to fetch delete key: ${resp.statusCode}');
     }
-    final doc = html_parser.parse(utf8.decode(resp.bodyBytes, allowMalformed: true));
+    final doc =
+        html_parser.parse(utf8.decode(resp.bodyBytes, allowMalformed: true));
     return doc.querySelector('input[name="key"]')?.attributes['value'];
   }
 
   Future<Map<String, String?>> fetchUserPageLinks(String? authorSlug) async {
     final cookies = await _getCookies();
     if (authorSlug == null) {
-      return {'watchLink': null, 'unwatchLink': null, 'blockLink': null, 'unblockLink': null};
+      return {
+        'watchLink': null,
+        'unwatchLink': null,
+        'blockLink': null,
+        'unblockLink': null
+      };
     }
     final url = 'https://www.furaffinity.net/user/$authorSlug/';
     final response = await httpClient.get(
@@ -638,10 +703,12 @@ class OpenJournalApiService {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to fetch user page links: ${response.statusCode}');
+      throw Exception(
+          'Failed to fetch user page links: ${response.statusCode}');
     }
 
-    final document = html_parser.parse(utf8.decode(response.bodyBytes, allowMalformed: true));
+    final document = html_parser
+        .parse(utf8.decode(response.bodyBytes, allowMalformed: true));
     String? watchLink;
     String? unwatchLink;
     String? blockLink;

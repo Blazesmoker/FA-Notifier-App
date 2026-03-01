@@ -8,6 +8,7 @@ import 'view_list_screen.dart';
 class UserGridSection extends StatelessWidget {
   final String title;
   final String viewListText;
+  final int totalUsersCount;
   final List<UserLink> users;
   final String sanitizedUsername;
 
@@ -15,10 +16,10 @@ class UserGridSection extends StatelessWidget {
     Key? key,
     required this.title,
     required this.viewListText,
+    required this.totalUsersCount,
     required this.users,
     required this.sanitizedUsername,
   }) : super(key: key);
-
 
   String _extractNickname(String url) {
     final uri = Uri.parse(url);
@@ -68,7 +69,6 @@ class UserGridSection extends StatelessWidget {
                             context,
                             MaterialPageRoute(
                               builder: (context) => UserProfileScreen(
-
                                 nickname: nickname,
                               ),
                             ),
@@ -79,7 +79,8 @@ class UserGridSection extends StatelessWidget {
                             color: Color(0xFF353535),
                             borderRadius: BorderRadius.circular(6.0),
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 4.0),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 4.0, horizontal: 4.0),
                           child: Center(
                             child: FittedBox(
                               fit: BoxFit.scaleDown,
@@ -111,6 +112,7 @@ class UserGridSection extends StatelessWidget {
                       builder: (context) => ViewListScreen(
                         title: title,
                         sanitizedUsername: sanitizedUsername,
+                        expectedUserCount: totalUsersCount,
                       ),
                     ),
                   );
@@ -119,7 +121,6 @@ class UserGridSection extends StatelessWidget {
                   'View List ($viewListText)',
                   style: const TextStyle(
                     color: Color(0xFFE09321),
-
                     fontSize: 16,
                   ),
                 ),
