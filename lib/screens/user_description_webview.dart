@@ -269,6 +269,10 @@ user-select: none !important;
         text-align: left !important;
       }
 
+      h1, h2, h3, h4 {
+        color: #fff !important;
+      }
+
       h1, h2, h3, h4, h5, h6 {
         text-align: center;
       }
