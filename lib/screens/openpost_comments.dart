@@ -30,16 +30,41 @@ class CommentWidget extends StatefulWidget {
 
 class _CommentWidgetState extends State<CommentWidget> {
   bool _showFullDate = false;
+  String? _lastCommentHtml;
+  bool _hasHtml = false;
+  String _normalizedCommentHtml = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _syncHtmlCache();
+  }
+
+  @override
+  void didUpdateWidget(covariant CommentWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncHtmlCache();
+  }
+
+  void _syncHtmlCache() {
+    final String? commentHtml = widget.comment['commentHtml'];
+    if (commentHtml == _lastCommentHtml) return;
+
+    _lastCommentHtml = commentHtml;
+    _hasHtml = commentHtml != null && commentHtml.trim().isNotEmpty;
+    if (_hasHtml) {
+      final String html = commentHtml ?? '';
+      _normalizedCommentHtml = normalizeSmilieTokensToHtml(html);
+    } else {
+      _normalizedCommentHtml = '';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final double widthPercent = (widget.comment['width'] ?? 100).toDouble();
     final int nestingLevel = ((100.0 - widthPercent) / 3.0).round().clamp(0, 4);
     final double leftPadding = nestingLevel * 16.0;
-    final String? commentHtml = widget.comment['commentHtml'];
-    final bool hasHtml = commentHtml != null && commentHtml.trim().isNotEmpty;
-    final String normalizedCommentHtml =
-        hasHtml ? normalizeSmilieTokensToHtml(commentHtml) : '';
 
     if (widget.comment['deleted'] == true) {
       return Padding(
@@ -232,9 +257,9 @@ class _CommentWidgetState extends State<CommentWidget> {
                     selectionHandleColor: const Color(0xFFE09321),
                   ),
                 ),
-                child: hasHtml
+                child: _hasHtml
                     ? Html(
-                        data: normalizedCommentHtml,
+                        data: _normalizedCommentHtml,
                         onLinkTap: (url, _, __) {
                           if (url != null) {
                             widget.handleLink?.call(url);

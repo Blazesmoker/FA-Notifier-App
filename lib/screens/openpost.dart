@@ -90,7 +90,7 @@ class OpenPost extends StatefulWidget {
   _OpenPostState createState() => _OpenPostState();
 }
 
-class _OpenPostState extends State<OpenPost> {
+class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   bool _showFullPublicationDate = false;
   String? profileImageUrl;
   String? username;
@@ -141,8 +141,13 @@ class _OpenPostState extends State<OpenPost> {
   final Set<String> _tagToggleInFlight = <String>{};
   final ValueNotifier<bool> _showScrollToTopNotifier =
       ValueNotifier<bool>(false);
-  bool _isSendingInlineComment = false;
-  bool _isCommentComposerExpanded = false;
+  final ValueNotifier<bool> _isSendingInlineComment =
+      ValueNotifier<bool>(false);
+  final ValueNotifier<double> _keyboardInset = ValueNotifier<double>(0);
+  final ValueNotifier<bool> _isCommentComposerExpanded =
+      ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _commentDraftHasText = ValueNotifier<bool>(false);
+  final ValueNotifier<int> _commentDraftCollapsedLines = ValueNotifier<int>(1);
   String? _blockKey;
   String? _unblockKey;
   bool _isClassicUserPage = false;
@@ -161,8 +166,14 @@ class _OpenPostState extends State<OpenPost> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_onScroll);
+    _commentController.addListener(_onCommentDraftChanged);
     _commentFocusNode.addListener(_syncCommentComposerExpansion);
+    _onCommentDraftChanged();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateKeyboardInset();
+    });
 
     Future.wait([
       _loadSfwEnabled(),
@@ -176,11 +187,18 @@ class _OpenPostState extends State<OpenPost> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _commentController.removeListener(_onCommentDraftChanged);
     _commentController.dispose();
     _commentFocusNode.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _showScrollToTopNotifier.dispose();
+    _keyboardInset.dispose();
+    _isCommentComposerExpanded.dispose();
+    _isSendingInlineComment.dispose();
+    _commentDraftHasText.dispose();
+    _commentDraftCollapsedLines.dispose();
     super.dispose();
   }
 
@@ -201,6 +219,32 @@ class _OpenPostState extends State<OpenPost> {
     final shouldShow = _scrollController.offset > 350;
     if (shouldShow == _showScrollToTopNotifier.value) return;
     _showScrollToTopNotifier.value = shouldShow;
+  }
+
+  @override
+  void didChangeMetrics() {
+    _updateKeyboardInset();
+  }
+
+  void _updateKeyboardInset() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) return;
+
+    final view = views.first;
+
+    final previousInset = _keyboardInset.value;
+    final inset = view.viewInsets.bottom / view.devicePixelRatio;
+
+    if ((inset - previousInset).abs() > 0.5) {
+      _keyboardInset.value = inset;
+
+
+      final keyboardJustClosed = previousInset > 0 && inset <= 0.5;
+      if (keyboardJustClosed && _commentFocusNode.hasFocus) {
+        _commentFocusNode.unfocus();
+
+      }
+    }
   }
 
   Future<void> _loadSfwEnabled() async {
@@ -1578,10 +1622,20 @@ class _OpenPostState extends State<OpenPost> {
 
   void _syncCommentComposerExpansion() {
     final shouldExpand = _commentFocusNode.hasFocus;
-    if (shouldExpand != _isCommentComposerExpanded) {
-      setState(() {
-        _isCommentComposerExpanded = shouldExpand;
-      });
+    if (shouldExpand != _isCommentComposerExpanded.value) {
+      _isCommentComposerExpanded.value = shouldExpand;
+    }
+  }
+
+  void _onCommentDraftChanged() {
+    final bool hasText = _commentController.text.trim().isNotEmpty;
+    if (hasText != _commentDraftHasText.value) {
+      _commentDraftHasText.value = hasText;
+    }
+
+    final int collapsedLines = _collapsedComposerLines(_commentController.text);
+    if (collapsedLines != _commentDraftCollapsedLines.value) {
+      _commentDraftCollapsedLines.value = collapsedLines;
     }
   }
 
@@ -1593,11 +1647,8 @@ class _OpenPostState extends State<OpenPost> {
 
   Future<void> _sendInlineComment() async {
     final commentText = _commentController.text.trim();
-    if (commentText.isEmpty || _isSendingInlineComment) return;
-
-    setState(() {
-      _isSendingInlineComment = true;
-    });
+    if (commentText.isEmpty || _isSendingInlineComment.value) return;
+    _isSendingInlineComment.value = true;
 
     try {
       final success = await submitPostCommentOrReply(
@@ -1641,20 +1692,19 @@ class _OpenPostState extends State<OpenPost> {
       );
     } finally {
       if (mounted) {
-        setState(() {
-          _isSendingInlineComment = false;
-        });
+        _isSendingInlineComment.value = false;
       }
     }
   }
 
   Widget _buildComposerSendButton({
     required bool canSend,
+    required bool isSending,
     bool compact = false,
   }) {
     final buttonSize = compact ? 30.0 : 40.0;
 
-    if (_isSendingInlineComment) {
+    if (isSending) {
       return SizedBox(
         width: buttonSize,
         height: buttonSize,
@@ -2186,11 +2236,7 @@ class _OpenPostState extends State<OpenPost> {
 
   @override
   Widget build(BuildContext context) {
-    bool showLoadingIndicator = !_detailsLoaded || !_webViewLoaded;
-    final collapsedPreviewLines = _collapsedComposerLines(_commentController.text);
-    final composerSpacerHeight = _isCommentComposerExpanded
-        ? 198.0
-        : (72.0 + ((collapsedPreviewLines - 1) * 24.0));
+    final bool showLoadingIndicator = !_detailsLoaded || !_webViewLoaded;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -2323,7 +2369,7 @@ class _OpenPostState extends State<OpenPost> {
               ),
             ],
           ),
-          resizeToAvoidBottomInset: true,
+          resizeToAvoidBottomInset: false,
           // Build the main content in a Stack so it can overlay the loading indicator.
           body: Listener(
             behavior: HitTestBehavior.opaque,
@@ -2333,14 +2379,15 @@ class _OpenPostState extends State<OpenPost> {
             },
             child: Stack(
               children: [
-                SelectionArea(
-                  key: _commentsSelectionKey,
-                  child: RefreshIndicator(
-                    onRefresh: () async {
-                      // Re-fetch post details when the user pulls down.
-                      await _fetchPostDetails();
-                    },
-                    child: CustomScrollView(
+                RepaintBoundary(
+                  child: SelectionArea(
+                    key: _commentsSelectionKey,
+                    child: RefreshIndicator(
+                      onRefresh: () async {
+                        // Re-fetch post details when the user pulls down.
+                        await _fetchPostDetails();
+                      },
+                      child: CustomScrollView(
                       controller: _scrollController,
                       physics: Platform.isIOS
                           ? const AlwaysScrollableScrollPhysics(
@@ -3033,26 +3080,43 @@ class _OpenPostState extends State<OpenPost> {
                         ),
                         ..._buildCommentSlivers(),
                         SliverToBoxAdapter(
-                          child: SizedBox(height: composerSpacerHeight),
+                          child: ListenableBuilder(
+                            listenable: Listenable.merge([
+                              _isCommentComposerExpanded,
+                              _commentDraftCollapsedLines,
+                            ]),
+                            builder: (context, _) {
+                              final isExpanded =
+                                  _isCommentComposerExpanded.value;
+                              final collapsedPreviewLines =
+                                  _commentDraftCollapsedLines.value;
+                              final composerSpacerHeight = isExpanded
+                                  ? 198.0
+                                  : (72.0 +
+                                      ((collapsedPreviewLines - 1) * 24.0));
+                              return SizedBox(height: composerSpacerHeight);
+                            },
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
+                ),
                 Positioned.fill(
-                  child: IgnorePointer(
-                    ignoring: !_isCommentComposerExpanded,
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 220),
-                      curve: Curves.easeOutCubic,
-                      opacity: _isCommentComposerExpanded ? 1 : 0,
-                      child: GestureDetector(
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: _isCommentComposerExpanded,
+                    builder: (context, isExpanded, _) {
+                      if (!isExpanded) {
+                        return const SizedBox.shrink();
+                      }
+                      return GestureDetector(
                         onTap: () => FocusScope.of(context).unfocus(),
                         child: Container(
                           color: Colors.black.withValues(alpha: 0.24),
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
                 ),
                 if (showLoadingIndicator)
@@ -3064,114 +3128,105 @@ class _OpenPostState extends State<OpenPost> {
                         assetPath: 'assets/icons/fathemed.png',
                       ),
                     ),
-                  ),
+                ),
               ],
             ),
           ),
           bottomNavigationBar: showLoadingIndicator
               ? null
-              : Container(
-                  color: Colors.black,
-                  child: SafeArea(
-                    child: Builder(
-                      builder: (context) {
-                        final keyboardInset =
-                            MediaQuery.viewInsetsOf(context).bottom;
-                        return AnimatedPadding(
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOutCubic,
-                          padding: EdgeInsets.only(
-                            left: 8,
-                            right: 8,
-                            bottom: (keyboardInset > 0 ? keyboardInset : 4) +
-                                (_isCommentComposerExpanded ? 8 : 0),
-                            top: 8,
-                          ),
-                          child: ValueListenableBuilder<TextEditingValue>(
-                            valueListenable: _commentController,
-                            builder: (context, value, _) {
-                              final canSend = !_isSendingInlineComment &&
-                                  value.text.trim().isNotEmpty;
-                              final collapsedLines =
-                                  _collapsedComposerLines(value.text);
-                              final minLines = _isCommentComposerExpanded
-                                  ? 6
-                                  : collapsedLines;
-                              final maxLines = _isCommentComposerExpanded
-                                  ? 6
-                                  : collapsedLines;
-                              final isCollapsedSingleLine =
-                                  !_isCommentComposerExpanded &&
-                                      collapsedLines == 1;
-                              const compactSingleLineVerticalPadding = 2.0;
-                              final topPadding = _isCommentComposerExpanded
-                                  ? 12.0
-                                  : (isCollapsedSingleLine
-                                      ? compactSingleLineVerticalPadding
-                                      : 8.0);
-                              final bottomPadding = _isCommentComposerExpanded
-                                  ? 8.0
-                                  : (isCollapsedSingleLine
-                                      ? compactSingleLineVerticalPadding
-                                      : 8.0);
+              : RepaintBoundary(
+            child: Container(
+              color: Colors.black,
+              child: SafeArea(
+                bottom: false, // ← disable SafeArea bottom; we handle it manually
+                child: ListenableBuilder(
+                  listenable: Listenable.merge([
+                    _keyboardInset,
+                    _isCommentComposerExpanded,
+                  ]),
+                  builder: (context, _) {
+                    final keyboardInset = _keyboardInset.value;
+                    final isExpanded = _isCommentComposerExpanded.value;
 
-                              return Row(
-                                crossAxisAlignment: isCollapsedSingleLine
-                                    ? CrossAxisAlignment.center
-                                    : CrossAxisAlignment.end,
-                                children: [
-                                  ClipRect(
-                                    child: AnimatedSize(
-                                      duration:
-                                          const Duration(milliseconds: 210),
-                                      curve: Curves.easeInOut,
-                                      alignment: Alignment.centerLeft,
-                                      child: ValueListenableBuilder<bool>(
-                                        valueListenable:
-                                            _showScrollToTopNotifier,
-                                        builder: (context, show, _) {
-                                          final showButton =
-                                              show && !_commentFocusNode.hasFocus;
-                                          return Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              if (showButton)
-                                                SizedBox(
-                                                  width: 36,
-                                                  height: 36,
-                                                  child: FloatingActionButton.small(
-                                                    heroTag: 'scroll_top',
-                                                    backgroundColor:
-                                                        const Color(0xFFE09321),
-                                                    elevation: 0,
-                                                    onPressed: () {
-                                                      _scrollController.animateTo(
-                                                        0,
-                                                        duration: const Duration(
-                                                            milliseconds: 300),
-                                                        curve: Curves.easeOut,
-                                                      );
-                                                    },
-                                                    child: const Icon(
-                                                      Icons.arrow_upward,
-                                                      size: 18,
-                                                    ),
-                                                  ),
-                                                ),
-                                              if (showButton)
-                                                const SizedBox(width: 8),
-                                            ],
-                                          );
-                                        },
+
+                    final safeAreaBottom = MediaQuery.of(context).padding.bottom;
+                    final bottomPadding = keyboardInset > 0
+                        ? keyboardInset
+                        : safeAreaBottom;
+                          return Padding(
+                            padding: EdgeInsets.only(
+                              left: 8,
+                              right: 8,
+                              bottom: bottomPadding + 8.0,
+                              top: 8,
+                            ),
+                            child: ListenableBuilder(
+                              listenable: Listenable.merge([
+                                _isCommentComposerExpanded,
+                                _commentDraftCollapsedLines,
+                                _commentDraftHasText,
+                                _showScrollToTopNotifier,
+                                _isSendingInlineComment,
+                              ]),
+                              builder: (context, _) {
+                                final isExpanded =
+                                    _isCommentComposerExpanded.value;
+                                final collapsedLines =
+                                    _commentDraftCollapsedLines.value;
+                                final hasText = _commentDraftHasText.value;
+                                final isSending =
+                                    _isSendingInlineComment.value;
+                                final canSend = !isSending && hasText;
+                                final minLines = isExpanded ? 6 : collapsedLines;
+                                final maxLines = isExpanded ? 6 : collapsedLines;
+                                final isCollapsedSingleLine =
+                                    !isExpanded && collapsedLines == 1;
+                                final showScrollToTopButton =
+                                    _showScrollToTopNotifier.value && !isExpanded;
+
+                                const compactSingleLineVerticalPadding = 2.0;
+                                final topPadding = isExpanded
+                                    ? 12.0
+                                    : (isCollapsedSingleLine
+                                        ? compactSingleLineVerticalPadding
+                                        : 8.0);
+                                final bottomPadding = isExpanded
+                                    ? 8.0
+                                    : (isCollapsedSingleLine
+                                        ? compactSingleLineVerticalPadding
+                                        : 8.0);
+
+                                return Row(
+                                  crossAxisAlignment: isCollapsedSingleLine
+                                      ? CrossAxisAlignment.center
+                                      : CrossAxisAlignment.end,
+                                  children: [
+                                    if (showScrollToTopButton)
+                                      SizedBox(
+                                        width: 36,
+                                        height: 36,
+                                        child: FloatingActionButton.small(
+                                          heroTag: 'scroll_top',
+                                          backgroundColor:
+                                              const Color(0xFFE09321),
+                                          elevation: 0,
+                                          onPressed: () {
+                                            _scrollController.animateTo(
+                                              0,
+                                              duration: const Duration(
+                                                  milliseconds: 300),
+                                              curve: Curves.easeOut,
+                                            );
+                                          },
+                                          child: const Icon(
+                                            Icons.arrow_upward,
+                                            size: 18,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: AnimatedSize(
-                                      duration:
-                                          const Duration(milliseconds: 220),
-                                      curve: Curves.easeOutCubic,
-                                      alignment: Alignment.bottomCenter,
+                                    if (showScrollToTopButton)
+                                      const SizedBox(width: 8),
+                                    Expanded(
                                       child: Stack(
                                         children: [
                                           TextField(
@@ -3185,6 +3240,8 @@ class _OpenPostState extends State<OpenPost> {
                                                 TextInputAction.newline,
                                             minLines: minLines,
                                             maxLines: maxLines,
+                                            scrollPadding:
+                                                const EdgeInsets.only(bottom: 8),
                                             decoration: InputDecoration(
                                               hintText: 'Add a comment...',
                                               hintStyle: const TextStyle(
@@ -3221,6 +3278,7 @@ class _OpenPostState extends State<OpenPost> {
                                                   child:
                                                       _buildComposerSendButton(
                                                     canSend: canSend,
+                                                    isSending: isSending,
                                                     compact: true,
                                                   ),
                                                 ),
@@ -3232,11 +3290,12 @@ class _OpenPostState extends State<OpenPost> {
                                               right: 4,
                                               child: _buildComposerSendButton(
                                                 canSend: canSend,
+                                                isSending: isSending,
                                               ),
                                             ),
-                                          if (_isCommentComposerExpanded &&
-                                              value.text.trim().isNotEmpty &&
-                                              !_isSendingInlineComment)
+                                          if (isExpanded &&
+                                              hasText &&
+                                              !isSending)
                                             Positioned(
                                               right: 4,
                                               bottom: 4,
@@ -3253,13 +3312,13 @@ class _OpenPostState extends State<OpenPost> {
                                         ],
                                       ),
                                     ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        );
-                      },
+                                  ],
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),
