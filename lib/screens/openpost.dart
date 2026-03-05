@@ -1342,62 +1342,79 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
   void _showDeleteConfirmationDialog(String confirmValue,
       String deleteSubmissionsSubmitValue, String submissionIdValue) {
-    TextEditingController passwordController = TextEditingController();
+    final TextEditingController passwordController = TextEditingController();
+    final FocusNode passwordFocusNode = FocusNode();
+
+    void submitDeletion(BuildContext dialogContext) {
+      final String password = passwordController.text;
+      if (password.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Password cannot be empty.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      TextInput.finishAutofillContext(shouldSave: false);
+      Navigator.of(dialogContext).pop();
+      _confirmDeletion(confirmValue, deleteSubmissionsSubmitValue,
+          submissionIdValue, password);
+    }
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Confirm Deletion'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'The following submission is going to be removed from your gallery:',
-                ),
-                const SizedBox(height: 8),
-                if (fullViewImageUrl != null)
-                  Image.network(
-                    fullViewImageUrl!,
-                    height: 150,
+          content: AutofillGroup(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'The following submission is going to be removed from your gallery:',
                   ),
-                const SizedBox(height: 8),
-                const Text(
-                  'This procedure is irreversible.\n\nPlease enter your account password below as a confirmation.',
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
+                  const SizedBox(height: 8),
+                  if (fullViewImageUrl != null)
+                    Image.network(
+                      fullViewImageUrl!,
+                      height: 150,
+                    ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'This procedure is irreversible.\n\nPlease enter your account password below as a confirmation.',
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: passwordController,
+                    focusNode: passwordFocusNode,
+                    obscureText: true,
+                    keyboardType: TextInputType.text,
+                    textInputAction: TextInputAction.done,
+                    autofillHints: const [AutofillHints.password],
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    decoration: const InputDecoration(
+                      labelText: 'Password',
+                    ),
+                    onSubmitted: (_) => submitDeletion(dialogContext),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                TextInput.finishAutofillContext(shouldSave: true);
+                Navigator.of(dialogContext).pop();
+              },
               child: const Text('Close'),
             ),
             ElevatedButton(
-              onPressed: () {
-                String password = passwordController.text;
-                if (password.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Password cannot be empty.'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-                Navigator.of(context).pop();
-                _confirmDeletion(confirmValue, deleteSubmissionsSubmitValue,
-                    submissionIdValue, password);
-              },
+              onPressed: () => submitDeletion(dialogContext),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red, // Button background color
               ),
@@ -1406,7 +1423,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           ],
         );
       },
-    );
+    ).then((_) {
+      passwordController.dispose();
+      passwordFocusNode.dispose();
+    });
   }
 
   Future<void> _confirmDeletion(

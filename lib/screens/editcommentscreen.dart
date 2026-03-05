@@ -210,6 +210,7 @@ class _EditCommentScreenState extends State<EditCommentScreen> {
             ? Center(child: PulsatingLoadingIndicator(size: 108.0, assetPath: 'assets/icons/fathemed.png'))
             : TextField(
           controller: _controller,
+          minLines: 6,
           maxLines: null,
           style: const TextStyle(
             color: Colors.white,

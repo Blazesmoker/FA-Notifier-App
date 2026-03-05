@@ -220,6 +220,7 @@ class _EditJournalCommentScreenState extends State<EditJournalCommentScreen> {
             : TextField(
           controller: _controller,
           maxLines: null,
+          minLines: 6,
           style: const TextStyle(
             color: Colors.white,
             fontSize: 15,
