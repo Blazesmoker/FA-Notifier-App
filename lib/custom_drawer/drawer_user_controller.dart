@@ -161,7 +161,9 @@ class DrawerUserControllerState extends State<DrawerUserController>
 
   @override
   Widget build(BuildContext context) {
-    var brightness = MediaQuery.of(context).platformBrightness;
+    final brightness = MediaQuery.platformBrightnessOf(context);
+    final size = MediaQuery.sizeOf(context);
+    final topPadding = MediaQuery.paddingOf(context).top;
     bool isLightMode = brightness == Brightness.light;
 
     return Scaffold(
@@ -175,13 +177,13 @@ class DrawerUserControllerState extends State<DrawerUserController>
             : const NeverScrollableScrollPhysics(),
         scrollDirection: Axis.horizontal,
         child: SizedBox(
-          height: MediaQuery.of(context).size.height,
-          width: MediaQuery.of(context).size.width + widget.drawerWidth,
+          height: size.height,
+          width: size.width + widget.drawerWidth,
           child: Row(
             children: <Widget>[
               SizedBox(
                 width: widget.drawerWidth,
-                height: MediaQuery.of(context).size.height,
+                height: size.height,
                 child: AnimatedBuilder(
                   animation: iconAnimationController!,
                   builder: (BuildContext context, Widget? child) {
@@ -215,8 +217,8 @@ class DrawerUserControllerState extends State<DrawerUserController>
 
 
               SizedBox(
-                width: MediaQuery.of(context).size.width,
-                height: MediaQuery.of(context).size.height,
+                width: size.width,
+                height: size.height,
                 child: Container(
                   decoration: BoxDecoration(
                     color: AppTheme.white,
@@ -243,7 +245,7 @@ class DrawerUserControllerState extends State<DrawerUserController>
                       if (widget.screenIndex != DrawerIndex.Notifications)
                         Padding(
                           padding: EdgeInsets.only(
-                            top: MediaQuery.of(context).padding.top + 4,
+                            top: topPadding + 4,
                             left: 8,
                           ),
                           child: SizedBox(

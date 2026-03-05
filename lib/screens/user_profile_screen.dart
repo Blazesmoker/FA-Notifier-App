@@ -1149,6 +1149,10 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
         (needsDescriptionLoad &&
             !_webViewLoaded &&
             _tabController.index == ProfileSection.Home.index);
+    final platformViews = WidgetsBinding.instance.platformDispatcher.views;
+    final baseView = platformViews.isNotEmpty ? platformViews.first : View.of(context);
+    final fixedTextScaleMediaQuery =
+        MediaQueryData.fromView(baseView).copyWith(textScaler: TextScaler.linear(1.0));
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
         value: const SystemUiOverlayStyle(
@@ -1376,7 +1380,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                                   crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
                                     MediaQuery(
-                                      data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(1.0)),
+                                      data: fixedTextScaleMediaQuery,
                                       child: Expanded(
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1554,8 +1558,7 @@ class UserProfileScreenState extends State<UserProfileScreen> with RouteAware, S
                         ),
 
                         MediaQuery(
-                          data: MediaQuery.of(context)
-                              .copyWith(textScaler: TextScaler.linear(1.0)),
+                          data: fixedTextScaleMediaQuery,
                           child: Padding(
                             padding:
                             const EdgeInsets.only(top: 8.0),

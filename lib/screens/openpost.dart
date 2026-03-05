@@ -2135,15 +2135,22 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           content: const Text('Are you sure you want to close this post?'),
           actions: [
             TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                minimumSize: Size.zero,
+              ),
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Cancel'),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                'Close',
-                style: TextStyle(color: Colors.red),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                minimumSize: Size.zero,
               ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Close', style: TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -2236,7 +2243,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final bool showLoadingIndicator = !_detailsLoaded || !_webViewLoaded;
-    final double viewPaddingBottom = MediaQuery.of(context).viewPadding.bottom;
+    final double viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         systemNavigationBarColor: Colors.black,
@@ -3146,12 +3153,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                   builder: (context, _) {
                     final keyboardInset = _keyboardInset.value;
                     final isExpanded = _isCommentComposerExpanded.value;
-
-
-                    final safeAreaBottom = MediaQuery.of(context).viewPadding.bottom;
-                    final bottomPadding = keyboardInset > 0
-                        ? keyboardInset
-                        : safeAreaBottom;
                           return Padding(
                             padding: EdgeInsets.only(
                               left: 8,

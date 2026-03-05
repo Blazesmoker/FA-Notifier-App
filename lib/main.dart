@@ -724,7 +724,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       theme: AppTheme.darkTheme,
       navigatorKey: navigatorKey,
       navigatorObservers: [routeObserver],
-      home: const HomeScreen(),
+      home: Builder(
+        builder: (context) {
+          final mediaQuery = MediaQuery.of(context);
+          final homeMediaQuery = mediaQuery.copyWith(
+            // Keep home/tabs insensitive to keyboard bottom insets from pushed routes.
+            viewInsets: mediaQuery.viewInsets.copyWith(bottom: 0),
+            padding: mediaQuery.padding.copyWith(
+              bottom: mediaQuery.viewPadding.bottom,
+            ),
+          );
+          return MediaQuery(
+            data: homeMediaQuery,
+            child: const HomeScreen(),
+          );
+        },
+      ),
     );
   }
 }

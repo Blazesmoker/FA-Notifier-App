@@ -622,7 +622,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return DrawerUserController(
       key: _drawerKey,
       screenIndex: drawerIndex,
-      drawerWidth: MediaQuery.of(context).size.width * 0.75,
+      drawerWidth: MediaQuery.sizeOf(context).width * 0.75,
       onDrawerCall: (DrawerIndex drawerIndexdata) {
         _changeIndex(drawerIndexdata);
       },

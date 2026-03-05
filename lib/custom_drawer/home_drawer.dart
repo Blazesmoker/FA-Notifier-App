@@ -360,9 +360,11 @@ class _HomeDrawerState extends State<HomeDrawer> {
               AnimatedBuilder(
                 animation: widget.iconAnimationController!,
                 builder: (BuildContext context, Widget? child) {
+                  final drawerContentWidth =
+                      MediaQuery.sizeOf(context).width * 0.75 - 64;
                   return Transform(
                     transform: Matrix4.translationValues(
-                      (MediaQuery.of(context).size.width * 0.75 - 64) *
+                      drawerContentWidth *
                           (1.0 - widget.iconAnimationController!.value - 1.0),
                       0.0,
                       0.0,
@@ -370,7 +372,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8.0),
                       child: Container(
-                        width: MediaQuery.of(context).size.width * 0.75 - 64,
+                        width: drawerContentWidth,
                         height: 46,
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.2),
@@ -1127,7 +1129,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
                       ),
                     ),
 
-                    SizedBox(height: MediaQuery.of(context).padding.bottom),
+                    SizedBox(height: MediaQuery.paddingOf(context).bottom),
                   ],
                 ),
               ),
