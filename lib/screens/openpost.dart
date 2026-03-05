@@ -242,8 +242,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       final keyboardJustClosed = previousInset > 0 && inset <= 0.5;
       if (keyboardJustClosed && _commentFocusNode.hasFocus) {
         _commentFocusNode.unfocus();
-
-      }
+         }
     }
   }
 
@@ -2237,7 +2236,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final bool showLoadingIndicator = !_detailsLoaded || !_webViewLoaded;
-
+    final double viewPaddingBottom = MediaQuery.of(context).viewPadding.bottom;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         systemNavigationBarColor: Colors.black,
@@ -3138,7 +3137,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
             child: Container(
               color: Colors.black,
               child: SafeArea(
-                bottom: false, // ← disable SafeArea bottom; we handle it manually
+                bottom: true,
                 child: ListenableBuilder(
                   listenable: Listenable.merge([
                     _keyboardInset,
@@ -3149,7 +3148,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                     final isExpanded = _isCommentComposerExpanded.value;
 
 
-                    final safeAreaBottom = MediaQuery.of(context).padding.bottom;
+                    final safeAreaBottom = MediaQuery.of(context).viewPadding.bottom;
                     final bottomPadding = keyboardInset > 0
                         ? keyboardInset
                         : safeAreaBottom;
@@ -3157,7 +3156,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                             padding: EdgeInsets.only(
                               left: 8,
                               right: 8,
-                              bottom: bottomPadding + 8.0,
+                              bottom: keyboardInset > 0
+                                  ? (keyboardInset - viewPaddingBottom + 8).clamp(0.0, double.infinity)
+                                  : 0.0,
                               top: 8,
                             ),
                             child: ListenableBuilder(
@@ -3181,10 +3182,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                 final maxLines = isExpanded ? 6 : collapsedLines;
                                 final isCollapsedSingleLine =
                                     !isExpanded && collapsedLines == 1;
-                                final showScrollToTopButton =
-                                    _showScrollToTopNotifier.value && !isExpanded;
 
-                                const compactSingleLineVerticalPadding = 2.0;
+                                const compactSingleLineVerticalPadding = 8.0;
                                 final topPadding = isExpanded
                                     ? 12.0
                                     : (isCollapsedSingleLine
@@ -3201,31 +3200,56 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                       ? CrossAxisAlignment.center
                                       : CrossAxisAlignment.end,
                                   children: [
-                                    if (showScrollToTopButton)
-                                      SizedBox(
-                                        width: 36,
-                                        height: 36,
-                                        child: FloatingActionButton.small(
-                                          heroTag: 'scroll_top',
-                                          backgroundColor:
-                                              const Color(0xFFE09321),
-                                          elevation: 0,
-                                          onPressed: () {
-                                            _scrollController.animateTo(
-                                              0,
-                                              duration: const Duration(
-                                                  milliseconds: 300),
-                                              curve: Curves.easeOut,
+                                    ClipRect(
+                                      child: AnimatedSize(
+                                        duration:
+                                            const Duration(milliseconds: 210),
+                                        curve: Curves.easeInOut,
+                                        alignment: Alignment.centerLeft,
+                                        child: ValueListenableBuilder<bool>(
+                                          valueListenable:
+                                              _showScrollToTopNotifier,
+                                          builder: (context, show, _) {
+                                            return Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                if (show && !isExpanded)
+                                                  SizedBox(
+                                                    width: 36,
+                                                    height: 36,
+                                                    child:
+                                                        FloatingActionButton
+                                                            .small(
+                                                      heroTag: 'scroll_top',
+                                                      backgroundColor:
+                                                          const Color(
+                                                              0xFFE09321),
+                                                      elevation: 0,
+                                                      onPressed: () {
+                                                        _scrollController
+                                                            .animateTo(
+                                                          0,
+                                                          duration:
+                                                              const Duration(
+                                                                  milliseconds:
+                                                                      300),
+                                                          curve: Curves.easeOut,
+                                                        );
+                                                      },
+                                                      child: const Icon(
+                                                        Icons.arrow_upward,
+                                                        size: 18,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                if (show && !isExpanded)
+                                                  const SizedBox(width: 8),
+                                              ],
                                             );
                                           },
-                                          child: const Icon(
-                                            Icons.arrow_upward,
-                                            size: 18,
-                                          ),
                                         ),
                                       ),
-                                    if (showScrollToTopButton)
-                                      const SizedBox(width: 8),
+                                    ),
                                     Expanded(
                                       child: Stack(
                                         children: [
@@ -3248,12 +3272,13 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                                   color: Colors.white54),
                                               contentPadding:
                                                   EdgeInsets.fromLTRB(
-                                                16,
+                                                12,
                                                 topPadding,
                                                 56,
                                                 bottomPadding,
                                               ),
                                               filled: true,
+                                              isDense: isCollapsedSingleLine,
                                               fillColor:
                                                   const Color(0xFF151515),
                                               border: OutlineInputBorder(
