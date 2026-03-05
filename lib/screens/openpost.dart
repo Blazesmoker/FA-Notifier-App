@@ -21,9 +21,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../app_theme.dart';
 import '../parsing_utils.dart';
 import '../utils/html_tags_debug.dart';
+import '../utils/bbcode_context_menu.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'SubmissionDescriptionWebview.dart';
-import 'add_comment_screen.dart';
+import 'add_post_comment_screen.dart';
 import 'avatardownloadscreen.dart';
 import 'openpost_api_service.dart';
 import 'edit_submission_screen.dart';
@@ -89,8 +90,7 @@ class OpenPost extends StatefulWidget {
   _OpenPostState createState() => _OpenPostState();
 }
 
-class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
-
+class _OpenPostState extends State<OpenPost> {
   bool _showFullPublicationDate = false;
   String? profileImageUrl;
   String? username;
@@ -105,11 +105,12 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   int commentsCount = 0;
   List<Map<String, dynamic>> comments = [];
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock),
+    iOptions: IOSOptions(
+        accountName: 'flutter_secure_storage_service',
+        accessibility: KeychainAccessibility.first_unlock),
   );
   final TextEditingController _commentController = TextEditingController();
+  final FocusNode _commentFocusNode = FocusNode();
   Timer? _debounceTimer;
   bool _pendingFavoriteState = false;
   String? userTimezoneIanaName;
@@ -138,8 +139,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   String? tagBlocklistNonce;
   bool _showTagsSection = false;
   final Set<String> _tagToggleInFlight = <String>{};
-  final ValueNotifier<bool> _showScrollToTopNotifier = ValueNotifier<bool>(false);
-  bool _isTyping = false;
+  final ValueNotifier<bool> _showScrollToTopNotifier =
+      ValueNotifier<bool>(false);
+  bool _isSendingInlineComment = false;
+  bool _isCommentComposerExpanded = false;
   String? _blockKey;
   String? _unblockKey;
   bool _isClassicUserPage = false;
@@ -152,15 +155,14 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   bool _sfwEnabled = true;
   bool _nsfwAllowed = false;
   final GlobalKey<SubmissionDescriptionWebViewState> _submissionWebViewKey =
-  GlobalKey<SubmissionDescriptionWebViewState>();
+      GlobalKey<SubmissionDescriptionWebViewState>();
   final ScrollController _scrollController = ScrollController();
-
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_onScroll);
+    _commentFocusNode.addListener(_syncCommentComposerExpansion);
 
     Future.wait([
       _loadSfwEnabled(),
@@ -174,19 +176,12 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _commentController.dispose();
+    _commentFocusNode.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _showScrollToTopNotifier.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeMetrics() {
-    super.didChangeMetrics();
-    final keyboardVisible = WidgetsBinding.instance.window.viewInsets.bottom > 0;
-    setState(() => _isTyping = keyboardVisible);
   }
 
   List<String> iconBeforeUrls = [];
@@ -216,10 +211,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   }
 
   Future<Response> _getWithSfwCookie(
-      String url, {
-        Map<String, String>? additionalHeaders,
-        bool skipSfw = false,
-      }) async {
+    String url, {
+    Map<String, String>? additionalHeaders,
+    bool skipSfw = false,
+  }) async {
     String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
 
@@ -235,7 +230,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     debugPrint('Cookie header being sent: $cookieHeader');
 
     final headers = <String, String>{
-      'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
+      'Cookie':
+          await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
       'User-Agent': FAHttp.userAgent,
     };
     if (additionalHeaders != null) headers.addAll(additionalHeaders);
@@ -244,11 +240,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
     debugPrint('Response status: ${response.statusCode}');
 
-
     final ct = (response.headers['content-type'] ?? '').toLowerCase();
     if (response.statusCode == 200 &&
         (ct.contains('text/html') || ct.contains('application/xhtml'))) {
-
       String decodedBody;
       try {
         decodedBody = utf8.decode(response.bodyBytes);
@@ -261,7 +255,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       }
 
       final document = html_parser.parse(decodedBody);
-
 
       final allSections = document.querySelectorAll('section');
       for (var section in allSections) {
@@ -281,23 +274,23 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         }
       }
 
-
       if (!skipSfw) {
         final noticeSection = document.querySelector('section.notice-message');
 
         if (noticeSection != null) {
           final noticeText = noticeSection.text.toLowerCase().trim();
 
-
           final isMatureWarning =
               (noticeText.contains('mature') || noticeText.contains('adult')) &&
-                  (noticeText.contains('rated') || noticeText.contains('content')) &&
+                  (noticeText.contains('rated') ||
+                      noticeText.contains('content')) &&
                   (noticeText.contains('account settings') ||
                       noticeText.contains('log in') ||
                       noticeText.contains('enable'));
 
           if (isMatureWarning && !_nsfwAllowed) {
-            debugPrint('DETECTED: Mature/Adult content warning - showing dialog');
+            debugPrint(
+                'DETECTED: Mature/Adult content warning - showing dialog');
 
             final userAgreed = await _showNSFWConfirmationDialog();
             debugPrint('User response: $userAgreed');
@@ -319,9 +312,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           }
         }
 
-
         final body = document.querySelector('body');
-        final isOldMatureError = body?.attributes['id'] == 'pageid-matureimage-error';
+        final isOldMatureError =
+            body?.attributes['id'] == 'pageid-matureimage-error';
 
         if (isOldMatureError && !_nsfwAllowed) {
           debugPrint('DETECTED: Old style mature error - showing dialog');
@@ -345,32 +338,33 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
   Future<bool> _showNSFWConfirmationDialog() async {
     return await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('NSFW Content'),
-          content: const Text(
-              'This post is marked NSFW. Are you sure you want to view it?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.black,
-              ),
-              child: const Text('No', style: TextStyle(color: Colors.white)),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.black,
-              ),
-              child: const Text('Yes', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
-    ) ??
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('NSFW Content'),
+              content: const Text(
+                  'This post is marked NSFW. Are you sure you want to view it?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.black,
+                  ),
+                  child:
+                      const Text('No', style: TextStyle(color: Colors.white)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.black,
+                  ),
+                  child: const Text('Yes', style: TextStyle(color: Colors.red)),
+                ),
+              ],
+            );
+          },
+        ) ??
         false;
   }
 
@@ -395,9 +389,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       final document = await compute(parseHtml, decodedBody);
 
       final isClassic = document
-          .querySelector('body')
-          ?.attributes['data-static-path']
-          ?.contains('themes/classic') ??
+              .querySelector('body')
+              ?.attributes['data-static-path']
+              ?.contains('themes/classic') ??
           false;
 
       dom.Element? watchLinkElement;
@@ -432,7 +426,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
               blockButton.text.trim().contains('+Block')) {
             blockLinkElement = dom.Element.tag('a');
             blockLinkElement.attributes['href'] =
-            blockForm.attributes['action']!;
+                blockForm.attributes['action']!;
             blockKey = blockButton.attributes['value'];
           }
         }
@@ -443,7 +437,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
               unblockButton.text.trim().contains('-Unblock')) {
             unblockLinkElement = dom.Element.tag('a');
             unblockLinkElement.attributes['href'] =
-            unblockForm.attributes['action']!;
+                unblockForm.attributes['action']!;
             unblockKey = unblockButton.attributes['value'];
           }
         }
@@ -465,8 +459,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       debugPrint('Failed to fetch user page links: ${response.statusCode}');
     }
   }
-
-
 
   Future<void> _showKeywordsDialog() async {
     if (keywords.isEmpty) {
@@ -511,7 +503,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   }
 
   Widget _buildTagsPanel() {
-    final bool hasAnyTags = keywordTags.isNotEmpty || metaKeywordTags.isNotEmpty;
+    final bool hasAnyTags =
+        keywordTags.isNotEmpty || metaKeywordTags.isNotEmpty;
 
     // Guard: some posts have *only* meta keywords. In that case, older parsing
     // fallbacks could end up treating the meta section as normal keywords,
@@ -538,15 +531,20 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     }
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(12, 10, 12, metaKeywordTags.isNotEmpty ? 4 : 0),
+      padding:
+          EdgeInsets.fromLTRB(12, 10, 12, metaKeywordTags.isNotEmpty ? 4 : 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (keywordTags.isNotEmpty && !hideKeywordGroup)
-            _buildTagsGroup(title: 'Keywords', tags: keywordTags, allowSearch: true),
+            _buildTagsGroup(
+                title: 'Keywords', tags: keywordTags, allowSearch: true),
           if (metaKeywordTags.isNotEmpty) ...[
             const SizedBox(height: 12),
-            _buildTagsGroup(title: 'Meta Keywords', tags: metaKeywordTags, allowSearch: false),
+            _buildTagsGroup(
+                title: 'Meta Keywords',
+                tags: metaKeywordTags,
+                allowSearch: false),
           ],
         ],
       ),
@@ -590,7 +588,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     final bool isBlocked = tag.isBlocked;
 
     final Color accent = isBlocked ? Colors.redAccent : const Color(0xFFE09321);
-    final Color border = isBlocked ? accent.withOpacity(0.55) : const Color(0xFF2A2A2A);
+    final Color border =
+        isBlocked ? accent.withOpacity(0.55) : const Color(0xFF2A2A2A);
 
     return Container(
       decoration: BoxDecoration(
@@ -623,7 +622,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                           height: 12,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.black),
                           ),
                         )
                       : Icon(
@@ -637,12 +637,16 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           ),
           const SizedBox(width: 8),
           InkWell(
-            onTap: (allowSearch && tag.isSearchable) ? () => _navigateToSearch(tag.name) : null,
+            onTap: (allowSearch && tag.isSearchable)
+                ? () => _navigateToSearch(tag.name)
+                : null,
             child: Text(
               tag.name,
               style: TextStyle(
                 fontSize: 13,
-                color: (allowSearch && tag.isSearchable) ? Colors.white : Colors.white70,
+                color: (allowSearch && tag.isSearchable)
+                    ? Colors.white
+                    : Colors.white70,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -658,7 +662,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     if (tagBlocklistNonce == null || tagBlocklistNonce!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Tag blocking is unavailable right now (missing nonce).'),
+          content:
+              Text('Tag blocking is unavailable right now (missing nonce).'),
           backgroundColor: Colors.red,
         ),
       );
@@ -684,7 +689,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            shouldBlock ? 'Tag blocked: ${tag.name}' : 'Tag unblocked: ${tag.name}',
+            shouldBlock
+                ? 'Tag blocked: ${tag.name}'
+                : 'Tag unblocked: ${tag.name}',
           ),
           backgroundColor: Colors.green,
         ),
@@ -692,7 +699,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to ${tag.isBlocked ? 'unblock' : 'block'} tag: ${tag.name}'),
+          content: Text(
+              'Failed to ${tag.isBlocked ? 'unblock' : 'block'} tag: ${tag.name}'),
           backgroundColor: Colors.red,
         ),
       );
@@ -730,7 +738,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _sendTagBlocklistRequest(String tagName, {required bool shouldBlock}) async {
+  Future<void> _sendTagBlocklistRequest(String tagName,
+      {required bool shouldBlock}) async {
     final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     final sfwValue = _sfwEnabled ? '1' : '0';
@@ -772,7 +781,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => KeywordSearchScreen(initialKeyword: formattedKeyword),
+        builder: (context) =>
+            KeywordSearchScreen(initialKeyword: formattedKeyword),
       ),
     );
   }
@@ -807,7 +817,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         );
         return;
       }
-      await _sendBlockUnblockPostRequest('/unblock/$linkUsername/', key, shouldBlock: false);
+      await _sendBlockUnblockPostRequest('/unblock/$linkUsername/', key,
+          shouldBlock: false);
     } else {
       if (blockLink == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -830,12 +841,13 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         );
         return;
       }
-      await _sendBlockUnblockPostRequest('/block/$linkUsername/', key, shouldBlock: true);
+      await _sendBlockUnblockPostRequest('/block/$linkUsername/', key,
+          shouldBlock: true);
     }
   }
 
-
-  Future<void> _sendBlockUnblockPostRequest(String urlPath, String keyValue, {required bool shouldBlock}) async {
+  Future<void> _sendBlockUnblockPostRequest(String urlPath, String keyValue,
+      {required bool shouldBlock}) async {
     String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     final sfwValue = _sfwEnabled ? '1' : '0';
@@ -870,14 +882,16 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         await _fetchUserPageLinks();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${shouldBlock ? 'Author blocked' : 'Author unblocked'}'),
+            content:
+                Text('${shouldBlock ? 'Author blocked' : 'Author unblocked'}'),
             backgroundColor: Colors.green,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to ${shouldBlock ? 'block' : 'unblock'} author.'),
+            content:
+                Text('Failed to ${shouldBlock ? 'block' : 'unblock'} author.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -885,14 +899,13 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('An error occurred while trying to ${shouldBlock ? 'block' : 'unblock'} author.'),
+          content: Text(
+              'An error occurred while trying to ${shouldBlock ? 'block' : 'unblock'} author.'),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
-
-
 
   Future<void> _sendWatchUnwatchRequest(String urlPath,
       {required bool shouldWatch}) async {
@@ -925,7 +938,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content:
-            Text('Failed to ${shouldWatch ? 'watch' : 'unwatch'} user.'),
+                Text('Failed to ${shouldWatch ? 'watch' : 'unwatch'} user.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -1002,7 +1015,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           );
           await _fetchPostDetails();
         } else {
-          debugPrint('Failed to hide comment. Status code: ${response.statusCode}');
+          debugPrint(
+              'Failed to hide comment. Status code: ${response.statusCode}');
         }
       } catch (e) {
         debugPrint('Error hiding comment: $e');
@@ -1031,10 +1045,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       }
       final document = await compute(parseHtml, decodedBody);
 
-
       // Modern (beta) style
       var favLinkElement = logQuery(document, '.favorite-nav a[href^="/fav/"]');
-      var unfavLinkElement = logQuery(document, '.favorite-nav a[href^="/unfav/"]');
+      var unfavLinkElement =
+          logQuery(document, '.favorite-nav a[href^="/unfav/"]');
 
       // Classic fallback
       if (favLinkElement == null) {
@@ -1048,16 +1062,11 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         favLink = favLinkElement?.attributes['href'];
         unfavLink = unfavLinkElement?.attributes['href'];
         isFavorited = (unfavLink != null);
-
       });
     } else {
       debugPrint('Failed to fetch favorite links: ${response.statusCode}');
     }
   }
-
-
-
-
 
   Future<void> _fetchPostDetails() async {
     setState(() => isLoading = true);
@@ -1110,12 +1119,13 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       final noticeSection = document.querySelector('section.notice-message');
       if (noticeSection != null) {
         final noticeText = noticeSection.text.toLowerCase().trim();
-        final isMatureWarning =
-            (noticeText.contains('mature') || noticeText.contains('adult')) &&
-                (noticeText.contains('rated') || noticeText.contains('content'));
+        final isMatureWarning = (noticeText.contains('mature') ||
+                noticeText.contains('adult')) &&
+            (noticeText.contains('rated') || noticeText.contains('content'));
 
         if (isMatureWarning) {
-          debugPrint('ERROR: Still got mature warning after retry - this should not happen');
+          debugPrint(
+              'ERROR: Still got mature warning after retry - this should not happen');
           setState(() => isLoading = false);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -1177,7 +1187,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       });
 
       debugPrint('Post loaded successfully: $submissionTitle');
-
     } catch (e) {
       debugPrint('Error fetching post details: $e');
       setState(() => isLoading = false);
@@ -1208,8 +1217,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       }
     }
   }
-
-
 
   Future<void> _handleDeletePost() async {
     String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
@@ -1249,11 +1256,11 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         var confirmInput = document.querySelector('button[name="confirm"]');
         var confirmValue = confirmInput?.attributes['value'];
         var deleteSubmissionsSubmitInput =
-        document.querySelector('input[name="delete_submissions_submit"]');
+            document.querySelector('input[name="delete_submissions_submit"]');
         var deleteSubmissionsSubmitValue =
-        deleteSubmissionsSubmitInput?.attributes['value'];
+            deleteSubmissionsSubmitInput?.attributes['value'];
         var submissionIdsInput =
-        document.querySelector('input[name="submission_ids[]"]');
+            document.querySelector('input[name="submission_ids[]"]');
         var submissionIdValue = submissionIdsInput?.attributes['value'];
 
         if (confirmValue == null ||
@@ -1359,8 +1366,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _confirmDeletion(String confirmValue,
-      String deleteSubmissionsSubmitValue, String submissionIdValue,
+  Future<void> _confirmDeletion(
+      String confirmValue,
+      String deleteSubmissionsSubmitValue,
+      String submissionIdValue,
       String password) async {
     String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
@@ -1399,7 +1408,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         var document = html_parser.parse(response.body);
         String bodyText = document.body?.text.trim() ?? '';
         if (bodyText.isEmpty ||
-            bodyText.toLowerCase().contains('there are no submissions to list')) {
+            bodyText
+                .toLowerCase()
+                .contains('there are no submissions to list')) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Submission deleted successfully.'),
@@ -1520,22 +1531,22 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
             naiveDateTime = naiveDateTime.subtract(const Duration(hours: 1));
           }
           publicationTime = naiveDateTime.toUtc();
-          debugPrint("Successfully parsed with fallback format: $publicationTime");
+          debugPrint(
+              "Successfully parsed with fallback format: $publicationTime");
           return;
         } catch (e) {
           // continue
         }
       }
 
-      debugPrint("Could not parse date with any format. Raw string: '$rawTime'");
-
+      debugPrint(
+          "Could not parse date with any format. Raw string: '$rawTime'");
     } catch (e, stackTrace) {
       debugPrint("Error parsing publication time: $e");
       debugPrint("Raw time string was: '$rawTime'");
       debugPrint("Stack trace: $stackTrace");
     }
   }
-
 
   String? getFormattedPublicationTime() {
     if (publicationTime == null) return null;
@@ -1565,14 +1576,120 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     });
   }
 
+  void _syncCommentComposerExpansion() {
+    final shouldExpand = _commentFocusNode.hasFocus;
+    if (shouldExpand != _isCommentComposerExpanded) {
+      setState(() {
+        _isCommentComposerExpanded = shouldExpand;
+      });
+    }
+  }
+
+  int _collapsedComposerLines(String text) {
+    if (text.isEmpty) return 1;
+    final lines = '\n'.allMatches(text).length + 1;
+    return lines.clamp(1, 6);
+  }
+
+  Future<void> _sendInlineComment() async {
+    final commentText = _commentController.text.trim();
+    if (commentText.isEmpty || _isSendingInlineComment) return;
+
+    setState(() {
+      _isSendingInlineComment = true;
+    });
+
+    try {
+      final success = await submitPostCommentOrReply(
+        secureStorage: _secureStorage,
+        message: commentText,
+        submissionId: widget.uniqueNumber,
+      );
+
+      if (!mounted) return;
+
+      if (success) {
+        _addComment(commentText);
+        _commentController.clear();
+        _commentFocusNode.unfocus();
+        await _fetchPostDetails();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Comment posted!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error posting comment. Please try again.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSendingInlineComment = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildComposerSendButton({
+    required bool canSend,
+    bool compact = false,
+  }) {
+    final buttonSize = compact ? 30.0 : 40.0;
+
+    if (_isSendingInlineComment) {
+      return SizedBox(
+        width: buttonSize,
+        height: buttonSize,
+        child: const Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+
+    return IconButton(
+      padding: EdgeInsets.zero,
+      constraints: BoxConstraints.tightFor(
+        width: buttonSize,
+        height: buttonSize,
+      ),
+      visualDensity: VisualDensity.compact,
+      icon: Icon(
+        Icons.send,
+        color: canSend ? const Color(0xFFE09321) : Colors.white54,
+      ),
+      onPressed: canSend ? _sendInlineComment : null,
+    );
+  }
+
   Future<void> _unhideComment(String unhideLink, String commentId) async {
     final shouldUnhide = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
           title: const Text("Confirmation"),
-          content:
-          const Text("Are you sure you want to unhide this comment?"),
+          content: const Text("Are you sure you want to unhide this comment?"),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
@@ -1603,7 +1720,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           );
           await _fetchPostDetails();
         } else {
-          debugPrint('Failed to unhide comment. Status code: ${response.statusCode}');
+          debugPrint(
+              'Failed to unhide comment. Status code: ${response.statusCode}');
         }
       } catch (e) {
         debugPrint('Error un-hiding comment: $e');
@@ -1707,7 +1825,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
       Uint8List bytes;
 
-
       final response = await httpClient.get(
         Uri.parse(imageUrl),
         headers: {'User-Agent': FAHttp.userAgent},
@@ -1718,10 +1835,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         bytes = await _loadDefaultImageBytes();
       }
 
-
       final tempDir = Directory.systemTemp;
       final tempFile = await File(
-          '${tempDir.path}/shared_image_${DateTime.now().millisecondsSinceEpoch}.jpg')
+              '${tempDir.path}/shared_image_${DateTime.now().millisecondsSinceEpoch}.jpg')
           .create();
       await tempFile.writeAsBytes(bytes);
 
@@ -1763,7 +1879,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     if (submissionDescription == null) return null;
     var document = html_parser.parse(submissionDescription);
     for (var anchor in document.querySelectorAll('a.auto_link_shortened')) {
-      String? fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
+      String? fullLink =
+          anchor.attributes['title'] ?? anchor.attributes['href'];
       if (fullLink != null && fullLink.isNotEmpty) {
         return fullLink;
       }
@@ -1784,22 +1901,19 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     return document.outerHtml;
   }
 
-
-
-
-
   /// Returns the full URL from a truncated comment link.
   String? _getFullLinkFromCommentHtml(String commentHtml, String truncatedUrl) {
     var document = html_parser.parse(commentHtml);
-    for (var anchor in document.querySelectorAll('a.auto_link.auto_link_shortened')) {
-      String? fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
+    for (var anchor
+        in document.querySelectorAll('a.auto_link.auto_link_shortened')) {
+      String? fullLink =
+          anchor.attributes['title'] ?? anchor.attributes['href'];
       if (fullLink != null && fullLink.isNotEmpty) {
         return fullLink;
       }
     }
     return null;
   }
-
 
   /// Handles FA links found in comments.
   Future<void> _handleCommentLink(
@@ -1911,7 +2025,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     await launchUrlString(url, mode: LaunchMode.externalApplication);
   }
 
-
   void _showEditDialog() {
     showDialog(
       context: context,
@@ -1944,10 +2057,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     String editUrl;
     if (type == 'info') {
       editUrl =
-      'https://www.furaffinity.net/controls/submissions/changeinfo/${widget.uniqueNumber}/';
+          'https://www.furaffinity.net/controls/submissions/changeinfo/${widget.uniqueNumber}/';
     } else {
       editUrl =
-      'https://www.furaffinity.net/controls/submissions/changesubmission/${widget.uniqueNumber}/';
+          'https://www.furaffinity.net/controls/submissions/changesubmission/${widget.uniqueNumber}/';
     }
 
     Navigator.push(
@@ -1960,12 +2073,47 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     });
   }
 
-  void _closePost() {
+  Future<bool> _confirmClosePostIfNeeded() async {
+    if (_commentController.text.trim().isEmpty) {
+      return true;
+    }
+
+    final shouldClose = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Discard draft?'),
+          content: const Text('Are you sure you want to close this post?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text(
+                'Close',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    return shouldClose ?? false;
+  }
+
+  Future<void> _closePost() async {
+    final canClose = await _confirmClosePostIfNeeded();
+    if (!canClose || !mounted) return;
+
     setState(() {
       _isWebViewVisible = false;
     });
 
     Future.delayed(const Duration(milliseconds: 5), () {
+      if (!mounted) return;
       Navigator.pop(context);
     });
   }
@@ -2007,7 +2155,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
   Future<bool> _toggleFavorite(bool isLiked) async {
     // Normalize the usernames by removing any leading '~' or '@' symbols.
-    String normalizedCurrent = (currentUsername ?? '').replaceAll(RegExp(r'^[~@]'), '');
+    String normalizedCurrent =
+        (currentUsername ?? '').replaceAll(RegExp(r'^[~@]'), '');
     String normalizedPost = (username ?? '').replaceAll(RegExp(r'^[~@]'), '');
 
     if (normalizedCurrent == normalizedPost) {
@@ -2019,7 +2168,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       );
       return isLiked;
     }
-
 
     bool newLikeState = !isLiked;
     setState(() {
@@ -2036,585 +2184,662 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     return newLikeState;
   }
 
-
-
-
-
-
   @override
   Widget build(BuildContext context) {
-    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     bool showLoadingIndicator = !_detailsLoaded || !_webViewLoaded;
+    final collapsedPreviewLines = _collapsedComposerLines(_commentController.text);
+    final composerSpacerHeight = _isCommentComposerExpanded
+        ? 198.0
+        : (72.0 + ((collapsedPreviewLines - 1) * 24.0));
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-        value: const SystemUiOverlayStyle(
-          systemNavigationBarColor: Colors.black,
-          systemNavigationBarIconBrightness: Brightness.light,
-          statusBarColor: Color(0xFF111111),
-          statusBarIconBrightness: Brightness.light,
-        ),
-        child: Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        scrolledUnderElevation: 0,
-        title: const Text("Post"),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _closePost,
-        ),
-        actions: [
-          Builder(
-            builder: (context) {
-              // Build the menu items.
-              List<PopupMenuEntry<String>> menuItems = [
-                const PopupMenuItem<String>(
-                  value: 'report',
-                  child: Text('Report'),
-                ),
-                if (currentUsername == null || currentUsername != username)
-                  PopupMenuItem<String>(
-                    value: 'block_unblock',
-                    child: Text(isBlocked ? 'Unblock author' : 'Block author'),
-                  ),
-                const PopupMenuItem<String>(
-                  value: 'info',
-                  child: Text('Info'),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'copy_link',
-                  child: Text('Copy link'),
-                ),
-              ];
-
-              if (currentUsername != null && currentUsername == username) {
-                menuItems.add(
-                  const PopupMenuItem<String>(
-                    value: 'edit',
-                    child: Text('Edit'),
-                  ),
-                );
-                menuItems.add(
-                  PopupMenuItem<String>(
-                    value: 'delete',
-                    child: Text(
-                      'Delete',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                  ),
-                );
-              }
-
-              return IconButton(
-                icon: const Icon(Icons.more_vert),
-                onPressed: () async {
-                  final RenderBox button = context.findRenderObject() as RenderBox;
-                  final RenderBox overlay =
-                  Overlay.of(context).context.findRenderObject() as RenderBox;
-                  final RelativeRect position = RelativeRect.fromRect(
-                    Rect.fromPoints(
-                      button.localToGlobal(Offset(0, button.size.height),
-                          ancestor: overlay),
-                      button.localToGlobal(
-                        button.size.bottomRight(Offset(0, button.size.height + 10)),
-                        ancestor: overlay,
-                      ),
-                    ),
-                    Offset.zero & overlay.size,
-                  );
-
-                  final selected = await showMenu<String>(
-                    context: context,
-                    position: position,
-                    items: menuItems,
-                  );
-
-                  switch (selected) {
-                    case 'report':
-                      launchUrlString('https://www.furaffinity.net/controls/troubletickets/');
-                      break;
-                    case 'block_unblock':
-                      await _handleBlockUnblock();
-                      break;
-                    case 'info':
-                      _showInfoDialog();
-                      break;
-                    case 'edit':
-                      _showEditDialog();
-                      break;
-                    case 'delete':
-                      _handleDeletePost();
-                      break;
-                    case 'copy_link':
-                      final postUrl = 'https://www.furaffinity.net/view/${widget.uniqueNumber}/';
-                      await Clipboard.setData(ClipboardData(text: postUrl));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Link copied to clipboard'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                      break;
-                    default:
-                      break;
-                  }
-                },
-              );
-            },
-          ),
-        ],
+      value: const SystemUiOverlayStyle(
+        systemNavigationBarColor: Colors.black,
+        systemNavigationBarIconBrightness: Brightness.light,
+        statusBarColor: Color(0xFF111111),
+        statusBarIconBrightness: Brightness.light,
       ),
-      resizeToAvoidBottomInset: true,
-      // Build the main content in a Stack so it can overlay the loading indicator.
-    body: Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: (_) {
-        _commentsSelectionKey.currentState?.clearSelection();
-        _commentsSelectionKey.currentState?.hideToolbar();
-      },
-      child: Stack(
-        children: [
-          SelectionArea(
-            key: _commentsSelectionKey,
-            child: RefreshIndicator(
-              onRefresh: () async {
-                // Re-fetch post details when the user pulls down.
-                await _fetchPostDetails();
-              },
-              child: CustomScrollView(
-                controller: _scrollController,
-                physics: Platform.isIOS
-                    ? const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics())
-                    : const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                  if (profileImageUrl != null && username != null)
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(
-                            child: GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => UserProfileScreen(
-                                      nickname: linkUsername ?? username!,
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.only(right: 6.0),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      width: 36,
-                                      height: 36,
-                                      decoration: const BoxDecoration(
-                                        color: Colors.transparent,
-                                        borderRadius: BorderRadius.zero,
-                                      ),
-                                      child: Image.network(
-                                        profileImageUrl!,
-                                        fit: BoxFit.cover,
-                                        alignment: Alignment.center,
-
-                                        // Shows while loading (no infinite spinner risk)
-                                        loadingBuilder: (context, child, loadingProgress) {
-                                          if (loadingProgress == null) {
-                                            return child;
-                                          }
-                                          return const Center(
-                                            child: CircularProgressIndicator(strokeWidth: 2),
-                                          );
-                                        },
-
-                                        // Handles errors safely
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return Image.asset(
-                                            'assets/images/defaultpic.gif',
-                                            fit: BoxFit.cover,
-                                          );
-                                        },
-                                      ),
-
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Flexible(
-                                      child: FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        alignment: Alignment.centerLeft,
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            ...iconBeforeUrls.map(
-                                                  (url) => Padding(
-                                                padding: const EdgeInsets.only(right: 4.0),
-                                                child: Image.network(
-                                                  url,
-                                                  width: 20,
-                                                  height: 20,
-                                                  errorBuilder: (context, error, stackTrace) =>
-                                                  const Icon(
-                                                    Icons.error,
-                                                    size: 20,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            Text(
-                                              username!,
-                                              style: const TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            ...iconAfterUrls.map(
-                                                  (url) => Padding(
-                                                padding: const EdgeInsets.only(left: 4.0),
-                                                child: Image.network(
-                                                  url,
-                                                  width: 20,
-                                                  height: 20,
-                                                  errorBuilder: (context, error, stackTrace) =>
-                                                  const Icon(
-                                                    Icons.error,
-                                                    size: 20,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (!(currentUsername != null && currentUsername == username))
-                            SizedBox(
-                              width: 94,
-                              height: 24,
-                              child: ElevatedButton(
-                                onPressed: _watchLinksLoading
-                                    ? null
-                                    : () => _handleWatchButtonPressed(),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                  isWatching ? Colors.black : const Color(0xFFE09321),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                  side: const BorderSide(color: Color(0xFFE09321)),
-                                ),
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: _watchLinksLoading
-                                      ? const SizedBox(
-                                          width: 14,
-                                          height: 14,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
-                                          ),
-                                        )
-                                      : Text(
-                                          isWatching ? "-Watch" : "+Watch",
-                                          style: TextStyle(
-                                            color: isWatching ? Colors.white : Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) {
+            _closePost();
+          }
+        },
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            scrolledUnderElevation: 0,
+            title: const Text("Post"),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: _closePost,
+            ),
+            actions: [
+              Builder(
+                builder: (context) {
+                  // Build the menu items.
+                  List<PopupMenuEntry<String>> menuItems = [
+                    const PopupMenuItem<String>(
+                      value: 'report',
+                      child: Text('Report'),
                     ),
-                  if (fullViewImageUrl != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 0.0),
-                      child: GestureDetector(
-                        onLongPressStart: (details) async {
-                          final tapPosition = details.globalPosition;
-                          final selected = await showMenu<String>(
-                            context: context,
-                            position: RelativeRect.fromLTRB(
-                              tapPosition.dx,
-                              tapPosition.dy,
-                              tapPosition.dx,
-                              tapPosition.dy,
-                            ),
-                            items: [
-                              const PopupMenuItem(
-                                value: 'download',
-                                child: Text('Download'),
-                              ),
-                              const PopupMenuItem(
-                                value: 'share',
-                                child: Text('Share image'),
-                              ),
-                            ],
-                          );
-                          if (selected == 'download') {
-                            debugPrint("$fullViewImageUrl image2");
-                            await _downloadImage(context, fullViewImageUrl!);
-
-                          } else if (selected == 'share') {
-                            await _shareImage(context, fullViewImageUrl!);
-                          }
-                        },
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => AvatarDownloadScreen(
-                                imageUrl: fullViewImageUrl!,
-                              ),
-                            ),
-                          );
-                        },
-                        child: ClipRect(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final aspectRatio = (imageWidth != null && imageHeight != null)
-                                  ? imageWidth! / imageHeight!
-                                  : 16 / 9;
-                              return AspectRatio(
-                                aspectRatio: aspectRatio,
-                                child: InteractiveViewer(
-                                  minScale: 1.0,
-                                  maxScale: 10.0,
-                                  child: Image.network(
-                                    fullViewImageUrl!,
-                                    fit: BoxFit.contain,
-                                    loadingBuilder: (
-                                        BuildContext context,
-                                        Widget child,
-                                        ImageChunkEvent? loadingProgress,
-                                        ) {
-                                      if (loadingProgress == null) {
-                                        return child;
-                                      }
-                                      return Container(
-                                        color: Colors.black,
-                                        child: Center(
-                                          child: CircularProgressIndicator(
-                                            value: loadingProgress.expectedTotalBytes != null
-                                                ? loadingProgress.cumulativeBytesLoaded /
-                                                (loadingProgress.expectedTotalBytes ?? 1)
-                                                : null,
-                                            valueColor: const AlwaysStoppedAnimation<Color>(
-                                              Color(0xFFE09321),
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        color: Colors.black,
-                                        child: const Center(
-                                          child: Icon(
-                                            Icons.error_outline,
-                                            color: Colors.red,
-                                            size: 40,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
+                    if (currentUsername == null || currentUsername != username)
+                      PopupMenuItem<String>(
+                        value: 'block_unblock',
+                        child:
+                            Text(isBlocked ? 'Unblock author' : 'Block author'),
                       ),
+                    const PopupMenuItem<String>(
+                      value: 'info',
+                      child: Text('Info'),
                     ),
+                    const PopupMenuItem<String>(
+                      value: 'copy_link',
+                      child: Text('Copy link'),
+                    ),
+                  ];
 
-                  const Divider(
-                    height: 5.0,
-                    color: Color(0xFF111111),
-                    thickness: 5.0,
-                  ),
-                  const Divider(
-                    height: 3.0,
-                    color: Colors.black,
-                    thickness: 3.0,
-                  ),
-                  const Divider(
-                    height: 3.0,
-                    color: Color(0xFF111111),
-                    thickness: 3.0,
-                  ),
-
-
-
-
-
-
-
-
-                  if (submissionTitle != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4.0, top: 4.0),
-                      child: Text(
-                        submissionTitle!,
-                        style: const TextStyle(
-                          fontSize: 23,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
+                  if (currentUsername != null && currentUsername == username) {
+                    menuItems.add(
+                      const PopupMenuItem<String>(
+                        value: 'edit',
+                        child: Text('Edit'),
                       ),
-                    ),
-                  if (publicationTime != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: GestureDetector(
-                        onTap: () {
-                          // Toggle between full and short date display.
-                          setState(() {
-                            _showFullPublicationDate = !_showFullPublicationDate;
-                          });
-                        },
+                    );
+                    menuItems.add(
+                      PopupMenuItem<String>(
+                        value: 'delete',
                         child: Text(
-                          '${getFormattedPublicationTime()}',
-                          style: const TextStyle(fontSize: 13, color: Colors.grey),
+                          'Delete',
+                          style: TextStyle(color: Colors.red),
                         ),
                       ),
-                    ),
+                    );
+                  }
 
-
-
-                  const Divider(
-                    height: 5.0,
-                    color: Color(0xFF111111),
-                    thickness: 5.0,
-                  ),
-                  const Divider(
-                    height: 2.0,
-                    color: Colors.black,
-                    thickness: 2.0,
-                  ),
-                  const Divider(
-                    height: 3.0,
-                    color: Color(0xFF111111),
-                    thickness: 3.0,
-                  ),
-                  if (_isWebViewVisible && submissionDescription != null)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 16.0, left: 16.0, top: 16.0),
-                      child: GestureDetector(
-                        onLongPressStart: (LongPressStartDetails details) async {
-                          final RenderBox overlay =
-                          Overlay.of(context).context.findRenderObject() as RenderBox;
-                          final RelativeRect position = RelativeRect.fromRect(
-                            details.globalPosition & const Size(40, 40),
-                            Offset.zero & overlay.size,
-                          );
-                          final selected = await showMenu<String>(
-                            context: context,
-                            position: position,
-                            items: const [
-                              PopupMenuItem<String>(
-                                value: 'copy',
-                                child: Text('Copy'),
-                              ),
-                              PopupMenuItem<String>(
-                                value: 'select',
-                                child: Text('Select Text'),
-                              ),
-                            ],
-                          );
-                          if (selected == 'copy') {
-                            String? plainText = await _submissionWebViewKey.currentState?.getPlainText();
-                            if (plainText != null) {
-                              await Clipboard.setData(ClipboardData(text: plainText));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Text copied to clipboard')),
-                              );
-                            }
-                          } else if (selected == 'select') {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => SubmissionDescriptionWebViewScreen(
-                                  submissionId: widget.uniqueNumber,
-                                  initialHtml: submissionDescription,
-                                ),
-                              ),
-                            );
-                          }
-                        },
-
-
-                        child: SubmissionDescriptionWebView(
-                          key: ValueKey(submissionDescription.hashCode),
-                          submissionId: widget.uniqueNumber,
-                          initialHtml: submissionDescription,
-                          enableTextSelection: false,
-                          forceHybridComposition: false,
-                          onHeightChanged: (double height) {
-                            if (!_webViewLoaded) {
-                              Future.delayed(const Duration(milliseconds: 25), () {
-                                if (mounted) {
-                                  setState(() {
-                                    _webViewLoaded = true;
-                                  });
-                                }
-                              });
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-
-
-                  const Divider(
-                    height: 2.0,
-                    color: Color(0xFF111111),
-                    thickness: 2.0,
-                  ),
-                  const Divider(
-                    height: 3.0,
-                    color: Colors.black,
-                    thickness: 3.0,
-                  ),
-                  const Divider(
-                    height: 4.0,
-                    color: Color(0xFF111111),
-                    thickness: 4.0,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 0.0, left: 0.0, top: 11.0, bottom: 0.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        _buildPublicationAndViewsRow(),
-
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 0.0, top: 11.0),
-                          child: const Divider(
-                            height: 3.0,
-                            color: Color(0xFF111111),
-                            thickness: 3.0,
+                  return IconButton(
+                    icon: const Icon(Icons.more_vert),
+                    onPressed: () async {
+                      final RenderBox button =
+                          context.findRenderObject() as RenderBox;
+                      final RenderBox overlay = Overlay.of(context)
+                          .context
+                          .findRenderObject() as RenderBox;
+                      final RelativeRect position = RelativeRect.fromRect(
+                        Rect.fromPoints(
+                          button.localToGlobal(Offset(0, button.size.height),
+                              ancestor: overlay),
+                          button.localToGlobal(
+                            button.size.bottomRight(
+                                Offset(0, button.size.height + 10)),
+                            ancestor: overlay,
                           ),
                         ),
-                        SizedBox(
-                          height: 50,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        Offset.zero & overlay.size,
+                      );
+
+                      final selected = await showMenu<String>(
+                        context: context,
+                        position: position,
+                        items: menuItems,
+                      );
+
+                      switch (selected) {
+                        case 'report':
+                          launchUrlString(
+                              'https://www.furaffinity.net/controls/troubletickets/');
+                          break;
+                        case 'block_unblock':
+                          await _handleBlockUnblock();
+                          break;
+                        case 'info':
+                          _showInfoDialog();
+                          break;
+                        case 'edit':
+                          _showEditDialog();
+                          break;
+                        case 'delete':
+                          _handleDeletePost();
+                          break;
+                        case 'copy_link':
+                          final postUrl =
+                              'https://www.furaffinity.net/view/${widget.uniqueNumber}/';
+                          await Clipboard.setData(ClipboardData(text: postUrl));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Link copied to clipboard'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          break;
+                        default:
+                          break;
+                      }
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
+          resizeToAvoidBottomInset: true,
+          // Build the main content in a Stack so it can overlay the loading indicator.
+          body: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (_) {
+              _commentsSelectionKey.currentState?.clearSelection();
+              _commentsSelectionKey.currentState?.hideToolbar();
+            },
+            child: Stack(
+              children: [
+                SelectionArea(
+                  key: _commentsSelectionKey,
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      // Re-fetch post details when the user pulls down.
+                      await _fetchPostDetails();
+                    },
+                    child: CustomScrollView(
+                      controller: _scrollController,
+                      physics: Platform.isIOS
+                          ? const AlwaysScrollableScrollPhysics(
+                              parent: ClampingScrollPhysics())
+                          : const AlwaysScrollableScrollPhysics(
+                              parent: ClampingScrollPhysics()),
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.start,
                             children: [
-                              /*
+                              if (profileImageUrl != null && username != null)
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Flexible(
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    UserProfileScreen(
+                                                  nickname:
+                                                      linkUsername ?? username!,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.only(
+                                                right: 6.0),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Container(
+                                                  width: 36,
+                                                  height: 36,
+                                                  decoration:
+                                                      const BoxDecoration(
+                                                    color: Colors.transparent,
+                                                    borderRadius:
+                                                        BorderRadius.zero,
+                                                  ),
+                                                  child: Image.network(
+                                                    profileImageUrl!,
+                                                    fit: BoxFit.cover,
+                                                    alignment: Alignment.center,
+
+                                                    // Shows while loading (no infinite spinner risk)
+                                                    loadingBuilder: (context,
+                                                        child,
+                                                        loadingProgress) {
+                                                      if (loadingProgress ==
+                                                          null) {
+                                                        return child;
+                                                      }
+                                                      return const Center(
+                                                        child:
+                                                            CircularProgressIndicator(
+                                                                strokeWidth: 2),
+                                                      );
+                                                    },
+
+                                                    // Handles errors safely
+                                                    errorBuilder: (context,
+                                                        error, stackTrace) {
+                                                      return Image.asset(
+                                                        'assets/images/defaultpic.gif',
+                                                        fit: BoxFit.cover,
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Flexible(
+                                                  child: FittedBox(
+                                                    fit: BoxFit.scaleDown,
+                                                    alignment:
+                                                        Alignment.centerLeft,
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        ...iconBeforeUrls.map(
+                                                          (url) => Padding(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .only(
+                                                                    right: 4.0),
+                                                            child:
+                                                                Image.network(
+                                                              url,
+                                                              width: 20,
+                                                              height: 20,
+                                                              errorBuilder: (context,
+                                                                      error,
+                                                                      stackTrace) =>
+                                                                  const Icon(
+                                                                Icons.error,
+                                                                size: 20,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          username!,
+                                                          style:
+                                                              const TextStyle(
+                                                            fontSize: 15,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                        ...iconAfterUrls.map(
+                                                          (url) => Padding(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .only(
+                                                                    left: 4.0),
+                                                            child:
+                                                                Image.network(
+                                                              url,
+                                                              width: 20,
+                                                              height: 20,
+                                                              errorBuilder: (context,
+                                                                      error,
+                                                                      stackTrace) =>
+                                                                  const Icon(
+                                                                Icons.error,
+                                                                size: 20,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (!(currentUsername != null &&
+                                          currentUsername == username))
+                                        SizedBox(
+                                          width: 94,
+                                          height: 24,
+                                          child: ElevatedButton(
+                                            onPressed: _watchLinksLoading
+                                                ? null
+                                                : () =>
+                                                    _handleWatchButtonPressed(),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: isWatching
+                                                  ? Colors.black
+                                                  : const Color(0xFFE09321),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(2),
+                                              ),
+                                              side: const BorderSide(
+                                                  color: Color(0xFFE09321)),
+                                            ),
+                                            child: FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              child: _watchLinksLoading
+                                                  ? const SizedBox(
+                                                      width: 14,
+                                                      height: 14,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        color: Colors.white,
+                                                      ),
+                                                    )
+                                                  : Text(
+                                                      isWatching
+                                                          ? "-Watch"
+                                                          : "+Watch",
+                                                      style: TextStyle(
+                                                        color: isWatching
+                                                            ? Colors.white
+                                                            : Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              if (fullViewImageUrl != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 0.0),
+                                  child: GestureDetector(
+                                    onLongPressStart: (details) async {
+                                      final tapPosition =
+                                          details.globalPosition;
+                                      final selected = await showMenu<String>(
+                                        context: context,
+                                        position: RelativeRect.fromLTRB(
+                                          tapPosition.dx,
+                                          tapPosition.dy,
+                                          tapPosition.dx,
+                                          tapPosition.dy,
+                                        ),
+                                        items: [
+                                          const PopupMenuItem(
+                                            value: 'download',
+                                            child: Text('Download'),
+                                          ),
+                                          const PopupMenuItem(
+                                            value: 'share',
+                                            child: Text('Share image'),
+                                          ),
+                                        ],
+                                      );
+                                      if (selected == 'download') {
+                                        debugPrint("$fullViewImageUrl image2");
+                                        await _downloadImage(
+                                            context, fullViewImageUrl!);
+                                      } else if (selected == 'share') {
+                                        await _shareImage(
+                                            context, fullViewImageUrl!);
+                                      }
+                                    },
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              AvatarDownloadScreen(
+                                            imageUrl: fullViewImageUrl!,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: ClipRect(
+                                      child: LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          final aspectRatio =
+                                              (imageWidth != null &&
+                                                      imageHeight != null)
+                                                  ? imageWidth! / imageHeight!
+                                                  : 16 / 9;
+                                          return AspectRatio(
+                                            aspectRatio: aspectRatio,
+                                            child: InteractiveViewer(
+                                              minScale: 1.0,
+                                              maxScale: 10.0,
+                                              child: Image.network(
+                                                fullViewImageUrl!,
+                                                fit: BoxFit.contain,
+                                                loadingBuilder: (
+                                                  BuildContext context,
+                                                  Widget child,
+                                                  ImageChunkEvent?
+                                                      loadingProgress,
+                                                ) {
+                                                  if (loadingProgress == null) {
+                                                    return child;
+                                                  }
+                                                  return Container(
+                                                    color: Colors.black,
+                                                    child: Center(
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                        value: loadingProgress
+                                                                    .expectedTotalBytes !=
+                                                                null
+                                                            ? loadingProgress
+                                                                    .cumulativeBytesLoaded /
+                                                                (loadingProgress
+                                                                        .expectedTotalBytes ??
+                                                                    1)
+                                                            : null,
+                                                        valueColor:
+                                                            const AlwaysStoppedAnimation<
+                                                                Color>(
+                                                          Color(0xFFE09321),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                                errorBuilder: (context, error,
+                                                    stackTrace) {
+                                                  return Container(
+                                                    color: Colors.black,
+                                                    child: const Center(
+                                                      child: Icon(
+                                                        Icons.error_outline,
+                                                        color: Colors.red,
+                                                        size: 40,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              const Divider(
+                                height: 5.0,
+                                color: Color(0xFF111111),
+                                thickness: 5.0,
+                              ),
+                              const Divider(
+                                height: 3.0,
+                                color: Colors.black,
+                                thickness: 3.0,
+                              ),
+                              const Divider(
+                                height: 3.0,
+                                color: Color(0xFF111111),
+                                thickness: 3.0,
+                              ),
+                              if (submissionTitle != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                      bottom: 4.0, top: 4.0),
+                                  child: Text(
+                                    submissionTitle!,
+                                    style: const TextStyle(
+                                      fontSize: 23,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              if (publicationTime != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8.0),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      // Toggle between full and short date display.
+                                      setState(() {
+                                        _showFullPublicationDate =
+                                            !_showFullPublicationDate;
+                                      });
+                                    },
+                                    child: Text(
+                                      '${getFormattedPublicationTime()}',
+                                      style: const TextStyle(
+                                          fontSize: 13, color: Colors.grey),
+                                    ),
+                                  ),
+                                ),
+                              const Divider(
+                                height: 5.0,
+                                color: Color(0xFF111111),
+                                thickness: 5.0,
+                              ),
+                              const Divider(
+                                height: 2.0,
+                                color: Colors.black,
+                                thickness: 2.0,
+                              ),
+                              const Divider(
+                                height: 3.0,
+                                color: Color(0xFF111111),
+                                thickness: 3.0,
+                              ),
+                              if (_isWebViewVisible &&
+                                  submissionDescription != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                      right: 16.0, left: 16.0, top: 16.0),
+                                  child: GestureDetector(
+                                    onLongPressStart:
+                                        (LongPressStartDetails details) async {
+                                      final RenderBox overlay =
+                                          Overlay.of(context)
+                                              .context
+                                              .findRenderObject() as RenderBox;
+                                      final RelativeRect position =
+                                          RelativeRect.fromRect(
+                                        details.globalPosition &
+                                            const Size(40, 40),
+                                        Offset.zero & overlay.size,
+                                      );
+                                      final selected = await showMenu<String>(
+                                        context: context,
+                                        position: position,
+                                        items: const [
+                                          PopupMenuItem<String>(
+                                            value: 'copy',
+                                            child: Text('Copy'),
+                                          ),
+                                          PopupMenuItem<String>(
+                                            value: 'select',
+                                            child: Text('Select Text'),
+                                          ),
+                                        ],
+                                      );
+                                      if (selected == 'copy') {
+                                        String? plainText =
+                                            await _submissionWebViewKey
+                                                .currentState
+                                                ?.getPlainText();
+                                        if (plainText != null) {
+                                          await Clipboard.setData(
+                                              ClipboardData(text: plainText));
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                                content: Text(
+                                                    'Text copied to clipboard')),
+                                          );
+                                        }
+                                      } else if (selected == 'select') {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                SubmissionDescriptionWebViewScreen(
+                                              submissionId: widget.uniqueNumber,
+                                              initialHtml:
+                                                  submissionDescription,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    child: SubmissionDescriptionWebView(
+                                      key: ValueKey(
+                                          submissionDescription.hashCode),
+                                      submissionId: widget.uniqueNumber,
+                                      initialHtml: submissionDescription,
+                                      enableTextSelection: false,
+                                      forceHybridComposition: false,
+                                      onHeightChanged: (double height) {
+                                        if (!_webViewLoaded) {
+                                          Future.delayed(
+                                              const Duration(milliseconds: 25),
+                                              () {
+                                            if (mounted) {
+                                              setState(() {
+                                                _webViewLoaded = true;
+                                              });
+                                            }
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              const Divider(
+                                height: 2.0,
+                                color: Color(0xFF111111),
+                                thickness: 2.0,
+                              ),
+                              const Divider(
+                                height: 3.0,
+                                color: Colors.black,
+                                thickness: 3.0,
+                              ),
+                              const Divider(
+                                height: 4.0,
+                                color: Color(0xFF111111),
+                                thickness: 4.0,
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                    right: 0.0,
+                                    left: 0.0,
+                                    top: 11.0,
+                                    bottom: 0.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    _buildPublicationAndViewsRow(),
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                          bottom: 0.0, top: 11.0),
+                                      child: const Divider(
+                                        height: 3.0,
+                                        color: Color(0xFF111111),
+                                        thickness: 3.0,
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      height: 50,
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceEvenly,
+                                        children: [
+                                          /*
                               Expanded(
                                 child: IconButton(
                                   icon: const Icon(
@@ -2643,277 +2868,405 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                               ),
 
                                */
-                              Expanded(
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.mail_outline,
-                                    size: 26,
-                                    color: Colors.grey,
-                                  ),
-                                  onPressed: () {
-                                    if (linkUsername != null) {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => NewMessageScreen(
-                                            recipient: linkUsername!,
+                                          Expanded(
+                                            child: IconButton(
+                                              icon: const Icon(
+                                                Icons.mail_outline,
+                                                size: 26,
+                                                color: Colors.grey,
+                                              ),
+                                              onPressed: () {
+                                                if (linkUsername != null) {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (context) =>
+                                                          NewMessageScreen(
+                                                        recipient:
+                                                            linkUsername!,
+                                                      ),
+                                                    ),
+                                                  );
+                                                } else {
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                          'Recipient username is unavailable.'),
+                                                      backgroundColor:
+                                                          Colors.red,
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                              splashRadius: 24,
+                                            ),
                                           ),
-                                        ),
-                                      );
-                                    } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Recipient username is unavailable.'),
-                                          backgroundColor: Colors.red,
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  splashRadius: 24,
-                                ),
-                              ),
-                              Expanded(
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.photo_library_outlined,
-                                    size: 26,
-                                    color: Colors.grey,
-                                  ),
-                                  onPressed: () {
-                                    if (linkUsername != null) {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => UserProfileScreen(
-                                            nickname: linkUsername!,
-                                            initialSection: ProfileSection.Gallery,
+                                          Expanded(
+                                            child: IconButton(
+                                              icon: const Icon(
+                                                Icons.photo_library_outlined,
+                                                size: 26,
+                                                color: Colors.grey,
+                                              ),
+                                              onPressed: () {
+                                                if (linkUsername != null) {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (context) =>
+                                                          UserProfileScreen(
+                                                        nickname: linkUsername!,
+                                                        initialSection:
+                                                            ProfileSection
+                                                                .Gallery,
+                                                      ),
+                                                    ),
+                                                  );
+                                                } else {
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                          'Username is unavailable.'),
+                                                      backgroundColor:
+                                                          Colors.red,
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                              splashRadius: 24,
+                                            ),
                                           ),
-                                        ),
-                                      );
-                                    } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Username is unavailable.'),
-                                          backgroundColor: Colors.red,
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  splashRadius: 24,
-                                ),
-                              ),
-                              Expanded(
-                                child: IconButton(
-                                  icon: LikeButton(
-                                    isLiked: isFavorited,
-                                    size: 26,
-                                    circleColor: const CircleColor(
-                                      start: Colors.red,
-                                      end: Colors.redAccent,
+                                          Expanded(
+                                            child: IconButton(
+                                              icon: LikeButton(
+                                                isLiked: isFavorited,
+                                                size: 26,
+                                                circleColor: const CircleColor(
+                                                  start: Colors.red,
+                                                  end: Colors.redAccent,
+                                                ),
+                                                bubblesColor:
+                                                    const BubblesColor(
+                                                  dotPrimaryColor: Colors.red,
+                                                  dotSecondaryColor:
+                                                      Colors.redAccent,
+                                                ),
+                                                likeBuilder: (bool isLiked) {
+                                                  return Icon(
+                                                    isLiked
+                                                        ? Icons.favorite
+                                                        : Icons.favorite_border,
+                                                    color: isLiked
+                                                        ? Colors.red
+                                                        : Colors.grey,
+                                                    size: 26,
+                                                  );
+                                                },
+                                                animationDuration:
+                                                    const Duration(
+                                                        milliseconds: 500),
+                                                onTap: _toggleFavorite,
+                                              ),
+                                              onPressed: () {
+                                                _toggleFavorite(isFavorited);
+                                              },
+                                              splashRadius: 24,
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: IconButton(
+                                              icon: Icon(
+                                                Icons.numbers,
+                                                size: 26,
+                                                color: _showTagsSection
+                                                    ? const Color(0xFFE09321)
+                                                    : Colors.grey,
+                                              ),
+                                              onPressed: () {
+                                                setState(() {
+                                                  _showTagsSection =
+                                                      !_showTagsSection;
+                                                });
+                                              },
+                                              splashRadius: 24,
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: IconButton(
+                                              icon: const Icon(
+                                                Icons.share_outlined,
+                                                size: 26,
+                                                color: Colors.grey,
+                                              ),
+                                              onPressed: _sharePost,
+                                              splashRadius: 24,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    bubblesColor: const BubblesColor(
-                                      dotPrimaryColor: Colors.red,
-                                      dotSecondaryColor: Colors.redAccent,
+                                    AnimatedSize(
+                                      duration:
+                                          const Duration(milliseconds: 250),
+                                      curve: Curves.easeInOut,
+                                      child: _showTagsSection
+                                          ? _buildTagsPanel()
+                                          : const SizedBox.shrink(),
                                     ),
-                                    likeBuilder: (bool isLiked) {
-                                      return Icon(
-                                        isLiked ? Icons.favorite : Icons.favorite_border,
-                                        color: isLiked ? Colors.red : Colors.grey,
-                                        size: 26,
-                                      );
-                                    },
-                                    animationDuration: const Duration(milliseconds: 500),
-                                    onTap: _toggleFavorite,
-                                  ),
-                                  onPressed: () {
-                                    _toggleFavorite(isFavorited);
-                                  },
-                                  splashRadius: 24,
+                                  ],
                                 ),
                               ),
-                              Expanded(
-                                child: IconButton(
-                                  icon: Icon(
-                                    Icons.numbers,
-                                    size: 26,
-                                    color: _showTagsSection
-                                        ? const Color(0xFFE09321)
-                                        : Colors.grey,
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _showTagsSection = !_showTagsSection;
-                                    });
-                                  },
-                                  splashRadius: 24,
-                                ),
+                              const Divider(
+                                height: 3.0,
+                                color: Color(0xFF111111),
+                                thickness: 3.0,
                               ),
-
-                              Expanded(
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.share_outlined,
-                                    size: 26,
-                                    color: Colors.grey,
-                                  ),
-                                  onPressed: _sharePost,
-                                  splashRadius: 24,
-                                ),
+                              const Divider(
+                                height: 4.0,
+                                color: Colors.black,
+                                thickness: 4.0,
                               ),
                             ],
                           ),
                         ),
-
-                        AnimatedSize(
-                          duration: const Duration(milliseconds: 250),
-                          curve: Curves.easeInOut,
-                          child: _showTagsSection ? _buildTagsPanel() : const SizedBox.shrink(),
+                        ..._buildCommentSlivers(),
+                        SliverToBoxAdapter(
+                          child: SizedBox(height: composerSpacerHeight),
                         ),
-
                       ],
                     ),
                   ),
-                  const Divider(
-                    height: 3.0,
-                    color: Color(0xFF111111),
-                    thickness: 3.0,
-                  ),
-                  const Divider(
-                    height: 4.0,
-                    color: Colors.black,
-                    thickness: 4.0,
-                  ),
-                      ],
-                    ),
-                  ),
-                  ..._buildCommentSlivers(),
-                  SliverToBoxAdapter(child: SizedBox(height: keyboardHeight)),
-                ],
-              ),
-            ),
-          ),
-
-          if (_isTyping)
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () => FocusScope.of(context).unfocus(),
-                child: Container(
-                  color: Colors.black.withOpacity(0.5),
-                  padding: EdgeInsets.only(bottom: keyboardHeight),
                 ),
-              ),
-            ),
-          if (showLoadingIndicator)
-            Container(
-              color: const Color(0xFF000000),
-              child: const Center(
-                child: PulsatingLoadingIndicator(
-                  size: 78.0,
-                  assetPath: 'assets/icons/fathemed.png',
-                ),
-              ),
-            ),
-        ],
-      ),
-    ),
-      bottomNavigationBar: showLoadingIndicator
-          ? null
-          : Container(
-        color: Colors.black,
-        child: SafeArea(
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 8,
-              right: 8,
-              bottom: keyboardHeight > 0 ? keyboardHeight : 4,
-              top: 8,
-            ),
-            child: Row(
-              children: [
-                ClipRect(
-                  child: AnimatedSize(
-                    duration: const Duration(milliseconds: 210),
-                    curve: Curves.easeInOut,
-                    alignment: Alignment.centerLeft,
-                    child: ValueListenableBuilder<bool>(
-                      valueListenable: _showScrollToTopNotifier,
-                      builder: (context, show, _) {
-                        return Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (show)
-                              SizedBox(
-                                width: 36,
-                                height: 36,
-                                child: FloatingActionButton.small(
-                                  heroTag: 'scroll_top',
-                                  backgroundColor: const Color(0xFFE09321),
-                                  elevation: 0,
-                                  onPressed: () {
-                                    _scrollController.animateTo(
-                                      0,
-                                      duration: const Duration(milliseconds: 300),
-                                      curve: Curves.easeOut,
-                                    );
-                                  },
-                                  child: const Icon(Icons.arrow_upward, size: 18),
-                                ),
-                              ),
-                            if (show) const SizedBox(width: 8),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () async {
-                      final ok = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => AddCommentScreen(
-                            submissionTitle: submissionTitle ?? '',
-                            onSendComment: _addComment,
-                            uniqueNumber: widget.uniqueNumber,
-                          ),
-                        ),
-                      );
-                      if (ok == true) _fetchPostDetails();
-                    },
-                    child: AbsorbPointer(
-                      child: SizedBox(
-                        height: 40,
-                        child: TextField(
-                          controller: _commentController,
-                          readOnly: true,
-                          decoration: InputDecoration(
-                            hintText: 'Add a comment...',
-                            hintStyle: const TextStyle(color: Colors.white54),
-                            contentPadding:
-                            const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                            filled: true,
-                            fillColor: const Color(0xFF151515),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide.none,
-                            ),
-                            suffixIcon: const Icon(Icons.send, color: Colors.white54),
-                          ),
+                Positioned.fill(
+                  child: IgnorePointer(
+                    ignoring: !_isCommentComposerExpanded,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      opacity: _isCommentComposerExpanded ? 1 : 0,
+                      child: GestureDetector(
+                        onTap: () => FocusScope.of(context).unfocus(),
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.24),
                         ),
                       ),
                     ),
                   ),
                 ),
+                if (showLoadingIndicator)
+                  Container(
+                    color: const Color(0xFF000000),
+                    child: const Center(
+                      child: PulsatingLoadingIndicator(
+                        size: 78.0,
+                        assetPath: 'assets/icons/fathemed.png',
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
+          bottomNavigationBar: showLoadingIndicator
+              ? null
+              : Container(
+                  color: Colors.black,
+                  child: SafeArea(
+                    child: Builder(
+                      builder: (context) {
+                        final keyboardInset =
+                            MediaQuery.viewInsetsOf(context).bottom;
+                        return AnimatedPadding(
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOutCubic,
+                          padding: EdgeInsets.only(
+                            left: 8,
+                            right: 8,
+                            bottom: (keyboardInset > 0 ? keyboardInset : 4) +
+                                (_isCommentComposerExpanded ? 8 : 0),
+                            top: 8,
+                          ),
+                          child: ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _commentController,
+                            builder: (context, value, _) {
+                              final canSend = !_isSendingInlineComment &&
+                                  value.text.trim().isNotEmpty;
+                              final collapsedLines =
+                                  _collapsedComposerLines(value.text);
+                              final minLines = _isCommentComposerExpanded
+                                  ? 6
+                                  : collapsedLines;
+                              final maxLines = _isCommentComposerExpanded
+                                  ? 6
+                                  : collapsedLines;
+                              final isCollapsedSingleLine =
+                                  !_isCommentComposerExpanded &&
+                                      collapsedLines == 1;
+                              const compactSingleLineVerticalPadding = 2.0;
+                              final topPadding = _isCommentComposerExpanded
+                                  ? 12.0
+                                  : (isCollapsedSingleLine
+                                      ? compactSingleLineVerticalPadding
+                                      : 8.0);
+                              final bottomPadding = _isCommentComposerExpanded
+                                  ? 8.0
+                                  : (isCollapsedSingleLine
+                                      ? compactSingleLineVerticalPadding
+                                      : 8.0);
+
+                              return Row(
+                                crossAxisAlignment: isCollapsedSingleLine
+                                    ? CrossAxisAlignment.center
+                                    : CrossAxisAlignment.end,
+                                children: [
+                                  ClipRect(
+                                    child: AnimatedSize(
+                                      duration:
+                                          const Duration(milliseconds: 210),
+                                      curve: Curves.easeInOut,
+                                      alignment: Alignment.centerLeft,
+                                      child: ValueListenableBuilder<bool>(
+                                        valueListenable:
+                                            _showScrollToTopNotifier,
+                                        builder: (context, show, _) {
+                                          final showButton =
+                                              show && !_commentFocusNode.hasFocus;
+                                          return Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (showButton)
+                                                SizedBox(
+                                                  width: 36,
+                                                  height: 36,
+                                                  child: FloatingActionButton.small(
+                                                    heroTag: 'scroll_top',
+                                                    backgroundColor:
+                                                        const Color(0xFFE09321),
+                                                    elevation: 0,
+                                                    onPressed: () {
+                                                      _scrollController.animateTo(
+                                                        0,
+                                                        duration: const Duration(
+                                                            milliseconds: 300),
+                                                        curve: Curves.easeOut,
+                                                      );
+                                                    },
+                                                    child: const Icon(
+                                                      Icons.arrow_upward,
+                                                      size: 18,
+                                                    ),
+                                                  ),
+                                                ),
+                                              if (showButton)
+                                                const SizedBox(width: 8),
+                                            ],
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: AnimatedSize(
+                                      duration:
+                                          const Duration(milliseconds: 220),
+                                      curve: Curves.easeOutCubic,
+                                      alignment: Alignment.bottomCenter,
+                                      child: Stack(
+                                        children: [
+                                          TextField(
+                                            controller: _commentController,
+                                            focusNode: _commentFocusNode,
+                                            style: const TextStyle(
+                                                color: Colors.white),
+                                            keyboardType:
+                                                TextInputType.multiline,
+                                            textInputAction:
+                                                TextInputAction.newline,
+                                            minLines: minLines,
+                                            maxLines: maxLines,
+                                            decoration: InputDecoration(
+                                              hintText: 'Add a comment...',
+                                              hintStyle: const TextStyle(
+                                                  color: Colors.white54),
+                                              contentPadding:
+                                                  EdgeInsets.fromLTRB(
+                                                16,
+                                                topPadding,
+                                                56,
+                                                bottomPadding,
+                                              ),
+                                              filled: true,
+                                              fillColor:
+                                                  const Color(0xFF151515),
+                                              border: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                                borderSide: BorderSide.none,
+                                              ),
+                                            ),
+                                            contextMenuBuilder:
+                                                BBCodeContextMenu.builder(
+                                                    _commentController),
+                                          ),
+                                          if (isCollapsedSingleLine)
+                                            Positioned.fill(
+                                              child: Align(
+                                                alignment:
+                                                    Alignment.centerRight,
+                                                child: Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          right: 4),
+                                                  child:
+                                                      _buildComposerSendButton(
+                                                    canSend: canSend,
+                                                    compact: true,
+                                                  ),
+                                                ),
+                                              ),
+                                            )
+                                          else
+                                            Positioned(
+                                              top: 4,
+                                              right: 4,
+                                              child: _buildComposerSendButton(
+                                                canSend: canSend,
+                                              ),
+                                            ),
+                                          if (_isCommentComposerExpanded &&
+                                              value.text.trim().isNotEmpty &&
+                                              !_isSendingInlineComment)
+                                            Positioned(
+                                              right: 4,
+                                              bottom: 4,
+                                              child: IconButton(
+                                                icon: const Icon(
+                                                  Icons.clear,
+                                                  color: Colors.white54,
+                                                ),
+                                                onPressed: () {
+                                                  _commentController.clear();
+                                                },
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
         ),
       ),
-        ),
     );
   }
-
 
   Widget _buildPublicationAndViewsRow() {
     String? ratingLabel(String? r) {
@@ -3016,6 +3369,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       ],
     );
   }
+
   final _commentsSelectionKey = GlobalKey<SelectableRegionState>();
 
   List<Widget> _buildCommentSlivers() {
@@ -3023,7 +3377,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       return const [
         SliverToBoxAdapter(
           child: Padding(
-            padding: EdgeInsets.only(top: 10.0, bottom: 14.0, right: 8.0, left: 8.0),
+            padding:
+                EdgeInsets.only(top: 10.0, bottom: 14.0, right: 8.0, left: 8.0),
             child: Text(
               "No comments.",
               style: TextStyle(fontSize: 16, color: Colors.grey),
@@ -3035,7 +3390,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
     return [
       SliverPadding(
-        padding: const EdgeInsets.only(top: 8.0, bottom: 0.0, right: 8.0, left: 8.0),
+        padding:
+            const EdgeInsets.only(top: 8.0, bottom: 0.0, right: 8.0, left: 8.0),
         sliver: SliverList(
           delegate: SliverChildBuilderDelegate(
             (context, index) {
@@ -3066,7 +3422,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                     );
                   }
                 },
-
                 onReply: () async {
                   final result = await Navigator.push<bool>(
                     context,
@@ -3080,16 +3435,16 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                         isClassic: _isClassicUserPage,
                         onSendReply: (_) {},
                       ),
-
                     ),
                   );
                   if (result == true) {
                     _fetchPostDetails();
                   }
                 },
-                onUnhide: (comment['deleted'] == true && comment['hideLink'] != null)
-                    ? () => _unhideComment(comment['hideLink'], "")
-                    : null,
+                onUnhide:
+                    (comment['deleted'] == true && comment['hideLink'] != null)
+                        ? () => _unhideComment(comment['hideLink'], "")
+                        : null,
                 handleLink: (url) async {
                   final commentHtml = comment['commentHtml'] ?? '';
                   await _handleCommentLink(context, url, commentHtml);
@@ -3103,6 +3458,3 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     ];
   }
 }
-
-
-
