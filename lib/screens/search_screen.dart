@@ -68,6 +68,7 @@ class SearchScreenState extends State<SearchScreen> {
             Expanded(
               flex: 8,
               child: Container(
+                height: 40,
                 decoration: BoxDecoration(
                   color: Color(0xFF2C2C2C),
                   borderRadius: BorderRadius.circular(8.0),
@@ -84,7 +85,11 @@ class SearchScreenState extends State<SearchScreen> {
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 0.0,
+                          ),
                         ),
                         onChanged: _onSearchChanged,
                       ),

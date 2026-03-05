@@ -7,6 +7,7 @@ import 'package:flutter_html/flutter_html.dart' as html;
 import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../utils/bbcode_context_menu.dart';
+import '../widgets/confirm_close_dialog.dart';
 
 class JournalReplyScreen extends StatefulWidget {
   final String submissionId; // Journal ID
@@ -96,7 +97,10 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
     );
   }
 
-
+  Future<void> _onRequestClose() async {
+    final confirmed = await ConfirmCloseDialog.show(context);
+    if (confirmed && mounted) Navigator.pop(context);
+  }
 
   Future<bool> _submitJournalReply({
     required String message,
@@ -159,37 +163,42 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: _isSending ? null : () => Navigator.pop(context),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (!didPop) _onRequestClose();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: _onRequestClose,
+          ),
+          title: const Text('Reply to Comment'),
+          actions: [
+            IconButton(
+              icon: _isSending
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send),
+              onPressed: _isSending ? null : _sendReply,
+            ),
+          ],
         ),
-        title: const Text('Reply to Comment'),
-        actions: [
-          IconButton(
-            icon: _isSending
-                ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-                : const Icon(Icons.send),
-            onPressed: _isSending ? null : _sendReply,
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            16,
-            16,
-            16 + MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              16,
+              16,
+              16 + MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
 
               Row(
                 children: [
@@ -297,7 +306,8 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
                 contextMenuBuilder:
                 BBCodeContextMenu.builder(_replyController),
               ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

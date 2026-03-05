@@ -1357,7 +1357,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         return;
       }
 
-      TextInput.finishAutofillContext(shouldSave: false);
+      TextInput.finishAutofillContext(shouldSave: true);
       Navigator.of(dialogContext).pop();
       _confirmDeletion(confirmValue, deleteSubmissionsSubmitValue,
           submissionIdValue, password);
@@ -1387,6 +1387,21 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                     'This procedure is irreversible.\n\nPlease enter your account password below as a confirmation.',
                   ),
                   const SizedBox(height: 8),
+                  // Hidden username field so Android autofill recognises a credential pair
+                  if (currentUsername != null)
+                    SizedBox(
+                      height: 0,
+                      child: Opacity(
+                        opacity: 0,
+                        child: TextField(
+                          autofillHints: const [AutofillHints.username],
+                          controller: TextEditingController(text: currentUsername),
+                          readOnly: true,
+                          enableInteractiveSelection: false,
+                          focusNode: _AlwaysDisabledFocusNode(),
+                        ),
+                      ),
+                    ),
                   TextField(
                     controller: passwordController,
                     focusNode: passwordFocusNode,
@@ -1408,7 +1423,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           actions: [
             TextButton(
               onPressed: () {
-                TextInput.finishAutofillContext(shouldSave: true);
+                TextInput.finishAutofillContext(shouldSave: false);
                 Navigator.of(dialogContext).pop();
               },
               child: const Text('Close'),
@@ -1416,7 +1431,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
             ElevatedButton(
               onPressed: () => submitDeletion(dialogContext),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red, // Button background color
+                backgroundColor: Colors.red,
               ),
               child: const Text('Confirm Deletion'),
             ),
@@ -1426,6 +1441,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     ).then((_) {
       passwordController.dispose();
       passwordFocusNode.dispose();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      passwordFocusNode.requestFocus();
     });
   }
 
@@ -3562,4 +3580,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       ),
     ];
   }
+}
+class _AlwaysDisabledFocusNode extends FocusNode {
+  @override
+  bool get hasFocus => false;
 }
