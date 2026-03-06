@@ -8,8 +8,16 @@ import '../utils/fa_link_handler.dart';
 class ShoutWidget extends StatefulWidget {
   final Shout shout;
   final VoidCallback? onDelete;
+  final bool isSelectionMode;
+  final bool isSelected;
 
-  const ShoutWidget({Key? key, required this.shout, this.onDelete})
+  const ShoutWidget({
+    Key? key,
+    required this.shout,
+    this.onDelete,
+    this.isSelectionMode = false,
+    this.isSelected = false,
+  })
       : super(key: key);
 
   @override
@@ -37,325 +45,365 @@ class _ShoutWidgetState extends State<ShoutWidget> {
             end: Alignment.bottomRight,
             colors: [Color(0xFF131313), Color(0xff1c1c1c)],
           ),
+          border: Border.all(
+            color: widget.isSelectionMode
+                ? (widget.isSelected
+                    ? const Color(0xFFE09321)
+                    : Colors.white24)
+                : Colors.transparent,
+            width: widget.isSelectionMode ? 1.2 : 0,
+          ),
           borderRadius: BorderRadius.circular(8.0),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
           children: [
-            Row(
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                GestureDetector(
-                  onTap: () {
-                    if (widget.shout.profileNickname.isNotEmpty) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => UserProfileScreen(
-                            nickname: widget.shout.profileNickname,
-                          ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          right: widget.isSelectionMode ? 28.0 : 0.0,
                         ),
-                      );
-                    }
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 4.0, right: 8.0),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8.0),
-                      child: Container(
-                        width: 46,
-                        height: 46,
-                        child: Image.network(
-                          widget.shout.avatarUrl,
-                          fit: BoxFit.cover,
-                          filterQuality: FilterQuality.low,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) {
-                              return child;
-                            }
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            return Image.asset(
-                              'assets/images/defaultpic.gif',
-                              fit: BoxFit.cover,
-                            );
-                          },
-                        ),
-
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (widget.shout.iconBeforeUrls.isNotEmpty)
-                              ...widget.shout.iconBeforeUrls.map((url) =>
-                                  Image.network(url, width: 16, height: 16)),
-                            Flexible(
-                              child: AutoSizeText(
-                                widget.shout.username,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                            GestureDetector(
+                              onTap: () {
+                                if (widget.isSelectionMode) {
+                                  return;
+                                }
+                                if (widget.shout.profileNickname.isNotEmpty) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => UserProfileScreen(
+                                        nickname: widget.shout.profileNickname,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 4.0, right: 8.0),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  child: SizedBox(
+                                    width: 46,
+                                    height: 46,
+                                    child: Image.network(
+                                      widget.shout.avatarUrl,
+                                      fit: BoxFit.cover,
+                                      filterQuality: FilterQuality.low,
+                                      loadingBuilder: (context, child, loadingProgress) {
+                                        if (loadingProgress == null) {
+                                          return child;
+                                        }
+                                        return const Center(
+                                          child: CircularProgressIndicator(),
+                                        );
+                                      },
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Image.asset(
+                                          'assets/images/defaultpic.gif',
+                                          fit: BoxFit.cover,
+                                        );
+                                      },
+                                    ),
+                                  ),
                                 ),
-                                maxLines: 1,
-                                minFontSize: 16,
                               ),
                             ),
-                            if (widget.shout.iconAfterUrls.isNotEmpty)
-                              ...widget.shout.iconAfterUrls.map((url) =>
-                                  Image.network(url, width: 16, height: 16)),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4.0),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (widget.shout.iconBeforeUrls.isNotEmpty)
+                                          ...widget.shout.iconBeforeUrls.map((url) =>
+                                              Image.network(url, width: 16, height: 16)),
+                                        Flexible(
+                                          child: AutoSizeText(
+                                            widget.shout.username,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                            maxLines: 1,
+                                            minFontSize: 16,
+                                          ),
+                                        ),
+                                        if (widget.shout.iconAfterUrls.isNotEmpty)
+                                          ...widget.shout.iconAfterUrls.map((url) =>
+                                              Image.network(url, width: 16, height: 16)),
+                                      ],
+                                    ),
+                                  ),
+                                  if ((widget.shout.symbol?.isNotEmpty ?? false) ||
+                                      widget.shout.profileNickname.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 0.0),
+                                      child: Row(
+                                        children: [
+                                          Text(
+                                            widget.shout.symbol ?? "~",
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              color: Color(0xFFE09321),
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 2),
+                                          Expanded(
+                                            child: Text(
+                                              widget.shout.profileNickname,
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                color: Color(0xFFE09321),
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                      if ((widget.shout.symbol?.isNotEmpty ?? false) ||
-                          widget.shout.profileNickname.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 0.0),
-                          child: Row(
-                            children: [
-                              Text(
-                                widget.shout.symbol ?? "~",
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Color(0xFFE09321),
-                                  fontWeight: FontWeight.bold,
-                                ),
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0, bottom: 1.0),
+                  child: html_pkg.Html(
+                    data: widget.shout.text,
+                    style: {
+                      "body": html_pkg.Style(
+                        margin: html_pkg.Margins.zero,
+                        textAlign: TextAlign.left,
+                        fontSize: html_pkg.FontSize(16),
+                        color: Colors.grey.shade300,
+                      ),
+                      "p": html_pkg.Style(
+                        fontSize: html_pkg.FontSize(16),
+                        color: Colors.grey.shade300,
+                      ),
+                      "a": html_pkg.Style(
+                        color: const Color(0xFFE09321),
+                        textDecoration: TextDecoration.none,
+                      ),
+                      "img": html_pkg.Style(
+                        width: html_pkg.Width(50.0),
+                        height: html_pkg.Height(50.0),
+                      ),
+                      "strong": html_pkg.Style(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      "u": html_pkg.Style(
+                        color: Colors.white,
+                      ),
+                      ".bbcode_right": html_pkg.Style(
+                        textAlign: TextAlign.right,
+                      ),
+                      ".bbcode_right .bbcode_sup, .bbcode_right sup":
+                          html_pkg.Style(
+                        textAlign: TextAlign.right,
+                      ),
+                      ".bbcode_center": html_pkg.Style(
+                        textAlign: TextAlign.center,
+                      ),
+                      ".bbcode_left": html_pkg.Style(
+                        textAlign: TextAlign.left,
+                      ),
+                    },
+                    onLinkTap: (url, _, __) => handleFALink(context, url!),
+                    extensions: [
+                      html_pkg.TagExtension(
+                        tagsToExtend: {"i"},
+                        builder: (html_pkg.ExtensionContext context) {
+                          final classAttr = context.attributes['class'];
+                          if (classAttr == 'bbcode bbcode_i') {
+                            return Text(
+                              context.styledElement?.element?.text ?? "",
+                              style: const TextStyle(
+                                fontStyle: FontStyle.italic,
+                                color: Colors.grey,
                               ),
-                              const SizedBox(width: 2),
-                              Expanded(
-                                child: Text(
-                                  widget.shout.profileNickname,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Color(0xFFE09321),
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                            );
+                          }
+                          switch (classAttr) {
+                            case 'smilie tongue':
+                              return Image.asset('assets/emojis/tongue.png',
+                                  width: 20, height: 20);
+                            case 'smilie evil':
+                              return Image.asset('assets/emojis/evil.png',
+                                  width: 20, height: 20);
+                            case 'smilie lmao':
+                              return Image.asset('assets/emojis/lmao.png',
+                                  width: 20, height: 20);
+                            case 'smilie gift':
+                              return Image.asset('assets/emojis/gift.png',
+                                  width: 20, height: 20);
+                            case 'smilie derp':
+                              return Image.asset('assets/emojis/derp.png',
+                                  width: 20, height: 20);
+                            case 'smilie teeth':
+                              return Image.asset('assets/emojis/teeth.png',
+                                  width: 20, height: 20);
+                            case 'smilie cool':
+                              return Image.asset('assets/emojis/cool.png',
+                                  width: 20, height: 20);
+                            case 'smilie huh':
+                              return Image.asset('assets/emojis/huh.png',
+                                  width: 20, height: 20);
+                            case 'smilie cd':
+                              return Image.asset('assets/emojis/cd.png',
+                                  width: 20, height: 20);
+                            case 'smilie coffee':
+                              return Image.asset('assets/emojis/coffee.png',
+                                  width: 20, height: 20);
+                            case 'smilie sarcastic':
+                              return Image.asset('assets/emojis/sarcastic.png',
+                                  width: 20, height: 20);
+                            case 'smilie veryhappy':
+                              return Image.asset('assets/emojis/veryhappy.png',
+                                  width: 20, height: 20);
+                            case 'smilie wink':
+                              return Image.asset('assets/emojis/wink.png',
+                                  width: 20, height: 20);
+                            case 'smilie whatever':
+                              return Image.asset('assets/emojis/whatever.png',
+                                  width: 20, height: 20);
+                            case 'smilie crying':
+                              return Image.asset('assets/emojis/crying.png',
+                                  width: 20, height: 20);
+                            case 'smilie love':
+                              return Image.asset('assets/emojis/love.png',
+                                  width: 20, height: 20);
+                            case 'smilie serious':
+                              return Image.asset('assets/emojis/serious.png',
+                                  width: 20, height: 20);
+                            case 'smilie yelling':
+                              return Image.asset('assets/emojis/yelling.png',
+                                  width: 20, height: 20);
+                            case 'smilie oooh':
+                              return Image.asset('assets/emojis/oooh.png',
+                                  width: 20, height: 20);
+                            case 'smilie angel':
+                              return Image.asset('assets/emojis/angel.png',
+                                  width: 20, height: 20);
+                            case 'smilie dunno':
+                              return Image.asset('assets/emojis/dunno.png',
+                                  width: 20, height: 20);
+                            case 'smilie nerd':
+                              return Image.asset('assets/emojis/nerd.png',
+                                  width: 20, height: 20);
+                            case 'smilie sad':
+                              return Image.asset('assets/emojis/sad.png',
+                                  width: 20, height: 20);
+                            case 'smilie zipped':
+                              return Image.asset('assets/emojis/zipped.png',
+                                  width: 20, height: 20);
+                            case 'smilie smile':
+                              return Image.asset('assets/emojis/smile.png',
+                                  width: 20, height: 20);
+                            case 'smilie badhairday':
+                              return Image.asset('assets/emojis/badhairday.png',
+                                  width: 20, height: 20);
+                            case 'smilie embarrassed':
+                              return Image.asset('assets/emojis/embarrassed.png',
+                                  width: 20, height: 20);
+                            case 'smilie note':
+                              return Image.asset('assets/emojis/note.png',
+                                  width: 20, height: 20);
+                            case 'smilie sleepy':
+                              return Image.asset('assets/emojis/sleepy.png',
+                                  width: 20, height: 20);
+                            default:
+                              return const SizedBox.shrink();
+                          }
+                        },
+                      ),
+                      html_pkg.TagExtension(
+                        tagsToExtend: {"img"},
+                        builder: (html_pkg.ExtensionContext context) {
+                          final src = context.attributes['src'];
+                          if (src == null) return const SizedBox.shrink();
+                          final resolvedUrl =
+                              src.startsWith('//') ? 'https:$src' : src;
+                          return Image.network(
+                            resolvedUrl,
+                            width: 50,
+                            height: 50,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) {
+                                return child;
+                              }
+                              return const SizedBox(
+                                width: 50,
+                                height: 50,
+                                child: CircularProgressIndicator(),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              return const SizedBox.shrink();
+                            },
+                          );
+                        },
+                      ),
                     ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 0.0),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          showFullDate = !showFullDate;
+                        });
+                      },
+                      child: Text(
+                        showFullDate
+                            ? widget.shout.popupDateFull
+                            : widget.shout.popupDateRelative,
+                        style: TextStyle(
+                          fontSize: 12.0,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
-            Padding(
-              padding: const EdgeInsets.only(top: 8.0, bottom: 1.0),
-              child: html_pkg.Html(
-                data: widget.shout.text,
-                style: {
-                  "body": html_pkg.Style(
-                    margin: html_pkg.Margins.zero,
-                    textAlign: TextAlign.left,
-                    fontSize: html_pkg.FontSize(16),
-                    color: Colors.grey.shade300,
-                  ),
-                  "p": html_pkg.Style(
-                    fontSize: html_pkg.FontSize(16),
-                    color: Colors.grey.shade300,
-                  ),
-                  "a": html_pkg.Style(
-                    color: const Color(0xFFE09321),
-                    textDecoration: TextDecoration.none,
-                  ),
-                  "img": html_pkg.Style(
-                    width: html_pkg.Width(50.0),
-                    height: html_pkg.Height(50.0),
-                  ),
-                  "strong": html_pkg.Style(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  "u": html_pkg.Style(
-                    color: Colors.white,
-                  ),
-                  ".bbcode_right": html_pkg.Style(
-                    textAlign: TextAlign.right,
-                  ),
-                  ".bbcode_right .bbcode_sup, .bbcode_right sup": html_pkg.Style(
-                    textAlign: TextAlign.right,
-                  ),
-                  ".bbcode_center": html_pkg.Style(
-                    textAlign: TextAlign.center,
-                  ),
-                  ".bbcode_left": html_pkg.Style(
-                    textAlign: TextAlign.left,
-                  ),
-                },
-                onLinkTap: (url, _, __) => handleFALink(context, url!),
-                extensions: [
-                  html_pkg.TagExtension(
-                    tagsToExtend: {"i"},
-                    builder: (html_pkg.ExtensionContext context) {
-                      final classAttr = context.attributes['class'];
-                      if (classAttr == 'bbcode bbcode_i') {
-                        return Text(
-                          context.styledElement?.element?.text ?? "",
-                          style: const TextStyle(
-                            fontStyle: FontStyle.italic,
-                            color: Colors.grey,
-                          ),
-                        );
-                      }
-                      switch (classAttr) {
-                        case 'smilie tongue':
-                          return Image.asset('assets/emojis/tongue.png',
-                              width: 20, height: 20);
-                        case 'smilie evil':
-                          return Image.asset('assets/emojis/evil.png',
-                              width: 20, height: 20);
-                        case 'smilie lmao':
-                          return Image.asset('assets/emojis/lmao.png',
-                              width: 20, height: 20);
-                        case 'smilie gift':
-                          return Image.asset('assets/emojis/gift.png',
-                              width: 20, height: 20);
-                        case 'smilie derp':
-                          return Image.asset('assets/emojis/derp.png',
-                              width: 20, height: 20);
-                        case 'smilie teeth':
-                          return Image.asset('assets/emojis/teeth.png',
-                              width: 20, height: 20);
-                        case 'smilie cool':
-                          return Image.asset('assets/emojis/cool.png',
-                              width: 20, height: 20);
-                        case 'smilie huh':
-                          return Image.asset('assets/emojis/huh.png',
-                              width: 20, height: 20);
-                        case 'smilie cd':
-                          return Image.asset('assets/emojis/cd.png',
-                              width: 20, height: 20);
-                        case 'smilie coffee':
-                          return Image.asset('assets/emojis/coffee.png',
-                              width: 20, height: 20);
-                        case 'smilie sarcastic':
-                          return Image.asset('assets/emojis/sarcastic.png',
-                              width: 20, height: 20);
-                        case 'smilie veryhappy':
-                          return Image.asset('assets/emojis/veryhappy.png',
-                              width: 20, height: 20);
-                        case 'smilie wink':
-                          return Image.asset('assets/emojis/wink.png',
-                              width: 20, height: 20);
-                        case 'smilie whatever':
-                          return Image.asset('assets/emojis/whatever.png',
-                              width: 20, height: 20);
-                        case 'smilie crying':
-                          return Image.asset('assets/emojis/crying.png',
-                              width: 20, height: 20);
-                        case 'smilie love':
-                          return Image.asset('assets/emojis/love.png',
-                              width: 20, height: 20);
-                        case 'smilie serious':
-                          return Image.asset('assets/emojis/serious.png',
-                              width: 20, height: 20);
-                        case 'smilie yelling':
-                          return Image.asset('assets/emojis/yelling.png',
-                              width: 20, height: 20);
-                        case 'smilie oooh':
-                          return Image.asset('assets/emojis/oooh.png',
-                              width: 20, height: 20);
-                        case 'smilie angel':
-                          return Image.asset('assets/emojis/angel.png',
-                              width: 20, height: 20);
-                        case 'smilie dunno':
-                          return Image.asset('assets/emojis/dunno.png',
-                              width: 20, height: 20);
-                        case 'smilie nerd':
-                          return Image.asset('assets/emojis/nerd.png',
-                              width: 20, height: 20);
-                        case 'smilie sad':
-                          return Image.asset('assets/emojis/sad.png',
-                              width: 20, height: 20);
-                        case 'smilie zipped':
-                          return Image.asset('assets/emojis/zipped.png',
-                              width: 20, height: 20);
-                        case 'smilie smile':
-                          return Image.asset('assets/emojis/smile.png',
-                              width: 20, height: 20);
-                        case 'smilie badhairday':
-                          return Image.asset('assets/emojis/badhairday.png',
-                              width: 20, height: 20);
-                        case 'smilie embarrassed':
-                          return Image.asset('assets/emojis/embarrassed.png',
-                              width: 20, height: 20);
-                        case 'smilie note':
-                          return Image.asset('assets/emojis/note.png',
-                              width: 20, height: 20);
-                        case 'smilie sleepy':
-                          return Image.asset('assets/emojis/sleepy.png',
-                              width: 20, height: 20);
-                        default:
-                          return const SizedBox.shrink();
-                      }
-                    },
-                  ),
-                  html_pkg.TagExtension(
-                    tagsToExtend: {"img"},
-                    builder: (html_pkg.ExtensionContext context) {
-                      final src = context.attributes['src'];
-                      if (src == null) return const SizedBox.shrink();
-                      final resolvedUrl =
-                      src.startsWith('//') ? 'https:$src' : src;
-                      return Image.network(
-                        resolvedUrl,
-                        width: 50,
-                        height: 50,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) {
-                            return child;
-                          }
-                          return const SizedBox(
-                            width: 50,
-                            height: 50,
-                            child: CircularProgressIndicator(),
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          return const SizedBox.shrink();
-                        },
-                      );
-
-                    },
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 0.0),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      showFullDate = !showFullDate;
-                    });
-                  },
-                  child: Text(
-                    showFullDate
-                        ? widget.shout.popupDateFull
-                        : widget.shout.popupDateRelative,
-                    style: TextStyle(
-                      fontSize: 12.0,
-                      color: Colors.grey.shade400,
-                    ),
-                  ),
+            if (widget.isSelectionMode)
+              Positioned(
+                top: 2.0,
+                right: 2.0,
+                child: Icon(
+                  widget.isSelected
+                      ? Icons.check_circle
+                      : Icons.radio_button_unchecked,
+                  color: widget.isSelected
+                      ? const Color(0xFFE09321)
+                      : Colors.white38,
+                  size: 22,
                 ),
               ),
-            ),
           ],
         ),
       ),

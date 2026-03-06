@@ -107,7 +107,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
     try {
 
       final info = await PackageInfo.fromPlatform();
-      final current = info.version.trim(); // "1.2.3"
+      final current = info.version.trim(); // "1.2.4"
       debugPrint('Current app version: $current');
 
 

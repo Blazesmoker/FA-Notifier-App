@@ -311,7 +311,12 @@ class _ViewListScreenState extends State<ViewListScreen> {
               hintStyle: const TextStyle(color: Colors.grey),
               filled: true,
               fillColor: const Color(0xFF353535),
-              prefixIcon: const Icon(Icons.search, color: Colors.black),
+              prefixIcon: const Icon(Icons.search, color: Colors.grey),
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 0.0,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8.0),
                 borderSide: BorderSide.none,

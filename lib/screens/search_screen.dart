@@ -68,7 +68,7 @@ class SearchScreenState extends State<SearchScreen> {
             Expanded(
               flex: 8,
               child: Container(
-                height: 40,
+                height: 46,
                 decoration: BoxDecoration(
                   color: Color(0xFF2C2C2C),
                   borderRadius: BorderRadius.circular(8.0),

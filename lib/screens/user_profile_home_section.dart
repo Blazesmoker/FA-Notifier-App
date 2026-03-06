@@ -37,12 +37,16 @@ class UserProfileHomeSection extends StatelessWidget {
     required this.recentlyWatchedCount,
     required this.shouts,
     required this.isOwnProfile,
+    required this.isShoutSelectionMode,
+    required this.selectedShoutCount,
     required this.currentShoutPage,
     required this.totalShoutPages,
     required this.isLoadingMoreShouts,
     required this.onOpenPostShout,
     required this.onLoadMoreShouts,
     required this.onConfirmDeleteShout,
+    required this.onToggleShoutSelectionMode,
+    required this.onToggleShoutSelection,
   });
 
   final bool hasRealUserProfile;
@@ -76,12 +80,16 @@ class UserProfileHomeSection extends StatelessWidget {
 
   final List<Shout> shouts;
   final bool isOwnProfile;
+  final bool isShoutSelectionMode;
+  final int selectedShoutCount;
   final int currentShoutPage;
   final int totalShoutPages;
   final bool isLoadingMoreShouts;
   final Future<void> Function(BuildContext context) onOpenPostShout;
   final Future<void> Function() onLoadMoreShouts;
   final Future<void> Function(int index, Shout shout) onConfirmDeleteShout;
+  final void Function() onToggleShoutSelectionMode;
+  final void Function(Shout shout) onToggleShoutSelection;
 
   @override
   Widget build(BuildContext context) {
@@ -160,12 +168,16 @@ class UserProfileHomeSection extends StatelessWidget {
         UserProfileShoutsSection(
           shouts: shouts,
           isOwnProfile: isOwnProfile,
+          isSelectionMode: isShoutSelectionMode,
+          selectedShoutCount: selectedShoutCount,
           currentShoutPage: currentShoutPage,
           totalShoutPages: totalShoutPages,
           isLoadingMoreShouts: isLoadingMoreShouts,
           onOpenPostShout: onOpenPostShout,
           onLoadMoreShouts: onLoadMoreShouts,
           onConfirmDeleteShout: onConfirmDeleteShout,
+          onToggleSelectionMode: onToggleShoutSelectionMode,
+          onToggleShoutSelection: onToggleShoutSelection,
         ),
         const SizedBox(height: 8.0),
       ],

@@ -7,23 +7,31 @@ import 'package:html/parser.dart' as html_parser;
 class UserProfileShoutsSection extends StatelessWidget {
   final List<Shout> shouts;
   final bool isOwnProfile;
+  final bool isSelectionMode;
+  final int selectedShoutCount;
   final int currentShoutPage;
   final int totalShoutPages;
   final bool isLoadingMoreShouts;
   final Future<void> Function(BuildContext context) onOpenPostShout;
   final Future<void> Function() onLoadMoreShouts;
   final Future<void> Function(int index, Shout shout) onConfirmDeleteShout;
+  final void Function() onToggleSelectionMode;
+  final void Function(Shout shout) onToggleShoutSelection;
 
   const UserProfileShoutsSection({
     Key? key,
     required this.shouts,
     required this.isOwnProfile,
+    required this.isSelectionMode,
+    required this.selectedShoutCount,
     required this.currentShoutPage,
     required this.totalShoutPages,
     required this.isLoadingMoreShouts,
     required this.onOpenPostShout,
     required this.onLoadMoreShouts,
     required this.onConfirmDeleteShout,
+    required this.onToggleSelectionMode,
+    required this.onToggleShoutSelection,
   }) : super(key: key);
 
   @override
@@ -54,30 +62,99 @@ class UserProfileShoutsSection extends StatelessWidget {
             ),
             const SizedBox(height: 0.0),
             Padding(
-              padding: const EdgeInsets.fromLTRB(12.0, 12.0, 12.0, 12.0),
-              child: GestureDetector(
-                onTap: () async {
-                  await onOpenPostShout(context);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF232323),
-                    borderRadius: BorderRadius.circular(10.0),
-                  ),
-                  child: Row(
-                    children: const [
-                      Expanded(
-                        child: Text(
-                          'Type here to leave a shout!',
-                          style: TextStyle(color: Colors.white54),
+              padding: const EdgeInsets.fromLTRB(12.0, 12.0, 12.0, 0.0),
+              child: Row(
+                children: [
+                  if (isOwnProfile) ...[
+                    GestureDetector(
+                      onTap: onToggleSelectionMode,
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: isSelectionMode
+                              ? const Color(0xFFE09321)
+                              : const Color(0xFF232323),
+                          borderRadius: BorderRadius.circular(10.0),
+                        ),
+                        child: const Icon(
+                          Icons.check_circle_outline,
+                          color: Colors.white,
                         ),
                       ),
-                      Icon(Icons.send, color: Colors.white54),
-                    ],
+                    ),
+                    const SizedBox(width: 8.0),
+                  ],
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () async {
+                        await onOpenPostShout(context);
+                      },
+                      child: Container(
+                        height: 48,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0,
+                          vertical: 10.0,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF232323),
+                          borderRadius: BorderRadius.circular(10.0),
+                        ),
+                        child: Row(
+                          children: const [
+                            Expanded(
+                              child: Text(
+                                'Type here to leave a shout!',
+                                style: TextStyle(color: Colors.white54),
+                              ),
+                            ),
+                            Icon(Icons.send, color: Colors.white54),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
+            ),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return ClipRect(
+                  child: FadeTransition(
+                    opacity: animation,
+                    child: SizeTransition(
+                      sizeFactor: animation,
+                      axisAlignment: -1.0,
+                      child: child,
+                    ),
+                  ),
+                );
+              },
+              child: isSelectionMode
+                  ? Padding(
+                      key: const ValueKey('selection-mode-label'),
+                      padding: const EdgeInsets.fromLTRB(12.0, 8.0, 12.0, 12.0),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          selectedShoutCount == 0
+                              ? 'Selection mode enabled'
+                              : '$selectedShoutCount shout${selectedShoutCount == 1 ? '' : 's'} selected',
+                          style: const TextStyle(
+                            color: Color(0xFFE09321),
+                            fontSize: 13.0,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    )
+                  : const SizedBox(
+                      key: ValueKey('selection-mode-spacer'),
+                      height: 12.0,
+                    ),
             ),
             if (shouts.isEmpty)
               const Text(
@@ -97,7 +174,12 @@ class UserProfileShoutsSection extends StatelessWidget {
                       final shout = shouts[index];
                       return GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onLongPress: () async {
+                        onTap: isSelectionMode
+                            ? () => onToggleShoutSelection(shout)
+                            : null,
+                        onLongPress: isSelectionMode
+                            ? () => onToggleShoutSelection(shout)
+                            : () async {
                           final plainText = html_parser.parse(shout.text).body?.text ?? shout.text;
                           final action = await showDialog<String>(
                             context: context,
@@ -185,16 +267,21 @@ class UserProfileShoutsSection extends StatelessWidget {
                               ),
                             );
                           } else if (action == 'delete') {
-                            onConfirmDeleteShout(index, shout);
+                            await onConfirmDeleteShout(index, shout);
                           }
                         },
-                        child: ShoutWidget(
-                          shout: shout,
-                          onDelete: () {
-                            if (isOwnProfile) {
-                              onConfirmDeleteShout(index, shout);
-                            }
-                          },
+                        child: AbsorbPointer(
+                          absorbing: isSelectionMode,
+                          child: ShoutWidget(
+                            shout: shout,
+                            isSelectionMode: isSelectionMode,
+                            isSelected: shout.selected,
+                            onDelete: () {
+                              if (isOwnProfile) {
+                                onConfirmDeleteShout(index, shout);
+                              }
+                            },
+                          ),
                         ),
                       );
                     },
@@ -233,4 +320,3 @@ class UserProfileShoutsSection extends StatelessWidget {
     );
   }
 }
-
