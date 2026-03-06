@@ -2435,7 +2435,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                       controller: _scrollController,
                       physics: Platform.isIOS
                           ? const AlwaysScrollableScrollPhysics(
-                              parent: ClampingScrollPhysics())
+                              parent: BouncingScrollPhysics())
                           : const AlwaysScrollableScrollPhysics(
                               parent: ClampingScrollPhysics()),
                       slivers: [
