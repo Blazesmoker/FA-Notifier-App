@@ -190,6 +190,29 @@ class OpenJournalApiService {
           c.querySelector('comment-title')?.text.trim() ?? '';
       comment['isOP'] = c.querySelector('.comment_op_marker') != null;
 
+      final iconBeforeElems =
+          c.querySelectorAll('usericon-block-before img');
+      final iconBeforeUrls = iconBeforeElems
+          .map((elem) {
+            final src = elem.attributes['src'];
+            if (src != null) return _absFaUrl(src) ?? '';
+            return '';
+          })
+          .where((url) => url.isNotEmpty)
+          .toList();
+      final iconAfterElems =
+          c.querySelectorAll('usericon-block-after img');
+      final iconAfterUrls = iconAfterElems
+          .map((elem) {
+            final src = elem.attributes['src'];
+            if (src != null) return _absFaUrl(src) ?? '';
+            return '';
+          })
+          .where((url) => url.isNotEmpty)
+          .toList();
+      comment['iconBeforeUrls'] = iconBeforeUrls;
+      comment['iconAfterUrls'] = iconAfterUrls;
+
       final popup = c.querySelector('.popup_date');
       comment['popupDateRelative'] = popup?.text.trim() ?? '';
       comment['popupDateFull'] = popup?.attributes['title'] ?? '';

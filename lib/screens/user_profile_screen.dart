@@ -1,5 +1,6 @@
 // user_profile_screen.dart
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math';
 import 'package:FANotifier/screens/user_description_webview.dart';
 import 'package:flutter/material.dart';
@@ -1394,7 +1395,14 @@ class UserProfileScreenState extends State<UserProfileScreen>
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
       ),
-      child: DefaultTabController(
+      child: PopScope(
+        canPop: !(Platform.isAndroid && _isShoutSelectionMode),
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop && Platform.isAndroid && _isShoutSelectionMode) {
+            _toggleShoutSelectionMode();
+          }
+        },
+        child: DefaultTabController(
         length: ProfileSection.values.length,
         child: Scaffold(
           backgroundColor: Colors.black,
@@ -1960,7 +1968,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                   ),
                 Positioned(
                   left: 16.0,
-                  bottom: 16.0 + MediaQuery.of(context).padding.bottom,
+                  bottom: 16.0,
                   child: IgnorePointer(
                     ignoring: !showDeleteSelectedFab,
                     child: ExcludeSemantics(
@@ -2038,6 +2046,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
               : null,
           floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
         ),
+      ),
       ),
     );
   }
