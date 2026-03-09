@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:intl/intl.dart';
@@ -143,6 +144,15 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   List<String> keywords = [];
 
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey<SelectionAreaState> _titleSelectionKey = GlobalKey();
+  final Map<Object, GlobalKey<SelectionAreaState>> _commentSelectionKeys =
+      <Object, GlobalKey<SelectionAreaState>>{};
+  final Map<Object, String> _commentSelectedTexts = <Object, String>{};
+  String _titleSelectedText = '';
+  int? _selectionClearPointerId;
+  Offset? _selectionClearPointerDownPosition;
+  DateTime? _selectionClearPointerDownTime;
+  bool _selectionClearPointerMoved = false;
 
   @override
   void initState() {
@@ -184,6 +194,92 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
     final shouldShow = _scrollController.offset > 350;
     if (shouldShow == _showScrollToTopNotifier.value) return;
     _showScrollToTopNotifier.value = shouldShow;
+  }
+
+  Object _commentSelectionId(Map<String, dynamic> comment, int index) {
+    return comment['commentId']?.toString() ?? 'comment_$index';
+  }
+
+  GlobalKey<SelectionAreaState> _commentSelectionKeyFor(Object selectionId) {
+    return _commentSelectionKeys.putIfAbsent(
+      selectionId,
+      () => GlobalKey<SelectionAreaState>(),
+    );
+  }
+
+  String _selectedCommentTextFor(Object selectionId) {
+    return _commentSelectedTexts[selectionId] ?? '';
+  }
+
+  void _updateTitleSelectedText(SelectedContent? content) {
+    _titleSelectedText = content?.plainText ?? '';
+  }
+
+  void _updateCommentSelectedText(
+    Object selectionId,
+    SelectedContent? content,
+  ) {
+    final text = content?.plainText ?? '';
+    if (text.isEmpty) {
+      _commentSelectedTexts.remove(selectionId);
+      return;
+    }
+    _commentSelectedTexts[selectionId] = text;
+  }
+
+  void _clearSelectionArea(GlobalKey<SelectionAreaState> key) {
+    final state = key.currentState;
+    if (state == null) return;
+    state.selectableRegion.clearSelection();
+    state.selectableRegion.hideToolbar();
+  }
+
+  void _clearAllTextSelections() {
+    _clearSelectionArea(_titleSelectionKey);
+    for (final key in _commentSelectionKeys.values) {
+      _clearSelectionArea(key);
+    }
+  }
+
+  void _handleSelectionClearPointerDown(PointerDownEvent event) {
+    _selectionClearPointerId = event.pointer;
+    _selectionClearPointerDownPosition = event.position;
+    _selectionClearPointerDownTime = DateTime.now();
+    _selectionClearPointerMoved = false;
+  }
+
+  void _handleSelectionClearPointerMove(PointerMoveEvent event) {
+    if (_selectionClearPointerId != event.pointer ||
+        _selectionClearPointerDownPosition == null) {
+      return;
+    }
+    if ((event.position - _selectionClearPointerDownPosition!).distance > 10) {
+      _selectionClearPointerMoved = true;
+    }
+  }
+
+  void _handleSelectionClearPointerUp(PointerUpEvent event) {
+    if (_selectionClearPointerId != event.pointer) return;
+    final downTime = _selectionClearPointerDownTime;
+    final isQuickTap = downTime != null &&
+        DateTime.now().difference(downTime) <=
+            const Duration(milliseconds: 250);
+    if (!_selectionClearPointerMoved && isQuickTap) {
+      _clearAllTextSelections();
+    }
+    _resetSelectionClearPointer();
+  }
+
+  void _handleSelectionClearPointerCancel(PointerCancelEvent event) {
+    if (_selectionClearPointerId != event.pointer) return;
+    _resetSelectionClearPointer();
+  }
+
+  void _resetSelectionClearPointer() {
+    _selectionClearPointerId = null;
+    _selectionClearPointerDownPosition = null;
+    _selectionClearPointerDownTime = null;
+    _selectionClearPointerMoved = false;
   }
 
   @override
@@ -900,13 +996,17 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                     size: 78.0, assetPath: 'assets/icons/fathemed.png'))
             : Stack(
                 children: [
-                  GestureDetector(
-                    behavior: HitTestBehavior.deferToChild,
-                    onTap: () {
-                      FocusScope.of(context).unfocus();
-                    },
-                    child: SelectionArea(
-                      key: _journalSelectionKey,
+                  Listener(
+                    behavior: HitTestBehavior.opaque,
+                    onPointerDown: _handleSelectionClearPointerDown,
+                    onPointerMove: _handleSelectionClearPointerMove,
+                    onPointerUp: _handleSelectionClearPointerUp,
+                    onPointerCancel: _handleSelectionClearPointerCancel,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.deferToChild,
+                      onTap: () {
+                        FocusScope.of(context).unfocus();
+                      },
                       child: RefreshIndicator(
                         onRefresh: _fetchPostDetailsNew,
                         child: CustomScrollView(
@@ -1027,15 +1127,34 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                             color: Colors.grey.shade900,
                                             thickness: 1.5,
                                             height: 24),
-                                        Text(
-                                          submissionTitle ?? '',
-                                          style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600),
+                                        SelectionArea(
+                                          key: _titleSelectionKey,
+                                          onSelectionChanged:
+                                              _updateTitleSelectedText,
+                                          contextMenuBuilder:
+                                              ReadOnlySelectionContextMenu
+                                                  .builder(
+                                            selectedTextProvider: () =>
+                                                _titleSelectedText,
+                                            includeIosTranslate: true,
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                submissionTitle ?? '',
+                                                style: const TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight:
+                                                        FontWeight.w600),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                  'Posted on: ${getFormattedPublicationTime() ?? ''}'),
+                                            ],
+                                          ),
                                         ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                            'Posted on: ${getFormattedPublicationTime() ?? ''}'),
                                         Divider(
                                             color: Colors.grey.shade900,
                                             thickness: 1.5,
@@ -1407,20 +1526,21 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                 delegate: SliverChildBuilderDelegate(
                                   (context, index) {
                                     final comment = comments[index];
+                                    final selectionId =
+                                        _commentSelectionId(comment, index);
                                     final previousComment =
                                         index > 0 ? comments[index - 1] : null;
                                     final nextComment =
                                         index + 1 < comments.length
                                             ? comments[index + 1]
                                             : null;
-                                    final currentNestingLevel =
-                                        ((100.0 -
-                                                    (comment['width'] ?? 100)
-                                                        .toDouble()) /
-                                                3.0)
-                                            .round()
-                                            .clamp(0, 4)
-                                            .toInt();
+                                    final currentNestingLevel = ((100.0 -
+                                                (comment['width'] ?? 100)
+                                                    .toDouble()) /
+                                            3.0)
+                                        .round()
+                                        .clamp(0, 4)
+                                        .toInt();
                                     final previousNestingLevel =
                                         previousComment == null
                                             ? 0
@@ -1447,15 +1567,13 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                     for (var i = index + 1;
                                         i < comments.length;
                                         i++) {
-                                      final futureNestingLevel =
-                                          ((100.0 -
-                                                      (comments[i]['width'] ??
-                                                              100)
-                                                          .toDouble()) /
-                                                  3.0)
-                                              .round()
-                                              .clamp(0, 4)
-                                              .toInt();
+                                      final futureNestingLevel = ((100.0 -
+                                                  (comments[i]['width'] ?? 100)
+                                                      .toDouble()) /
+                                              3.0)
+                                          .round()
+                                          .clamp(0, 4)
+                                          .toInt();
                                       if (futureNestingLevel <
                                           currentNestingLevel) {
                                         break;
@@ -1540,6 +1658,18 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                               _getFullLinkFromFetchedHtml,
                                         );
                                       },
+                                      selectionAreaKey:
+                                          _commentSelectionKeyFor(selectionId),
+                                      onSelectionChanged: (content) =>
+                                          _updateCommentSelectedText(
+                                              selectionId, content),
+                                      contextMenuBuilder:
+                                          ReadOnlySelectionContextMenu.builder(
+                                        selectedTextProvider: () =>
+                                            _selectedCommentTextFor(
+                                                selectionId),
+                                        includeIosTranslate: true,
+                                      ),
                                     );
                                   },
                                   childCount: comments.length,
@@ -1804,8 +1934,6 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
     return document.outerHtml;
   }
 }
-
-final GlobalKey<SelectionAreaState> _journalSelectionKey = GlobalKey();
 
 class JournalNotFoundException implements Exception {
   @override

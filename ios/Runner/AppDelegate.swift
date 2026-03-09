@@ -1,5 +1,7 @@
 import Flutter
 import UIKit
+import SwiftUI
+import Translation
 import workmanager_apple
 import BackgroundTasks
 import flutter_secure_storage
@@ -24,6 +26,8 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 
     private var notifChannel: FlutterMethodChannel?
     private var pendingNotificationPayload: [String: Any]?
+    private var translationChannel: FlutterMethodChannel?
+    private var translationHostController: UIViewController?
 
     private func findFlutterViewController() -> FlutterViewController? {
         if let vc = window?.rootViewController as? FlutterViewController {
@@ -80,6 +84,102 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         }
     }
 
+    func setupTranslationChannelIfNeeded() {
+        guard translationChannel == nil,
+              let controller = findFlutterViewController()
+        else { return }
+
+        let channel = FlutterMethodChannel(
+            name: "app.translation",
+            binaryMessenger: controller.binaryMessenger
+        )
+        translationChannel = channel
+        self.fLog("MethodChannel 'app.translation' initialized")
+
+        channel.setMethodCallHandler { [weak self] call, result in
+            guard let self = self else {
+                result(FlutterError(code: "translation_unavailable", message: "AppDelegate deallocated", details: nil))
+                return
+            }
+
+            guard call.method == "translation.showNativeSheet" else {
+                result(FlutterMethodNotImplemented)
+                return
+            }
+
+            let rawText: String?
+            if let args = call.arguments as? [String: Any] {
+                rawText = args["text"] as? String
+            } else {
+                rawText = call.arguments as? String
+            }
+
+            let text = rawText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !text.isEmpty else {
+                result(false)
+                return
+            }
+
+            DispatchQueue.main.async {
+                result(self.presentNativeTranslationSheetIfAvailable(text: text))
+            }
+        }
+    }
+
+    @MainActor
+    private func presentNativeTranslationSheetIfAvailable(text: String) -> Bool {
+        guard #available(iOS 17.4, *) else {
+            return false
+        }
+
+        guard let anchorController = findFlutterViewController() else {
+            fLog("Translation sheet unavailable: FlutterViewController not found")
+            return false
+        }
+
+        removeTranslationHostIfNeeded()
+
+        let bridge = NativeTranslationSheetBridge(text: text) { [weak self] in
+            self?.removeTranslationHostIfNeeded()
+        }
+
+        let hostingController = UIHostingController(
+            rootView: NativeTranslationSheetView(bridge: bridge)
+        )
+        hostingController.view.backgroundColor = .clear
+        hostingController.view.translatesAutoresizingMaskIntoConstraints = false
+
+        anchorController.addChild(hostingController)
+        anchorController.view.addSubview(hostingController.view)
+        NSLayoutConstraint.activate([
+            hostingController.view.leadingAnchor.constraint(equalTo: anchorController.view.leadingAnchor),
+            hostingController.view.trailingAnchor.constraint(equalTo: anchorController.view.trailingAnchor),
+            hostingController.view.topAnchor.constraint(equalTo: anchorController.view.topAnchor),
+            hostingController.view.bottomAnchor.constraint(equalTo: anchorController.view.bottomAnchor)
+        ])
+        hostingController.didMove(toParent: anchorController)
+        translationHostController = hostingController
+        fLog("Presenting native translation sheet")
+        return true
+    }
+
+    @MainActor
+    private func removeTranslationHostIfNeeded() {
+        guard let host = translationHostController else { return }
+
+        if host.presentingViewController != nil {
+            host.dismiss(animated: false)
+        }
+
+        if host.parent != nil {
+            host.willMove(toParent: nil)
+            host.view.removeFromSuperview()
+            host.removeFromParent()
+        }
+
+        translationHostController = nil
+    }
+
     private lazy var timeFmt: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .none
@@ -123,6 +223,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         }
         GeneratedPluginRegistrant.register(with: self)
         setupNotificationChannelIfNeeded()
+        setupTranslationChannelIfNeeded()
         UNUserNotificationCenter.current().delegate = self
         WorkmanagerPlugin.setPluginRegistrantCallback(registerPluginsForBackgroundIsolate)
 
@@ -166,6 +267,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     override func applicationDidBecomeActive(_ application: UIApplication) {
         fLog("App became active")
         setupNotificationChannelIfNeeded()
+        setupTranslationChannelIfNeeded()
         getPendingBackgroundTasks()
         logApproxNextFetch("didBecomeActive")
     }
@@ -356,5 +458,54 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     }
     override func applicationWillTerminate(_ application: UIApplication) {
         fLog("App will terminate")
+    }
+}
+
+@available(iOS 17.4, *)
+@MainActor
+final class NativeTranslationSheetBridge: ObservableObject {
+    @Published var isPresented = false
+
+    let text: String
+    private let onDismiss: () -> Void
+    private var didTriggerPresentation = false
+
+    init(text: String, onDismiss: @escaping () -> Void) {
+        self.text = text
+        self.onDismiss = onDismiss
+    }
+
+    func triggerPresentationIfNeeded() {
+        guard !didTriggerPresentation else { return }
+        didTriggerPresentation = true
+        DispatchQueue.main.async {
+            self.isPresented = true
+        }
+    }
+
+    func handlePresentationChange(_ nextValue: Bool) {
+        if !nextValue {
+            onDismiss()
+        }
+    }
+}
+
+@available(iOS 17.4, *)
+struct NativeTranslationSheetView: View {
+    @ObservedObject var bridge: NativeTranslationSheetBridge
+
+    var body: some View {
+        Color.clear
+            .ignoresSafeArea()
+            .translationPresentation(
+                isPresented: $bridge.isPresented,
+                text: bridge.text
+            )
+            .onAppear {
+                bridge.triggerPresentationIfNeeded()
+            }
+            .onChange(of: bridge.isPresented) { _, nextValue in
+                bridge.handlePresentationChange(nextValue)
+            }
     }
 }

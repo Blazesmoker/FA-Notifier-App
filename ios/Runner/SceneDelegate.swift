@@ -32,6 +32,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 createWindow(using: ws)
             }
         }
+
+        let appDelegate = UIApplication.shared.delegate as? AppDelegate
+        appDelegate?.setupNotificationChannelIfNeeded()
+        appDelegate?.setupTranslationChannelIfNeeded()
     }
 
     private func createWindow(using windowScene: UIWindowScene) {
@@ -54,6 +58,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window.makeKeyAndVisible()
 
         appDelegate?.setupNotificationChannelIfNeeded()
+        appDelegate?.setupTranslationChannelIfNeeded()
         pendingWindowScene = nil
     }
 }

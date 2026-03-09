@@ -1,5 +1,6 @@
 import 'package:extended_text/extended_text.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter_html/flutter_html.dart';
 
 import '../utils/specialTextSpanBuilder.dart';
@@ -16,6 +17,10 @@ class CommentWidget extends StatefulWidget {
   final VoidCallback? onReply;
   final VoidCallback? onUnhide;
   final Future<void> Function(String url)? handleLink;
+  final GlobalKey<SelectionAreaState>? selectionAreaKey;
+  final ValueChanged<SelectedContent?>? onSelectionChanged;
+  final Widget Function(BuildContext, SelectableRegionState)?
+      contextMenuBuilder;
 
   const CommentWidget({
     Key? key,
@@ -28,6 +33,9 @@ class CommentWidget extends StatefulWidget {
     this.onReply,
     this.onUnhide,
     this.handleLink,
+    this.selectionAreaKey,
+    this.onSelectionChanged,
+    this.contextMenuBuilder,
   }) : super(key: key);
 
   @override
@@ -99,10 +107,15 @@ class _CommentWidgetState extends State<CommentWidget> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Text(
-                    widget.comment['text'] ?? '',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    textAlign: TextAlign.left,
+                  child: SelectionArea(
+                    key: widget.selectionAreaKey,
+                    onSelectionChanged: widget.onSelectionChanged,
+                    contextMenuBuilder: widget.contextMenuBuilder,
+                    child: Text(
+                      widget.comment['text'] ?? '',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      textAlign: TextAlign.left,
+                    ),
                   ),
                 ),
                 if (widget.comment['hideLink'] != null)
@@ -277,88 +290,93 @@ class _CommentWidgetState extends State<CommentWidget> {
                       selectionHandleColor: const Color(0xFFE09321),
                     ),
                   ),
-                  child: _hasHtml
-                      ? Html(
-                          data: _normalizedCommentHtml,
-                          onLinkTap: (url, _, __) {
-                            if (url != null) {
-                              widget.handleLink?.call(url);
-                            }
-                          },
-                          extensions: [
-                            TagExtension.inline(
-                              tagsToExtend: {'i'},
-                              builder: (context) {
-                                final assetPath = emojiAssetForSmilieClass(
-                                    context.attributes['class']);
-                                if (assetPath != null) {
-                                  return WidgetSpan(
-                                    child: Image.asset(assetPath,
-                                        width: 20, height: 20),
+                  child: SelectionArea(
+                    key: widget.selectionAreaKey,
+                    onSelectionChanged: widget.onSelectionChanged,
+                    contextMenuBuilder: widget.contextMenuBuilder,
+                    child: _hasHtml
+                        ? Html(
+                            data: _normalizedCommentHtml,
+                            onLinkTap: (url, _, __) {
+                              if (url != null) {
+                                widget.handleLink?.call(url);
+                              }
+                            },
+                            extensions: [
+                              TagExtension.inline(
+                                tagsToExtend: {'i'},
+                                builder: (context) {
+                                  final assetPath = emojiAssetForSmilieClass(
+                                      context.attributes['class']);
+                                  if (assetPath != null) {
+                                    return WidgetSpan(
+                                      child: Image.asset(assetPath,
+                                          width: 20, height: 20),
+                                    );
+                                  }
+                                  return TextSpan(
+                                    style: const TextStyle(
+                                        fontStyle: FontStyle.italic),
+                                    children: context.inlineSpanChildren ??
+                                        const <InlineSpan>[],
                                   );
-                                }
-                                return TextSpan(
-                                  style: const TextStyle(
-                                      fontStyle: FontStyle.italic),
-                                  children: context.inlineSpanChildren ??
-                                      const <InlineSpan>[],
-                                );
-                              },
+                                },
+                              ),
+                            ],
+                            style: {
+                              "body": Style(
+                                margin: Margins.zero,
+                                padding: HtmlPaddings.zero,
+                                color: Colors.grey.shade300,
+                                fontSize: FontSize(14),
+                              ),
+                              ".bbcode_center": Style(
+                                display: Display.block,
+                                textAlign: TextAlign.center,
+                              ),
+                              ".bbcode_left": Style(
+                                display: Display.block,
+                                textAlign: TextAlign.left,
+                              ),
+                              ".bbcode_right": Style(
+                                display: Display.block,
+                                textAlign: TextAlign.right,
+                              ),
+                              "code": Style(
+                                backgroundColor: Colors.transparent,
+                                padding: HtmlPaddings.zero,
+                                margin: Margins.zero,
+                                fontFamily: 'inherit',
+                                fontSize: FontSize(14),
+                                color: Colors.grey.shade300,
+                              ),
+                              "strong": Style(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade300,
+                              ),
+                              "em": Style(
+                                fontStyle: FontStyle.italic,
+                                color: Colors.grey.shade300,
+                              ),
+                              ".bbcode_u": Style(
+                                textDecoration: TextDecoration.underline,
+                                color: Colors.grey.shade300,
+                              ),
+                              "a": Style(
+                                color: const Color(0xFFE09321),
+                                textDecoration: TextDecoration.none,
+                              ),
+                            },
+                          )
+                        : ExtendedText(
+                            widget.comment['text'] ?? '',
+                            specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
+                              onTapLink: widget.handleLink,
                             ),
-                          ],
-                          style: {
-                            "body": Style(
-                              margin: Margins.zero,
-                              padding: HtmlPaddings.zero,
-                              color: Colors.grey.shade300,
-                              fontSize: FontSize(14),
-                            ),
-                            ".bbcode_center": Style(
-                              display: Display.block,
-                              textAlign: TextAlign.center,
-                            ),
-                            ".bbcode_left": Style(
-                              display: Display.block,
-                              textAlign: TextAlign.left,
-                            ),
-                            ".bbcode_right": Style(
-                              display: Display.block,
-                              textAlign: TextAlign.right,
-                            ),
-                            "code": Style(
-                              backgroundColor: Colors.transparent,
-                              padding: HtmlPaddings.zero,
-                              margin: Margins.zero,
-                              fontFamily: 'inherit',
-                              fontSize: FontSize(14),
-                              color: Colors.grey.shade300,
-                            ),
-                            "strong": Style(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey.shade300,
-                            ),
-                            "em": Style(
-                              fontStyle: FontStyle.italic,
-                              color: Colors.grey.shade300,
-                            ),
-                            ".bbcode_u": Style(
-                              textDecoration: TextDecoration.underline,
-                              color: Colors.grey.shade300,
-                            ),
-                            "a": Style(
-                              color: const Color(0xFFE09321),
-                              textDecoration: TextDecoration.none,
-                            ),
-                          },
-                        )
-                      : ExtendedText(
-                          widget.comment['text'] ?? '',
-                          specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
-                            onTapLink: widget.handleLink,
+                            style: TextStyle(
+                                fontSize: 14, color: Colors.grey.shade300),
                           ),
-                          style: TextStyle(
-                              fontSize: 14, color: Colors.grey.shade300),
-                        ),
+                  ),
                 ),
               ),
               Row(

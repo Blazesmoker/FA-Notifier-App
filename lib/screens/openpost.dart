@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:html/dom.dart' as dom;
 import 'package:FANotifier/screens/reply_screen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -162,6 +163,15 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   final GlobalKey<SubmissionDescriptionWebViewState> _submissionWebViewKey =
       GlobalKey<SubmissionDescriptionWebViewState>();
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey<SelectionAreaState> _titleSelectionKey = GlobalKey();
+  final Map<Object, GlobalKey<SelectionAreaState>> _commentSelectionKeys =
+      <Object, GlobalKey<SelectionAreaState>>{};
+  final Map<Object, String> _commentSelectedTexts = <Object, String>{};
+  String _titleSelectedText = '';
+  int? _selectionClearPointerId;
+  Offset? _selectionClearPointerDownPosition;
+  DateTime? _selectionClearPointerDownTime;
+  bool _selectionClearPointerMoved = false;
 
   @override
   void initState() {
@@ -219,6 +229,92 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     final shouldShow = _scrollController.offset > 350;
     if (shouldShow == _showScrollToTopNotifier.value) return;
     _showScrollToTopNotifier.value = shouldShow;
+  }
+
+  Object _commentSelectionId(Map<String, dynamic> comment, int index) {
+    return comment['commentId']?.toString() ?? 'comment_$index';
+  }
+
+  GlobalKey<SelectionAreaState> _commentSelectionKeyFor(Object selectionId) {
+    return _commentSelectionKeys.putIfAbsent(
+      selectionId,
+      () => GlobalKey<SelectionAreaState>(),
+    );
+  }
+
+  String _selectedCommentTextFor(Object selectionId) {
+    return _commentSelectedTexts[selectionId] ?? '';
+  }
+
+  void _updateTitleSelectedText(SelectedContent? content) {
+    _titleSelectedText = content?.plainText ?? '';
+  }
+
+  void _updateCommentSelectedText(
+    Object selectionId,
+    SelectedContent? content,
+  ) {
+    final text = content?.plainText ?? '';
+    if (text.isEmpty) {
+      _commentSelectedTexts.remove(selectionId);
+      return;
+    }
+    _commentSelectedTexts[selectionId] = text;
+  }
+
+  void _clearSelectionArea(GlobalKey<SelectionAreaState> key) {
+    final state = key.currentState;
+    if (state == null) return;
+    state.selectableRegion.clearSelection();
+    state.selectableRegion.hideToolbar();
+  }
+
+  void _clearAllTextSelections() {
+    _clearSelectionArea(_titleSelectionKey);
+    for (final key in _commentSelectionKeys.values) {
+      _clearSelectionArea(key);
+    }
+  }
+
+  void _handleSelectionClearPointerDown(PointerDownEvent event) {
+    _selectionClearPointerId = event.pointer;
+    _selectionClearPointerDownPosition = event.position;
+    _selectionClearPointerDownTime = DateTime.now();
+    _selectionClearPointerMoved = false;
+  }
+
+  void _handleSelectionClearPointerMove(PointerMoveEvent event) {
+    if (_selectionClearPointerId != event.pointer ||
+        _selectionClearPointerDownPosition == null) {
+      return;
+    }
+    if ((event.position - _selectionClearPointerDownPosition!).distance > 10) {
+      _selectionClearPointerMoved = true;
+    }
+  }
+
+  void _handleSelectionClearPointerUp(PointerUpEvent event) {
+    if (_selectionClearPointerId != event.pointer) return;
+    final downTime = _selectionClearPointerDownTime;
+    final isQuickTap = downTime != null &&
+        DateTime.now().difference(downTime) <=
+            const Duration(milliseconds: 250);
+    if (!_selectionClearPointerMoved && isQuickTap) {
+      _clearAllTextSelections();
+    }
+    _resetSelectionClearPointer();
+  }
+
+  void _handleSelectionClearPointerCancel(PointerCancelEvent event) {
+    if (_selectionClearPointerId != event.pointer) return;
+    _resetSelectionClearPointer();
+  }
+
+  void _resetSelectionClearPointer() {
+    _selectionClearPointerId = null;
+    _selectionClearPointerDownPosition = null;
+    _selectionClearPointerDownTime = null;
+    _selectionClearPointerMoved = false;
   }
 
   @override
@@ -2419,530 +2515,535 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           // Build the main content in a Stack so it can overlay the loading indicator.
           body: Listener(
             behavior: HitTestBehavior.opaque,
-            onPointerDown: (_) {
-              _commentsSelectionKey.currentState?.clearSelection();
-              _commentsSelectionKey.currentState?.hideToolbar();
-            },
+            onPointerDown: _handleSelectionClearPointerDown,
+            onPointerMove: _handleSelectionClearPointerMove,
+            onPointerUp: _handleSelectionClearPointerUp,
+            onPointerCancel: _handleSelectionClearPointerCancel,
             child: Stack(
               children: [
                 RepaintBoundary(
-                  child: SelectionArea(
-                    key: _commentsSelectionKey,
-                    child: RefreshIndicator(
-                      onRefresh: () async {
-                        // Re-fetch post details when the user pulls down.
-                        await _fetchPostDetails();
-                      },
-                      child: CustomScrollView(
-                        controller: _scrollController,
-                        physics: Platform.isIOS
-                            ? const AlwaysScrollableScrollPhysics(
-                                parent: BouncingScrollPhysics())
-                            : const AlwaysScrollableScrollPhysics(
-                                parent: ClampingScrollPhysics()),
-                        slivers: [
-                          SliverToBoxAdapter(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: [
-                                if (profileImageUrl != null && username != null)
-                                  Padding(
-                                    padding: const EdgeInsets.all(8.0),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Flexible(
-                                          child: GestureDetector(
-                                            onTap: () {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) =>
-                                                      UserProfileScreen(
-                                                    nickname: linkUsername ??
-                                                        username!,
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                            child: Container(
-                                              padding: const EdgeInsets.only(
-                                                  right: 6.0),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Container(
-                                                    width: 36,
-                                                    height: 36,
-                                                    decoration:
-                                                        const BoxDecoration(
-                                                      color: Colors.transparent,
-                                                      borderRadius:
-                                                          BorderRadius.zero,
-                                                    ),
-                                                    child: Image.network(
-                                                      profileImageUrl!,
-                                                      fit: BoxFit.cover,
-                                                      alignment:
-                                                          Alignment.center,
-
-                                                      // Shows while loading (no infinite spinner risk)
-                                                      loadingBuilder: (context,
-                                                          child,
-                                                          loadingProgress) {
-                                                        if (loadingProgress ==
-                                                            null) {
-                                                          return child;
-                                                        }
-                                                        return const Center(
-                                                          child:
-                                                              CircularProgressIndicator(
-                                                                  strokeWidth:
-                                                                      2),
-                                                        );
-                                                      },
-
-                                                      // Handles errors safely
-                                                      errorBuilder: (context,
-                                                          error, stackTrace) {
-                                                        return Image.asset(
-                                                          'assets/images/defaultpic.gif',
-                                                          fit: BoxFit.cover,
-                                                        );
-                                                      },
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 10),
-                                                  Flexible(
-                                                    child: FittedBox(
-                                                      fit: BoxFit.scaleDown,
-                                                      alignment:
-                                                          Alignment.centerLeft,
-                                                      child: Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
-                                                        children: [
-                                                          ...iconBeforeUrls.map(
-                                                            (url) => Padding(
-                                                              padding:
-                                                                  const EdgeInsets
-                                                                      .only(
-                                                                      right:
-                                                                          4.0),
-                                                              child:
-                                                                  Image.network(
-                                                                url,
-                                                                width: 20,
-                                                                height: 20,
-                                                                errorBuilder: (context,
-                                                                        error,
-                                                                        stackTrace) =>
-                                                                    const Icon(
-                                                                  Icons.error,
-                                                                  size: 20,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                          Text(
-                                                            username!,
-                                                            style:
-                                                                const TextStyle(
-                                                              fontSize: 15,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
-                                                            ),
-                                                          ),
-                                                          ...iconAfterUrls.map(
-                                                            (url) => Padding(
-                                                              padding:
-                                                                  const EdgeInsets
-                                                                      .only(
-                                                                      left:
-                                                                          4.0),
-                                                              child:
-                                                                  Image.network(
-                                                                url,
-                                                                width: 20,
-                                                                height: 20,
-                                                                errorBuilder: (context,
-                                                                        error,
-                                                                        stackTrace) =>
-                                                                    const Icon(
-                                                                  Icons.error,
-                                                                  size: 20,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        if (!(currentUsername != null &&
-                                            currentUsername == username))
-                                          SizedBox(
-                                            width: 94,
-                                            height: 24,
-                                            child: ElevatedButton(
-                                              onPressed: _watchLinksLoading
-                                                  ? null
-                                                  : () =>
-                                                      _handleWatchButtonPressed(),
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: isWatching
-                                                    ? Colors.black
-                                                    : const Color(0xFFE09321),
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(2),
-                                                ),
-                                                side: const BorderSide(
-                                                    color: Color(0xFFE09321)),
-                                              ),
-                                              child: FittedBox(
-                                                fit: BoxFit.scaleDown,
-                                                child: _watchLinksLoading
-                                                    ? const SizedBox(
-                                                        width: 14,
-                                                        height: 14,
-                                                        child:
-                                                            CircularProgressIndicator(
-                                                          strokeWidth: 2,
-                                                          color: Colors.white,
-                                                        ),
-                                                      )
-                                                    : Text(
-                                                        isWatching
-                                                            ? "-Watch"
-                                                            : "+Watch",
-                                                        style: TextStyle(
-                                                          color: isWatching
-                                                              ? Colors.white
-                                                              : Colors.white,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                        ),
-                                                      ),
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                if (fullViewImageUrl != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 0.0),
-                                    child: GestureDetector(
-                                      onLongPressStart: (details) async {
-                                        final tapPosition =
-                                            details.globalPosition;
-                                        final selected = await showMenu<String>(
-                                          context: context,
-                                          position: RelativeRect.fromLTRB(
-                                            tapPosition.dx,
-                                            tapPosition.dy,
-                                            tapPosition.dx,
-                                            tapPosition.dy,
-                                          ),
-                                          items: [
-                                            const PopupMenuItem(
-                                              value: 'download',
-                                              child: Text('Download'),
-                                            ),
-                                            const PopupMenuItem(
-                                              value: 'share',
-                                              child: Text('Share image'),
-                                            ),
-                                          ],
-                                        );
-                                        if (selected == 'download') {
-                                          debugPrint(
-                                              "$fullViewImageUrl image2");
-                                          await _downloadImage(
-                                              context, fullViewImageUrl!);
-                                        } else if (selected == 'share') {
-                                          await _shareImage(
-                                              context, fullViewImageUrl!);
-                                        }
-                                      },
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                AvatarDownloadScreen(
-                                              imageUrl: fullViewImageUrl!,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                      child: ClipRect(
-                                        child: LayoutBuilder(
-                                          builder: (context, constraints) {
-                                            final aspectRatio =
-                                                (imageWidth != null &&
-                                                        imageHeight != null)
-                                                    ? imageWidth! / imageHeight!
-                                                    : 16 / 9;
-                                            return AspectRatio(
-                                              aspectRatio: aspectRatio,
-                                              child: InteractiveViewer(
-                                                minScale: 1.0,
-                                                maxScale: 10.0,
-                                                child: Image.network(
-                                                  fullViewImageUrl!,
-                                                  fit: BoxFit.contain,
-                                                  loadingBuilder: (
-                                                    BuildContext context,
-                                                    Widget child,
-                                                    ImageChunkEvent?
-                                                        loadingProgress,
-                                                  ) {
-                                                    if (loadingProgress ==
-                                                        null) {
-                                                      return child;
-                                                    }
-                                                    return Container(
-                                                      color: Colors.black,
-                                                      child: Center(
-                                                        child:
-                                                            CircularProgressIndicator(
-                                                          value: loadingProgress
-                                                                      .expectedTotalBytes !=
-                                                                  null
-                                                              ? loadingProgress
-                                                                      .cumulativeBytesLoaded /
-                                                                  (loadingProgress
-                                                                          .expectedTotalBytes ??
-                                                                      1)
-                                                              : null,
-                                                          valueColor:
-                                                              const AlwaysStoppedAnimation<
-                                                                  Color>(
-                                                            Color(0xFFE09321),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    );
-                                                  },
-                                                  errorBuilder: (context, error,
-                                                      stackTrace) {
-                                                    return Container(
-                                                      color: Colors.black,
-                                                      child: const Center(
-                                                        child: Icon(
-                                                          Icons.error_outline,
-                                                          color: Colors.red,
-                                                          size: 40,
-                                                        ),
-                                                      ),
-                                                    );
-                                                  },
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      await _fetchPostDetails();
+                    },
+                    child: CustomScrollView(
+                      controller: _scrollController,
+                      physics: Platform.isIOS
+                          ? const AlwaysScrollableScrollPhysics(
+                              parent: BouncingScrollPhysics())
+                          : const AlwaysScrollableScrollPhysics(
+                              parent: ClampingScrollPhysics()),
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            children: [
+                              if (profileImageUrl != null && username != null)
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Flexible(
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    UserProfileScreen(
+                                                  nickname:
+                                                      linkUsername ?? username!,
                                                 ),
                                               ),
                                             );
                                           },
+                                          child: Container(
+                                            padding: const EdgeInsets.only(
+                                                right: 6.0),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Container(
+                                                  width: 36,
+                                                  height: 36,
+                                                  decoration:
+                                                      const BoxDecoration(
+                                                    color: Colors.transparent,
+                                                    borderRadius:
+                                                        BorderRadius.zero,
+                                                  ),
+                                                  child: Image.network(
+                                                    profileImageUrl!,
+                                                    fit: BoxFit.cover,
+                                                    alignment: Alignment.center,
+
+                                                    // Shows while loading (no infinite spinner risk)
+                                                    loadingBuilder: (context,
+                                                        child,
+                                                        loadingProgress) {
+                                                      if (loadingProgress ==
+                                                          null) {
+                                                        return child;
+                                                      }
+                                                      return const Center(
+                                                        child:
+                                                            CircularProgressIndicator(
+                                                                strokeWidth: 2),
+                                                      );
+                                                    },
+
+                                                    // Handles errors safely
+                                                    errorBuilder: (context,
+                                                        error, stackTrace) {
+                                                      return Image.asset(
+                                                        'assets/images/defaultpic.gif',
+                                                        fit: BoxFit.cover,
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Flexible(
+                                                  child: FittedBox(
+                                                    fit: BoxFit.scaleDown,
+                                                    alignment:
+                                                        Alignment.centerLeft,
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        ...iconBeforeUrls.map(
+                                                          (url) => Padding(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .only(
+                                                                    right: 4.0),
+                                                            child:
+                                                                Image.network(
+                                                              url,
+                                                              width: 20,
+                                                              height: 20,
+                                                              errorBuilder: (context,
+                                                                      error,
+                                                                      stackTrace) =>
+                                                                  const Icon(
+                                                                Icons.error,
+                                                                size: 20,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          username!,
+                                                          style:
+                                                              const TextStyle(
+                                                            fontSize: 15,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                        ...iconAfterUrls.map(
+                                                          (url) => Padding(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .only(
+                                                                    left: 4.0),
+                                                            child:
+                                                                Image.network(
+                                                              url,
+                                                              width: 20,
+                                                              height: 20,
+                                                              errorBuilder: (context,
+                                                                      error,
+                                                                      stackTrace) =>
+                                                                  const Icon(
+                                                                Icons.error,
+                                                                size: 20,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ),
-                                const Divider(
-                                  height: 5.0,
-                                  color: Color(0xFF111111),
-                                  thickness: 5.0,
-                                ),
-                                const Divider(
-                                  height: 3.0,
-                                  color: Colors.black,
-                                  thickness: 3.0,
-                                ),
-                                const Divider(
-                                  height: 3.0,
-                                  color: Color(0xFF111111),
-                                  thickness: 3.0,
-                                ),
-                                if (submissionTitle != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                        bottom: 4.0, top: 4.0),
-                                    child: Text(
-                                      submissionTitle!,
-                                      style: const TextStyle(
-                                        fontSize: 23,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                                if (publicationTime != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 8.0),
-                                    child: GestureDetector(
-                                      onTap: () {
-                                        // Toggle between full and short date display.
-                                        setState(() {
-                                          _showFullPublicationDate =
-                                              !_showFullPublicationDate;
-                                        });
-                                      },
-                                      child: Text(
-                                        '${getFormattedPublicationTime()}',
-                                        style: const TextStyle(
-                                            fontSize: 13, color: Colors.grey),
-                                      ),
-                                    ),
-                                  ),
-                                const Divider(
-                                  height: 5.0,
-                                  color: Color(0xFF111111),
-                                  thickness: 5.0,
-                                ),
-                                const Divider(
-                                  height: 2.0,
-                                  color: Colors.black,
-                                  thickness: 2.0,
-                                ),
-                                const Divider(
-                                  height: 3.0,
-                                  color: Color(0xFF111111),
-                                  thickness: 3.0,
-                                ),
-                                if (_isWebViewVisible &&
-                                    submissionDescription != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                        right: 16.0, left: 16.0, top: 16.0),
-                                    child: GestureDetector(
-                                      onLongPressStart: (LongPressStartDetails
-                                          details) async {
-                                        final RenderBox overlay =
-                                            Overlay.of(context)
-                                                    .context
-                                                    .findRenderObject()
-                                                as RenderBox;
-                                        final RelativeRect position =
-                                            RelativeRect.fromRect(
-                                          details.globalPosition &
-                                              const Size(40, 40),
-                                          Offset.zero & overlay.size,
-                                        );
-                                        final selected = await showMenu<String>(
-                                          context: context,
-                                          position: position,
-                                          items: const [
-                                            PopupMenuItem<String>(
-                                              value: 'copy',
-                                              child: Text('Copy'),
+                                      if (!(currentUsername != null &&
+                                          currentUsername == username))
+                                        SizedBox(
+                                          width: 94,
+                                          height: 24,
+                                          child: ElevatedButton(
+                                            onPressed: _watchLinksLoading
+                                                ? null
+                                                : () =>
+                                                    _handleWatchButtonPressed(),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: isWatching
+                                                  ? Colors.black
+                                                  : const Color(0xFFE09321),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(2),
+                                              ),
+                                              side: const BorderSide(
+                                                  color: Color(0xFFE09321)),
                                             ),
-                                            PopupMenuItem<String>(
-                                              value: 'select',
-                                              child: Text('Select Text'),
+                                            child: FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              child: _watchLinksLoading
+                                                  ? const SizedBox(
+                                                      width: 14,
+                                                      height: 14,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        color: Colors.white,
+                                                      ),
+                                                    )
+                                                  : Text(
+                                                      isWatching
+                                                          ? "-Watch"
+                                                          : "+Watch",
+                                                      style: TextStyle(
+                                                        color: isWatching
+                                                            ? Colors.white
+                                                            : Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
                                             ),
-                                          ],
-                                        );
-                                        if (selected == 'copy') {
-                                          String? plainText =
-                                              await _submissionWebViewKey
-                                                  .currentState
-                                                  ?.getPlainText();
-                                          if (plainText != null) {
-                                            await Clipboard.setData(
-                                                ClipboardData(text: plainText));
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                              const SnackBar(
-                                                  content: Text(
-                                                      'Text copied to clipboard')),
-                                            );
-                                          }
-                                        } else if (selected == 'select') {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) =>
-                                                  SubmissionDescriptionWebViewScreen(
-                                                submissionId:
-                                                    widget.uniqueNumber,
-                                                initialHtml:
-                                                    submissionDescription,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              if (fullViewImageUrl != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 0.0),
+                                  child: GestureDetector(
+                                    onLongPressStart: (details) async {
+                                      final tapPosition =
+                                          details.globalPosition;
+                                      final selected = await showMenu<String>(
+                                        context: context,
+                                        position: RelativeRect.fromLTRB(
+                                          tapPosition.dx,
+                                          tapPosition.dy,
+                                          tapPosition.dx,
+                                          tapPosition.dy,
+                                        ),
+                                        items: [
+                                          const PopupMenuItem(
+                                            value: 'download',
+                                            child: Text('Download'),
+                                          ),
+                                          const PopupMenuItem(
+                                            value: 'share',
+                                            child: Text('Share image'),
+                                          ),
+                                        ],
+                                      );
+                                      if (selected == 'download') {
+                                        debugPrint("$fullViewImageUrl image2");
+                                        await _downloadImage(
+                                            context, fullViewImageUrl!);
+                                      } else if (selected == 'share') {
+                                        await _shareImage(
+                                            context, fullViewImageUrl!);
+                                      }
+                                    },
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              AvatarDownloadScreen(
+                                            imageUrl: fullViewImageUrl!,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: ClipRect(
+                                      child: LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          final aspectRatio =
+                                              (imageWidth != null &&
+                                                      imageHeight != null)
+                                                  ? imageWidth! / imageHeight!
+                                                  : 16 / 9;
+                                          return AspectRatio(
+                                            aspectRatio: aspectRatio,
+                                            child: InteractiveViewer(
+                                              minScale: 1.0,
+                                              maxScale: 10.0,
+                                              child: Image.network(
+                                                fullViewImageUrl!,
+                                                fit: BoxFit.contain,
+                                                loadingBuilder: (
+                                                  BuildContext context,
+                                                  Widget child,
+                                                  ImageChunkEvent?
+                                                      loadingProgress,
+                                                ) {
+                                                  if (loadingProgress == null) {
+                                                    return child;
+                                                  }
+                                                  return Container(
+                                                    color: Colors.black,
+                                                    child: Center(
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                        value: loadingProgress
+                                                                    .expectedTotalBytes !=
+                                                                null
+                                                            ? loadingProgress
+                                                                    .cumulativeBytesLoaded /
+                                                                (loadingProgress
+                                                                        .expectedTotalBytes ??
+                                                                    1)
+                                                            : null,
+                                                        valueColor:
+                                                            const AlwaysStoppedAnimation<
+                                                                Color>(
+                                                          Color(0xFFE09321),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                                errorBuilder: (context, error,
+                                                    stackTrace) {
+                                                  return Container(
+                                                    color: Colors.black,
+                                                    child: const Center(
+                                                      child: Icon(
+                                                        Icons.error_outline,
+                                                        color: Colors.red,
+                                                        size: 40,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
                                               ),
                                             ),
                                           );
-                                        }
-                                      },
-                                      child: SubmissionDescriptionWebView(
-                                        key: ValueKey(
-                                            submissionDescription.hashCode),
-                                        submissionId: widget.uniqueNumber,
-                                        initialHtml: submissionDescription,
-                                        enableTextSelection: false,
-                                        forceHybridComposition: false,
-                                        onHeightChanged: (double height) {
-                                          if (!_webViewLoaded) {
-                                            Future.delayed(
-                                                const Duration(
-                                                    milliseconds: 25), () {
-                                              if (mounted) {
-                                                setState(() {
-                                                  _webViewLoaded = true;
-                                                });
-                                              }
-                                            });
-                                          }
                                         },
                                       ),
                                     ),
                                   ),
-                                const Divider(
-                                  height: 2.0,
-                                  color: Color(0xFF111111),
-                                  thickness: 2.0,
                                 ),
-                                const Divider(
-                                  height: 3.0,
-                                  color: Colors.black,
-                                  thickness: 3.0,
+                              const Divider(
+                                height: 5.0,
+                                color: Color(0xFF111111),
+                                thickness: 5.0,
+                              ),
+                              const Divider(
+                                height: 3.0,
+                                color: Colors.black,
+                                thickness: 3.0,
+                              ),
+                              const Divider(
+                                height: 3.0,
+                                color: Color(0xFF111111),
+                                thickness: 3.0,
+                              ),
+                              if (submissionTitle != null ||
+                                  publicationTime != null)
+                                SelectionArea(
+                                  key: _titleSelectionKey,
+                                  onSelectionChanged: _updateTitleSelectedText,
+                                  contextMenuBuilder:
+                                      ReadOnlySelectionContextMenu.builder(
+                                    selectedTextProvider: () =>
+                                        _titleSelectedText,
+                                    includeIosTranslate: true,
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (submissionTitle != null)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                              bottom: 4.0, top: 4.0),
+                                          child: Text(
+                                            submissionTitle!,
+                                            style: const TextStyle(
+                                              fontSize: 23,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                      if (publicationTime != null)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                              bottom: 8.0),
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              setState(() {
+                                                _showFullPublicationDate =
+                                                    !_showFullPublicationDate;
+                                              });
+                                            },
+                                            child: Text(
+                                              '${getFormattedPublicationTime()}',
+                                              style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.grey),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ),
-                                const Divider(
-                                  height: 4.0,
-                                  color: Color(0xFF111111),
-                                  thickness: 4.0,
-                                ),
+                              const Divider(
+                                height: 5.0,
+                                color: Color(0xFF111111),
+                                thickness: 5.0,
+                              ),
+                              const Divider(
+                                height: 2.0,
+                                color: Colors.black,
+                                thickness: 2.0,
+                              ),
+                              const Divider(
+                                height: 3.0,
+                                color: Color(0xFF111111),
+                                thickness: 3.0,
+                              ),
+                              if (_isWebViewVisible &&
+                                  submissionDescription != null)
                                 Padding(
                                   padding: const EdgeInsets.only(
-                                      right: 0.0,
-                                      left: 0.0,
-                                      top: 11.0,
-                                      bottom: 0.0),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: [
-                                      _buildPublicationAndViewsRow(),
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                            bottom: 0.0, top: 11.0),
-                                        child: const Divider(
-                                          height: 3.0,
-                                          color: Color(0xFF111111),
-                                          thickness: 3.0,
-                                        ),
+                                      right: 16.0, left: 16.0, top: 16.0),
+                                  child: GestureDetector(
+                                    onLongPressStart:
+                                        (LongPressStartDetails details) async {
+                                      final RenderBox overlay =
+                                          Overlay.of(context)
+                                              .context
+                                              .findRenderObject() as RenderBox;
+                                      final RelativeRect position =
+                                          RelativeRect.fromRect(
+                                        details.globalPosition &
+                                            const Size(40, 40),
+                                        Offset.zero & overlay.size,
+                                      );
+                                      final selected = await showMenu<String>(
+                                        context: context,
+                                        position: position,
+                                        items: const [
+                                          PopupMenuItem<String>(
+                                            value: 'copy',
+                                            child: Text('Copy'),
+                                          ),
+                                          PopupMenuItem<String>(
+                                            value: 'select',
+                                            child: Text('Select Text'),
+                                          ),
+                                        ],
+                                      );
+                                      if (selected == 'copy') {
+                                        String? plainText =
+                                            await _submissionWebViewKey
+                                                .currentState
+                                                ?.getPlainText();
+                                        if (plainText != null) {
+                                          await Clipboard.setData(
+                                              ClipboardData(text: plainText));
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                                content: Text(
+                                                    'Text copied to clipboard')),
+                                          );
+                                        }
+                                      } else if (selected == 'select') {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                SubmissionDescriptionWebViewScreen(
+                                              submissionId: widget.uniqueNumber,
+                                              initialHtml:
+                                                  submissionDescription,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    child: SubmissionDescriptionWebView(
+                                      key: ValueKey(
+                                          submissionDescription.hashCode),
+                                      submissionId: widget.uniqueNumber,
+                                      initialHtml: submissionDescription,
+                                      enableTextSelection: false,
+                                      forceHybridComposition: false,
+                                      onHeightChanged: (double height) {
+                                        if (!_webViewLoaded) {
+                                          Future.delayed(
+                                              const Duration(milliseconds: 25),
+                                              () {
+                                            if (mounted) {
+                                              setState(() {
+                                                _webViewLoaded = true;
+                                              });
+                                            }
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              const Divider(
+                                height: 2.0,
+                                color: Color(0xFF111111),
+                                thickness: 2.0,
+                              ),
+                              const Divider(
+                                height: 3.0,
+                                color: Colors.black,
+                                thickness: 3.0,
+                              ),
+                              const Divider(
+                                height: 4.0,
+                                color: Color(0xFF111111),
+                                thickness: 4.0,
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                    right: 0.0,
+                                    left: 0.0,
+                                    top: 11.0,
+                                    bottom: 0.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    _buildPublicationAndViewsRow(),
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                          bottom: 0.0, top: 11.0),
+                                      child: const Divider(
+                                        height: 3.0,
+                                        color: Color(0xFF111111),
+                                        thickness: 3.0,
                                       ),
-                                      SizedBox(
-                                        height: 50,
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceEvenly,
-                                          children: [
-                                            /*
+                                    ),
+                                    SizedBox(
+                                      height: 50,
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceEvenly,
+                                        children: [
+                                          /*
                               Expanded(
                                 child: IconButton(
                                   icon: const Icon(
@@ -2971,196 +3072,190 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                               ),
 
                                */
-                                            Expanded(
-                                              child: IconButton(
-                                                icon: const Icon(
-                                                  Icons.mail_outline,
-                                                  size: 26,
-                                                  color: Colors.grey,
-                                                ),
-                                                onPressed: () {
-                                                  if (linkUsername != null) {
-                                                    Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder: (context) =>
-                                                            NewMessageScreen(
-                                                          recipient:
-                                                              linkUsername!,
-                                                        ),
+                                          Expanded(
+                                            child: IconButton(
+                                              icon: const Icon(
+                                                Icons.mail_outline,
+                                                size: 26,
+                                                color: Colors.grey,
+                                              ),
+                                              onPressed: () {
+                                                if (linkUsername != null) {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (context) =>
+                                                          NewMessageScreen(
+                                                        recipient:
+                                                            linkUsername!,
                                                       ),
-                                                    );
-                                                  } else {
-                                                    ScaffoldMessenger.of(
-                                                            context)
-                                                        .showSnackBar(
-                                                      const SnackBar(
-                                                        content: Text(
-                                                            'Recipient username is unavailable.'),
-                                                        backgroundColor:
-                                                            Colors.red,
+                                                    ),
+                                                  );
+                                                } else {
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                          'Recipient username is unavailable.'),
+                                                      backgroundColor:
+                                                          Colors.red,
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                              splashRadius: 24,
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: IconButton(
+                                              icon: const Icon(
+                                                Icons.photo_library_outlined,
+                                                size: 26,
+                                                color: Colors.grey,
+                                              ),
+                                              onPressed: () {
+                                                if (linkUsername != null) {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (context) =>
+                                                          UserProfileScreen(
+                                                        nickname: linkUsername!,
+                                                        initialSection:
+                                                            ProfileSection
+                                                                .Gallery,
                                                       ),
-                                                    );
-                                                  }
-                                                },
-                                                splashRadius: 24,
-                                              ),
+                                                    ),
+                                                  );
+                                                } else {
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                          'Username is unavailable.'),
+                                                      backgroundColor:
+                                                          Colors.red,
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                              splashRadius: 24,
                                             ),
-                                            Expanded(
-                                              child: IconButton(
-                                                icon: const Icon(
-                                                  Icons.photo_library_outlined,
-                                                  size: 26,
-                                                  color: Colors.grey,
+                                          ),
+                                          Expanded(
+                                            child: IconButton(
+                                              icon: LikeButton(
+                                                isLiked: isFavorited,
+                                                size: 26,
+                                                circleColor: const CircleColor(
+                                                  start: Colors.red,
+                                                  end: Colors.redAccent,
                                                 ),
-                                                onPressed: () {
-                                                  if (linkUsername != null) {
-                                                    Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder: (context) =>
-                                                            UserProfileScreen(
-                                                          nickname:
-                                                              linkUsername!,
-                                                          initialSection:
-                                                              ProfileSection
-                                                                  .Gallery,
-                                                        ),
-                                                      ),
-                                                    );
-                                                  } else {
-                                                    ScaffoldMessenger.of(
-                                                            context)
-                                                        .showSnackBar(
-                                                      const SnackBar(
-                                                        content: Text(
-                                                            'Username is unavailable.'),
-                                                        backgroundColor:
-                                                            Colors.red,
-                                                      ),
-                                                    );
-                                                  }
-                                                },
-                                                splashRadius: 24,
-                                              ),
-                                            ),
-                                            Expanded(
-                                              child: IconButton(
-                                                icon: LikeButton(
-                                                  isLiked: isFavorited,
-                                                  size: 26,
-                                                  circleColor:
-                                                      const CircleColor(
-                                                    start: Colors.red,
-                                                    end: Colors.redAccent,
-                                                  ),
-                                                  bubblesColor:
-                                                      const BubblesColor(
-                                                    dotPrimaryColor: Colors.red,
-                                                    dotSecondaryColor:
-                                                        Colors.redAccent,
-                                                  ),
-                                                  likeBuilder: (bool isLiked) {
-                                                    return Icon(
-                                                      isLiked
-                                                          ? Icons.favorite
-                                                          : Icons
-                                                              .favorite_border,
-                                                      color: isLiked
-                                                          ? Colors.red
-                                                          : Colors.grey,
-                                                      size: 26,
-                                                    );
-                                                  },
-                                                  animationDuration:
-                                                      const Duration(
-                                                          milliseconds: 500),
-                                                  onTap: _toggleFavorite,
+                                                bubblesColor:
+                                                    const BubblesColor(
+                                                  dotPrimaryColor: Colors.red,
+                                                  dotSecondaryColor:
+                                                      Colors.redAccent,
                                                 ),
-                                                onPressed: () {
-                                                  _toggleFavorite(isFavorited);
+                                                likeBuilder: (bool isLiked) {
+                                                  return Icon(
+                                                    isLiked
+                                                        ? Icons.favorite
+                                                        : Icons.favorite_border,
+                                                    color: isLiked
+                                                        ? Colors.red
+                                                        : Colors.grey,
+                                                    size: 26,
+                                                  );
                                                 },
-                                                splashRadius: 24,
+                                                animationDuration:
+                                                    const Duration(
+                                                        milliseconds: 500),
+                                                onTap: _toggleFavorite,
                                               ),
+                                              onPressed: () {
+                                                _toggleFavorite(isFavorited);
+                                              },
+                                              splashRadius: 24,
                                             ),
-                                            Expanded(
-                                              child: IconButton(
-                                                icon: Icon(
-                                                  Icons.numbers,
-                                                  size: 26,
-                                                  color: _showTagsSection
-                                                      ? const Color(0xFFE09321)
-                                                      : Colors.grey,
-                                                ),
-                                                onPressed: () {
-                                                  setState(() {
-                                                    _showTagsSection =
-                                                        !_showTagsSection;
-                                                  });
-                                                },
-                                                splashRadius: 24,
+                                          ),
+                                          Expanded(
+                                            child: IconButton(
+                                              icon: Icon(
+                                                Icons.numbers,
+                                                size: 26,
+                                                color: _showTagsSection
+                                                    ? const Color(0xFFE09321)
+                                                    : Colors.grey,
                                               ),
+                                              onPressed: () {
+                                                setState(() {
+                                                  _showTagsSection =
+                                                      !_showTagsSection;
+                                                });
+                                              },
+                                              splashRadius: 24,
                                             ),
-                                            Expanded(
-                                              child: IconButton(
-                                                icon: const Icon(
-                                                  Icons.share_outlined,
-                                                  size: 26,
-                                                  color: Colors.grey,
-                                                ),
-                                                onPressed: _sharePost,
-                                                splashRadius: 24,
+                                          ),
+                                          Expanded(
+                                            child: IconButton(
+                                              icon: const Icon(
+                                                Icons.share_outlined,
+                                                size: 26,
+                                                color: Colors.grey,
                                               ),
+                                              onPressed: _sharePost,
+                                              splashRadius: 24,
                                             ),
-                                          ],
-                                        ),
+                                          ),
+                                        ],
                                       ),
-                                      AnimatedSize(
-                                        duration:
-                                            const Duration(milliseconds: 250),
-                                        curve: Curves.easeInOut,
-                                        child: _showTagsSection
-                                            ? _buildTagsPanel()
-                                            : const SizedBox.shrink(),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                    AnimatedSize(
+                                      duration:
+                                          const Duration(milliseconds: 250),
+                                      curve: Curves.easeInOut,
+                                      child: _showTagsSection
+                                          ? _buildTagsPanel()
+                                          : const SizedBox.shrink(),
+                                    ),
+                                  ],
                                 ),
-                                const Divider(
-                                  height: 3.0,
-                                  color: Color(0xFF111111),
-                                  thickness: 3.0,
-                                ),
-                                const Divider(
-                                  height: 4.0,
-                                  color: Colors.black,
-                                  thickness: 4.0,
-                                ),
-                              ],
-                            ),
+                              ),
+                              const Divider(
+                                height: 3.0,
+                                color: Color(0xFF111111),
+                                thickness: 3.0,
+                              ),
+                              const Divider(
+                                height: 4.0,
+                                color: Colors.black,
+                                thickness: 4.0,
+                              ),
+                            ],
                           ),
-                          ..._buildCommentSlivers(),
-                          SliverToBoxAdapter(
-                            child: ListenableBuilder(
-                              listenable: Listenable.merge([
-                                _isCommentComposerExpanded,
-                                _commentDraftCollapsedLines,
-                              ]),
-                              builder: (context, _) {
-                                final isExpanded =
-                                    _isCommentComposerExpanded.value;
-                                final collapsedPreviewLines =
-                                    _commentDraftCollapsedLines.value;
-                                final composerSpacerHeight = isExpanded
-                                    ? 198.0
-                                    : (72.0 +
-                                        ((collapsedPreviewLines - 1) * 24.0));
-                                return SizedBox(height: composerSpacerHeight);
-                              },
-                            ),
+                        ),
+                        ..._buildCommentSlivers(),
+                        SliverToBoxAdapter(
+                          child: ListenableBuilder(
+                            listenable: Listenable.merge([
+                              _isCommentComposerExpanded,
+                              _commentDraftCollapsedLines,
+                            ]),
+                            builder: (context, _) {
+                              final isExpanded =
+                                  _isCommentComposerExpanded.value;
+                              final collapsedPreviewLines =
+                                  _commentDraftCollapsedLines.value;
+                              final composerSpacerHeight = isExpanded
+                                  ? 198.0
+                                  : (72.0 +
+                                      ((collapsedPreviewLines - 1) * 24.0));
+                              return SizedBox(height: composerSpacerHeight);
+                            },
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -3512,8 +3607,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     );
   }
 
-  final _commentsSelectionKey = GlobalKey<SelectableRegionState>();
-
   List<Widget> _buildCommentSlivers() {
     if (comments.isEmpty) {
       return const [
@@ -3538,6 +3631,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           delegate: SliverChildBuilderDelegate(
             (context, index) {
               final comment = comments[index];
+              final selectionId = _commentSelectionId(comment, index);
               final previousComment = index > 0 ? comments[index - 1] : null;
               final nextComment =
                   index + 1 < comments.length ? comments[index + 1] : null;
@@ -3630,6 +3724,14 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                   final commentHtml = comment['commentHtml'] ?? '';
                   await _handleCommentLink(context, url, commentHtml);
                 },
+                selectionAreaKey: _commentSelectionKeyFor(selectionId),
+                onSelectionChanged: (content) =>
+                    _updateCommentSelectedText(selectionId, content),
+                contextMenuBuilder: ReadOnlySelectionContextMenu.builder(
+                  selectedTextProvider: () =>
+                      _selectedCommentTextFor(selectionId),
+                  includeIosTranslate: true,
+                ),
               );
             },
             childCount: comments.length,
