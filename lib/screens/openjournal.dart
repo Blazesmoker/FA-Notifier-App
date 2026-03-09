@@ -839,457 +839,500 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
       child: Scaffold(
         resizeToAvoidBottomInset: false,
         appBar: AppBar(
-        title: const Text("Journal"),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _closeJournal,
-        ),
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            position: PopupMenuPosition.under,
-            offset: const Offset(0, 8),
-            onSelected: (value) {
-              switch (value) {
-                case 'share':
-                  _sharePost();
-                  break;
-                case 'edit':
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => CreateJournalScreen(
-                        uniqueNumber: widget.uniqueNumber,
-                      ),
-                    ),
-                  ).then((_) => _fetchPostDetailsNew());
-                  break;
-                case 'delete':
-                  if (!isOwner) {
-                    showAppSnackBar(context,
-                        'You do not have permission to delete this journal.',
-                        backgroundColor: Colors.red);
-                    break;
-                  }
-                  unawaited(_confirmAndDeleteJournal());
-                  break;
-              }
-            },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(
-                value: 'share',
-                child: Text('Share'),
-              ),
-              if (isOwner)
-                const PopupMenuItem<String>(
-                  value: 'edit',
-                  child: Text('Edit'),
-                ),
-              if (isOwner)
-                const PopupMenuItem<String>(
-                  value: 'delete',
-                  child: Text('Delete'),
-                ),
-            ],
+          title: const Text("Journal"),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _closeJournal,
           ),
-        ],
-      ),
+          actions: [
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              position: PopupMenuPosition.under,
+              offset: const Offset(0, 8),
+              onSelected: (value) {
+                switch (value) {
+                  case 'share':
+                    _sharePost();
+                    break;
+                  case 'edit':
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => CreateJournalScreen(
+                          uniqueNumber: widget.uniqueNumber,
+                        ),
+                      ),
+                    ).then((_) => _fetchPostDetailsNew());
+                    break;
+                  case 'delete':
+                    if (!isOwner) {
+                      showAppSnackBar(context,
+                          'You do not have permission to delete this journal.',
+                          backgroundColor: Colors.red);
+                      break;
+                    }
+                    unawaited(_confirmAndDeleteJournal());
+                    break;
+                }
+              },
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                const PopupMenuItem<String>(
+                  value: 'share',
+                  child: Text('Share'),
+                ),
+                if (isOwner)
+                  const PopupMenuItem<String>(
+                    value: 'edit',
+                    child: Text('Edit'),
+                  ),
+                if (isOwner)
+                  const PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Text('Delete'),
+                  ),
+              ],
+            ),
+          ],
+        ),
         body: isLoading
-          ? const Center(
-              child: PulsatingLoadingIndicator(
-                  size: 78.0, assetPath: 'assets/icons/fathemed.png'))
-          : Stack(
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.deferToChild,
-                  onTap: () {
-                    FocusScope.of(context).unfocus();
-                  },
-                  child: SelectionArea(
-                    key: _journalSelectionKey,
-                    child: RefreshIndicator(
-                      onRefresh: _fetchPostDetailsNew,
-                      child: CustomScrollView(
-                        controller: _scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        slivers: [
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 4.0, horizontal: 8.0),
-                              child: Card(
-                                color: const Color(0xFF151515),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12.0),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          if (profileImageUrl != null)
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                  right: 8.0, top: 4.0),
-                                              child: GestureDetector(
-                                                onTap: () {
+            ? const Center(
+                child: PulsatingLoadingIndicator(
+                    size: 78.0, assetPath: 'assets/icons/fathemed.png'))
+            : Stack(
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.deferToChild,
+                    onTap: () {
+                      FocusScope.of(context).unfocus();
+                    },
+                    child: SelectionArea(
+                      key: _journalSelectionKey,
+                      child: RefreshIndicator(
+                        onRefresh: _fetchPostDetailsNew,
+                        child: CustomScrollView(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          slivers: [
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 4.0, horizontal: 8.0),
+                                child: Card(
+                                  color: const Color(0xFF151515),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            if (profileImageUrl != null)
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                    right: 8.0, top: 4.0),
+                                                child: GestureDetector(
+                                                  onTap: () {
+                                                    if (authorUserName !=
+                                                            null &&
+                                                        authorUserName!
+                                                            .isNotEmpty) {
+                                                      Navigator.push(
+                                                        context,
+                                                        MaterialPageRoute(
+                                                          builder: (context) =>
+                                                              UserProfileScreen(
+                                                            nickname:
+                                                                authorUserName!,
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                  child: Image.network(
+                                                    profileImageUrl!,
+                                                    width: 46,
+                                                    height: 46,
+                                                    fit: BoxFit.cover,
+                                                    loadingBuilder: (context,
+                                                        child,
+                                                        loadingProgress) {
+                                                      if (loadingProgress ==
+                                                          null) {
+                                                        return child;
+                                                      }
+                                                      return Image.asset(
+                                                        'assets/images/defaultpic.gif',
+                                                        width: 46,
+                                                        height: 46,
+                                                        fit: BoxFit.cover,
+                                                      );
+                                                    },
+                                                    errorBuilder: (context,
+                                                        error, stackTrace) {
+                                                      return Image.asset(
+                                                        'assets/images/defaultpic.gif',
+                                                        width: 46,
+                                                        height: 46,
+                                                        fit: BoxFit.cover,
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
+                                              ),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    authorDisplayName ??
+                                                        authorUserName ??
+                                                        'Anonymous',
+                                                    style: const TextStyle(
+                                                        fontSize: 13,
+                                                        fontWeight:
+                                                            FontWeight.bold),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
                                                   if (authorUserName != null &&
                                                       authorUserName!
-                                                          .isNotEmpty) {
-                                                    Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder: (context) =>
-                                                            UserProfileScreen(
-                                                          nickname:
-                                                              authorUserName!,
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
-                                                child: Image.network(
-                                                  profileImageUrl!,
-                                                  width: 46,
-                                                  height: 46,
-                                                  fit: BoxFit.cover,
-                                                  loadingBuilder: (context,
-                                                      child, loadingProgress) {
-                                                    if (loadingProgress ==
-                                                        null) {
-                                                      return child;
-                                                    }
-                                                    return Image.asset(
-                                                      'assets/images/defaultpic.gif',
-                                                      width: 46,
-                                                      height: 46,
-                                                      fit: BoxFit.cover,
-                                                    );
-                                                  },
-                                                  errorBuilder: (context, error,
-                                                      stackTrace) {
-                                                    return Image.asset(
-                                                      'assets/images/defaultpic.gif',
-                                                      width: 46,
-                                                      height: 46,
-                                                      fit: BoxFit.cover,
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  authorDisplayName ??
-                                                      authorUserName ??
-                                                      'Anonymous',
-                                                  style: const TextStyle(
-                                                      fontSize: 13,
-                                                      fontWeight:
-                                                          FontWeight.bold),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                                if (authorUserName != null &&
-                                                    authorUserName!.isNotEmpty)
-                                                  Text(
-                                                    '${(authorSymbol == null || authorSymbol!.isEmpty) ? '@' : authorSymbol!}${authorUserName!}',
-                                                    style: const TextStyle(
-                                                        fontSize: 11,
-                                                        color:
-                                                            Color(0xFFE09321)),
-                                                  ),
-                                                if (!isJournalClassic &&
-                                                    (authorUserTitle ?? '')
-                                                        .isNotEmpty)
-                                                  Text(
-                                                    authorUserTitle!,
-                                                    style: TextStyle(
-                                                        fontSize: 12,
-                                                        color: Colors
-                                                            .grey.shade400),
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      Divider(
-                                          color: Colors.grey.shade900,
-                                          thickness: 1.5,
-                                          height: 24),
-                                      Text(
-                                        submissionTitle ?? '',
-                                        style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                          'Posted on: ${getFormattedPublicationTime() ?? ''}'),
-                                      Divider(
-                                          color: Colors.grey.shade900,
-                                          thickness: 1.5,
-                                          height: 24),
-                                      Theme(
-                                          data: Theme.of(context).copyWith(
-                                            textSelectionTheme:
-                                                TextSelectionThemeData(
-                                              selectionColor:
-                                                  const Color(0xFFE09321)
-                                                      .withOpacity(0.4),
-                                              selectionHandleColor:
-                                                  const Color(0xFFE09321),
-                                            ),
-                                          ),
-                                          child: html_pkg.Html(
-                                            data: submissionDescription ?? '',
-                                            style: {
-                                              "body": html_pkg.Style(
-                                                textAlign: TextAlign.left,
-                                                fontSize: html_pkg.FontSize(16),
-                                                padding:
-                                                    html_pkg.HtmlPaddings.zero,
-                                                margin: html_pkg.Margins.zero,
-                                                backgroundColor:
-                                                    Colors.transparent,
-                                              ),
-                                              "a": html_pkg.Style(
-                                                textDecoration:
-                                                    TextDecoration.none,
-                                                color: const Color(0xFFE09321),
-                                              ),
-                                              "hr": html_pkg.Style(
-                                                padding: html_pkg.HtmlPaddings
-                                                    .symmetric(vertical: 8),
-                                                margin:
-                                                    html_pkg.Margins.symmetric(
-                                                        vertical: 8),
-                                                height: html_pkg.Height(1),
-                                              ),
-                                              ".bbcode_center": html_pkg.Style(
-                                                textAlign: TextAlign.center,
-                                                display: html_pkg.Display.block,
-                                              ),
-                                              ".bbcode_right": html_pkg.Style(
-                                                textAlign: TextAlign.right,
-                                                display: html_pkg.Display.block,
-                                              ),
-                                              ".bbcode_left": html_pkg.Style(
-                                                textAlign: TextAlign.left,
-                                                display: html_pkg.Display.block,
-                                              ),
-                                            },
-                                            onLinkTap: (url, _, __) => handleFALink(
-                                                context, url!,
-                                                htmlSource:
-                                                    submissionDescription,
-                                                getFullUrl:
-                                                    _getFullLinkFromFetchedHtml),
-                                            extensions: [
-                                              html_pkg.TagExtension(
-                                                tagsToExtend: {"i"},
-                                                builder:
-                                                    (html_pkg.ExtensionContext
-                                                        context) {
-                                                  final classAttr = context
-                                                      .attributes['class'];
-                                                  if (classAttr ==
-                                                      'bbcode bbcode_i') {
-                                                    return Text(
-                                                      context.styledElement
-                                                              ?.element?.text ??
-                                                          "",
+                                                          .isNotEmpty)
+                                                    Text(
+                                                      '${(authorSymbol == null || authorSymbol!.isEmpty) ? '@' : authorSymbol!}${authorUserName!}',
                                                       style: const TextStyle(
-                                                        fontStyle:
-                                                            FontStyle.italic,
-                                                        color: Colors.white,
-                                                      ),
-                                                    );
-                                                  }
-                                                  switch (classAttr) {
-                                                    case 'smilie tongue':
-                                                      return Image.asset(
-                                                          'assets/emojis/tongue.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie evil':
-                                                      return Image.asset(
-                                                          'assets/emojis/evil.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie lmao':
-                                                      return Image.asset(
-                                                          'assets/emojis/lmao.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie gift':
-                                                      return Image.asset(
-                                                          'assets/emojis/gift.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie derp':
-                                                      return Image.asset(
-                                                          'assets/emojis/derp.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie teeth':
-                                                      return Image.asset(
-                                                          'assets/emojis/teeth.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie cool':
-                                                      return Image.asset(
-                                                          'assets/emojis/cool.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie huh':
-                                                      return Image.asset(
-                                                          'assets/emojis/huh.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie cd':
-                                                      return Image.asset(
-                                                          'assets/emojis/cd.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie coffee':
-                                                      return Image.asset(
-                                                          'assets/emojis/coffee.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie sarcastic':
-                                                      return Image.asset(
-                                                          'assets/emojis/sarcastic.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie veryhappy':
-                                                      return Image.asset(
-                                                          'assets/emojis/veryhappy.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie wink':
-                                                      return Image.asset(
-                                                          'assets/emojis/wink.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie whatever':
-                                                      return Image.asset(
-                                                          'assets/emojis/whatever.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie crying':
-                                                      return Image.asset(
-                                                          'assets/emojis/crying.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie love':
-                                                      return Image.asset(
-                                                          'assets/emojis/love.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie serious':
-                                                      return Image.asset(
-                                                          'assets/emojis/serious.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie yelling':
-                                                      return Image.asset(
-                                                          'assets/emojis/yelling.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie oooh':
-                                                      return Image.asset(
-                                                          'assets/emojis/oooh.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie angel':
-                                                      return Image.asset(
-                                                          'assets/emojis/angel.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie dunno':
-                                                      return Image.asset(
-                                                          'assets/emojis/dunno.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie nerd':
-                                                      return Image.asset(
-                                                          'assets/emojis/nerd.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie sad':
-                                                      return Image.asset(
-                                                          'assets/emojis/sad.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie zipped':
-                                                      return Image.asset(
-                                                          'assets/emojis/zipped.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie smile':
-                                                      return Image.asset(
-                                                          'assets/emojis/smile.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie badhairday':
-                                                      return Image.asset(
-                                                          'assets/emojis/badhairday.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie embarrassed':
-                                                      return Image.asset(
-                                                          'assets/emojis/embarrassed.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie note':
-                                                      return Image.asset(
-                                                          'assets/emojis/note.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    case 'smilie sleepy':
-                                                      return Image.asset(
-                                                          'assets/emojis/sleepy.png',
-                                                          width: 20,
-                                                          height: 20);
-                                                    default:
+                                                          fontSize: 11,
+                                                          color: Color(
+                                                              0xFFE09321)),
+                                                    ),
+                                                  if (!isJournalClassic &&
+                                                      (authorUserTitle ?? '')
+                                                          .isNotEmpty)
+                                                    Text(
+                                                      authorUserTitle!,
+                                                      style: TextStyle(
+                                                          fontSize: 12,
+                                                          color: Colors
+                                                              .grey.shade400),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Divider(
+                                            color: Colors.grey.shade900,
+                                            thickness: 1.5,
+                                            height: 24),
+                                        Text(
+                                          submissionTitle ?? '',
+                                          style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                            'Posted on: ${getFormattedPublicationTime() ?? ''}'),
+                                        Divider(
+                                            color: Colors.grey.shade900,
+                                            thickness: 1.5,
+                                            height: 24),
+                                        Theme(
+                                            data: Theme.of(context).copyWith(
+                                              textSelectionTheme:
+                                                  TextSelectionThemeData(
+                                                selectionColor:
+                                                    const Color(0xFFE09321)
+                                                        .withOpacity(0.4),
+                                                selectionHandleColor:
+                                                    const Color(0xFFE09321),
+                                              ),
+                                            ),
+                                            child: html_pkg.Html(
+                                              data: submissionDescription ?? '',
+                                              style: {
+                                                "body": html_pkg.Style(
+                                                  textAlign: TextAlign.left,
+                                                  fontSize:
+                                                      html_pkg.FontSize(16),
+                                                  padding: html_pkg
+                                                      .HtmlPaddings.zero,
+                                                  margin: html_pkg.Margins.zero,
+                                                  backgroundColor:
+                                                      Colors.transparent,
+                                                ),
+                                                "a": html_pkg.Style(
+                                                  textDecoration:
+                                                      TextDecoration.none,
+                                                  color:
+                                                      const Color(0xFFE09321),
+                                                ),
+                                                "hr": html_pkg.Style(
+                                                  padding: html_pkg.HtmlPaddings
+                                                      .symmetric(vertical: 8),
+                                                  margin: html_pkg.Margins
+                                                      .symmetric(vertical: 8),
+                                                  height: html_pkg.Height(1),
+                                                ),
+                                                ".bbcode_center":
+                                                    html_pkg.Style(
+                                                  textAlign: TextAlign.center,
+                                                  display:
+                                                      html_pkg.Display.block,
+                                                ),
+                                                ".bbcode_right": html_pkg.Style(
+                                                  textAlign: TextAlign.right,
+                                                  display:
+                                                      html_pkg.Display.block,
+                                                ),
+                                                ".bbcode_left": html_pkg.Style(
+                                                  textAlign: TextAlign.left,
+                                                  display:
+                                                      html_pkg.Display.block,
+                                                ),
+                                              },
+                                              onLinkTap: (url, _, __) =>
+                                                  handleFALink(context, url!,
+                                                      htmlSource:
+                                                          submissionDescription,
+                                                      getFullUrl:
+                                                          _getFullLinkFromFetchedHtml),
+                                              extensions: [
+                                                html_pkg.TagExtension(
+                                                  tagsToExtend: {"i"},
+                                                  builder:
+                                                      (html_pkg.ExtensionContext
+                                                          context) {
+                                                    final classAttr = context
+                                                        .attributes['class'];
+                                                    if (classAttr ==
+                                                        'bbcode bbcode_i') {
+                                                      return Text(
+                                                        context
+                                                                .styledElement
+                                                                ?.element
+                                                                ?.text ??
+                                                            "",
+                                                        style: const TextStyle(
+                                                          fontStyle:
+                                                              FontStyle.italic,
+                                                          color: Colors.white,
+                                                        ),
+                                                      );
+                                                    }
+                                                    switch (classAttr) {
+                                                      case 'smilie tongue':
+                                                        return Image.asset(
+                                                            'assets/emojis/tongue.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie evil':
+                                                        return Image.asset(
+                                                            'assets/emojis/evil.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie lmao':
+                                                        return Image.asset(
+                                                            'assets/emojis/lmao.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie gift':
+                                                        return Image.asset(
+                                                            'assets/emojis/gift.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie derp':
+                                                        return Image.asset(
+                                                            'assets/emojis/derp.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie teeth':
+                                                        return Image.asset(
+                                                            'assets/emojis/teeth.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie cool':
+                                                        return Image.asset(
+                                                            'assets/emojis/cool.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie huh':
+                                                        return Image.asset(
+                                                            'assets/emojis/huh.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie cd':
+                                                        return Image.asset(
+                                                            'assets/emojis/cd.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie coffee':
+                                                        return Image.asset(
+                                                            'assets/emojis/coffee.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie sarcastic':
+                                                        return Image.asset(
+                                                            'assets/emojis/sarcastic.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie veryhappy':
+                                                        return Image.asset(
+                                                            'assets/emojis/veryhappy.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie wink':
+                                                        return Image.asset(
+                                                            'assets/emojis/wink.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie whatever':
+                                                        return Image.asset(
+                                                            'assets/emojis/whatever.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie crying':
+                                                        return Image.asset(
+                                                            'assets/emojis/crying.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie love':
+                                                        return Image.asset(
+                                                            'assets/emojis/love.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie serious':
+                                                        return Image.asset(
+                                                            'assets/emojis/serious.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie yelling':
+                                                        return Image.asset(
+                                                            'assets/emojis/yelling.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie oooh':
+                                                        return Image.asset(
+                                                            'assets/emojis/oooh.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie angel':
+                                                        return Image.asset(
+                                                            'assets/emojis/angel.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie dunno':
+                                                        return Image.asset(
+                                                            'assets/emojis/dunno.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie nerd':
+                                                        return Image.asset(
+                                                            'assets/emojis/nerd.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie sad':
+                                                        return Image.asset(
+                                                            'assets/emojis/sad.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie zipped':
+                                                        return Image.asset(
+                                                            'assets/emojis/zipped.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie smile':
+                                                        return Image.asset(
+                                                            'assets/emojis/smile.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie badhairday':
+                                                        return Image.asset(
+                                                            'assets/emojis/badhairday.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie embarrassed':
+                                                        return Image.asset(
+                                                            'assets/emojis/embarrassed.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie note':
+                                                        return Image.asset(
+                                                            'assets/emojis/note.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      case 'smilie sleepy':
+                                                        return Image.asset(
+                                                            'assets/emojis/sleepy.png',
+                                                            width: 20,
+                                                            height: 20);
+                                                      default:
+                                                        return const SizedBox
+                                                            .shrink();
+                                                    }
+                                                  },
+                                                ),
+                                                html_pkg.TagExtension(
+                                                  tagsToExtend: {"img"},
+                                                  builder:
+                                                      (html_pkg.ExtensionContext
+                                                          context) {
+                                                    final src = context
+                                                        .attributes['src'];
+                                                    if (src == null)
                                                       return const SizedBox
                                                           .shrink();
-                                                  }
-                                                },
-                                              ),
-                                              html_pkg.TagExtension(
-                                                tagsToExtend: {"img"},
-                                                builder:
-                                                    (html_pkg.ExtensionContext
-                                                        context) {
-                                                  final src =
-                                                      context.attributes['src'];
-                                                  if (src == null)
-                                                    return const SizedBox
-                                                        .shrink();
-                                                  final resolvedUrl =
-                                                      src.startsWith('//')
-                                                          ? 'https:$src'
-                                                          : src;
-                                                  // Check if this image is a profile emoji.
-                                                  if (resolvedUrl.contains(
-                                                          "a.furaffinity.net") &&
-                                                      resolvedUrl
-                                                          .endsWith(".gif")) {
+                                                    final resolvedUrl =
+                                                        src.startsWith('//')
+                                                            ? 'https:$src'
+                                                            : src;
+                                                    // Check if this image is a profile emoji.
+                                                    if (resolvedUrl.contains(
+                                                            "a.furaffinity.net") &&
+                                                        resolvedUrl
+                                                            .endsWith(".gif")) {
+                                                      return Image.network(
+                                                        resolvedUrl,
+                                                        width:
+                                                            50, // profile emoji size.
+                                                        height: 50,
+                                                        fit: BoxFit.contain,
+                                                        loadingBuilder: (context,
+                                                            child,
+                                                            loadingProgress) {
+                                                          if (loadingProgress ==
+                                                              null) {
+                                                            return child;
+                                                          }
+                                                          return const SizedBox(
+                                                            width: 50,
+                                                            height: 50,
+                                                            child:
+                                                                CircularProgressIndicator(
+                                                                    strokeWidth:
+                                                                        2),
+                                                          );
+                                                        },
+                                                        errorBuilder: (context,
+                                                            error, stackTrace) {
+                                                          return Image.asset(
+                                                            'assets/images/defaultpic.gif',
+                                                            width: 50,
+                                                            height: 50,
+                                                            fit: BoxFit.contain,
+                                                          );
+                                                        },
+                                                      );
+                                                    }
+
                                                     return Image.network(
                                                       resolvedUrl,
-                                                      width:
-                                                          50, // profile emoji size.
+                                                      width: 50,
                                                       height: 50,
-                                                      fit: BoxFit.contain,
+                                                      fit: BoxFit.cover,
                                                       loadingBuilder: (context,
                                                           child,
                                                           loadingProgress) {
@@ -1301,9 +1344,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                                           width: 50,
                                                           height: 50,
                                                           child:
-                                                              CircularProgressIndicator(
-                                                                  strokeWidth:
-                                                                      2),
+                                                              CircularProgressIndicator(),
                                                         );
                                                       },
                                                       errorBuilder: (context,
@@ -1312,397 +1353,440 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                                           'assets/images/defaultpic.gif',
                                                           width: 50,
                                                           height: 50,
-                                                          fit: BoxFit.contain,
+                                                          fit: BoxFit.cover,
                                                         );
                                                       },
                                                     );
-                                                  }
-
-                                                  return Image.network(
-                                                    resolvedUrl,
-                                                    width: 50,
-                                                    height: 50,
-                                                    fit: BoxFit.cover,
-                                                    loadingBuilder: (context,
-                                                        child,
-                                                        loadingProgress) {
-                                                      if (loadingProgress ==
-                                                          null) {
-                                                        return child;
-                                                      }
-                                                      return const SizedBox(
-                                                        width: 50,
-                                                        height: 50,
-                                                        child:
-                                                            CircularProgressIndicator(),
-                                                      );
-                                                    },
-                                                    errorBuilder: (context,
-                                                        error, stackTrace) {
-                                                      return Image.asset(
-                                                        'assets/images/defaultpic.gif',
-                                                        width: 50,
-                                                        height: 50,
-                                                        fit: BoxFit.cover,
-                                                      );
-                                                    },
-                                                  );
-                                                },
-                                              ),
-                                            ],
-                                          ))
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SliverToBoxAdapter(
-                            child: const Divider(
-                              height: 3.0,
-                              color: Color(0xFF111111),
-                              thickness: 3.0,
-                            ),
-                          ),
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12.0, vertical: 12.0),
-                              child: Center(
-                                child: Text(
-                                  commentsCount > 0
-                                      ? '$commentsCount Comments'
-                                      : 'No Comments',
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SliverToBoxAdapter(
-                            child: const Divider(
-                              height: 3.0,
-                              color: Color(0xFF111111),
-                              thickness: 3.0,
-                            ),
-                          ),
-                          const SliverToBoxAdapter(
-                            child: SizedBox(height: 8),
-                          ),
-                          SliverPadding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 8.0),
-                            sliver: SliverList(
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  final comment = comments[index];
-                                  return CommentWidget(
-                                    key:
-                                        ValueKey(comment['commentId'] ?? index),
-                                    comment: comment,
-                                    onHide: (comment['hideLink'] != null)
-                                        ? () => hideComment(comment['hideLink'],
-                                            comment['commentId'] ?? '')
-                                        : null,
-                                    onEdit: (comment['editLink'] != null)
-                                        ? () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) =>
-                                                    EditJournalCommentScreen(
-                                                  comment: comment,
-                                                  editLink: comment['editLink'],
-                                                  onUpdateComment: () async {
-                                                    await _fetchPostDetailsNew();
                                                   },
                                                 ),
-                                              ),
-                                            );
-                                          }
-                                        : null,
-                                    onReply: () async {
-                                      await Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              JournalReplyScreen(
-                                            submissionId: widget.uniqueNumber,
-                                            commentId:
-                                                comment['commentId'] ?? '',
-                                            onSendReply: (replyText) {},
-                                            username: comment['username'] ??
-                                                'Anonymous',
-                                            profileImage:
-                                                comment['profileImage'] ?? '',
-                                            commentHtml: comment['commentHtml'],
-                                            commentText: comment['text'],
-                                          ),
-                                        ),
-                                      ).then((result) {
-                                        if (result == true) {
-                                          _fetchPostDetailsNew();
-                                        }
-                                      });
-                                    },
-                                    onUnhide: (comment['deleted'] == true &&
-                                            comment['unhideLink'] != null)
-                                        ? () => _unhideComment(
-                                            comment['unhideLink'],
-                                            comment['commentId'] ?? '')
-                                        : null,
-                                    handleLink: (url) async {
-                                      final commentHtml =
-                                          comment['commentHtml'] ?? '';
-                                      await handleFALink(
-                                        context,
-                                        url,
-                                        htmlSource: commentHtml,
-                                        getFullUrl: _getFullLinkFromFetchedHtml,
-                                      );
-                                    },
-                                  );
-                                },
-                                childCount: comments.length,
-                              ),
-                            ),
-                          ),
-                          SliverToBoxAdapter(
-                            child: ListenableBuilder(
-                              listenable: Listenable.merge([
-                                _isCommentComposerExpanded,
-                                _commentDraftCollapsedLines,
-                              ]),
-                              builder: (context, _) {
-                                final isExpanded =
-                                    _isCommentComposerExpanded.value;
-                                final collapsedPreviewLines =
-                                    _commentDraftCollapsedLines.value;
-                                final composerSpacerHeight = isExpanded
-                                    ? 198.0
-                                    : (72.0 +
-                                        ((collapsedPreviewLines - 1) * 24.0));
-                                return SizedBox(height: composerSpacerHeight);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned.fill(
-                  child: ValueListenableBuilder<bool>(
-                    valueListenable: _isCommentComposerExpanded,
-                    builder: (context, isExpanded, _) {
-                      if (!isExpanded) {
-                        return const SizedBox.shrink();
-                      }
-                      return GestureDetector(
-                        onTap: () => FocusScope.of(context).unfocus(),
-                        child: Container(
-                          color: Colors.black.withValues(alpha: 0.24),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-        bottomNavigationBar: isLoading
-          ? null
-          : RepaintBoundary(
-              child: Container(
-                color: Colors.black,
-                child: SafeArea(
-                  bottom: true,
-                  child: ListenableBuilder(
-                    listenable: Listenable.merge([
-                      _keyboardInset,
-                      _isCommentComposerExpanded,
-                    ]),
-                    builder: (context, _) {
-                      final keyboardInset = _keyboardInset.value;
-                      final isExpanded = _isCommentComposerExpanded.value;
-                      return Padding(
-                        padding: EdgeInsets.only(
-                          left: 8,
-                          right: 8,
-                          bottom: keyboardInset > 0
-                              ? (keyboardInset - viewPaddingBottom + 8)
-                                  .clamp(0.0, double.infinity)
-                              : 0.0,
-                          top: 8,
-                        ),
-                        child: ListenableBuilder(
-                          listenable: Listenable.merge([
-                            _isCommentComposerExpanded,
-                            _commentDraftCollapsedLines,
-                            _commentDraftHasText,
-                            _showScrollToTopNotifier,
-                            _isSendingInlineComment,
-                          ]),
-                          builder: (context, _) {
-                            final collapsedLines =
-                                _commentDraftCollapsedLines.value;
-                            final hasText = _commentDraftHasText.value;
-                            final isSending = _isSendingInlineComment.value;
-                            final canSend = !isSending && hasText;
-                            final minLines = isExpanded ? 6 : collapsedLines;
-                            final maxLines = isExpanded ? 6 : collapsedLines;
-                            final isCollapsedSingleLine =
-                                !isExpanded && collapsedLines == 1;
-
-                            const compactSingleLineVerticalPadding = 8.0;
-                            final topPadding = isExpanded
-                                ? 12.0
-                                : (isCollapsedSingleLine
-                                    ? compactSingleLineVerticalPadding
-                                    : 8.0);
-                            final bottomPadding = isExpanded
-                                ? 8.0
-                                : (isCollapsedSingleLine
-                                    ? compactSingleLineVerticalPadding
-                                    : 8.0);
-
-                            return Row(
-                              crossAxisAlignment: isCollapsedSingleLine
-                                  ? CrossAxisAlignment.center
-                                  : CrossAxisAlignment.end,
-                              children: [
-                                ClipRect(
-                                  child: AnimatedSize(
-                                    duration: const Duration(milliseconds: 210),
-                                    curve: Curves.easeInOut,
-                                    alignment: Alignment.centerLeft,
-                                    child: ValueListenableBuilder<bool>(
-                                      valueListenable: _showScrollToTopNotifier,
-                                      builder: (context, show, _) {
-                                        return Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            if (show && !isExpanded)
-                                              SizedBox(
-                                                width: 36,
-                                                height: 36,
-                                                child:
-                                                    FloatingActionButton.small(
-                                                  heroTag: 'journal_scroll_top',
-                                                  backgroundColor:
-                                                      const Color(0xFFE09321),
-                                                  elevation: 0,
-                                                  onPressed: () {
-                                                    _scrollController.animateTo(
-                                                      0,
-                                                      duration: const Duration(
-                                                          milliseconds: 300),
-                                                      curve: Curves.easeOut,
-                                                    );
-                                                  },
-                                                  child: const Icon(
-                                                    Icons.arrow_upward,
-                                                    size: 18,
-                                                  ),
-                                                ),
-                                              ),
-                                            if (show && !isExpanded)
-                                              const SizedBox(width: 8),
-                                          ],
-                                        );
-                                      },
+                                              ],
+                                            ))
+                                      ],
                                     ),
                                   ),
                                 ),
-                                Expanded(
-                                  child: Stack(
-                                    children: [
-                                      TextField(
-                                        controller: _commentController,
-                                        focusNode: _commentFocusNode,
-                                        style: const TextStyle(
-                                            color: Colors.white),
-                                        keyboardType: TextInputType.multiline,
-                                        textInputAction:
-                                            TextInputAction.newline,
-                                        minLines: minLines,
-                                        maxLines: maxLines,
-                                        scrollPadding:
-                                            const EdgeInsets.only(bottom: 8),
-                                        decoration: InputDecoration(
-                                          hintText: 'Add a comment...',
-                                          hintStyle: const TextStyle(
-                                              color: Colors.white54),
-                                          contentPadding: EdgeInsets.fromLTRB(
-                                            12,
-                                            topPadding,
-                                            56,
-                                            bottomPadding,
-                                          ),
-                                          filled: true,
-                                          isDense: isCollapsedSingleLine,
-                                          fillColor: const Color(0xFF151515),
-                                          border: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(10),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                        ),
-                                        contextMenuBuilder:
-                                            BBCodeContextMenu.builder(
-                                                _commentController),
-                                      ),
-                                      if (isCollapsedSingleLine)
-                                        Positioned.fill(
-                                          child: Align(
-                                            alignment: Alignment.centerRight,
-                                            child: Padding(
-                                              padding: const EdgeInsets.only(
-                                                  right: 4),
-                                              child: _buildComposerSendButton(
-                                                canSend: canSend,
-                                                isSending: isSending,
-                                                compact: true,
-                                              ),
-                                            ),
-                                          ),
-                                        )
-                                      else
-                                        Positioned(
-                                          top: 4,
-                                          right: 4,
-                                          child: _buildComposerSendButton(
-                                            canSend: canSend,
-                                            isSending: isSending,
-                                          ),
-                                        ),
-                                      if (isExpanded && hasText && !isSending)
-                                        Positioned(
-                                          right: 4,
-                                          bottom: 4,
-                                          child: IconButton(
-                                            icon: const Icon(
-                                              Icons.clear,
-                                              color: Colors.white54,
-                                            ),
-                                            onPressed: () {
-                                              _commentController.clear();
-                                            },
-                                          ),
-                                        ),
-                                    ],
+                              ),
+                            ),
+                            const SliverToBoxAdapter(
+                              child: const Divider(
+                                height: 3.0,
+                                color: Color(0xFF111111),
+                                thickness: 3.0,
+                              ),
+                            ),
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12.0, vertical: 12.0),
+                                child: Center(
+                                  child: Text(
+                                    commentsCount > 0
+                                        ? '$commentsCount Comments'
+                                        : 'No Comments',
+                                    style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold),
                                   ),
                                 ),
-                              ],
-                            );
-                          },
+                              ),
+                            ),
+                            const SliverToBoxAdapter(
+                              child: const Divider(
+                                height: 3.0,
+                                color: Color(0xFF111111),
+                                thickness: 3.0,
+                              ),
+                            ),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: 8),
+                            ),
+                            SliverPadding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8.0),
+                              sliver: SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, index) {
+                                    final comment = comments[index];
+                                    final previousComment =
+                                        index > 0 ? comments[index - 1] : null;
+                                    final nextComment =
+                                        index + 1 < comments.length
+                                            ? comments[index + 1]
+                                            : null;
+                                    final currentNestingLevel =
+                                        ((100.0 -
+                                                    (comment['width'] ?? 100)
+                                                        .toDouble()) /
+                                                3.0)
+                                            .round()
+                                            .clamp(0, 4)
+                                            .toInt();
+                                    final previousNestingLevel =
+                                        previousComment == null
+                                            ? 0
+                                            : ((100.0 -
+                                                        (previousComment[
+                                                                    'width'] ??
+                                                                100)
+                                                            .toDouble()) /
+                                                    3.0)
+                                                .round()
+                                                .clamp(0, 4)
+                                                .toInt();
+                                    final nextNestingLevel = nextComment == null
+                                        ? 0
+                                        : ((100.0 -
+                                                    (nextComment['width'] ??
+                                                            100)
+                                                        .toDouble()) /
+                                                3.0)
+                                            .round()
+                                            .clamp(0, 4)
+                                            .toInt();
+                                    var continuesCurrentLevelBelow = false;
+                                    for (var i = index + 1;
+                                        i < comments.length;
+                                        i++) {
+                                      final futureNestingLevel =
+                                          ((100.0 -
+                                                      (comments[i]['width'] ??
+                                                              100)
+                                                          .toDouble()) /
+                                                  3.0)
+                                              .round()
+                                              .clamp(0, 4)
+                                              .toInt();
+                                      if (futureNestingLevel <
+                                          currentNestingLevel) {
+                                        break;
+                                      }
+                                      if (futureNestingLevel ==
+                                          currentNestingLevel) {
+                                        continuesCurrentLevelBelow = true;
+                                        break;
+                                      }
+                                    }
+                                    return CommentWidget(
+                                      key: ValueKey(
+                                          comment['commentId'] ?? index),
+                                      comment: comment,
+                                      previousNestingLevel:
+                                          previousNestingLevel,
+                                      nextNestingLevel: nextNestingLevel,
+                                      continuesCurrentLevelBelow:
+                                          continuesCurrentLevelBelow,
+                                      onHide: (comment['hideLink'] != null)
+                                          ? () => hideComment(
+                                              comment['hideLink'],
+                                              comment['commentId'] ?? '')
+                                          : null,
+                                      onEdit: (comment['editLink'] != null)
+                                          ? () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      EditJournalCommentScreen(
+                                                    comment: comment,
+                                                    editLink:
+                                                        comment['editLink'],
+                                                    onUpdateComment: () async {
+                                                      await _fetchPostDetailsNew();
+                                                    },
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          : null,
+                                      onReply: () async {
+                                        await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                JournalReplyScreen(
+                                              submissionId: widget.uniqueNumber,
+                                              commentId:
+                                                  comment['commentId'] ?? '',
+                                              onSendReply: (replyText) {},
+                                              username: comment['username'] ??
+                                                  'Anonymous',
+                                              profileImage:
+                                                  comment['profileImage'] ?? '',
+                                              commentHtml:
+                                                  comment['commentHtml'],
+                                              commentText: comment['text'],
+                                            ),
+                                          ),
+                                        ).then((result) {
+                                          if (result == true) {
+                                            _fetchPostDetailsNew();
+                                          }
+                                        });
+                                      },
+                                      onUnhide: (comment['deleted'] == true &&
+                                              comment['unhideLink'] != null)
+                                          ? () => _unhideComment(
+                                              comment['unhideLink'],
+                                              comment['commentId'] ?? '')
+                                          : null,
+                                      handleLink: (url) async {
+                                        final commentHtml =
+                                            comment['commentHtml'] ?? '';
+                                        await handleFALink(
+                                          context,
+                                          url,
+                                          htmlSource: commentHtml,
+                                          getFullUrl:
+                                              _getFullLinkFromFetchedHtml,
+                                        );
+                                      },
+                                    );
+                                  },
+                                  childCount: comments.length,
+                                ),
+                              ),
+                            ),
+                            SliverToBoxAdapter(
+                              child: ListenableBuilder(
+                                listenable: Listenable.merge([
+                                  _isCommentComposerExpanded,
+                                  _commentDraftCollapsedLines,
+                                ]),
+                                builder: (context, _) {
+                                  final isExpanded =
+                                      _isCommentComposerExpanded.value;
+                                  final collapsedPreviewLines =
+                                      _commentDraftCollapsedLines.value;
+                                  final composerSpacerHeight = isExpanded
+                                      ? 198.0
+                                      : (72.0 +
+                                          ((collapsedPreviewLines - 1) * 24.0));
+                                  return SizedBox(height: composerSpacerHeight);
+                                },
+                              ),
+                            ),
+                          ],
                         ),
-                      );
-                    },
+                      ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: ValueListenableBuilder<bool>(
+                      valueListenable: _isCommentComposerExpanded,
+                      builder: (context, isExpanded, _) {
+                        if (!isExpanded) {
+                          return const SizedBox.shrink();
+                        }
+                        return GestureDetector(
+                          onTap: () => FocusScope.of(context).unfocus(),
+                          child: Container(
+                            color: Colors.black.withValues(alpha: 0.24),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+        bottomNavigationBar: isLoading
+            ? null
+            : RepaintBoundary(
+                child: Container(
+                  color: Colors.black,
+                  child: SafeArea(
+                    bottom: true,
+                    child: ListenableBuilder(
+                      listenable: Listenable.merge([
+                        _keyboardInset,
+                        _isCommentComposerExpanded,
+                      ]),
+                      builder: (context, _) {
+                        final keyboardInset = _keyboardInset.value;
+                        final isExpanded = _isCommentComposerExpanded.value;
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            left: 8,
+                            right: 8,
+                            bottom: keyboardInset > 0
+                                ? (keyboardInset - viewPaddingBottom + 8)
+                                    .clamp(0.0, double.infinity)
+                                : 0.0,
+                            top: 8,
+                          ),
+                          child: ListenableBuilder(
+                            listenable: Listenable.merge([
+                              _isCommentComposerExpanded,
+                              _commentDraftCollapsedLines,
+                              _commentDraftHasText,
+                              _showScrollToTopNotifier,
+                              _isSendingInlineComment,
+                            ]),
+                            builder: (context, _) {
+                              final collapsedLines =
+                                  _commentDraftCollapsedLines.value;
+                              final hasText = _commentDraftHasText.value;
+                              final isSending = _isSendingInlineComment.value;
+                              final canSend = !isSending && hasText;
+                              final minLines = isExpanded ? 6 : collapsedLines;
+                              final maxLines = isExpanded ? 6 : collapsedLines;
+                              final isCollapsedSingleLine =
+                                  !isExpanded && collapsedLines == 1;
+
+                              const compactSingleLineVerticalPadding = 8.0;
+                              final topPadding = isExpanded
+                                  ? 12.0
+                                  : (isCollapsedSingleLine
+                                      ? compactSingleLineVerticalPadding
+                                      : 8.0);
+                              final bottomPadding = isExpanded
+                                  ? 8.0
+                                  : (isCollapsedSingleLine
+                                      ? compactSingleLineVerticalPadding
+                                      : 8.0);
+
+                              return Row(
+                                crossAxisAlignment: isCollapsedSingleLine
+                                    ? CrossAxisAlignment.center
+                                    : CrossAxisAlignment.end,
+                                children: [
+                                  ClipRect(
+                                    child: AnimatedSize(
+                                      duration:
+                                          const Duration(milliseconds: 210),
+                                      curve: Curves.easeInOut,
+                                      alignment: Alignment.centerLeft,
+                                      child: ValueListenableBuilder<bool>(
+                                        valueListenable:
+                                            _showScrollToTopNotifier,
+                                        builder: (context, show, _) {
+                                          return Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (show && !isExpanded)
+                                                SizedBox(
+                                                  width: 36,
+                                                  height: 36,
+                                                  child: FloatingActionButton
+                                                      .small(
+                                                    heroTag:
+                                                        'journal_scroll_top',
+                                                    backgroundColor:
+                                                        const Color(0xFFE09321),
+                                                    elevation: 0,
+                                                    onPressed: () {
+                                                      _scrollController
+                                                          .animateTo(
+                                                        0,
+                                                        duration:
+                                                            const Duration(
+                                                                milliseconds:
+                                                                    300),
+                                                        curve: Curves.easeOut,
+                                                      );
+                                                    },
+                                                    child: const Icon(
+                                                      Icons.arrow_upward,
+                                                      size: 18,
+                                                    ),
+                                                  ),
+                                                ),
+                                              if (show && !isExpanded)
+                                                const SizedBox(width: 8),
+                                            ],
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Stack(
+                                      children: [
+                                        TextField(
+                                          controller: _commentController,
+                                          focusNode: _commentFocusNode,
+                                          style: const TextStyle(
+                                              color: Colors.white),
+                                          keyboardType: TextInputType.multiline,
+                                          textInputAction:
+                                              TextInputAction.newline,
+                                          minLines: minLines,
+                                          maxLines: maxLines,
+                                          scrollPadding:
+                                              const EdgeInsets.only(bottom: 8),
+                                          decoration: InputDecoration(
+                                            hintText: 'Add a comment...',
+                                            hintStyle: const TextStyle(
+                                                color: Colors.white54),
+                                            contentPadding: EdgeInsets.fromLTRB(
+                                              12,
+                                              topPadding,
+                                              56,
+                                              bottomPadding,
+                                            ),
+                                            filled: true,
+                                            isDense: isCollapsedSingleLine,
+                                            fillColor: const Color(0xFF151515),
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              borderSide: BorderSide.none,
+                                            ),
+                                          ),
+                                          contextMenuBuilder:
+                                              BBCodeContextMenu.builder(
+                                                  _commentController),
+                                        ),
+                                        if (isCollapsedSingleLine)
+                                          Positioned.fill(
+                                            child: Align(
+                                              alignment: Alignment.centerRight,
+                                              child: Padding(
+                                                padding: const EdgeInsets.only(
+                                                    right: 4),
+                                                child: _buildComposerSendButton(
+                                                  canSend: canSend,
+                                                  isSending: isSending,
+                                                  compact: true,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                        else
+                                          Positioned(
+                                            top: 4,
+                                            right: 4,
+                                            child: _buildComposerSendButton(
+                                              canSend: canSend,
+                                              isSending: isSending,
+                                            ),
+                                          ),
+                                        if (isExpanded && hasText && !isSending)
+                                          Positioned(
+                                            right: 4,
+                                            bottom: 4,
+                                            child: IconButton(
+                                              icon: const Icon(
+                                                Icons.clear,
+                                                color: Colors.white54,
+                                              ),
+                                              onPressed: () {
+                                                _commentController.clear();
+                                              },
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
-            ),
       ),
     );
   }

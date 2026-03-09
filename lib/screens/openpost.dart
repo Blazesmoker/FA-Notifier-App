@@ -238,11 +238,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     if ((inset - previousInset).abs() > 0.5) {
       _keyboardInset.value = inset;
 
-
       final keyboardJustClosed = previousInset > 0 && inset <= 0.5;
       if (keyboardJustClosed && _commentFocusNode.hasFocus) {
         _commentFocusNode.unfocus();
-         }
+      }
     }
   }
 
@@ -1395,7 +1394,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                         opacity: 0,
                         child: TextField(
                           autofillHints: const [AutofillHints.username],
-                          controller: TextEditingController(text: currentUsername),
+                          controller:
+                              TextEditingController(text: currentUsername),
                           readOnly: true,
                           enableInteractiveSelection: false,
                           focusNode: _AlwaysDisabledFocusNode(),
@@ -2174,7 +2174,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           actions: [
             TextButton(
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 minimumSize: Size.zero,
               ),
@@ -2183,7 +2184,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
             ),
             TextButton(
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 minimumSize: Size.zero,
               ),
@@ -2432,505 +2434,515 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                         await _fetchPostDetails();
                       },
                       child: CustomScrollView(
-                      controller: _scrollController,
-                      physics: Platform.isIOS
-                          ? const AlwaysScrollableScrollPhysics(
-                              parent: BouncingScrollPhysics())
-                          : const AlwaysScrollableScrollPhysics(
-                              parent: ClampingScrollPhysics()),
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: [
-                              if (profileImageUrl != null && username != null)
-                                Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Flexible(
-                                        child: GestureDetector(
-                                          onTap: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) =>
-                                                    UserProfileScreen(
-                                                  nickname:
-                                                      linkUsername ?? username!,
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.only(
-                                                right: 6.0),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Container(
-                                                  width: 36,
-                                                  height: 36,
-                                                  decoration:
-                                                      const BoxDecoration(
-                                                    color: Colors.transparent,
-                                                    borderRadius:
-                                                        BorderRadius.zero,
+                        controller: _scrollController,
+                        physics: Platform.isIOS
+                            ? const AlwaysScrollableScrollPhysics(
+                                parent: BouncingScrollPhysics())
+                            : const AlwaysScrollableScrollPhysics(
+                                parent: ClampingScrollPhysics()),
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              children: [
+                                if (profileImageUrl != null && username != null)
+                                  Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Flexible(
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      UserProfileScreen(
+                                                    nickname: linkUsername ??
+                                                        username!,
                                                   ),
-                                                  child: Image.network(
-                                                    profileImageUrl!,
-                                                    fit: BoxFit.cover,
-                                                    alignment: Alignment.center,
+                                                ),
+                                              );
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.only(
+                                                  right: 6.0),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Container(
+                                                    width: 36,
+                                                    height: 36,
+                                                    decoration:
+                                                        const BoxDecoration(
+                                                      color: Colors.transparent,
+                                                      borderRadius:
+                                                          BorderRadius.zero,
+                                                    ),
+                                                    child: Image.network(
+                                                      profileImageUrl!,
+                                                      fit: BoxFit.cover,
+                                                      alignment:
+                                                          Alignment.center,
 
-                                                    // Shows while loading (no infinite spinner risk)
-                                                    loadingBuilder: (context,
-                                                        child,
-                                                        loadingProgress) {
-                                                      if (loadingProgress ==
-                                                          null) {
-                                                        return child;
-                                                      }
-                                                      return const Center(
+                                                      // Shows while loading (no infinite spinner risk)
+                                                      loadingBuilder: (context,
+                                                          child,
+                                                          loadingProgress) {
+                                                        if (loadingProgress ==
+                                                            null) {
+                                                          return child;
+                                                        }
+                                                        return const Center(
+                                                          child:
+                                                              CircularProgressIndicator(
+                                                                  strokeWidth:
+                                                                      2),
+                                                        );
+                                                      },
+
+                                                      // Handles errors safely
+                                                      errorBuilder: (context,
+                                                          error, stackTrace) {
+                                                        return Image.asset(
+                                                          'assets/images/defaultpic.gif',
+                                                          fit: BoxFit.cover,
+                                                        );
+                                                      },
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 10),
+                                                  Flexible(
+                                                    child: FittedBox(
+                                                      fit: BoxFit.scaleDown,
+                                                      alignment:
+                                                          Alignment.centerLeft,
+                                                      child: Row(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          ...iconBeforeUrls.map(
+                                                            (url) => Padding(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .only(
+                                                                      right:
+                                                                          4.0),
+                                                              child:
+                                                                  Image.network(
+                                                                url,
+                                                                width: 20,
+                                                                height: 20,
+                                                                errorBuilder: (context,
+                                                                        error,
+                                                                        stackTrace) =>
+                                                                    const Icon(
+                                                                  Icons.error,
+                                                                  size: 20,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          Text(
+                                                            username!,
+                                                            style:
+                                                                const TextStyle(
+                                                              fontSize: 15,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                            ),
+                                                          ),
+                                                          ...iconAfterUrls.map(
+                                                            (url) => Padding(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .only(
+                                                                      left:
+                                                                          4.0),
+                                                              child:
+                                                                  Image.network(
+                                                                url,
+                                                                width: 20,
+                                                                height: 20,
+                                                                errorBuilder: (context,
+                                                                        error,
+                                                                        stackTrace) =>
+                                                                    const Icon(
+                                                                  Icons.error,
+                                                                  size: 20,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        if (!(currentUsername != null &&
+                                            currentUsername == username))
+                                          SizedBox(
+                                            width: 94,
+                                            height: 24,
+                                            child: ElevatedButton(
+                                              onPressed: _watchLinksLoading
+                                                  ? null
+                                                  : () =>
+                                                      _handleWatchButtonPressed(),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: isWatching
+                                                    ? Colors.black
+                                                    : const Color(0xFFE09321),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(2),
+                                                ),
+                                                side: const BorderSide(
+                                                    color: Color(0xFFE09321)),
+                                              ),
+                                              child: FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: _watchLinksLoading
+                                                    ? const SizedBox(
+                                                        width: 14,
+                                                        height: 14,
                                                         child:
                                                             CircularProgressIndicator(
-                                                                strokeWidth: 2),
-                                                      );
-                                                    },
-
-                                                    // Handles errors safely
-                                                    errorBuilder: (context,
-                                                        error, stackTrace) {
-                                                      return Image.asset(
-                                                        'assets/images/defaultpic.gif',
-                                                        fit: BoxFit.cover,
-                                                      );
-                                                    },
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 10),
-                                                Flexible(
-                                                  child: FittedBox(
-                                                    fit: BoxFit.scaleDown,
-                                                    alignment:
-                                                        Alignment.centerLeft,
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        ...iconBeforeUrls.map(
-                                                          (url) => Padding(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .only(
-                                                                    right: 4.0),
-                                                            child:
-                                                                Image.network(
-                                                              url,
-                                                              width: 20,
-                                                              height: 20,
-                                                              errorBuilder: (context,
-                                                                      error,
-                                                                      stackTrace) =>
-                                                                  const Icon(
-                                                                Icons.error,
-                                                                size: 20,
-                                                              ),
-                                                            ),
-                                                          ),
+                                                          strokeWidth: 2,
+                                                          color: Colors.white,
                                                         ),
-                                                        Text(
-                                                          username!,
-                                                          style:
-                                                              const TextStyle(
-                                                            fontSize: 15,
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                          ),
-                                                        ),
-                                                        ...iconAfterUrls.map(
-                                                          (url) => Padding(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .only(
-                                                                    left: 4.0),
-                                                            child:
-                                                                Image.network(
-                                                              url,
-                                                              width: 20,
-                                                              height: 20,
-                                                              errorBuilder: (context,
-                                                                      error,
-                                                                      stackTrace) =>
-                                                                  const Icon(
-                                                                Icons.error,
-                                                                size: 20,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      if (!(currentUsername != null &&
-                                          currentUsername == username))
-                                        SizedBox(
-                                          width: 94,
-                                          height: 24,
-                                          child: ElevatedButton(
-                                            onPressed: _watchLinksLoading
-                                                ? null
-                                                : () =>
-                                                    _handleWatchButtonPressed(),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: isWatching
-                                                  ? Colors.black
-                                                  : const Color(0xFFE09321),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(2),
-                                              ),
-                                              side: const BorderSide(
-                                                  color: Color(0xFFE09321)),
-                                            ),
-                                            child: FittedBox(
-                                              fit: BoxFit.scaleDown,
-                                              child: _watchLinksLoading
-                                                  ? const SizedBox(
-                                                      width: 14,
-                                                      height: 14,
-                                                      child:
-                                                          CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                        color: Colors.white,
-                                                      ),
-                                                    )
-                                                  : Text(
-                                                      isWatching
-                                                          ? "-Watch"
-                                                          : "+Watch",
-                                                      style: TextStyle(
-                                                        color: isWatching
-                                                            ? Colors.white
-                                                            : Colors.white,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              if (fullViewImageUrl != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 0.0),
-                                  child: GestureDetector(
-                                    onLongPressStart: (details) async {
-                                      final tapPosition =
-                                          details.globalPosition;
-                                      final selected = await showMenu<String>(
-                                        context: context,
-                                        position: RelativeRect.fromLTRB(
-                                          tapPosition.dx,
-                                          tapPosition.dy,
-                                          tapPosition.dx,
-                                          tapPosition.dy,
-                                        ),
-                                        items: [
-                                          const PopupMenuItem(
-                                            value: 'download',
-                                            child: Text('Download'),
-                                          ),
-                                          const PopupMenuItem(
-                                            value: 'share',
-                                            child: Text('Share image'),
-                                          ),
-                                        ],
-                                      );
-                                      if (selected == 'download') {
-                                        debugPrint("$fullViewImageUrl image2");
-                                        await _downloadImage(
-                                            context, fullViewImageUrl!);
-                                      } else if (selected == 'share') {
-                                        await _shareImage(
-                                            context, fullViewImageUrl!);
-                                      }
-                                    },
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              AvatarDownloadScreen(
-                                            imageUrl: fullViewImageUrl!,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    child: ClipRect(
-                                      child: LayoutBuilder(
-                                        builder: (context, constraints) {
-                                          final aspectRatio =
-                                              (imageWidth != null &&
-                                                      imageHeight != null)
-                                                  ? imageWidth! / imageHeight!
-                                                  : 16 / 9;
-                                          return AspectRatio(
-                                            aspectRatio: aspectRatio,
-                                            child: InteractiveViewer(
-                                              minScale: 1.0,
-                                              maxScale: 10.0,
-                                              child: Image.network(
-                                                fullViewImageUrl!,
-                                                fit: BoxFit.contain,
-                                                loadingBuilder: (
-                                                  BuildContext context,
-                                                  Widget child,
-                                                  ImageChunkEvent?
-                                                      loadingProgress,
-                                                ) {
-                                                  if (loadingProgress == null) {
-                                                    return child;
-                                                  }
-                                                  return Container(
-                                                    color: Colors.black,
-                                                    child: Center(
-                                                      child:
-                                                          CircularProgressIndicator(
-                                                        value: loadingProgress
-                                                                    .expectedTotalBytes !=
-                                                                null
-                                                            ? loadingProgress
-                                                                    .cumulativeBytesLoaded /
-                                                                (loadingProgress
-                                                                        .expectedTotalBytes ??
-                                                                    1)
-                                                            : null,
-                                                        valueColor:
-                                                            const AlwaysStoppedAnimation<
-                                                                Color>(
-                                                          Color(0xFFE09321),
+                                                      )
+                                                    : Text(
+                                                        isWatching
+                                                            ? "-Watch"
+                                                            : "+Watch",
+                                                        style: TextStyle(
+                                                          color: isWatching
+                                                              ? Colors.white
+                                                              : Colors.white,
+                                                          fontWeight:
+                                                              FontWeight.bold,
                                                         ),
                                                       ),
-                                                    ),
-                                                  );
-                                                },
-                                                errorBuilder: (context, error,
-                                                    stackTrace) {
-                                                  return Container(
-                                                    color: Colors.black,
-                                                    child: const Center(
-                                                      child: Icon(
-                                                        Icons.error_outline,
-                                                        color: Colors.red,
-                                                        size: 40,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
                                               ),
                                             ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              const Divider(
-                                height: 5.0,
-                                color: Color(0xFF111111),
-                                thickness: 5.0,
-                              ),
-                              const Divider(
-                                height: 3.0,
-                                color: Colors.black,
-                                thickness: 3.0,
-                              ),
-                              const Divider(
-                                height: 3.0,
-                                color: Color(0xFF111111),
-                                thickness: 3.0,
-                              ),
-                              if (submissionTitle != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      bottom: 4.0, top: 4.0),
-                                  child: Text(
-                                    submissionTitle!,
-                                    style: const TextStyle(
-                                      fontSize: 23,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                              if (publicationTime != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8.0),
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      // Toggle between full and short date display.
-                                      setState(() {
-                                        _showFullPublicationDate =
-                                            !_showFullPublicationDate;
-                                      });
-                                    },
-                                    child: Text(
-                                      '${getFormattedPublicationTime()}',
-                                      style: const TextStyle(
-                                          fontSize: 13, color: Colors.grey),
-                                    ),
-                                  ),
-                                ),
-                              const Divider(
-                                height: 5.0,
-                                color: Color(0xFF111111),
-                                thickness: 5.0,
-                              ),
-                              const Divider(
-                                height: 2.0,
-                                color: Colors.black,
-                                thickness: 2.0,
-                              ),
-                              const Divider(
-                                height: 3.0,
-                                color: Color(0xFF111111),
-                                thickness: 3.0,
-                              ),
-                              if (_isWebViewVisible &&
-                                  submissionDescription != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      right: 16.0, left: 16.0, top: 16.0),
-                                  child: GestureDetector(
-                                    onLongPressStart:
-                                        (LongPressStartDetails details) async {
-                                      final RenderBox overlay =
-                                          Overlay.of(context)
-                                              .context
-                                              .findRenderObject() as RenderBox;
-                                      final RelativeRect position =
-                                          RelativeRect.fromRect(
-                                        details.globalPosition &
-                                            const Size(40, 40),
-                                        Offset.zero & overlay.size,
-                                      );
-                                      final selected = await showMenu<String>(
-                                        context: context,
-                                        position: position,
-                                        items: const [
-                                          PopupMenuItem<String>(
-                                            value: 'copy',
-                                            child: Text('Copy'),
                                           ),
-                                          PopupMenuItem<String>(
-                                            value: 'select',
-                                            child: Text('Select Text'),
+                                      ],
+                                    ),
+                                  ),
+                                if (fullViewImageUrl != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 0.0),
+                                    child: GestureDetector(
+                                      onLongPressStart: (details) async {
+                                        final tapPosition =
+                                            details.globalPosition;
+                                        final selected = await showMenu<String>(
+                                          context: context,
+                                          position: RelativeRect.fromLTRB(
+                                            tapPosition.dx,
+                                            tapPosition.dy,
+                                            tapPosition.dx,
+                                            tapPosition.dy,
                                           ),
-                                        ],
-                                      );
-                                      if (selected == 'copy') {
-                                        String? plainText =
-                                            await _submissionWebViewKey
-                                                .currentState
-                                                ?.getPlainText();
-                                        if (plainText != null) {
-                                          await Clipboard.setData(
-                                              ClipboardData(text: plainText));
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            const SnackBar(
-                                                content: Text(
-                                                    'Text copied to clipboard')),
-                                          );
+                                          items: [
+                                            const PopupMenuItem(
+                                              value: 'download',
+                                              child: Text('Download'),
+                                            ),
+                                            const PopupMenuItem(
+                                              value: 'share',
+                                              child: Text('Share image'),
+                                            ),
+                                          ],
+                                        );
+                                        if (selected == 'download') {
+                                          debugPrint(
+                                              "$fullViewImageUrl image2");
+                                          await _downloadImage(
+                                              context, fullViewImageUrl!);
+                                        } else if (selected == 'share') {
+                                          await _shareImage(
+                                              context, fullViewImageUrl!);
                                         }
-                                      } else if (selected == 'select') {
+                                      },
+                                      onTap: () {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
                                             builder: (context) =>
-                                                SubmissionDescriptionWebViewScreen(
-                                              submissionId: widget.uniqueNumber,
-                                              initialHtml:
-                                                  submissionDescription,
+                                                AvatarDownloadScreen(
+                                              imageUrl: fullViewImageUrl!,
                                             ),
                                           ),
                                         );
-                                      }
-                                    },
-                                    child: SubmissionDescriptionWebView(
-                                      key: ValueKey(
-                                          submissionDescription.hashCode),
-                                      submissionId: widget.uniqueNumber,
-                                      initialHtml: submissionDescription,
-                                      enableTextSelection: false,
-                                      forceHybridComposition: false,
-                                      onHeightChanged: (double height) {
-                                        if (!_webViewLoaded) {
-                                          Future.delayed(
-                                              const Duration(milliseconds: 25),
-                                              () {
-                                            if (mounted) {
-                                              setState(() {
-                                                _webViewLoaded = true;
-                                              });
-                                            }
-                                          });
-                                        }
                                       },
-                                    ),
-                                  ),
-                                ),
-                              const Divider(
-                                height: 2.0,
-                                color: Color(0xFF111111),
-                                thickness: 2.0,
-                              ),
-                              const Divider(
-                                height: 3.0,
-                                color: Colors.black,
-                                thickness: 3.0,
-                              ),
-                              const Divider(
-                                height: 4.0,
-                                color: Color(0xFF111111),
-                                thickness: 4.0,
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                    right: 0.0,
-                                    left: 0.0,
-                                    top: 11.0,
-                                    bottom: 0.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    _buildPublicationAndViewsRow(),
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                          bottom: 0.0, top: 11.0),
-                                      child: const Divider(
-                                        height: 3.0,
-                                        color: Color(0xFF111111),
-                                        thickness: 3.0,
+                                      child: ClipRect(
+                                        child: LayoutBuilder(
+                                          builder: (context, constraints) {
+                                            final aspectRatio =
+                                                (imageWidth != null &&
+                                                        imageHeight != null)
+                                                    ? imageWidth! / imageHeight!
+                                                    : 16 / 9;
+                                            return AspectRatio(
+                                              aspectRatio: aspectRatio,
+                                              child: InteractiveViewer(
+                                                minScale: 1.0,
+                                                maxScale: 10.0,
+                                                child: Image.network(
+                                                  fullViewImageUrl!,
+                                                  fit: BoxFit.contain,
+                                                  loadingBuilder: (
+                                                    BuildContext context,
+                                                    Widget child,
+                                                    ImageChunkEvent?
+                                                        loadingProgress,
+                                                  ) {
+                                                    if (loadingProgress ==
+                                                        null) {
+                                                      return child;
+                                                    }
+                                                    return Container(
+                                                      color: Colors.black,
+                                                      child: Center(
+                                                        child:
+                                                            CircularProgressIndicator(
+                                                          value: loadingProgress
+                                                                      .expectedTotalBytes !=
+                                                                  null
+                                                              ? loadingProgress
+                                                                      .cumulativeBytesLoaded /
+                                                                  (loadingProgress
+                                                                          .expectedTotalBytes ??
+                                                                      1)
+                                                              : null,
+                                                          valueColor:
+                                                              const AlwaysStoppedAnimation<
+                                                                  Color>(
+                                                            Color(0xFFE09321),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                  errorBuilder: (context, error,
+                                                      stackTrace) {
+                                                    return Container(
+                                                      color: Colors.black,
+                                                      child: const Center(
+                                                        child: Icon(
+                                                          Icons.error_outline,
+                                                          color: Colors.red,
+                                                          size: 40,
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
                                       ),
                                     ),
-                                    SizedBox(
-                                      height: 50,
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceEvenly,
-                                        children: [
-                                          /*
+                                  ),
+                                const Divider(
+                                  height: 5.0,
+                                  color: Color(0xFF111111),
+                                  thickness: 5.0,
+                                ),
+                                const Divider(
+                                  height: 3.0,
+                                  color: Colors.black,
+                                  thickness: 3.0,
+                                ),
+                                const Divider(
+                                  height: 3.0,
+                                  color: Color(0xFF111111),
+                                  thickness: 3.0,
+                                ),
+                                if (submissionTitle != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                        bottom: 4.0, top: 4.0),
+                                    child: Text(
+                                      submissionTitle!,
+                                      style: const TextStyle(
+                                        fontSize: 23,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                if (publicationTime != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8.0),
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        // Toggle between full and short date display.
+                                        setState(() {
+                                          _showFullPublicationDate =
+                                              !_showFullPublicationDate;
+                                        });
+                                      },
+                                      child: Text(
+                                        '${getFormattedPublicationTime()}',
+                                        style: const TextStyle(
+                                            fontSize: 13, color: Colors.grey),
+                                      ),
+                                    ),
+                                  ),
+                                const Divider(
+                                  height: 5.0,
+                                  color: Color(0xFF111111),
+                                  thickness: 5.0,
+                                ),
+                                const Divider(
+                                  height: 2.0,
+                                  color: Colors.black,
+                                  thickness: 2.0,
+                                ),
+                                const Divider(
+                                  height: 3.0,
+                                  color: Color(0xFF111111),
+                                  thickness: 3.0,
+                                ),
+                                if (_isWebViewVisible &&
+                                    submissionDescription != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                        right: 16.0, left: 16.0, top: 16.0),
+                                    child: GestureDetector(
+                                      onLongPressStart: (LongPressStartDetails
+                                          details) async {
+                                        final RenderBox overlay =
+                                            Overlay.of(context)
+                                                    .context
+                                                    .findRenderObject()
+                                                as RenderBox;
+                                        final RelativeRect position =
+                                            RelativeRect.fromRect(
+                                          details.globalPosition &
+                                              const Size(40, 40),
+                                          Offset.zero & overlay.size,
+                                        );
+                                        final selected = await showMenu<String>(
+                                          context: context,
+                                          position: position,
+                                          items: const [
+                                            PopupMenuItem<String>(
+                                              value: 'copy',
+                                              child: Text('Copy'),
+                                            ),
+                                            PopupMenuItem<String>(
+                                              value: 'select',
+                                              child: Text('Select Text'),
+                                            ),
+                                          ],
+                                        );
+                                        if (selected == 'copy') {
+                                          String? plainText =
+                                              await _submissionWebViewKey
+                                                  .currentState
+                                                  ?.getPlainText();
+                                          if (plainText != null) {
+                                            await Clipboard.setData(
+                                                ClipboardData(text: plainText));
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                  content: Text(
+                                                      'Text copied to clipboard')),
+                                            );
+                                          }
+                                        } else if (selected == 'select') {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  SubmissionDescriptionWebViewScreen(
+                                                submissionId:
+                                                    widget.uniqueNumber,
+                                                initialHtml:
+                                                    submissionDescription,
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                      child: SubmissionDescriptionWebView(
+                                        key: ValueKey(
+                                            submissionDescription.hashCode),
+                                        submissionId: widget.uniqueNumber,
+                                        initialHtml: submissionDescription,
+                                        enableTextSelection: false,
+                                        forceHybridComposition: false,
+                                        onHeightChanged: (double height) {
+                                          if (!_webViewLoaded) {
+                                            Future.delayed(
+                                                const Duration(
+                                                    milliseconds: 25), () {
+                                              if (mounted) {
+                                                setState(() {
+                                                  _webViewLoaded = true;
+                                                });
+                                              }
+                                            });
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                const Divider(
+                                  height: 2.0,
+                                  color: Color(0xFF111111),
+                                  thickness: 2.0,
+                                ),
+                                const Divider(
+                                  height: 3.0,
+                                  color: Colors.black,
+                                  thickness: 3.0,
+                                ),
+                                const Divider(
+                                  height: 4.0,
+                                  color: Color(0xFF111111),
+                                  thickness: 4.0,
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                      right: 0.0,
+                                      left: 0.0,
+                                      top: 11.0,
+                                      bottom: 0.0),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      _buildPublicationAndViewsRow(),
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                            bottom: 0.0, top: 11.0),
+                                        child: const Divider(
+                                          height: 3.0,
+                                          color: Color(0xFF111111),
+                                          thickness: 3.0,
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        height: 50,
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceEvenly,
+                                          children: [
+                                            /*
                               Expanded(
                                 child: IconButton(
                                   icon: const Icon(
@@ -2959,193 +2971,198 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                               ),
 
                                */
-                                          Expanded(
-                                            child: IconButton(
-                                              icon: const Icon(
-                                                Icons.mail_outline,
-                                                size: 26,
-                                                color: Colors.grey,
-                                              ),
-                                              onPressed: () {
-                                                if (linkUsername != null) {
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) =>
-                                                          NewMessageScreen(
-                                                        recipient:
-                                                            linkUsername!,
-                                                      ),
-                                                    ),
-                                                  );
-                                                } else {
-                                                  ScaffoldMessenger.of(context)
-                                                      .showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                          'Recipient username is unavailable.'),
-                                                      backgroundColor:
-                                                          Colors.red,
-                                                    ),
-                                                  );
-                                                }
-                                              },
-                                              splashRadius: 24,
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: IconButton(
-                                              icon: const Icon(
-                                                Icons.photo_library_outlined,
-                                                size: 26,
-                                                color: Colors.grey,
-                                              ),
-                                              onPressed: () {
-                                                if (linkUsername != null) {
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) =>
-                                                          UserProfileScreen(
-                                                        nickname: linkUsername!,
-                                                        initialSection:
-                                                            ProfileSection
-                                                                .Gallery,
-                                                      ),
-                                                    ),
-                                                  );
-                                                } else {
-                                                  ScaffoldMessenger.of(context)
-                                                      .showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                          'Username is unavailable.'),
-                                                      backgroundColor:
-                                                          Colors.red,
-                                                    ),
-                                                  );
-                                                }
-                                              },
-                                              splashRadius: 24,
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: IconButton(
-                                              icon: LikeButton(
-                                                isLiked: isFavorited,
-                                                size: 26,
-                                                circleColor: const CircleColor(
-                                                  start: Colors.red,
-                                                  end: Colors.redAccent,
+                                            Expanded(
+                                              child: IconButton(
+                                                icon: const Icon(
+                                                  Icons.mail_outline,
+                                                  size: 26,
+                                                  color: Colors.grey,
                                                 ),
-                                                bubblesColor:
-                                                    const BubblesColor(
-                                                  dotPrimaryColor: Colors.red,
-                                                  dotSecondaryColor:
-                                                      Colors.redAccent,
-                                                ),
-                                                likeBuilder: (bool isLiked) {
-                                                  return Icon(
-                                                    isLiked
-                                                        ? Icons.favorite
-                                                        : Icons.favorite_border,
-                                                    color: isLiked
-                                                        ? Colors.red
-                                                        : Colors.grey,
-                                                    size: 26,
-                                                  );
+                                                onPressed: () {
+                                                  if (linkUsername != null) {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (context) =>
+                                                            NewMessageScreen(
+                                                          recipient:
+                                                              linkUsername!,
+                                                        ),
+                                                      ),
+                                                    );
+                                                  } else {
+                                                    ScaffoldMessenger.of(
+                                                            context)
+                                                        .showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                            'Recipient username is unavailable.'),
+                                                        backgroundColor:
+                                                            Colors.red,
+                                                      ),
+                                                    );
+                                                  }
                                                 },
-                                                animationDuration:
-                                                    const Duration(
-                                                        milliseconds: 500),
-                                                onTap: _toggleFavorite,
+                                                splashRadius: 24,
                                               ),
-                                              onPressed: () {
-                                                _toggleFavorite(isFavorited);
-                                              },
-                                              splashRadius: 24,
                                             ),
-                                          ),
-                                          Expanded(
-                                            child: IconButton(
-                                              icon: Icon(
-                                                Icons.numbers,
-                                                size: 26,
-                                                color: _showTagsSection
-                                                    ? const Color(0xFFE09321)
-                                                    : Colors.grey,
+                                            Expanded(
+                                              child: IconButton(
+                                                icon: const Icon(
+                                                  Icons.photo_library_outlined,
+                                                  size: 26,
+                                                  color: Colors.grey,
+                                                ),
+                                                onPressed: () {
+                                                  if (linkUsername != null) {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (context) =>
+                                                            UserProfileScreen(
+                                                          nickname:
+                                                              linkUsername!,
+                                                          initialSection:
+                                                              ProfileSection
+                                                                  .Gallery,
+                                                        ),
+                                                      ),
+                                                    );
+                                                  } else {
+                                                    ScaffoldMessenger.of(
+                                                            context)
+                                                        .showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                            'Username is unavailable.'),
+                                                        backgroundColor:
+                                                            Colors.red,
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                                splashRadius: 24,
                                               ),
-                                              onPressed: () {
-                                                setState(() {
-                                                  _showTagsSection =
-                                                      !_showTagsSection;
-                                                });
-                                              },
-                                              splashRadius: 24,
                                             ),
-                                          ),
-                                          Expanded(
-                                            child: IconButton(
-                                              icon: const Icon(
-                                                Icons.share_outlined,
-                                                size: 26,
-                                                color: Colors.grey,
+                                            Expanded(
+                                              child: IconButton(
+                                                icon: LikeButton(
+                                                  isLiked: isFavorited,
+                                                  size: 26,
+                                                  circleColor:
+                                                      const CircleColor(
+                                                    start: Colors.red,
+                                                    end: Colors.redAccent,
+                                                  ),
+                                                  bubblesColor:
+                                                      const BubblesColor(
+                                                    dotPrimaryColor: Colors.red,
+                                                    dotSecondaryColor:
+                                                        Colors.redAccent,
+                                                  ),
+                                                  likeBuilder: (bool isLiked) {
+                                                    return Icon(
+                                                      isLiked
+                                                          ? Icons.favorite
+                                                          : Icons
+                                                              .favorite_border,
+                                                      color: isLiked
+                                                          ? Colors.red
+                                                          : Colors.grey,
+                                                      size: 26,
+                                                    );
+                                                  },
+                                                  animationDuration:
+                                                      const Duration(
+                                                          milliseconds: 500),
+                                                  onTap: _toggleFavorite,
+                                                ),
+                                                onPressed: () {
+                                                  _toggleFavorite(isFavorited);
+                                                },
+                                                splashRadius: 24,
                                               ),
-                                              onPressed: _sharePost,
-                                              splashRadius: 24,
                                             ),
-                                          ),
-                                        ],
+                                            Expanded(
+                                              child: IconButton(
+                                                icon: Icon(
+                                                  Icons.numbers,
+                                                  size: 26,
+                                                  color: _showTagsSection
+                                                      ? const Color(0xFFE09321)
+                                                      : Colors.grey,
+                                                ),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    _showTagsSection =
+                                                        !_showTagsSection;
+                                                  });
+                                                },
+                                                splashRadius: 24,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              child: IconButton(
+                                                icon: const Icon(
+                                                  Icons.share_outlined,
+                                                  size: 26,
+                                                  color: Colors.grey,
+                                                ),
+                                                onPressed: _sharePost,
+                                                splashRadius: 24,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    AnimatedSize(
-                                      duration:
-                                          const Duration(milliseconds: 250),
-                                      curve: Curves.easeInOut,
-                                      child: _showTagsSection
-                                          ? _buildTagsPanel()
-                                          : const SizedBox.shrink(),
-                                    ),
-                                  ],
+                                      AnimatedSize(
+                                        duration:
+                                            const Duration(milliseconds: 250),
+                                        curve: Curves.easeInOut,
+                                        child: _showTagsSection
+                                            ? _buildTagsPanel()
+                                            : const SizedBox.shrink(),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              const Divider(
-                                height: 3.0,
-                                color: Color(0xFF111111),
-                                thickness: 3.0,
-                              ),
-                              const Divider(
-                                height: 4.0,
-                                color: Colors.black,
-                                thickness: 4.0,
-                              ),
-                            ],
+                                const Divider(
+                                  height: 3.0,
+                                  color: Color(0xFF111111),
+                                  thickness: 3.0,
+                                ),
+                                const Divider(
+                                  height: 4.0,
+                                  color: Colors.black,
+                                  thickness: 4.0,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        ..._buildCommentSlivers(),
-                        SliverToBoxAdapter(
-                          child: ListenableBuilder(
-                            listenable: Listenable.merge([
-                              _isCommentComposerExpanded,
-                              _commentDraftCollapsedLines,
-                            ]),
-                            builder: (context, _) {
-                              final isExpanded =
-                                  _isCommentComposerExpanded.value;
-                              final collapsedPreviewLines =
-                                  _commentDraftCollapsedLines.value;
-                              final composerSpacerHeight = isExpanded
-                                  ? 198.0
-                                  : (72.0 +
-                                      ((collapsedPreviewLines - 1) * 24.0));
-                              return SizedBox(height: composerSpacerHeight);
-                            },
+                          ..._buildCommentSlivers(),
+                          SliverToBoxAdapter(
+                            child: ListenableBuilder(
+                              listenable: Listenable.merge([
+                                _isCommentComposerExpanded,
+                                _commentDraftCollapsedLines,
+                              ]),
+                              builder: (context, _) {
+                                final isExpanded =
+                                    _isCommentComposerExpanded.value;
+                                final collapsedPreviewLines =
+                                    _commentDraftCollapsedLines.value;
+                                final composerSpacerHeight = isExpanded
+                                    ? 198.0
+                                    : (72.0 +
+                                        ((collapsedPreviewLines - 1) * 24.0));
+                                return SizedBox(height: composerSpacerHeight);
+                              },
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 ),
                 Positioned.fill(
                   child: ValueListenableBuilder<bool>(
@@ -3172,31 +3189,32 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                         assetPath: 'assets/icons/fathemed.png',
                       ),
                     ),
-                ),
+                  ),
               ],
             ),
           ),
           bottomNavigationBar: showLoadingIndicator
               ? null
               : RepaintBoundary(
-            child: Container(
-              color: Colors.black,
-              child: SafeArea(
-                bottom: true,
-                child: ListenableBuilder(
-                  listenable: Listenable.merge([
-                    _keyboardInset,
-                    _isCommentComposerExpanded,
-                  ]),
-                  builder: (context, _) {
-                    final keyboardInset = _keyboardInset.value;
-                    final isExpanded = _isCommentComposerExpanded.value;
+                  child: Container(
+                    color: Colors.black,
+                    child: SafeArea(
+                      bottom: true,
+                      child: ListenableBuilder(
+                        listenable: Listenable.merge([
+                          _keyboardInset,
+                          _isCommentComposerExpanded,
+                        ]),
+                        builder: (context, _) {
+                          final keyboardInset = _keyboardInset.value;
+                          final isExpanded = _isCommentComposerExpanded.value;
                           return Padding(
                             padding: EdgeInsets.only(
                               left: 8,
                               right: 8,
                               bottom: keyboardInset > 0
-                                  ? (keyboardInset - viewPaddingBottom + 8).clamp(0.0, double.infinity)
+                                  ? (keyboardInset - viewPaddingBottom + 8)
+                                      .clamp(0.0, double.infinity)
                                   : 0.0,
                               top: 8,
                             ),
@@ -3214,11 +3232,12 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                 final collapsedLines =
                                     _commentDraftCollapsedLines.value;
                                 final hasText = _commentDraftHasText.value;
-                                final isSending =
-                                    _isSendingInlineComment.value;
+                                final isSending = _isSendingInlineComment.value;
                                 final canSend = !isSending && hasText;
-                                final minLines = isExpanded ? 6 : collapsedLines;
-                                final maxLines = isExpanded ? 6 : collapsedLines;
+                                final minLines =
+                                    isExpanded ? 6 : collapsedLines;
+                                final maxLines =
+                                    isExpanded ? 6 : collapsedLines;
                                 final isCollapsedSingleLine =
                                     !isExpanded && collapsedLines == 1;
 
@@ -3256,9 +3275,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                                   SizedBox(
                                                     width: 36,
                                                     height: 36,
-                                                    child:
-                                                        FloatingActionButton
-                                                            .small(
+                                                    child: FloatingActionButton
+                                                        .small(
                                                       heroTag: 'scroll_top',
                                                       backgroundColor:
                                                           const Color(
@@ -3304,7 +3322,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                             minLines: minLines,
                                             maxLines: maxLines,
                                             scrollPadding:
-                                                const EdgeInsets.only(bottom: 8),
+                                                const EdgeInsets.only(
+                                                    bottom: 8),
                                             decoration: InputDecoration(
                                               hintText: 'Add a comment...',
                                               hintStyle: const TextStyle(
@@ -3519,9 +3538,48 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           delegate: SliverChildBuilderDelegate(
             (context, index) {
               final comment = comments[index];
+              final previousComment = index > 0 ? comments[index - 1] : null;
+              final nextComment =
+                  index + 1 < comments.length ? comments[index + 1] : null;
+              final currentNestingLevel =
+                  ((100.0 - (comment['width'] ?? 100).toDouble()) / 3.0)
+                      .round()
+                      .clamp(0, 4)
+                      .toInt();
+              final previousNestingLevel = previousComment == null
+                  ? 0
+                  : ((100.0 - (previousComment['width'] ?? 100).toDouble()) /
+                          3.0)
+                      .round()
+                      .clamp(0, 4)
+                      .toInt();
+              final nextNestingLevel = nextComment == null
+                  ? 0
+                  : ((100.0 - (nextComment['width'] ?? 100).toDouble()) / 3.0)
+                      .round()
+                      .clamp(0, 4)
+                      .toInt();
+              var continuesCurrentLevelBelow = false;
+              for (var i = index + 1; i < comments.length; i++) {
+                final futureNestingLevel =
+                    ((100.0 - (comments[i]['width'] ?? 100).toDouble()) / 3.0)
+                        .round()
+                        .clamp(0, 4)
+                        .toInt();
+                if (futureNestingLevel < currentNestingLevel) {
+                  break;
+                }
+                if (futureNestingLevel == currentNestingLevel) {
+                  continuesCurrentLevelBelow = true;
+                  break;
+                }
+              }
               return CommentWidget(
                 key: ValueKey(comment['commentId'] ?? index),
                 comment: comment,
+                previousNestingLevel: previousNestingLevel,
+                nextNestingLevel: nextNestingLevel,
+                continuesCurrentLevelBelow: continuesCurrentLevelBelow,
                 onHide: () {
                   final hideLink = comment['hideLink'] as String?;
                   final cId = comment['commentId'] as String?;
@@ -3581,6 +3639,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     ];
   }
 }
+
 class _AlwaysDisabledFocusNode extends FocusNode {
   @override
   bool get hasFocus => false;
