@@ -77,6 +77,8 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                                   return;
                                 }
                                 if (widget.shout.profileNickname.isNotEmpty) {
+                                  final parentState = context.findAncestorStateOfType<UserProfileScreenState>();
+                                  parentState?.exitShoutSelectionMode();
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(

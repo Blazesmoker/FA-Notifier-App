@@ -548,6 +548,18 @@ class UserProfileScreenState extends State<UserProfileScreen>
     });
   }
 
+  void exitShoutSelectionMode() {
+    if (!_isShoutSelectionMode) {
+      return;
+    }
+    setState(() {
+      _isShoutSelectionMode = false;
+      for (final shout in shouts) {
+        shout.selected = false;
+      }
+    });
+  }
+
   void _toggleShoutSelection(Shout shout) {
     if (!_isShoutSelectionMode) {
       return;
@@ -863,6 +875,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       final String folderName = match.group(3)!;
       final String folderUrl =
           'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+      exitShoutSelectionMode();
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -883,6 +896,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     );
     if (userRegex.hasMatch(urlToMatch)) {
       final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
+      exitShoutSelectionMode();
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -901,6 +915,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       final String? userNameFromJournal = match.group(1);
       final String? journalId = match.group(2);
       if (userNameFromJournal != null) {
+        exitShoutSelectionMode();
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -1386,7 +1401,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     final fixedTextScaleMediaQuery = MediaQueryData.fromView(baseView)
         .copyWith(textScaler: TextScaler.linear(1.0));
     final bool showDeleteSelectedFab =
-        !isLoading && _isShoutSelectionMode && _selectedShoutCount > 0;
+        !isLoading && isOwnProfile && _isShoutSelectionMode && _selectedShoutCount > 0;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -1982,7 +1997,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                           duration: const Duration(milliseconds: 210),
                           curve: Curves.easeInOut,
                           child: FloatingActionButton(
-                            heroTag: 'delete-selected-shouts-fab',
+                            heroTag: null,
                             onPressed: _isDeletingSelectedShouts
                                 ? null
                                 : _confirmDeleteSelectedShouts,
