@@ -339,10 +339,8 @@ class _ViewListScreenState extends State<ViewListScreen> {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (context) => UserProfileScreen(
-                            nickname: user.nickname,
-                          ),
+                        UserProfileScreen.route(
+                          nickname: user.nickname,
                         ),
                       );
                     },

@@ -162,10 +162,7 @@ class _CommentWidgetState extends State<CommentWidget> {
                           if (nick != null) {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    UserProfileScreen(nickname: nick),
-                              ),
+                              UserProfileScreen.route(nickname: nick),
                             );
                           }
                         },

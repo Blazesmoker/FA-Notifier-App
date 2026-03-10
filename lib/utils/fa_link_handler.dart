@@ -39,27 +39,23 @@ Future<void> handleFALink(
     if (folderNumber != null && folderName != null) {
       // specific folder
       final String folderUrl =
-        'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+          'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(
-            nickname: tappedUsername,
-            initialSection: ProfileSection.Gallery,
-            initialFolderUrl: folderUrl,
-            initialFolderName: folderName,
-          ),
+        UserProfileScreen.route(
+          nickname: tappedUsername,
+          initialSection: ProfileSection.Gallery,
+          initialFolderUrl: folderUrl,
+          initialFolderName: folderName,
         ),
       );
     } else {
       // just the gallery
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(
-            nickname: tappedUsername,
-            initialSection: ProfileSection.Gallery,
-          ),
+        UserProfileScreen.route(
+          nickname: tappedUsername,
+          initialSection: ProfileSection.Gallery,
         ),
       );
     }
@@ -67,21 +63,21 @@ Future<void> handleFALink(
   }
 
   // User profile
-  final RegExp userRegex = RegExp(r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$');
+  final RegExp userRegex = RegExp(
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$');
   final matchUser = userRegex.firstMatch(urlToMatch);
   if (matchUser != null) {
     final tappedUsername = matchUser.group(1)!;
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => UserProfileScreen(nickname: tappedUsername),
-      ),
+      UserProfileScreen.route(nickname: tappedUsername),
     );
     return;
   }
 
   // Journals: /journals/username or /journal/id
-  final RegExp journalRegex = RegExp(r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$');
+  final RegExp journalRegex = RegExp(
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$');
   final matchJournal = journalRegex.firstMatch(urlToMatch);
   if (matchJournal != null) {
     final String? username = matchJournal.group(1);
@@ -89,11 +85,9 @@ Future<void> handleFALink(
     if (username != null) {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(
-            nickname: username,
-            initialSection: ProfileSection.Journals,
-          ),
+        UserProfileScreen.route(
+          nickname: username,
+          initialSection: ProfileSection.Journals,
         ),
       );
     } else if (journalId != null) {
@@ -108,7 +102,8 @@ Future<void> handleFALink(
   }
 
   // Submission/view
-  final RegExp viewRegex = RegExp(r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$');
+  final RegExp viewRegex = RegExp(
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$');
   final matchView = viewRegex.firstMatch(urlToMatch);
   if (matchView != null) {
     final submissionId = matchView.group(1)!;

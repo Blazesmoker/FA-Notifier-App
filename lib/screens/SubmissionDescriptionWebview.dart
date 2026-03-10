@@ -39,19 +39,18 @@ class SubmissionDescriptionWebView extends StatefulWidget {
       SubmissionDescriptionWebViewState();
 }
 
-class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebView>
+class SubmissionDescriptionWebViewState
+    extends State<SubmissionDescriptionWebView>
     with AutomaticKeepAliveClientMixin<SubmissionDescriptionWebView> {
   static const Color background = Color(0xFF121212);
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock),
+    iOptions: IOSOptions(
+        accountName: 'flutter_secure_storage_service',
+        accessibility: KeychainAccessibility.first_unlock),
   );
   late Future<String> _submissionDescriptionFuture;
   double _webViewHeight = 50.0;
-
-
 
   String? _submissionDescriptionHtml;
 
@@ -80,27 +79,27 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
     for (final a in root.querySelectorAll('a[href]')) {
       final href = a.attributes['href']!;
       if (href.startsWith('/https://') || href.startsWith('/http://')) {
-        a.attributes['href'] = href.substring(1);   // trim the first "/"
+        a.attributes['href'] = href.substring(1); // trim the first "/"
       }
     }
   }
 
   Future<String> _processInitialHtml(String html) async {
     final doc = html_parser.parse(html);
-    doc.querySelectorAll(
-      'script, .footerAds, #ddmenu, .mobile-navigation, '
+    doc
+        .querySelectorAll(
+          'script, .footerAds, #ddmenu, .mobile-navigation, '
           '.mobile-notification-bar, #header, .online-stats, .news-block, '
           '.submission-sidebar, .leaderboardAd, .footerAds, .online-stats',
-    ).forEach((e) => e.remove());
+        )
+        .forEach((e) => e.remove());
 
     var submissionDesc = doc.querySelector(
       '.submission-description, '
-          'td.alt1[width="70%"][valign="top"][align="left"][style*="padding:8px"]',
+      'td.alt1[width="70%"][valign="top"][align="left"][style*="padding:8px"]',
     );
 
     submissionDesc ??= doc.body;
-
-
 
     if (submissionDesc == null) {
       return '<p>No submission description found.</p>';
@@ -134,23 +133,24 @@ class SubmissionDescriptionWebViewState extends State<SubmissionDescriptionWebVi
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to fetch submission page: ${response.statusCode}');
+      throw Exception(
+          'Failed to fetch submission page: ${response.statusCode}');
     }
 
     final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
     final doc = html_parser.parse(decodedBody);
 
     // Remove unwanted elements
-    doc.querySelectorAll(
-      'script, .footerAds, #ddmenu, .mobile-navigation, '
+    doc
+        .querySelectorAll(
+          'script, .footerAds, #ddmenu, .mobile-navigation, '
           '.mobile-notification-bar, #header, .online-stats, .news-block, '
           '.submission-sidebar, .leaderboardAd, .footerAds, .online-stats',
-    ).forEach((e) => e.remove());
+        )
+        .forEach((e) => e.remove());
 
-    final submissionDesc = doc.querySelector(
-        '.submission-description, '
-            'td.alt1[width="70%"][valign="top"][align="left"][style*="padding:8px"]'
-    );
+    final submissionDesc = doc.querySelector('.submission-description, '
+        'td.alt1[width="70%"][valign="top"][align="left"][style*="padding:8px"]');
 
     if (submissionDesc == null) {
       // Fallback if not found.
@@ -297,32 +297,35 @@ user-select: none !important;
 ''';
   }
 
-
   /// Searches the provided HTML for a truncated URL and returns the full URL.
   /// Returns the original truncated URL when a better match is not found to
   /// satisfy non-null callbacks passed to `handleFALink`.
-  String _getFullLinkFromFetchedHtml(String truncatedUrl, {String? htmlSource}) {
+  String _getFullLinkFromFetchedHtml(String truncatedUrl,
+      {String? htmlSource}) {
     final String? source = htmlSource ?? _submissionDescriptionHtml;
     if (source == null) return truncatedUrl;
 
     final document = html_parser.parse(source);
     for (var anchor in document.querySelectorAll('a.auto_link_shortened')) {
       if (anchor.text.trim() == truncatedUrl) {
-        return anchor.attributes['title'] ?? anchor.attributes['href'] ?? truncatedUrl;
+        return anchor.attributes['title'] ??
+            anchor.attributes['href'] ??
+            truncatedUrl;
       }
     }
     return truncatedUrl;
   }
 
-
-  Future<void> _handleFALink(BuildContext context, String url, {String? htmlSource}) async {
+  Future<void> _handleFALink(BuildContext context, String url,
+      {String? htmlSource}) async {
     String fullUrlToMatch = url;
     debugPrint("full URL: $fullUrlToMatch");
     if (url.contains('.....')) {
-      final recoveredLink = _getFullLinkFromFetchedHtml(url, htmlSource: htmlSource);
+      final recoveredLink =
+          _getFullLinkFromFetchedHtml(url, htmlSource: htmlSource);
       fullUrlToMatch = recoveredLink;
       debugPrint("Recovered full URL: $fullUrlToMatch");
-        }
+    }
 
     final Uri uri = Uri.parse(fullUrlToMatch);
     final String urlToMatch = uri.toString();
@@ -336,7 +339,8 @@ user-select: none !important;
       final String tappedUsername = match.group(1)!;
       final String folderNumber = match.group(2)!;
       final String folderName = match.group(3)!;
-      final String folderUrl = 'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+      final String folderUrl =
+          'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
 
       debugPrint('Tapped username: $tappedUsername');
       debugPrint('Folder number: $folderNumber');
@@ -345,13 +349,11 @@ user-select: none !important;
 
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(
-            nickname: tappedUsername,
-            initialSection: ProfileSection.Gallery,
-            initialFolderUrl: folderUrl,
-            initialFolderName: folderName,
-          ),
+        UserProfileScreen.route(
+          nickname: tappedUsername,
+          initialSection: ProfileSection.Gallery,
+          initialFolderUrl: folderUrl,
+          initialFolderName: folderName,
         ),
       );
       return;
@@ -365,9 +367,7 @@ user-select: none !important;
       final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(nickname: tappedUsername),
-        ),
+        UserProfileScreen.route(nickname: tappedUsername),
       );
       return;
     }
@@ -386,11 +386,9 @@ user-select: none !important;
         // Matched: /journals/username/
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => UserProfileScreen(
-              nickname: username,
-              initialSection: ProfileSection.Journals,
-            ),
+          UserProfileScreen.route(
+            nickname: username,
+            initialSection: ProfileSection.Journals,
           ),
         );
       } else if (journalId != null) {
@@ -428,7 +426,6 @@ user-select: none !important;
     await launchUrlString(fullUrlToMatch, mode: LaunchMode.externalApplication);
   }
 
-
   Future<String?> getPlainText() async {
     if (_submissionDescriptionHtml == null) return null;
     final document = html_parser.parse(_submissionDescriptionHtml!);
@@ -444,7 +441,9 @@ user-select: none !important;
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
             height: 300,
-            child: Center(child: PulsatingLoadingIndicator(size: 58.0, assetPath: 'assets/icons/fathemed.png')),
+            child: Center(
+                child: PulsatingLoadingIndicator(
+                    size: 58.0, assetPath: 'assets/icons/fathemed.png')),
           );
         }
         if (snapshot.hasError) {
@@ -485,7 +484,8 @@ user-select: none !important;
               onCreateWindow: (controller, createWindowReq) async {
                 final url = createWindowReq.request.url?.toString() ?? '';
                 if (url.isNotEmpty) {
-                  await handleFALink(context, url, htmlSource: url, getFullUrl: _getFullLinkFromFetchedHtml);
+                  await handleFALink(context, url,
+                      htmlSource: url, getFullUrl: _getFullLinkFromFetchedHtml);
                 }
                 return true;
               },
@@ -508,16 +508,21 @@ user-select: none !important;
                 final url = navAction.request.url.toString();
                 if (Platform.isAndroid) {
                   if (navAction.isForMainFrame) {
-                    await handleFALink(context, url, htmlSource: url, getFullUrl: _getFullLinkFromFetchedHtml);
+                    await handleFALink(context, url,
+                        htmlSource: url,
+                        getFullUrl: _getFullLinkFromFetchedHtml);
                     return NavigationActionPolicy.CANCEL;
                   }
                   return NavigationActionPolicy.ALLOW;
                 } else if (Platform.isIOS) {
-                  if (navAction.navigationType == NavigationType.LINK_ACTIVATED) {
+                  if (navAction.navigationType ==
+                      NavigationType.LINK_ACTIVATED) {
                     if (url == "https://www.furaffinity.net/") {
                       return NavigationActionPolicy.ALLOW;
                     }
-                    await handleFALink(context, url, htmlSource: url, getFullUrl: _getFullLinkFromFetchedHtml);
+                    await handleFALink(context, url,
+                        htmlSource: url,
+                        getFullUrl: _getFullLinkFromFetchedHtml);
                     return NavigationActionPolicy.CANCEL;
                   }
                   return NavigationActionPolicy.ALLOW;
@@ -525,7 +530,8 @@ user-select: none !important;
                 return NavigationActionPolicy.ALLOW;
               },
               onLoadError: (controller, url, code, message) {
-                showAppSnackBar(context, 'Failed to load content: $message', backgroundColor: Colors.red);
+                showAppSnackBar(context, 'Failed to load content: $message',
+                    backgroundColor: Colors.red);
               },
               onLoadHttpError: (controller, url, statusCode, description) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -546,11 +552,11 @@ user-select: none !important;
   }
 }
 
-
 class SubmissionDescriptionWebViewScreen extends StatelessWidget {
   final String submissionId;
   final String? initialHtml;
-  const SubmissionDescriptionWebViewScreen({Key? key, required this.submissionId, this.initialHtml})
+  const SubmissionDescriptionWebViewScreen(
+      {Key? key, required this.submissionId, this.initialHtml})
       : super(key: key);
 
   @override

@@ -65,14 +65,13 @@ class UserGridSection extends StatelessWidget {
                       height: 34.0,
                       child: GestureDetector(
                         onTap: () {
-                          final parentState = context.findAncestorStateOfType<UserProfileScreenState>();
+                          final parentState = context.findAncestorStateOfType<
+                              UserProfileScreenState>();
                           parentState?.exitShoutSelectionMode();
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (context) => UserProfileScreen(
-                                nickname: nickname,
-                              ),
+                            UserProfileScreen.route(
+                              nickname: nickname,
                             ),
                           );
                         },

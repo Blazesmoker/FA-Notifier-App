@@ -49,7 +49,6 @@ class HomeDrawer extends StatefulWidget {
   final Function(Notifications) onNotificationsUpdated;
   final Function(String) onBadgeTap;
 
-
   @override
   _HomeDrawerState createState() => _HomeDrawerState();
 }
@@ -86,7 +85,8 @@ class _HomeDrawerState extends State<HomeDrawer> {
     super.initState();
     setDrawerListArray();
     _loadSfwEnabled();
-    _faNotificationService = Provider.of<FANotificationService>(context, listen: false);
+    _faNotificationService =
+        Provider.of<FANotificationService>(context, listen: false);
     _faNotificationService?.addListener(_onFaNotificationServiceChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -105,11 +105,9 @@ class _HomeDrawerState extends State<HomeDrawer> {
 
   Future<void> _checkForUpdate() async {
     try {
-
       final info = await PackageInfo.fromPlatform();
       final current = info.version.trim(); // "1.2.4"
       debugPrint('Current app version: $current');
-
 
       final uri = Uri.parse(
         'https://api.github.com/repos/Blazesmoker/FA-Notifier-App/releases/latest',
@@ -124,18 +122,15 @@ class _HomeDrawerState extends State<HomeDrawer> {
       debugPrint('GitHub API status: ${resp.statusCode}');
 
       if (resp.statusCode == 200) {
-
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
         final tagName = data['tag_name'] as String;
-        final ghVer = tagName.startsWith('v')
-            ? tagName.substring(1)
-            : tagName;
+        final ghVer = tagName.startsWith('v') ? tagName.substring(1) : tagName;
 
         if (!mounted) return;
         setState(() {
-          _currentAppVersion   = current;
+          _currentAppVersion = current;
           _latestGithubVersion = ghVer;
-          _updateAvailable     = ghVer != current;
+          _updateAvailable = ghVer != current;
         });
 
         debugPrint('Remote version: $ghVer; show update = $_updateAvailable');
@@ -206,8 +201,6 @@ class _HomeDrawerState extends State<HomeDrawer> {
   }
 
   bool showStars = false;
-
-
 
   void _onKofiPressed(Offset globalTapPosition) {
     // Ignore if in cooldown
@@ -320,7 +313,6 @@ class _HomeDrawerState extends State<HomeDrawer> {
               Container(
                 height: 54.0,
                 alignment: Alignment.centerLeft,
-
                 child: Row(
                   children: <Widget>[
                     const SizedBox(width: 6.0, height: 46.0),
@@ -477,13 +469,11 @@ class _HomeDrawerState extends State<HomeDrawer> {
 
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => UserProfileScreen(
-              nickname: tappedUsername,
-              initialSection: ProfileSection.Gallery,
-              initialFolderUrl: folderUrl,
-              initialFolderName: folderName,
-            ),
+          UserProfileScreen.route(
+            nickname: tappedUsername,
+            initialSection: ProfileSection.Gallery,
+            initialFolderUrl: folderUrl,
+            initialFolderName: folderName,
           ),
         );
         return;
@@ -501,9 +491,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
 
         await Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => UserProfileScreen(nickname: tappedUsername),
-          ),
+          UserProfileScreen.route(nickname: tappedUsername),
         );
         return;
       }
@@ -522,11 +510,9 @@ class _HomeDrawerState extends State<HomeDrawer> {
           // Matched: /journals/username/
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => UserProfileScreen(
-                nickname: username,
-                initialSection: ProfileSection.Journals,
-              ),
+            UserProfileScreen.route(
+              nickname: username,
+              initialSection: ProfileSection.Journals,
             ),
           );
         } else if (journalId != null) {
@@ -727,7 +713,6 @@ class _HomeDrawerState extends State<HomeDrawer> {
     final int journalsCount = int.tryParse(_notifications.journals) ?? 0;
     final int notesCount = int.tryParse(_notifications.notes) ?? 0;
 
-
     final List<Widget> badgeWidgets = [];
     if (submissionsCount > 0) {
       badgeWidgets.add(
@@ -827,318 +812,333 @@ class _HomeDrawerState extends State<HomeDrawer> {
     }
 
     const bool kForceShowUpdateButton = false;
-    final bool showUpdateButton = _updateAvailable || (kDebugMode && kForceShowUpdateButton);
+    final bool showUpdateButton =
+        _updateAvailable || (kDebugMode && kForceShowUpdateButton);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-        value: const SystemUiOverlayStyle(
-          systemNavigationBarColor: Colors.black, // ✅ black navbar
-          systemNavigationBarIconBrightness: Brightness.light,
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.light,
-        ),
-        child: Container(
-      color: Color(0xFF111111),
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: <Widget>[
-            // User Profile Section with avatar
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.only(top: 0.0),
-              color: Color(0xFF111111),
-              child: Container(
-                padding: const EdgeInsets.only(
-                    right: 0.0, left: 0.0, top: 4.0, bottom: 4.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: <Widget>[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Avatar widget
-                        GestureDetector(
-                          onTap: () {
-                            if (widget.userProfile != null &&
-                                widget
-                                    .userProfile!.profileImageUrl.isNotEmpty) {
-                              final String imageUrl =
-                                  widget.userProfile!.profileImageUrl;
-                              final String filename = imageUrl.split('/').last;
-                              final String nickname = filename.contains('.')
-                                  ? filename.substring(
-                                      0, filename.lastIndexOf('.'))
-                                  : filename;
-                              final String lowercaseNickname =
-                                  nickname.toLowerCase();
-                              debugPrint("Extracted nickname: $lowercaseNickname");
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => UserProfileScreen(
+      value: const SystemUiOverlayStyle(
+        systemNavigationBarColor: Colors.black, // ✅ black navbar
+        systemNavigationBarIconBrightness: Brightness.light,
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+      ),
+      child: Container(
+        color: Color(0xFF111111),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: <Widget>[
+              // User Profile Section with avatar
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.only(top: 0.0),
+                color: Color(0xFF111111),
+                child: Container(
+                  padding: const EdgeInsets.only(
+                      right: 0.0, left: 0.0, top: 4.0, bottom: 4.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: <Widget>[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Avatar widget
+                          GestureDetector(
+                            onTap: () {
+                              if (widget.userProfile != null &&
+                                  widget.userProfile!.profileImageUrl
+                                      .isNotEmpty) {
+                                final String imageUrl =
+                                    widget.userProfile!.profileImageUrl;
+                                final String filename =
+                                    imageUrl.split('/').last;
+                                final String nickname = filename.contains('.')
+                                    ? filename.substring(
+                                        0, filename.lastIndexOf('.'))
+                                    : filename;
+                                final String lowercaseNickname =
+                                    nickname.toLowerCase();
+                                debugPrint(
+                                    "Extracted nickname: $lowercaseNickname");
+                                Navigator.push(
+                                  context,
+                                  UserProfileScreen.route(
                                     nickname: lowercaseNickname,
                                   ),
-                                ),
-                              );
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('User profile not available'),
-                                ),
-                              );
-                            }
-                          },
-                          child: widget.userProfile != null &&
-                                  widget.userProfile!.profileImageUrl.isNotEmpty
-                              ? AnimatedBuilder(
-                                  animation: widget.iconAnimationController!,
-                                  builder:
-                                      (BuildContext context, Widget? child) {
-                                    return ScaleTransition(
-                                      scale: AlwaysStoppedAnimation<double>(
-                                        1.0 -
-                                            (widget.iconAnimationController!
-                                                    .value) *
-                                                0.2,
-                                      ),
-                                      child: RotationTransition(
-                                        turns: const AlwaysStoppedAnimation<
-                                            double>(0.0),
-                                        child: Container(
-                                          height: 110,
-                                          width: 110,
-                                          decoration: BoxDecoration(
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                            boxShadow: <BoxShadow>[
-                                              BoxShadow(
-                                                color: AppTheme.grey
-                                                    .withOpacity(0.0),
-                                                offset: const Offset(2.0, 4.0),
-                                                blurRadius: 8,
-                                              ),
-                                            ],
-                                          ),
-                                          child: Image.network(
-                                            widget.userProfile!.profileImageUrl,
-                                            fit: BoxFit.cover,
-                                            loadingBuilder: (context, child, loadingProgress) {
-                                              if (loadingProgress == null) {
-                                                return child;
-                                              }
-                                              return const Center(
-                                                child: PulsatingLoadingIndicator(
-                                                  size: 58.0,
-                                                  assetPath: 'assets/icons/fathemed.png',
-                                                ),
-                                              );
-                                            },
-                                            errorBuilder: (context, error, stackTrace) {
-                                              if (error.toString().contains('404')) {
-                                                return Image.asset(
-                                                  'assets/images/defaultpic.gif',
-                                                  fit: BoxFit.cover,
-                                                );
-                                              } else {
-                                                return const Icon(
-                                                  Icons.person,
-                                                  size: 60,
-                                                  color: Colors.white,
-                                                );
-                                              }
-                                            },
-                                          ),
-
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('User profile not available'),
+                                  ),
+                                );
+                              }
+                            },
+                            child: widget.userProfile != null &&
+                                    widget
+                                        .userProfile!.profileImageUrl.isNotEmpty
+                                ? AnimatedBuilder(
+                                    animation: widget.iconAnimationController!,
+                                    builder:
+                                        (BuildContext context, Widget? child) {
+                                      return ScaleTransition(
+                                        scale: AlwaysStoppedAnimation<double>(
+                                          1.0 -
+                                              (widget.iconAnimationController!
+                                                      .value) *
+                                                  0.2,
                                         ),
-                                      ),
-                                    );
-                                  },
-                                )
-                              : ClipRRect(
-                                  borderRadius: const BorderRadius.all(
-                                    Radius.circular(60.0),
+                                        child: RotationTransition(
+                                          turns: const AlwaysStoppedAnimation<
+                                              double>(0.0),
+                                          child: Container(
+                                            height: 110,
+                                            width: 110,
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  BorderRadius.circular(12.0),
+                                              boxShadow: <BoxShadow>[
+                                                BoxShadow(
+                                                  color: AppTheme.grey
+                                                      .withOpacity(0.0),
+                                                  offset:
+                                                      const Offset(2.0, 4.0),
+                                                  blurRadius: 8,
+                                                ),
+                                              ],
+                                            ),
+                                            child: Image.network(
+                                              widget
+                                                  .userProfile!.profileImageUrl,
+                                              fit: BoxFit.cover,
+                                              loadingBuilder: (context, child,
+                                                  loadingProgress) {
+                                                if (loadingProgress == null) {
+                                                  return child;
+                                                }
+                                                return const Center(
+                                                  child:
+                                                      PulsatingLoadingIndicator(
+                                                    size: 58.0,
+                                                    assetPath:
+                                                        'assets/icons/fathemed.png',
+                                                  ),
+                                                );
+                                              },
+                                              errorBuilder:
+                                                  (context, error, stackTrace) {
+                                                if (error
+                                                    .toString()
+                                                    .contains('404')) {
+                                                  return Image.asset(
+                                                    'assets/images/defaultpic.gif',
+                                                    fit: BoxFit.cover,
+                                                  );
+                                                } else {
+                                                  return const Icon(
+                                                    Icons.person,
+                                                    size: 60,
+                                                    color: Colors.white,
+                                                  );
+                                                }
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : ClipRRect(
+                                    borderRadius: const BorderRadius.all(
+                                      Radius.circular(60.0),
+                                    ),
+                                    child: Image.asset(
+                                      'assets/images/defaultpic.gif',
+                                      width: 120,
+                                      height: 120,
+                                      fit: BoxFit.cover,
+                                    ),
                                   ),
-                                  child: Image.asset(
-                                    'assets/images/defaultpic.gif',
-                                    width: 120,
-                                    height: 120,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Divider(
+                        height: 4.0,
+                        color: Colors.black,
+                        thickness: 4.0,
+                      ),
+                      const SizedBox(height: 8),
+                      // Username
+                      Text(
+                        widget.userProfile?.username ?? 'Username',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          fontSize: 19,
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Divider(
-                      height: 4.0,
-                      color: Colors.black,
-                      thickness: 4.0,
-                    ),
-                    const SizedBox(height: 8),
-                    // Username
-                    Text(
-                      widget.userProfile?.username ?? 'Username',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        fontSize: 19,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Divider(
-                      height: 3.0,
-                      color: Colors.black,
-                      thickness: 3.0,
-                    ),
-                    const SizedBox(height: 6),
-                    // Notifications Row
-                    Container(
-                      color: Colors.black,
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 8, horizontal: 16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: badgesWithSpacing,
+                      const SizedBox(height: 8),
+                      const Divider(
+                        height: 3.0,
+                        color: Colors.black,
+                        thickness: 3.0,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 6),
+                      // Notifications Row
+                      Container(
+                        color: Colors.black,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 8, horizontal: 16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: badgesWithSpacing,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            // Drawer Items
-            Expanded(
-              child: Container(
-                color: AppTheme.background,
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: ListView.builder(
-                        physics: const BouncingScrollPhysics(),
-                        padding: EdgeInsets.zero,
-                        itemCount: drawerList!.length + (showUpdateButton ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (showUpdateButton && index == 0) {
-                            return Padding(
-                              padding: const EdgeInsets.fromLTRB(16.0, 14.0, 16.0, 4.0),
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(maxWidth: 200),
-                                  child: Material(
-                                    color: const Color(0xFF3ACD3E),
-                                    borderRadius: BorderRadius.circular(26),
-                                    clipBehavior: Clip.antiAlias,
-                                    child: InkWell(
-                                      onTap: () => launchUrlString(
-                                        'https://t.me/+xTEmmXoDW5tkMGFi',
-                                        mode: LaunchMode.externalApplication,
-                                      ),
-                                      child: const SizedBox(
-                                        height: 44,
-                                        child: Center(
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              Icon(Icons.cached, color: Colors.white),
-                                              SizedBox(width: 6),
-                                              Text(
-                                                'Update Available!',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 16,
+              // Drawer Items
+              Expanded(
+                child: Container(
+                  color: AppTheme.background,
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: ListView.builder(
+                          physics: const BouncingScrollPhysics(),
+                          padding: EdgeInsets.zero,
+                          itemCount:
+                              drawerList!.length + (showUpdateButton ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (showUpdateButton && index == 0) {
+                              return Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                    16.0, 14.0, 16.0, 4.0),
+                                child: Center(
+                                  child: ConstrainedBox(
+                                    constraints:
+                                        const BoxConstraints(maxWidth: 200),
+                                    child: Material(
+                                      color: const Color(0xFF3ACD3E),
+                                      borderRadius: BorderRadius.circular(26),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: InkWell(
+                                        onTap: () => launchUrlString(
+                                          'https://t.me/+xTEmmXoDW5tkMGFi',
+                                          mode: LaunchMode.externalApplication,
+                                        ),
+                                        child: const SizedBox(
+                                          height: 44,
+                                          child: Center(
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.cached,
+                                                    color: Colors.white),
+                                                SizedBox(width: 6),
+                                                Text(
+                                                  'Update Available!',
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 16,
+                                                  ),
                                                 ),
-                                              ),
-                                            ],
+                                              ],
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            );
-                          }
+                              );
+                            }
 
-                          final int drawerIndex = showUpdateButton ? index - 1 : index;
-                          return inkwell(drawerList![drawerIndex]);
-                        },
-
+                            final int drawerIndex =
+                                showUpdateButton ? index - 1 : index;
+                            return inkwell(drawerList![drawerIndex]);
+                          },
+                        ),
                       ),
-                    ),
 
-
-                    // NSFW Toggle
-                    Padding(
-                      padding: const EdgeInsets.only(
-                        bottom: 10.0,
-                        top: 6.0,
-                        right: 16.0,
-                        left: 16.0,
+                      // NSFW Toggle
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: 10.0,
+                          top: 6.0,
+                          right: 16.0,
+                          left: 16.0,
+                        ),
+                        child: Row(
+                          children: [
+                            FlutterSwitch(
+                              width: 68.0,
+                              height: 30.0,
+                              toggleSize: 20.0,
+                              value: !_sfwEnabled,
+                              borderRadius: 18.0,
+                              padding: 3,
+                              activeText: 'NSFW',
+                              inactiveText: ' SFW',
+                              valueFontSize: 11.6,
+                              activeTextColor: Colors.black,
+                              activeToggleColor: Colors.black,
+                              inactiveTextColor: Colors.white,
+                              activeColor: const Color(0xFFE09321),
+                              inactiveColor: const Color(0xFF111111),
+                              showOnOff: true,
+                              onToggle: (val) async {
+                                final prefs =
+                                    await SharedPreferences.getInstance();
+                                bool confirmationDisabled =
+                                    prefs.getBool(NsfwConfirmationDisabled) ??
+                                        false;
+                                if (confirmationDisabled) {
+                                  await _toggleNsfwMode();
+                                } else {
+                                  await _showNsfwConfirmationDialog();
+                                }
+                              },
+                            ),
+                          ],
+                        ),
                       ),
-                      child: Row(
-                        children: [
-                          FlutterSwitch(
-                            width: 68.0,
-                            height: 30.0,
-                            toggleSize: 20.0,
-                            value: !_sfwEnabled,
-                            borderRadius: 18.0,
-                            padding: 3,
-                            activeText: 'NSFW',
-                            inactiveText: ' SFW',
-                            valueFontSize: 11.6,
-                            activeTextColor: Colors.black,
-                            activeToggleColor: Colors.black,
-                            inactiveTextColor: Colors.white,
-                            activeColor: const Color(0xFFE09321),
-                            inactiveColor: const Color(0xFF111111),
-                            showOnOff: true,
-                            onToggle: (val) async {
-                              final prefs = await SharedPreferences.getInstance();
-                              bool confirmationDisabled =
-                                  prefs.getBool(NsfwConfirmationDisabled) ?? false;
-                              if (confirmationDisabled) {
-                                await _toggleNsfwMode();
-                              } else {
-                                await _showNsfwConfirmationDialog();
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
 
-                    const Divider(
-                      height: 1.0,
-                      color: Color(0xFF111111),
-                      thickness: 3.0,
-                    ),
-
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 8.0,
-                        horizontal: 16.0,
+                      const Divider(
+                        height: 1.0,
+                        color: Color(0xFF111111),
+                        thickness: 3.0,
                       ),
-                      child: Text(
-                        'Registered users online: ${_notifications.registeredUsersOnline}',
-                        style: const TextStyle(fontSize: 14, color: Colors.white),
-                        textAlign: TextAlign.left,
-                      ),
-                    ),
 
-                    SizedBox(height: MediaQuery.paddingOf(context).bottom),
-                  ],
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8.0,
+                          horizontal: 16.0,
+                        ),
+                        child: Text(
+                          'Registered users online: ${_notifications.registeredUsersOnline}',
+                          style: const TextStyle(
+                              fontSize: 14, color: Colors.white),
+                          textAlign: TextAlign.left,
+                        ),
+                      ),
+
+                      SizedBox(height: MediaQuery.paddingOf(context).bottom),
+                    ],
+                  ),
                 ),
               ),
-            ),
-
-          ],
+            ],
+          ),
         ),
       ),
-        ),
     );
   }
 }

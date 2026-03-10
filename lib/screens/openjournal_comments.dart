@@ -135,10 +135,8 @@ class _CommentWidgetState extends State<CommentWidget> {
                           if (widget.comment['username'] != null) {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
-                                builder: (context) => UserProfileScreen(
-                                  nickname: widget.comment['username'],
-                                ),
+                              UserProfileScreen.route(
+                                nickname: widget.comment['username'],
                               ),
                             );
                           }

@@ -2125,13 +2125,11 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
           'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(
-            nickname: tappedUsername,
-            initialSection: ProfileSection.Gallery,
-            initialFolderUrl: folderUrl,
-            initialFolderName: folderName,
-          ),
+        UserProfileScreen.route(
+          nickname: tappedUsername,
+          initialSection: ProfileSection.Gallery,
+          initialFolderUrl: folderUrl,
+          initialFolderName: folderName,
         ),
       );
       return;
@@ -2145,9 +2143,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
       final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(nickname: tappedUsername),
-        ),
+        UserProfileScreen.route(nickname: tappedUsername),
       );
       return;
     }
@@ -2166,11 +2162,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         // Matched: /journals/username/
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => UserProfileScreen(
-              nickname: username,
-              initialSection: ProfileSection.Journals,
-            ),
+          UserProfileScreen.route(
+            nickname: username,
+            initialSection: ProfileSection.Journals,
           ),
         );
       } else if (journalId != null) {
@@ -2556,12 +2550,9 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                           onTap: () {
                                             Navigator.push(
                                               context,
-                                              MaterialPageRoute(
-                                                builder: (context) =>
-                                                    UserProfileScreen(
-                                                  nickname:
-                                                      linkUsername ?? username!,
-                                                ),
+                                              UserProfileScreen.route(
+                                                nickname:
+                                                    linkUsername ?? username!,
                                               ),
                                             );
                                           },
@@ -2669,10 +2660,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                                                 size: 20,
                                                               ),
                                                             ),
-                ),
-              ),
-            ],
-          ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
                                                   ),
                                                 ),
                                               ],
@@ -3123,14 +3114,11 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                                 if (linkUsername != null) {
                                                   Navigator.push(
                                                     context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) =>
-                                                          UserProfileScreen(
-                                                        nickname: linkUsername!,
-                                                        initialSection:
-                                                            ProfileSection
-                                                                .Gallery,
-                                                      ),
+                                                    UserProfileScreen.route(
+                                                      nickname: linkUsername!,
+                                                      initialSection:
+                                                          ProfileSection
+                                                              .Gallery,
                                                     ),
                                                   );
                                                 } else {

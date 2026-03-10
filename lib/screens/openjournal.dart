@@ -1047,12 +1047,9 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                                             .isNotEmpty) {
                                                       Navigator.push(
                                                         context,
-                                                        MaterialPageRoute(
-                                                          builder: (context) =>
-                                                              UserProfileScreen(
-                                                            nickname:
-                                                                authorUserName!,
-                                                          ),
+                                                        UserProfileScreen.route(
+                                                          nickname:
+                                                              authorUserName!,
                                                         ),
                                                       );
                                                     }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math';
 import 'package:FANotifier/screens/user_description_webview.dart';
+import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -34,6 +35,68 @@ import 'user_profile_home_section.dart';
 import 'user_profile_journals_section.dart';
 import 'user_profile_scraps_section.dart';
 
+class _AndroidUserProfilePageRoute<T> extends PageRoute<T> {
+  _AndroidUserProfilePageRoute({
+    required this.builder,
+    super.settings,
+    super.requestFocus,
+    this.allowSnapshotting = true,
+    this.fullscreenDialog = false,
+    this.maintainState = true,
+  });
+
+  final WidgetBuilder builder;
+  final bool allowSnapshotting;
+  @override
+  final bool fullscreenDialog;
+  @override
+  final bool maintainState;
+
+  @override
+  bool get opaque => false;
+
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  String? get barrierLabel => null;
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 280);
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 280);
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    return builder(context);
+  }
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return SlideTransition(
+      position: animation.drive(
+        Tween<Offset>(
+          begin: const Offset(1.0, 0.0),
+          end: Offset.zero,
+        ).chain(
+          CurveTween(curve: Curves.easeOutCubic),
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
 class UserProfileScreen extends StatefulWidget {
   final String nickname;
   final ProfileSection initialSection;
@@ -47,6 +110,33 @@ class UserProfileScreen extends StatefulWidget {
     this.initialFolderName,
   }) : super(key: key);
 
+  static Route<T> route<T>({
+    required String nickname,
+    ProfileSection initialSection = ProfileSection.Home,
+    String? initialFolderUrl,
+    String? initialFolderName,
+    RouteSettings? settings,
+  }) {
+    final builder = (BuildContext context) => UserProfileScreen(
+          nickname: nickname,
+          initialSection: initialSection,
+          initialFolderUrl: initialFolderUrl,
+          initialFolderName: initialFolderName,
+        );
+
+    if (Platform.isAndroid) {
+      return _AndroidUserProfilePageRoute<T>(
+        settings: settings,
+        builder: builder,
+      );
+    }
+
+    return CupertinoPageRoute<T>(
+      settings: settings,
+      builder: builder,
+    );
+  }
+
   @override
   UserProfileScreenState createState() => UserProfileScreenState();
 }
@@ -54,7 +144,7 @@ class UserProfileScreen extends StatefulWidget {
 enum ProfileSection { Home, Gallery, Scraps, Favs, Journals }
 
 class UserProfileScreenState extends State<UserProfileScreen>
-    with RouteAware, SingleTickerProviderStateMixin {
+    with RouteAware, TickerProviderStateMixin {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -64,10 +154,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
   @override
   void dispose() {
     _tabSettleTimer?.cancel();
+    _backSwipeAnimationController.dispose();
     _tabController.dispose();
     _scrollController.removeListener(_updateAvatarTransform);
     _scrollController.removeListener(_onScrollForMoveUpFab);
     _scrollController.dispose();
+    _backSwipeOffsetNotifier.dispose();
     _showMoveUpFab.dispose();
     routeObserver.unsubscribe(this);
     super.dispose();
@@ -263,12 +355,21 @@ class UserProfileScreenState extends State<UserProfileScreen>
   static const double sliverAppBarMinHeight = kToolbarHeight - 80.0; // 56.0
   static const double collapsibleHeaderMaxHeight = 110.0;
   static const double navigationSliderHeight = 64.0;
+  static const double _androidBackSwipeDetectorWidth = 25.0;
+  static const double _androidBackSwipeTriggerWidth = 62.0;
+  static const double _androidBackSwipeMinDistance = 72.0;
+  static const double _androidBackSwipeMinVelocity = 700.0;
 
   final double _bannerScaleStart = 0.0;
   final double _bannerScaleEnd = 180.0;
 
   late ScrollController _scrollController;
   late final ValueNotifier<bool> _showMoveUpFab = ValueNotifier<bool>(false);
+  late final ValueNotifier<double> _backSwipeOffsetNotifier =
+      ValueNotifier<double>(0.0);
+  late final AnimationController _backSwipeAnimationController;
+  Animation<double>? _backSwipeOffsetAnimation;
+  bool _popAfterBackSwipeAnimation = false;
 
   late TabController _tabController;
 
@@ -288,6 +389,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
   bool isLoadingMoreShouts = false;
   bool _isShoutSelectionMode = false;
   bool _isDeletingSelectedShouts = false;
+  bool _isDraggingBackFromEdge = false;
+  double _backDragStartX = 0.0;
+  double _backDragDistance = 0.0;
+
+  double get _backSwipeOffset => _backSwipeOffsetNotifier.value;
+  set _backSwipeOffset(double value) => _backSwipeOffsetNotifier.value = value;
 
   @override
   void initState() {
@@ -315,6 +422,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
       vsync: this,
       initialIndex: widget.initialSection.index,
     );
+    _backSwipeAnimationController = AnimationController(vsync: this)
+      ..addListener(_onBackSwipeAnimationTick)
+      ..addStatusListener(_onBackSwipeAnimationStatusChanged);
 
     // Load only the initial tab immediately; others will load after "settling".
     _lazyLoadedSections.add(ProfileSection.values[_tabController.index]);
@@ -376,6 +486,236 @@ class UserProfileScreenState extends State<UserProfileScreen>
   Future<void> _initAsyncFetch() async {
     await _loadSfwEnabled();
     await _fetchUserProfile();
+  }
+
+  Future<bool> _attemptCloseProfileScreen({
+    bool resetBackSwipeOffset = true,
+  }) async {
+    _webViewKey.currentState?.hideWebView();
+    if (resetBackSwipeOffset) {
+      _resetAndroidBackSwipe();
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    if (!mounted) {
+      return false;
+    }
+    return Navigator.maybePop(context);
+  }
+
+  void _closeProfileScreen() {
+    _attemptCloseProfileScreen();
+  }
+
+  void _onBackSwipeAnimationTick() {
+    final animation = _backSwipeOffsetAnimation;
+    if (animation == null) {
+      return;
+    }
+    _backSwipeOffset = animation.value;
+  }
+
+  void _onBackSwipeAnimationStatusChanged(AnimationStatus status) {
+    if (status != AnimationStatus.completed) {
+      return;
+    }
+
+    final shouldPop = _popAfterBackSwipeAnimation;
+    _backSwipeOffsetAnimation = null;
+    _popAfterBackSwipeAnimation = false;
+
+    if (shouldPop) {
+      _finishBackSwipeClose();
+    }
+  }
+
+  Future<void> _finishBackSwipeClose() async {
+    final didPop =
+        await _attemptCloseProfileScreen(resetBackSwipeOffset: false);
+    if (!didPop && mounted) {
+      _animateBackSwipeTo(
+        0.0,
+        duration: const Duration(milliseconds: 180),
+      );
+    }
+  }
+
+  Duration _backSwipeCloseDuration(
+    double screenWidth,
+    double velocity,
+  ) {
+    final remaining = max(0.0, screenWidth - _backSwipeOffset);
+    if (remaining <= 0.0) {
+      return Duration.zero;
+    }
+
+    if (velocity > 0.0) {
+      final milliseconds = ((remaining / velocity) * 1000)
+          .round()
+          .clamp(90, 240);
+      return Duration(milliseconds: milliseconds);
+    }
+
+    final distanceFactor = (remaining / screenWidth).clamp(0.2, 1.0);
+    return Duration(milliseconds: (220 * distanceFactor).round());
+  }
+
+  Duration _backSwipeResetDuration(double screenWidth) {
+    if (screenWidth <= 0.0) {
+      return const Duration(milliseconds: 180);
+    }
+
+    final distanceFactor = (_backSwipeOffset / screenWidth).clamp(0.15, 1.0);
+    return Duration(milliseconds: (180 * distanceFactor).round());
+  }
+
+  void _animateBackSwipeTo(
+    double target, {
+    required Duration duration,
+    Curve curve = Curves.easeOutCubic,
+    bool popWhenDone = false,
+  }) {
+    _backSwipeAnimationController.stop();
+    _backSwipeAnimationController.duration = duration;
+    _backSwipeOffsetAnimation = Tween<double>(
+      begin: _backSwipeOffset,
+      end: target,
+    ).animate(
+      CurvedAnimation(
+        parent: _backSwipeAnimationController,
+        curve: curve,
+      ),
+    );
+    _popAfterBackSwipeAnimation = popWhenDone;
+    _backSwipeAnimationController.forward(from: 0.0);
+  }
+
+  void _handleAndroidBackSwipeStart(DragStartDetails details) {
+    if (!Platform.isAndroid || _isShoutSelectionMode) {
+      return;
+    }
+
+    if (details.globalPosition.dx <= _androidBackSwipeTriggerWidth) {
+      _backSwipeAnimationController.stop();
+      _backSwipeOffsetAnimation = null;
+      _popAfterBackSwipeAnimation = false;
+      _isDraggingBackFromEdge = true;
+      _backDragStartX = details.globalPosition.dx - _backSwipeOffset;
+      _backDragDistance = _backSwipeOffset;
+    }
+  }
+
+  void _handleAndroidBackSwipeUpdate(DragUpdateDetails details) {
+    if (!_isDraggingBackFromEdge) {
+      return;
+    }
+
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final distance = (details.globalPosition.dx - _backDragStartX)
+        .clamp(0.0, screenWidth)
+        .toDouble();
+    _backDragDistance = distance;
+    _backSwipeOffset = distance;
+  }
+
+  void _handleAndroidBackSwipeEnd(DragEndDetails details) {
+    if (!_isDraggingBackFromEdge) {
+      return;
+    }
+
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final closeDistanceThreshold =
+        max(_androidBackSwipeMinDistance, screenWidth * 0.25);
+    final shouldClose =
+        _backDragDistance >= closeDistanceThreshold ||
+        details.velocity.pixelsPerSecond.dx >= _androidBackSwipeMinVelocity;
+
+    _isDraggingBackFromEdge = false;
+    _backDragStartX = 0.0;
+    _backDragDistance = 0.0;
+
+    if (shouldClose) {
+      _animateBackSwipeTo(
+        screenWidth,
+        duration: _backSwipeCloseDuration(
+          screenWidth,
+          details.velocity.pixelsPerSecond.dx,
+        ),
+        popWhenDone: true,
+      );
+    } else {
+      _animateBackSwipeTo(
+        0.0,
+        duration: _backSwipeResetDuration(screenWidth),
+      );
+    }
+  }
+
+  void _resetAndroidBackSwipe() {
+    _isDraggingBackFromEdge = false;
+    _backDragStartX = 0.0;
+    _backDragDistance = 0.0;
+    _backSwipeAnimationController.stop();
+    _backSwipeOffsetAnimation = null;
+    _popAfterBackSwipeAnimation = false;
+    _backSwipeOffset = 0.0;
+  }
+
+  Widget _buildAndroidBackSwipeOverlay() {
+    if (!Platform.isAndroid) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned(
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: _androidBackSwipeDetectorWidth,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragStart: _handleAndroidBackSwipeStart,
+        onHorizontalDragUpdate: _handleAndroidBackSwipeUpdate,
+        onHorizontalDragEnd: _handleAndroidBackSwipeEnd,
+        onHorizontalDragCancel: _resetAndroidBackSwipe,
+        child: Container(color: Colors.transparent),
+      ),
+    );
+  }
+
+  Widget _buildAndroidBackSwipeTransition({required Widget child}) {
+    if (!Platform.isAndroid) {
+      return child;
+    }
+
+    return ValueListenableBuilder<double>(
+      valueListenable: _backSwipeOffsetNotifier,
+      child: child,
+      builder: (context, offset, swipeChild) {
+        final screenWidth = MediaQuery.sizeOf(context).width;
+        final progress = screenWidth > 0.0
+            ? (offset / screenWidth).clamp(0.0, 1.0).toDouble()
+            : 0.0;
+
+        return Transform.translate(
+          offset: Offset(offset, 0.0),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              boxShadow: offset > 0.0
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: 0.24 * (1.0 - (progress * 0.5)),
+                        ),
+                        blurRadius: 24.0,
+                        offset: const Offset(-6.0, 0.0),
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: swipeChild,
+          ),
+        );
+      },
+    );
   }
 
   void _updateAvatarTransform() {
@@ -878,13 +1218,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
       exitShoutSelectionMode();
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(
-            nickname: tappedUsername,
-            initialSection: ProfileSection.Gallery,
-            initialFolderUrl: folderUrl,
-            initialFolderName: folderName,
-          ),
+        UserProfileScreen.route(
+          nickname: tappedUsername,
+          initialSection: ProfileSection.Gallery,
+          initialFolderUrl: folderUrl,
+          initialFolderName: folderName,
         ),
       );
       return;
@@ -899,9 +1237,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       exitShoutSelectionMode();
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(nickname: tappedUsername),
-        ),
+        UserProfileScreen.route(nickname: tappedUsername),
       );
       return;
     }
@@ -918,11 +1254,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
         exitShoutSelectionMode();
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => UserProfileScreen(
-              nickname: userNameFromJournal,
-              initialSection: ProfileSection.Journals,
-            ),
+          UserProfileScreen.route(
+            nickname: userNameFromJournal,
+            initialSection: ProfileSection.Journals,
           ),
         );
       } else if (journalId != null) {
@@ -1400,8 +1734,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
         platformViews.isNotEmpty ? platformViews.first : View.of(context);
     final fixedTextScaleMediaQuery = MediaQueryData.fromView(baseView)
         .copyWith(textScaler: TextScaler.linear(1.0));
-    final bool showDeleteSelectedFab =
-        !isLoading && isOwnProfile && _isShoutSelectionMode && _selectedShoutCount > 0;
+    final bool showDeleteSelectedFab = !isLoading &&
+        isOwnProfile &&
+        _isShoutSelectionMode &&
+        _selectedShoutCount > 0;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -1418,650 +1754,671 @@ class UserProfileScreenState extends State<UserProfileScreen>
           }
         },
         child: DefaultTabController(
-        length: ProfileSection.values.length,
-        child: Scaffold(
-          backgroundColor: Colors.black,
-          body: SafeArea(
-            top: false,
-            child: Stack(
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: () => _clearProfileNameSelection(),
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: (ScrollNotification notification) {
-                      _updateAvatarTransform();
-                      return false;
-                    },
-                    child: NestedScrollView(
-                      controller: _scrollController,
-                      headerSliverBuilder: (context, innerBoxIsScrolled) => [
-                        SliverAppBar(
-                          centerTitle: false,
-                          leading: IconButton(
-                            icon: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Positioned(
-                                    left: 1,
-                                    child: Icon(Icons.arrow_back,
-                                        size: 24, color: Color(0xFF111111))),
-                                Positioned(
-                                    right: 1,
-                                    child: Icon(Icons.arrow_back,
-                                        size: 24, color: Color(0xFF111111))),
-                                Positioned(
-                                    top: 1,
-                                    child: Icon(Icons.arrow_back,
-                                        size: 24, color: Color(0xFF111111))),
-                                Positioned(
-                                    bottom: 1,
-                                    child: Icon(Icons.arrow_back,
-                                        size: 24, color: Color(0xFF111111))),
-                                Icon(Icons.arrow_back,
-                                    size: 24, color: Colors.white),
-                              ],
-                            ),
-                            onPressed: () {
-                              _webViewKey.currentState?.hideWebView();
-                              Future.delayed(const Duration(milliseconds: 5),
-                                  () {
-                                Navigator.pop(context);
-                              });
-                            },
-                          ),
-                          title: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Stack(
+          length: ProfileSection.values.length,
+          child: _buildAndroidBackSwipeTransition(
+            child: Scaffold(
+              backgroundColor: Colors.black,
+              body: SafeArea(
+                top: false,
+                child: Stack(
+                  children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: () => _clearProfileNameSelection(),
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: (ScrollNotification notification) {
+                        _updateAvatarTransform();
+                        return false;
+                      },
+                      child: NestedScrollView(
+                        controller: _scrollController,
+                        headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                          SliverAppBar(
+                            centerTitle: false,
+                            leading: IconButton(
+                              icon: Stack(
+                                alignment: Alignment.center,
                                 children: [
-                                  // Stroked text as outline
-                                  Text(
-                                    symbolUsername ?? 'Profile',
-                                    style: TextStyle(
-                                      fontSize: 18.0,
-                                      fontWeight: FontWeight.bold,
-                                      foreground: Paint()
-                                        ..style = PaintingStyle.stroke
-                                        ..strokeWidth = 2
-                                        ..color = Color(0xFF111111),
-                                    ),
-                                  ),
-                                  // Filled text on top
-                                  Text(
-                                    symbolUsername ?? 'Profile',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18.0,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                                  Positioned(
+                                      left: 1,
+                                      child: Icon(Icons.arrow_back,
+                                          size: 24, color: Color(0xFF111111))),
+                                  Positioned(
+                                      right: 1,
+                                      child: Icon(Icons.arrow_back,
+                                          size: 24, color: Color(0xFF111111))),
+                                  Positioned(
+                                      top: 1,
+                                      child: Icon(Icons.arrow_back,
+                                          size: 24, color: Color(0xFF111111))),
+                                  Positioned(
+                                      bottom: 1,
+                                      child: Icon(Icons.arrow_back,
+                                          size: 24, color: Color(0xFF111111))),
+                                  Icon(Icons.arrow_back,
+                                      size: 24, color: Colors.white),
                                 ],
                               ),
-                              if (symbolUsername != null &&
-                                  symbolUsername!.startsWith('!'))
-                                const Padding(
-                                  padding: EdgeInsets.only(left: 8.0),
-                                  child: Text(
-                                    "USER BANNED",
-                                    style: TextStyle(
-                                      color: Colors.red,
-                                      fontSize: 18.0,
-                                      fontWeight: FontWeight.bold,
+                              onPressed: _closeProfileScreen,
+                            ),
+                            title: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Stack(
+                                  children: [
+                                    // Stroked text as outline
+                                    Text(
+                                      symbolUsername ?? 'Profile',
+                                      style: TextStyle(
+                                        fontSize: 18.0,
+                                        fontWeight: FontWeight.bold,
+                                        foreground: Paint()
+                                          ..style = PaintingStyle.stroke
+                                          ..strokeWidth = 2
+                                          ..color = Color(0xFF111111),
+                                      ),
+                                    ),
+                                    // Filled text on top
+                                    Text(
+                                      symbolUsername ?? 'Profile',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18.0,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (symbolUsername != null &&
+                                    symbolUsername!.startsWith('!'))
+                                  const Padding(
+                                    padding: EdgeInsets.only(left: 8.0),
+                                    child: Text(
+                                      "USER BANNED",
+                                      style: TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 18.0,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
-                                ),
-                            ],
-                          ),
-                          expandedHeight: sliverAppBarExpandedHeight,
-                          pinned: true,
-                          floating: false,
-                          snap: false,
-                          backgroundColor: Colors.black.withOpacity(
-                            (_scrollController.hasClients &&
-                                    _scrollController.offset > 50)
-                                ? (_scrollController.offset / 200)
-                                    .clamp(0.0, 1.0)
-                                : 0.0,
-                          ),
-                          actions: [
-                            Builder(
-                              builder: (context) {
-                                return IconButton(
-                                  icon: Stack(
-                                    alignment: Alignment.center,
-                                    children: [
-                                      Positioned(
-                                          left: 1,
-                                          child: Icon(Icons.more_vert,
-                                              size: 24,
-                                              color: Color(0xFF111111))),
-                                      Positioned(
-                                          right: 1,
-                                          child: Icon(Icons.more_vert,
-                                              size: 24,
-                                              color: Color(0xFF111111))),
-                                      Positioned(
-                                          top: 1,
-                                          child: Icon(Icons.more_vert,
-                                              size: 24,
-                                              color: Color(0xFF111111))),
-                                      Positioned(
-                                          bottom: 1,
-                                          child: Icon(Icons.more_vert,
-                                              size: 24,
-                                              color: Color(0xFF111111))),
-                                      Icon(Icons.more_vert,
-                                          size: 24, color: Colors.white),
-                                    ],
-                                  ),
-                                  onPressed: () async {
-                                    final RenderBox button =
-                                        context.findRenderObject() as RenderBox;
-                                    final RenderBox overlay =
-                                        Overlay.of(context)
-                                            .context
-                                            .findRenderObject() as RenderBox;
-                                    final RelativeRect position =
-                                        RelativeRect.fromRect(
-                                      Rect.fromPoints(
-                                        button.localToGlobal(const Offset(0, 0),
-                                            ancestor: overlay),
-                                        button.localToGlobal(
-                                            Offset(0, button.size.height + 10),
-                                            ancestor: overlay),
-                                      ),
-                                      Offset.zero & overlay.size,
-                                    );
-
-                                    List<PopupMenuEntry<String>> menuItems = [
-                                      const PopupMenuItem<String>(
-                                        value: 'report',
-                                        child: Text('Report'),
-                                      ),
-                                      if (!isOwnProfile)
-                                        PopupMenuItem<String>(
-                                          value: 'block_unblock',
-                                          child: Text(isBlocked
-                                              ? 'Unblock author'
-                                              : 'Block author'),
+                              ],
+                            ),
+                            expandedHeight: sliverAppBarExpandedHeight,
+                            pinned: true,
+                            floating: false,
+                            snap: false,
+                            backgroundColor: Colors.black.withOpacity(
+                              (_scrollController.hasClients &&
+                                      _scrollController.offset > 50)
+                                  ? (_scrollController.offset / 200)
+                                      .clamp(0.0, 1.0)
+                                  : 0.0,
+                            ),
+                            actions: [
+                              Builder(
+                                builder: (context) {
+                                  return IconButton(
+                                    icon: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        Positioned(
+                                            left: 1,
+                                            child: Icon(Icons.more_vert,
+                                                size: 24,
+                                                color: Color(0xFF111111))),
+                                        Positioned(
+                                            right: 1,
+                                            child: Icon(Icons.more_vert,
+                                                size: 24,
+                                                color: Color(0xFF111111))),
+                                        Positioned(
+                                            top: 1,
+                                            child: Icon(Icons.more_vert,
+                                                size: 24,
+                                                color: Color(0xFF111111))),
+                                        Positioned(
+                                            bottom: 1,
+                                            child: Icon(Icons.more_vert,
+                                                size: 24,
+                                                color: Color(0xFF111111))),
+                                        Icon(Icons.more_vert,
+                                            size: 24, color: Colors.white),
+                                      ],
+                                    ),
+                                    onPressed: () async {
+                                      final RenderBox button = context
+                                          .findRenderObject() as RenderBox;
+                                      final RenderBox overlay =
+                                          Overlay.of(context)
+                                              .context
+                                              .findRenderObject() as RenderBox;
+                                      final RelativeRect position =
+                                          RelativeRect.fromRect(
+                                        Rect.fromPoints(
+                                          button.localToGlobal(
+                                              const Offset(0, 0),
+                                              ancestor: overlay),
+                                          button.localToGlobal(
+                                              Offset(
+                                                  0, button.size.height + 10),
+                                              ancestor: overlay),
                                         ),
-                                      const PopupMenuItem<String>(
-                                        value: 'copy_link',
-                                        child: Text('Copy link'),
-                                      ),
-                                    ];
+                                        Offset.zero & overlay.size,
+                                      );
 
-                                    final selected = await showMenu<String>(
-                                      context: context,
-                                      position: position,
-                                      items: menuItems,
-                                    );
+                                      List<PopupMenuEntry<String>> menuItems = [
+                                        const PopupMenuItem<String>(
+                                          value: 'report',
+                                          child: Text('Report'),
+                                        ),
+                                        if (!isOwnProfile)
+                                          PopupMenuItem<String>(
+                                            value: 'block_unblock',
+                                            child: Text(isBlocked
+                                                ? 'Unblock author'
+                                                : 'Block author'),
+                                          ),
+                                        const PopupMenuItem<String>(
+                                          value: 'copy_link',
+                                          child: Text('Copy link'),
+                                        ),
+                                      ];
 
-                                    switch (selected) {
-                                      case 'report':
-                                        launchUrlString(
-                                            'https://www.furaffinity.net/controls/troubletickets/');
-                                        break;
-                                      case 'block_unblock':
-                                        if (!isOwnProfile) {
-                                          await _handleBlockUnblock();
-                                        }
-                                        break;
-                                      case 'copy_link':
-                                        _copyProfileLinkToClipboard();
-                                        break;
-                                      default:
-                                        break;
-                                    }
-                                  },
+                                      final selected = await showMenu<String>(
+                                        context: context,
+                                        position: position,
+                                        items: menuItems,
+                                      );
+
+                                      switch (selected) {
+                                        case 'report':
+                                          launchUrlString(
+                                              'https://www.furaffinity.net/controls/troubletickets/');
+                                          break;
+                                        case 'block_unblock':
+                                          if (!isOwnProfile) {
+                                            await _handleBlockUnblock();
+                                          }
+                                          break;
+                                        case 'copy_link':
+                                          _copyProfileLinkToClipboard();
+                                          break;
+                                        default:
+                                          break;
+                                      }
+                                    },
+                                  );
+                                },
+                              ),
+                            ],
+                            flexibleSpace: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final double expandedHeight =
+                                    sliverAppBarExpandedHeight;
+                                final double scrollRange =
+                                    expandedHeight - kToolbarHeight;
+                                double shrinkOffset =
+                                    _scrollController.hasClients
+                                        ? _scrollController.offset
+                                            .clamp(0.0, scrollRange)
+                                        : 0.0;
+                                double alignmentX = -1.0;
+
+                                return Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Positioned.fill(
+                                      child: buildAnimatedBanner(constraints),
+                                    ),
+                                    Container(
+                                      color: Colors.black.withOpacity(0.15),
+                                    ),
+                                    buildAnimatedAvatar(),
+                                  ],
                                 );
                               },
                             ),
-                          ],
-                          flexibleSpace: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final double expandedHeight =
-                                  sliverAppBarExpandedHeight;
-                              final double scrollRange =
-                                  expandedHeight - kToolbarHeight;
-                              double shrinkOffset = _scrollController.hasClients
-                                  ? _scrollController.offset
-                                      .clamp(0.0, scrollRange)
-                                  : 0.0;
-                              double alignmentX = -1.0;
-
-                              return Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  Positioned.fill(
-                                    child: buildAnimatedBanner(constraints),
-                                  ),
-                                  Container(
-                                    color: Colors.black.withOpacity(0.15),
-                                  ),
-                                  buildAnimatedAvatar(),
-                                ],
-                              );
-                            },
                           ),
-                        ),
-                        SliverPersistentHeader(
-                          delegate: FixedSliverPersistentHeaderDelegate(
-                            height: 160,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                const Divider(
-                                  height: 4.0,
-                                  color: Color(0xFF111111),
-                                  thickness: 3.0,
-                                ),
-                                const Divider(
-                                  height: 2.0,
-                                  color: Colors.black,
-                                  thickness: 1.0,
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      width: double.infinity,
-                                      color: const Color(0xFF111111),
-                                      child: Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                            8.0, 0.0, 8.0, 8.0),
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.center,
-                                          children: [
-                                            MediaQuery(
-                                              data: fixedTextScaleMediaQuery,
-                                              child: Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    SizedBox(
-                                                      height: 30.0,
-                                                      child: Padding(
-                                                        padding: EdgeInsets.only(
-                                                            left:
-                                                                textLeftPadding),
-                                                        child: FittedBox(
-                                                          fit: BoxFit.scaleDown,
-                                                          alignment: Alignment
-                                                              .centerLeft,
-                                                          child:
-                                                              _buildProfileHeaderNameRow(),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    SizedBox(
-                                                      height: 24.0,
-                                                      child: Visibility(
-                                                        visible: true,
-                                                        maintainSize: true,
-                                                        maintainAnimation: true,
-                                                        maintainState: true,
+                          SliverPersistentHeader(
+                            delegate: FixedSliverPersistentHeaderDelegate(
+                              height: 160,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  const Divider(
+                                    height: 4.0,
+                                    color: Color(0xFF111111),
+                                    thickness: 3.0,
+                                  ),
+                                  const Divider(
+                                    height: 2.0,
+                                    color: Colors.black,
+                                    thickness: 1.0,
+                                  ),
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: double.infinity,
+                                        color: const Color(0xFF111111),
+                                        child: Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                              8.0, 0.0, 8.0, 8.0),
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
+                                            children: [
+                                              MediaQuery(
+                                                data: fixedTextScaleMediaQuery,
+                                                child: Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      SizedBox(
+                                                        height: 30.0,
                                                         child: Padding(
-                                                          padding:
-                                                              EdgeInsets.only(
-                                                            top: 0.0,
-                                                            left:
-                                                                textLeftPadding,
-                                                          ),
+                                                          padding: EdgeInsets.only(
+                                                              left:
+                                                                  textLeftPadding),
                                                           child: FittedBox(
                                                             fit: BoxFit
                                                                 .scaleDown,
                                                             alignment: Alignment
-                                                                .center,
-                                                            child: Text(
-                                                              (userTitle?.isNotEmpty ??
-                                                                      false)
-                                                                  ? userTitle!
-                                                                  : " ",
-                                                              style:
-                                                                  const TextStyle(
-                                                                color: Colors
-                                                                    .white70,
-                                                                fontSize: 16.0,
+                                                                .centerLeft,
+                                                            child:
+                                                                _buildProfileHeaderNameRow(),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      SizedBox(
+                                                        height: 24.0,
+                                                        child: Visibility(
+                                                          visible: true,
+                                                          maintainSize: true,
+                                                          maintainAnimation:
+                                                              true,
+                                                          maintainState: true,
+                                                          child: Padding(
+                                                            padding:
+                                                                EdgeInsets.only(
+                                                              top: 0.0,
+                                                              left:
+                                                                  textLeftPadding,
+                                                            ),
+                                                            child: FittedBox(
+                                                              fit: BoxFit
+                                                                  .scaleDown,
+                                                              alignment:
+                                                                  Alignment
+                                                                      .center,
+                                                              child: Text(
+                                                                (userTitle?.isNotEmpty ??
+                                                                        false)
+                                                                    ? userTitle!
+                                                                    : " ",
+                                                                style:
+                                                                    const TextStyle(
+                                                                  color: Colors
+                                                                      .white70,
+                                                                  fontSize:
+                                                                      16.0,
+                                                                ),
+                                                                maxLines: 1,
                                                               ),
-                                                              maxLines: 1,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(
+                                                          top: 8.0,
+                                                          left: 0.0,
+                                                        ),
+                                                        child: FittedBox(
+                                                          fit: BoxFit.scaleDown,
+                                                          alignment: Alignment
+                                                              .centerLeft,
+                                                          child: Text(
+                                                            registrationDate !=
+                                                                        null &&
+                                                                    registrationDate!
+                                                                        .isNotEmpty
+                                                                ? 'Joined $registrationDate'
+                                                                : '',
+                                                            style:
+                                                                const TextStyle(
+                                                              color: Colors
+                                                                  .white70,
+                                                              fontSize: 14.0,
+                                                            ),
+                                                            maxLines: 1,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              if (isOwnProfile)
+                                                SizedBox(
+                                                  width: 100,
+                                                  height: 38,
+                                                  child: ElevatedButton(
+                                                    onPressed:
+                                                        _showEditProfileDialog,
+                                                    style: ElevatedButton
+                                                        .styleFrom(
+                                                      backgroundColor:
+                                                          Colors.black,
+                                                      shape:
+                                                          RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(2),
+                                                      ),
+                                                      side: const BorderSide(
+                                                        color:
+                                                            Color(0xFFE09321),
+                                                      ),
+                                                    ),
+                                                    child: const FittedBox(
+                                                      fit: BoxFit.scaleDown,
+                                                      child: Text(
+                                                        "Edit Profile",
+                                                        style: TextStyle(
+                                                          color: Colors.white,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                )
+                                              else
+                                                Column(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 100,
+                                                      height: 38,
+                                                      child: ElevatedButton(
+                                                        onPressed:
+                                                            _handleWatchButtonPressed,
+                                                        style: ElevatedButton
+                                                            .styleFrom(
+                                                          backgroundColor:
+                                                              Colors.black,
+                                                          shape:
+                                                              RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        2),
+                                                          ),
+                                                          side:
+                                                              const BorderSide(
+                                                            color: Color(
+                                                                0xFFE09321),
+                                                          ),
+                                                        ),
+                                                        child: FittedBox(
+                                                          fit: BoxFit.scaleDown,
+                                                          child: Text(
+                                                            isWatching
+                                                                ? "-Watch"
+                                                                : "+Watch",
+                                                            style:
+                                                                const TextStyle(
+                                                              color:
+                                                                  Colors.white,
                                                             ),
                                                           ),
                                                         ),
                                                       ),
                                                     ),
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                        top: 8.0,
-                                                        left: 0.0,
-                                                      ),
-                                                      child: FittedBox(
-                                                        fit: BoxFit.scaleDown,
-                                                        alignment: Alignment
-                                                            .centerLeft,
-                                                        child: Text(
-                                                          registrationDate !=
-                                                                      null &&
-                                                                  registrationDate!
-                                                                      .isNotEmpty
-                                                              ? 'Joined $registrationDate'
-                                                              : '',
-                                                          style:
-                                                              const TextStyle(
-                                                            color:
-                                                                Colors.white70,
-                                                            fontSize: 14.0,
+                                                    const SizedBox(height: 5),
+                                                    SizedBox(
+                                                      width: 100,
+                                                      height: 38,
+                                                      child: ElevatedButton(
+                                                        onPressed: () {
+                                                          Navigator.push(
+                                                            context,
+                                                            MaterialPageRoute(
+                                                              builder: (context) =>
+                                                                  NewMessageScreen(
+                                                                recipient:
+                                                                    sanitizedUsername,
+                                                              ),
+                                                            ),
+                                                          );
+                                                        },
+                                                        style: ElevatedButton
+                                                            .styleFrom(
+                                                          backgroundColor:
+                                                              const Color(
+                                                                  0xFFE09321),
+                                                          shape:
+                                                              RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        2),
                                                           ),
-                                                          maxLines: 1,
+                                                        ),
+                                                        child: const FittedBox(
+                                                          fit: BoxFit.scaleDown,
+                                                          child: Text(
+                                                            "Note",
+                                                            style: TextStyle(
+                                                              color:
+                                                                  Colors.white,
+                                                            ),
+                                                          ),
                                                         ),
                                                       ),
                                                     ),
                                                   ],
                                                 ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            if (isOwnProfile)
-                                              SizedBox(
-                                                width: 100,
-                                                height: 38,
-                                                child: ElevatedButton(
-                                                  onPressed:
-                                                      _showEditProfileDialog,
-                                                  style:
-                                                      ElevatedButton.styleFrom(
-                                                    backgroundColor:
-                                                        Colors.black,
-                                                    shape:
-                                                        RoundedRectangleBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              2),
-                                                    ),
-                                                    side: const BorderSide(
-                                                      color: Color(0xFFE09321),
-                                                    ),
-                                                  ),
-                                                  child: const FittedBox(
-                                                    fit: BoxFit.scaleDown,
-                                                    child: Text(
-                                                      "Edit Profile",
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              )
-                                            else
-                                              Column(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  SizedBox(
-                                                    width: 100,
-                                                    height: 38,
-                                                    child: ElevatedButton(
-                                                      onPressed:
-                                                          _handleWatchButtonPressed,
-                                                      style: ElevatedButton
-                                                          .styleFrom(
-                                                        backgroundColor:
-                                                            Colors.black,
-                                                        shape:
-                                                            RoundedRectangleBorder(
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(2),
-                                                        ),
-                                                        side: const BorderSide(
-                                                          color:
-                                                              Color(0xFFE09321),
-                                                        ),
-                                                      ),
-                                                      child: FittedBox(
-                                                        fit: BoxFit.scaleDown,
-                                                        child: Text(
-                                                          isWatching
-                                                              ? "-Watch"
-                                                              : "+Watch",
-                                                          style:
-                                                              const TextStyle(
-                                                            color: Colors.white,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 5),
-                                                  SizedBox(
-                                                    width: 100,
-                                                    height: 38,
-                                                    child: ElevatedButton(
-                                                      onPressed: () {
-                                                        Navigator.push(
-                                                          context,
-                                                          MaterialPageRoute(
-                                                            builder: (context) =>
-                                                                NewMessageScreen(
-                                                              recipient:
-                                                                  sanitizedUsername,
-                                                            ),
-                                                          ),
-                                                        );
-                                                      },
-                                                      style: ElevatedButton
-                                                          .styleFrom(
-                                                        backgroundColor:
-                                                            const Color(
-                                                                0xFFE09321),
-                                                        shape:
-                                                            RoundedRectangleBorder(
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(2),
-                                                        ),
-                                                      ),
-                                                      child: const FittedBox(
-                                                        fit: BoxFit.scaleDown,
-                                                        child: Text(
-                                                          "Note",
-                                                          style: TextStyle(
-                                                            color: Colors.white,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    const Divider(
-                                      height: 3.0,
-                                      color: Colors.black,
-                                      thickness: 3.0,
-                                    ),
-                                    const Divider(
-                                      height: 4.0,
-                                      color: Color(0xFF111111),
-                                      thickness: 4.0,
-                                    ),
-                                  ],
-                                ),
-                                MediaQuery(
-                                  data: fixedTextScaleMediaQuery,
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(top: 8.0),
-                                    child: Table(
-                                      columnWidths: const {
-                                        0: FlexColumnWidth(1),
-                                        1: FlexColumnWidth(1),
-                                        2: FlexColumnWidth(1),
-                                        3: FlexColumnWidth(1),
-                                      },
-                                      defaultVerticalAlignment:
-                                          TableCellVerticalAlignment.middle,
-                                      children: [
-                                        TableRow(
-                                          children: [
-                                            ProfileStatItem(
-                                                count: views?.toString() ?? '0',
-                                                label: 'Views'),
-                                            ProfileStatItem(
-                                                count:
-                                                    submissions?.toString() ??
-                                                        '0',
-                                                label: 'Submissions'),
-                                            ProfileStatItem(
-                                                count: favs?.toString() ?? '0',
-                                                label: 'Favs'),
-                                            ProfileStatItem(
-                                                count: recentWatchersCount
-                                                    .toString(),
-                                                label: 'Watched'),
-                                          ],
-                                        ),
-                                      ],
+                                      const Divider(
+                                        height: 3.0,
+                                        color: Colors.black,
+                                        thickness: 3.0,
+                                      ),
+                                      const Divider(
+                                        height: 4.0,
+                                        color: Color(0xFF111111),
+                                        thickness: 4.0,
+                                      ),
+                                    ],
+                                  ),
+                                  MediaQuery(
+                                    data: fixedTextScaleMediaQuery,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 8.0),
+                                      child: Table(
+                                        columnWidths: const {
+                                          0: FlexColumnWidth(1),
+                                          1: FlexColumnWidth(1),
+                                          2: FlexColumnWidth(1),
+                                          3: FlexColumnWidth(1),
+                                        },
+                                        defaultVerticalAlignment:
+                                            TableCellVerticalAlignment.middle,
+                                        children: [
+                                          TableRow(
+                                            children: [
+                                              ProfileStatItem(
+                                                  count:
+                                                      views?.toString() ?? '0',
+                                                  label: 'Views'),
+                                              ProfileStatItem(
+                                                  count:
+                                                      submissions?.toString() ??
+                                                          '0',
+                                                  label: 'Submissions'),
+                                              ProfileStatItem(
+                                                  count:
+                                                      favs?.toString() ?? '0',
+                                                  label: 'Favs'),
+                                              ProfileStatItem(
+                                                  count: recentWatchersCount
+                                                      .toString(),
+                                                  label: 'Watched'),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
+                            ),
+                            pinned: false,
+                          ),
+                          SliverPersistentHeader(
+                            pinned: true,
+                            delegate: NavigationSliderSliverDelegate(
+                              minHeight: navigationSliderHeight + 1.0,
+                              maxHeight: navigationSliderHeight + 1.0,
+                              child: NavigationSlider(
+                                sections: ProfileSection.values,
+                                tabController: _tabController,
+                                getTabTitle: _getTabTitle,
+                                getIconForSection: _getIconForSection,
+                                onTabTapped: (index, isAlreadySelected) {
+                                  if (isAlreadySelected) {
+                                    _scrollController.animateTo(
+                                      0.0,
+                                      duration:
+                                          const Duration(milliseconds: 300),
+                                      curve: Curves.easeOut,
+                                    );
+                                  }
+                                },
+                              ),
                             ),
                           ),
-                          pinned: false,
-                        ),
-                        SliverPersistentHeader(
-                          pinned: true,
-                          delegate: NavigationSliderSliverDelegate(
-                            minHeight: navigationSliderHeight + 1.0,
-                            maxHeight: navigationSliderHeight + 1.0,
-                            child: NavigationSlider(
-                              sections: ProfileSection.values,
-                              tabController: _tabController,
-                              getTabTitle: _getTabTitle,
-                              getIconForSection: _getIconForSection,
-                              onTabTapped: (index, isAlreadySelected) {
-                                if (isAlreadySelected) {
-                                  _scrollController.animateTo(
-                                    0.0,
-                                    duration: const Duration(milliseconds: 300),
-                                    curve: Curves.easeOut,
-                                  );
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
-                      body: TabBarView(
-                        controller: _tabController,
-                        children: ProfileSection.values.map((section) {
-                          return KeyedSubtree(
-                            key: ValueKey(section),
-                            child: _buildLazySection(section),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ),
-                ),
-                if (showLoadingIndicator)
-                  Container(
-                    color: Colors.black.withOpacity(1.0),
-                    child: const Center(
-                      child: PulsatingLoadingIndicator(
-                        size: 88.0,
-                        assetPath: 'assets/icons/fathemed.png',
-                      ),
-                    ),
-                  ),
-                Positioned(
-                  left: 16.0,
-                  bottom: 16.0,
-                  child: IgnorePointer(
-                    ignoring: !showDeleteSelectedFab,
-                    child: ExcludeSemantics(
-                      excluding: !showDeleteSelectedFab,
-                      child: AnimatedOpacity(
-                        opacity: showDeleteSelectedFab ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 210),
-                        curve: Curves.easeInOut,
-                        child: AnimatedScale(
-                          scale: showDeleteSelectedFab ? 1.0 : 0.92,
-                          duration: const Duration(milliseconds: 210),
-                          curve: Curves.easeInOut,
-                          child: FloatingActionButton(
-                            heroTag: null,
-                            onPressed: _isDeletingSelectedShouts
-                                ? null
-                                : _confirmDeleteSelectedShouts,
-                            backgroundColor: Colors.red,
-                            tooltip: 'Delete Selected Shouts',
-                            child: _isDeletingSelectedShouts
-                                ? const SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                          Colors.white),
-                                    ),
-                                  )
-                                : const Icon(Icons.delete, color: Colors.white),
-                          ),
+                        ],
+                        body: TabBarView(
+                          controller: _tabController,
+                          children: ProfileSection.values.map((section) {
+                            return KeyedSubtree(
+                              key: ValueKey(section),
+                              child: _buildLazySection(section),
+                            );
+                          }).toList(),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          floatingActionButton: !isLoading
-              ? ValueListenableBuilder<bool>(
-                  valueListenable: _showMoveUpFab,
-                  builder: (context, showFab, child) {
-                    return IgnorePointer(
-                      ignoring: !showFab,
+                  if (showLoadingIndicator)
+                    Container(
+                      color: Colors.black.withOpacity(1.0),
+                      child: const Center(
+                        child: PulsatingLoadingIndicator(
+                          size: 88.0,
+                          assetPath: 'assets/icons/fathemed.png',
+                        ),
+                      ),
+                    ),
+                  _buildAndroidBackSwipeOverlay(),
+                  Positioned(
+                    left: 16.0,
+                    bottom: 16.0,
+                    child: IgnorePointer(
+                      ignoring: !showDeleteSelectedFab,
                       child: ExcludeSemantics(
-                        excluding: !showFab,
+                        excluding: !showDeleteSelectedFab,
                         child: AnimatedOpacity(
-                          opacity: showFab ? 1.0 : 0.0,
+                          opacity: showDeleteSelectedFab ? 1.0 : 0.0,
                           duration: const Duration(milliseconds: 210),
                           curve: Curves.easeInOut,
                           child: AnimatedScale(
-                            scale: showFab ? 1.0 : 0.92,
+                            scale: showDeleteSelectedFab ? 1.0 : 0.92,
                             duration: const Duration(milliseconds: 210),
                             curve: Curves.easeInOut,
-                            child: child,
+                            child: FloatingActionButton(
+                              heroTag: null,
+                              onPressed: _isDeletingSelectedShouts
+                                  ? null
+                                  : _confirmDeleteSelectedShouts,
+                              backgroundColor: Colors.red,
+                              tooltip: 'Delete Selected Shouts',
+                              child: _isDeletingSelectedShouts
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                Colors.white),
+                                      ),
+                                    )
+                                  : const Icon(Icons.delete,
+                                      color: Colors.white),
+                            ),
                           ),
                         ),
                       ),
-                    );
-                  },
-                  child: FloatingActionButton(
-                    onPressed: () {
-                      _scrollController.animateTo(
-                        0.0,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOut,
-                      );
-                    },
-                    backgroundColor: const Color(0xFFE09321),
-                    child: const Icon(Icons.arrow_upward, color: Colors.white),
-                    tooltip: 'Scroll to Top',
+                    ),
                   ),
-                )
-              : null,
-          floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+                  ],
+                ),
+              ),
+              floatingActionButton: !isLoading
+                  ? ValueListenableBuilder<bool>(
+                      valueListenable: _showMoveUpFab,
+                      builder: (context, showFab, child) {
+                        return IgnorePointer(
+                          ignoring: !showFab,
+                          child: ExcludeSemantics(
+                            excluding: !showFab,
+                            child: AnimatedOpacity(
+                              opacity: showFab ? 1.0 : 0.0,
+                              duration: const Duration(milliseconds: 210),
+                              curve: Curves.easeInOut,
+                              child: AnimatedScale(
+                                scale: showFab ? 1.0 : 0.92,
+                                duration: const Duration(milliseconds: 210),
+                                curve: Curves.easeInOut,
+                                child: child,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                      child: FloatingActionButton(
+                        onPressed: () {
+                          _scrollController.animateTo(
+                            0.0,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOut,
+                          );
+                        },
+                        backgroundColor: const Color(0xFFE09321),
+                        child:
+                            const Icon(Icons.arrow_upward, color: Colors.white),
+                        tooltip: 'Scroll to Top',
+                      ),
+                    )
+                  : null,
+              floatingActionButtonLocation:
+                  FloatingActionButtonLocation.endFloat,
+            ),
+          ),
         ),
-      ),
       ),
     );
   }

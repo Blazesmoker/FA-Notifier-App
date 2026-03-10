@@ -15,6 +15,7 @@ import '../utils/specialTextSpanBuilder.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import 'openjournal.dart';
 import 'openpost.dart';
+
 /// A widget that toggles between relative and absolute date formats when tapped.
 class ToggleableDate extends StatefulWidget {
   final String relativeDate;
@@ -78,16 +79,15 @@ class AvatarWidget extends StatelessWidget {
       ),
       child: (imageUrl != null && imageUrl!.isNotEmpty)
           ? _AvatarFadeInImage(
-        imageUrl: imageUrl!,
-        fallbackAsset: fallbackAsset,
-      )
+              imageUrl: imageUrl!,
+              fallbackAsset: fallbackAsset,
+            )
           : Image.asset(
-        fallbackAsset,
-        fit: BoxFit.cover,
-      ),
+              fallbackAsset,
+              fit: BoxFit.cover,
+            ),
     );
   }
-
 }
 
 /// A stateful widget for the Shouts section.
@@ -152,7 +152,9 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
 
     setState(() {
       _isEnriching = true;
-      _shoutsFuture = widget.service.enrichShoutsFromProfileIfNeeded(force: true).then((list) {
+      _shoutsFuture = widget.service
+          .enrichShoutsFromProfileIfNeeded(force: true)
+          .then((list) {
         final unique = _deduplicateShouts(list);
         _shouts = unique;
         return unique;
@@ -199,9 +201,13 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
     final prev = _shouts;
     final bool changed = prev == null ||
         prev.length != unique.length ||
-        (prev.isNotEmpty && unique.isNotEmpty && prev.first.id != unique.first.id);
+        (prev.isNotEmpty &&
+            unique.isNotEmpty &&
+            prev.first.id != unique.first.id);
     if (!changed) return;
-    if (widget.isActive && _enrichRequestedForSignature == null && widget.service.shoutsNeedEnrich) {
+    if (widget.isActive &&
+        _enrichRequestedForSignature == null &&
+        widget.service.shoutsNeedEnrich) {
       _shouts = unique;
       _maybeAutoEnrich();
       return;
@@ -229,7 +235,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
           avatarUrl: it.avatarUrl ?? '',
           postedAgo: it.date,
           textContent: it.content,
-          isRemoved: it.content.toLowerCase().contains('shout has been removed'),
+          isRemoved:
+              it.content.toLowerCase().contains('shout has been removed'),
           isChecked: it.isChecked,
         );
       }).toList();
@@ -264,7 +271,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
   /// Called when user taps "Select All"
   Future<void> toggleSelectAll() async {
     int index = widget.service.sections.indexWhere(
-          (s) => s.title.toLowerCase().contains('shouts'),
+      (s) => s.title.toLowerCase().contains('shouts'),
     );
     if (index == -1) return;
     widget.service.toggleSelectAll(index);
@@ -273,7 +280,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
     setState(() {
       for (var localShout in _shouts!) {
         try {
-          final match = providerItems.firstWhere((pi) => pi.id == localShout.id);
+          final match =
+              providerItems.firstWhere((pi) => pi.id == localShout.id);
           localShout.isChecked = match.isChecked;
         } catch (_) {}
       }
@@ -283,7 +291,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
   /// Called when user taps "Remove Selected"
   Future<void> removeSelected() async {
     int index = widget.service.sections.indexWhere(
-          (s) => s.title.toLowerCase().contains('shouts'),
+      (s) => s.title.toLowerCase().contains('shouts'),
     );
     if (index == -1) return;
     await widget.service.removeSelected(index);
@@ -293,7 +301,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
   /// Called when user taps "Nuke" for the entire "Shouts" section
   Future<void> nukeSection() async {
     int index = widget.service.sections.indexWhere(
-          (s) => s.title.toLowerCase().contains('shouts'),
+      (s) => s.title.toLowerCase().contains('shouts'),
     );
     if (index == -1) return;
     await widget.service.nukeSection(index);
@@ -313,8 +321,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
   String _preprocessFAEmojis(String rawHtml) {
     // Look for e.g. <i class="smilie lmao"></i>
     // and convert to [smilie-lmao].
-    final exp = RegExp(r'<i\s+class="([^"]+)"[^>]*>(.*?)<\/i>',
-        caseSensitive: false);
+    final exp =
+        RegExp(r'<i\s+class="([^"]+)"[^>]*>(.*?)<\/i>', caseSensitive: false);
     return rawHtml.replaceAllMapped(exp, (match) {
       final classAttr = match.group(1) ?? '';
       if (classAttr.startsWith('smilie ')) {
@@ -342,15 +350,15 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                 // render the "light" msg/others view (default avatars / empty text),
                 // even for a single frame.
                 final sig = widget.service.shoutsLightSignature;
-                final shouldBlockLightView =
-                    widget.service.shoutsNeedEnrich &&
-                        !_isEnriching &&
-                        sig.isNotEmpty &&
-                        _enrichRequestedForSignature != sig;
+                final shouldBlockLightView = widget.service.shoutsNeedEnrich &&
+                    !_isEnriching &&
+                    sig.isNotEmpty &&
+                    _enrichRequestedForSignature != sig;
 
                 if (shouldBlockLightView) {
                   // Start enrichment once the tab is actually active (avoid background fetch).
-                  if (widget.isActive && _autoEnrichScheduledForSignature != sig) {
+                  if (widget.isActive &&
+                      _autoEnrichScheduledForSignature != sig) {
                     _autoEnrichScheduledForSignature = sig;
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (!mounted) return;
@@ -422,10 +430,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                           // Tapping the row => open user profile
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (_) => UserProfileScreen(
-                                nickname: widget.service.currentUsernameFromLink!,
-                              ),
+                            UserProfileScreen.route(
+                              nickname: widget.service.currentUsernameFromLink!,
                             ),
                           );
                         },
@@ -448,8 +454,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                       child: LayoutBuilder(
                                         builder: (context, constraints) {
                                           return InkWell(
-                                            onTap: () =>
-                                                _onCheckboxChanged(s, !s.isChecked),
+                                            onTap: () => _onCheckboxChanged(
+                                                s, !s.isChecked),
                                             splashColor: Colors.grey[800],
                                             highlightColor: Colors.grey[600],
                                             child: Container(
@@ -459,10 +465,11 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                               child: IgnorePointer(
                                                 child: Checkbox(
                                                   activeColor:
-                                                  const Color(0xFFE09321),
+                                                      const Color(0xFFE09321),
                                                   value: s.isChecked,
                                                   onChanged: (bool? val) =>
-                                                      _onCheckboxChanged(s, val),
+                                                      _onCheckboxChanged(
+                                                          s, val),
                                                 ),
                                               ),
                                             ),
@@ -478,7 +485,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                       width: 4.0,
                                       height: 64.0,
                                       color: const Color(0xFF1F1F1F),
-                                      margin: const EdgeInsets.symmetric(horizontal: 0.0),
+                                      margin: const EdgeInsets.symmetric(
+                                          horizontal: 0.0),
                                     ),
                                   ),
 
@@ -489,10 +497,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                       onTap: () {
                                         Navigator.push(
                                           context,
-                                          MaterialPageRoute(
-                                            builder: (_) => UserProfileScreen(
-                                              nickname: s.nicknameLink,
-                                            ),
+                                          UserProfileScreen.route(
+                                            nickname: s.nicknameLink,
                                           ),
                                         );
                                       },
@@ -502,7 +508,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                         child: AvatarWidget(
                                           imageUrl: s.avatarUrl,
                                           fallbackAsset:
-                                          'assets/images/defaultpic.gif',
+                                              'assets/images/defaultpic.gif',
                                           radius: 24,
                                         ),
                                       ),
@@ -513,14 +519,16 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                       padding: const EdgeInsets.all(8),
                                       alignment: Alignment.centerLeft,
                                       child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                            CrossAxisAlignment.start,
                                         children: [
                                           // Nickname line
                                           if (!s.textContent
                                               .toLowerCase()
-                                              .contains("shout has been removed"))
+                                              .contains(
+                                                  "shout has been removed"))
                                             RichText(
                                               text: TextSpan(
                                                 children: [
@@ -529,21 +537,21 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                                     style: const TextStyle(
                                                       color: Color(0xFFE09321),
                                                       fontSize: 14,
-                                                      fontWeight: FontWeight.bold,
+                                                      fontWeight:
+                                                          FontWeight.bold,
                                                     ),
-                                                    recognizer: TapGestureRecognizer()
-                                                      ..onTap = () {
-                                                        Navigator.push(
-                                                          context,
-                                                          MaterialPageRoute(
-                                                            builder: (_) =>
-                                                                UserProfileScreen(
-                                                                  nickname:
-                                                                  s.nicknameLink,
-                                                                ),
-                                                          ),
-                                                        );
-                                                      },
+                                                    recognizer:
+                                                        TapGestureRecognizer()
+                                                          ..onTap = () {
+                                                            Navigator.push(
+                                                              context,
+                                                              UserProfileScreen
+                                                                  .route(
+                                                                nickname: s
+                                                                    .nicknameLink,
+                                                              ),
+                                                            );
+                                                          },
                                                   ),
                                                   const TextSpan(
                                                     text: " left a shout:",
@@ -565,7 +573,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                               fontSize: 13,
                                             ),
                                             specialTextSpanBuilder:
-                                            EmojiSpecialTextSpanBuilder(
+                                                EmojiSpecialTextSpanBuilder(
                                               onTapLink: (String tappedUrl) {
                                                 // Handle link taps
                                               },
@@ -585,7 +593,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                   child: Align(
                                     alignment: Alignment.centerRight,
                                     child: Padding(
-                                      padding: const EdgeInsets.only(right: 8.0),
+                                      padding:
+                                          const EdgeInsets.only(right: 8.0),
                                       child: ToggleableDate(
                                         relativeDate: s.postedAgo,
                                         absoluteDate: s.postedTitle,
@@ -613,7 +622,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
 /// Widget for non-shouts sections.
 class NotificationSectionWidget extends StatelessWidget {
   final int sectionIndex;
-  const NotificationSectionWidget({Key? key, required this.sectionIndex}) : super(key: key);
+  const NotificationSectionWidget({Key? key, required this.sectionIndex})
+      : super(key: key);
 
   Future<bool> isSfwModeEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -632,331 +642,443 @@ class NotificationSectionWidget extends StatelessWidget {
           ),
           child: section.items.isEmpty
               ? ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            children: const [
-              SizedBox(
-                height: 200,
-                child: Center(child: Text('No notifications.', style: TextStyle(color: Colors.grey))),
-              ),
-            ],
-          )
-              : ListView.builder(
-            physics: const AlwaysScrollableScrollPhysics(),
-            itemCount: section.items.length,
-            itemBuilder: (context, itemIndex) {
-              final item = section.items[itemIndex];
-              return Column(
-                children: [
-                  if (itemIndex == 0)
-                    const Divider(
-                      height: 4.0,
-                      color: Color(0xFF111111),
-                      thickness: 4.0,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: const [
+                    SizedBox(
+                      height: 200,
+                      child: Center(
+                          child: Text('No notifications.',
+                              style: TextStyle(color: Colors.grey))),
                     ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 0.0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                  ],
+                )
+              : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  itemCount: section.items.length,
+                  itemBuilder: (context, itemIndex) {
+                    final item = section.items[itemIndex];
+                    return Column(
                       children: [
-                        Material(
-                          type: MaterialType.transparency,
-                          child: ConstrainedBox(
-                            constraints: (section.title.toLowerCase().contains('favorites') ||
-                                section.title.toLowerCase().contains('submission comments'))
-                                ? const BoxConstraints(minHeight: 88.0, maxHeight: 88.0)
-                                : const BoxConstraints(minHeight: 80.0, maxHeight: 80.0),
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                return InkWell(
-                                  onTap: () {
-                                    item.isChecked = !item.isChecked;
-                                    service.notifyListeners();
-                                  },
-                                  splashColor: Colors.grey[800],
-                                  highlightColor: Colors.grey[600],
-                                  child: Container(
-                                    height: constraints.maxHeight,
-                                    width: 48.0,
-                                    alignment: Alignment.center,
-                                    child: IgnorePointer(
-                                      child: Checkbox(
-                                        activeColor: const Color(0xFFE09321),
-                                        value: item.isChecked,
-                                        onChanged: (bool? value) {
-                                          if (value != null) {
-                                            item.isChecked = value;
-                                            service.notifyListeners();
-                                          }
+                        if (itemIndex == 0)
+                          const Divider(
+                            height: 4.0,
+                            color: Color(0xFF111111),
+                            thickness: 4.0,
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 0.0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Material(
+                                type: MaterialType.transparency,
+                                child: ConstrainedBox(
+                                  constraints: (section.title
+                                              .toLowerCase()
+                                              .contains('favorites') ||
+                                          section.title
+                                              .toLowerCase()
+                                              .contains('submission comments'))
+                                      ? const BoxConstraints(
+                                          minHeight: 88.0, maxHeight: 88.0)
+                                      : const BoxConstraints(
+                                          minHeight: 80.0, maxHeight: 80.0),
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      return InkWell(
+                                        onTap: () {
+                                          item.isChecked = !item.isChecked;
+                                          service.notifyListeners();
                                         },
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: Container(
-                            width: 4.0,
-                            height: 64.0,
-                            color: const Color(0xFF1F1F1F),
-                            margin: const EdgeInsets.symmetric(horizontal: 0.0),
-                          ),
-                        ),
-                        if (section.title.toLowerCase().contains('watches'))
-                          GestureDetector(
-                            onTap: () {
-                              debugPrint("Opening profile: ${item.linkUsername}");
-                              if (item.linkUsername != null) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => UserProfileScreen(nickname: item.linkUsername!),
-                                  ),
-                                );
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.only(left: 10.0, right: 0.0),
-                              child: AvatarWidget(
-                                imageUrl: item.avatarUrl,
-                                fallbackAsset: 'assets/images/defaultpic.gif',
-                                radius: 24,
-                              ),
-                            ),
-                          ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              if (section.title.toLowerCase().contains('watches')) {
-                                debugPrint("Opening profile: ${item.linkUsername}");
-                                if (item.linkUsername != null) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => UserProfileScreen(nickname: item.linkUsername!),
-                                    ),
-                                  );
-                                }
-                              } else if (section.title.toLowerCase().contains('favorites') ||
-                                  section.title.toLowerCase().contains('submission comments')) {
-                                if (item.submissionId != null) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => OpenPost(uniqueNumber: item.submissionId!, imageUrl: ''),
-                                    ),
-                                  );
-                                }
-                              } else if (section.title.toLowerCase().contains('journal comments')) {
-                                if (item.journalId != null) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => OpenJournal(uniqueNumber: item.journalId!),
-                                    ),
-                                  );
-                                }
-                              } else if (section.title.toLowerCase().contains('shouts')) {
-                                final username = service.currentUsernameFromLink;
-                                debugPrint("shout clicked: $username");
-
-                                if (username != null) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => UserProfileScreen(nickname: username),
-                                    ),
-                                  );
-                                }
-                              } else if (section.title.toLowerCase().contains('journals')) {
-                                if (item.journalId != null) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => OpenJournal(uniqueNumber: item.journalId!),
-                                    ),
-                                  );
-                                }
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              constraints: const BoxConstraints(minHeight: 64),
-                              alignment: Alignment.centerLeft,
-                              color: Colors.transparent,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Transform.translate(
-                                    offset: (section.title.toLowerCase().contains('favorites') ||
-                                        section.title.toLowerCase().contains('submission comments'))
-                                        ? const Offset(0, 0)
-                                        : const Offset(0, 8),
-                                    child: Html(
-                                      data: item.content.replaceAll(RegExp(r'\btitled\b', caseSensitive: false), ''),
-                                      style: {
-                                        "a[href^='/user']": Style(
-                                          textDecoration: TextDecoration.none,
-                                          color: const Color(0xFFE09321),
-                                          fontStyle: FontStyle.normal,
-                                        ),
-                                        "div.info > span": Style(
-                                          color: const Color(0xFFE09321),
-                                          fontWeight: FontWeight.normal,
-                                        ),
-                                        "a[href^='/journal']": Style(
-                                          textDecoration: TextDecoration.none,
-                                          color: Colors.white,
-                                          fontStyle: FontStyle.normal,
-                                        ),
-                                        "a[href^='/view']": Style(
-                                          textDecoration: TextDecoration.none,
-                                          color: Colors.white,
-                                          fontStyle: FontStyle.normal,
-                                        ),
-                                        "em": Style(fontStyle: FontStyle.normal),
-                                        "i": Style(fontStyle: FontStyle.normal),
-                                      },
-                                      onLinkTap: (String? url, Map<String, String> attributes, dom.Element? element) {
-                                        if (url != null) {
-                                          final uri = Uri.parse(url);
-                                          RegExp userRegex = RegExp(r'^/user/([^/]+)/?$');
-                                          RegExp journalRegex = RegExp(r'^/journal/(\d+)/.*$');
-                                          RegExp viewRegex = RegExp(r'^/view/(\d+)/.*$');
-                                          String path = uri.path;
-                                          if (userRegex.hasMatch(path)) {
-                                            final username = userRegex.firstMatch(path)!.group(1)!;
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => UserProfileScreen(nickname: username),
-                                              ),
-                                            );
-                                          } else if (journalRegex.hasMatch(path)) {
-                                            final journalId = journalRegex.firstMatch(path)!.group(1)!;
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => OpenJournal(uniqueNumber: journalId),
-                                              ),
-                                            );
-                                          } else if (viewRegex.hasMatch(path)) {
-                                            final submissionId = viewRegex.firstMatch(path)!.group(1)!;
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => OpenPost(uniqueNumber: submissionId, imageUrl: ''),
-                                              ),
-                                            );
-                                          }
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(height: 0),
-                                  if (!(section.title.toLowerCase().contains('favorites') ||
-                                      section.title.toLowerCase().contains('submission comments')))
-                                    const SizedBox(height: 0),
-                                  if (!(section.title.toLowerCase().contains('favorites') ||
-                                      section.title.toLowerCase().contains('submission comments')))
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: ToggleableDate(
-                                        relativeDate: item.date,
-                                        absoluteDate: item.fullDate,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (section.title.toLowerCase().contains('favorites') ||
-                            section.title.toLowerCase().contains('submission comments'))
-                          Builder(
-                            builder: (context) {
-                              final submissionId = item.submissionId ?? '';
-                              if (submissionId.isEmpty) {
-                                return const SizedBox(width: 60, height: 60);
-                              }
-                              return Padding(
-                                padding: const EdgeInsets.only(left: 4.0, right: 12.0, top: 4, bottom: 4),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    GestureDetector(
-                                      onTap: () {
-                                        if (item.submissionId != null) {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => OpenPost(uniqueNumber: item.submissionId!, imageUrl: ''),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                      child: FutureBuilder<String?>(
-                                        future: FANotificationService.fetchSubmissionPreview(submissionId),
-                                        builder: (context, snapshot) {
-                                          return SizedBox(
-                                            width: 56,
-                                            height: 56,
-                                            child: snapshot.hasData && snapshot.data != null
-                                                ? FutureBuilder<bool>(
-                                              future: isSfwModeEnabled(),
-                                              builder: (context, sfwSnapshot) {
-                                                if (!sfwSnapshot.hasData) {
-                                                  return Container(color: const Color(0xFF1F1F1F));
+                                        splashColor: Colors.grey[800],
+                                        highlightColor: Colors.grey[600],
+                                        child: Container(
+                                          height: constraints.maxHeight,
+                                          width: 48.0,
+                                          alignment: Alignment.center,
+                                          child: IgnorePointer(
+                                            child: Checkbox(
+                                              activeColor:
+                                                  const Color(0xFFE09321),
+                                              value: item.isChecked,
+                                              onChanged: (bool? value) {
+                                                if (value != null) {
+                                                  item.isChecked = value;
+                                                  service.notifyListeners();
                                                 }
-                                                final bool sfwEnabled = sfwSnapshot.data!;
-                                                return FadeInNetworkImage(
-                                                  imageUrl: snapshot.data!,
-                                                  fit: BoxFit.cover,
-                                                  alignment: Alignment.topCenter,
-                                                  placeholder: Container(
-                                                    color: const Color(0xFF1F1F1F),
-                                                  ),
-                                                  errorWidget: Image.asset(
-                                                    sfwEnabled
-                                                        ? 'assets/images/nsfw.png'
-                                                        : 'assets/images/defaultpic.gif',
-                                                    fit: BoxFit.cover,
-                                                    alignment: Alignment.topCenter,
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: Container(
+                                  width: 4.0,
+                                  height: 64.0,
+                                  color: const Color(0xFF1F1F1F),
+                                  margin: const EdgeInsets.symmetric(
+                                      horizontal: 0.0),
+                                ),
+                              ),
+                              if (section.title
+                                  .toLowerCase()
+                                  .contains('watches'))
+                                GestureDetector(
+                                  onTap: () {
+                                    debugPrint(
+                                        "Opening profile: ${item.linkUsername}");
+                                    if (item.linkUsername != null) {
+                                      Navigator.push(
+                                        context,
+                                        UserProfileScreen.route(
+                                            nickname: item.linkUsername!),
+                                      );
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.only(
+                                        left: 10.0, right: 0.0),
+                                    child: AvatarWidget(
+                                      imageUrl: item.avatarUrl,
+                                      fallbackAsset:
+                                          'assets/images/defaultpic.gif',
+                                      radius: 24,
+                                    ),
+                                  ),
+                                ),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    if (section.title
+                                        .toLowerCase()
+                                        .contains('watches')) {
+                                      debugPrint(
+                                          "Opening profile: ${item.linkUsername}");
+                                      if (item.linkUsername != null) {
+                                        Navigator.push(
+                                          context,
+                                          UserProfileScreen.route(
+                                              nickname: item.linkUsername!),
+                                        );
+                                      }
+                                    } else if (section.title
+                                            .toLowerCase()
+                                            .contains('favorites') ||
+                                        section.title
+                                            .toLowerCase()
+                                            .contains('submission comments')) {
+                                      if (item.submissionId != null) {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => OpenPost(
+                                                uniqueNumber:
+                                                    item.submissionId!,
+                                                imageUrl: ''),
+                                          ),
+                                        );
+                                      }
+                                    } else if (section.title
+                                        .toLowerCase()
+                                        .contains('journal comments')) {
+                                      if (item.journalId != null) {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => OpenJournal(
+                                                uniqueNumber: item.journalId!),
+                                          ),
+                                        );
+                                      }
+                                    } else if (section.title
+                                        .toLowerCase()
+                                        .contains('shouts')) {
+                                      final username =
+                                          service.currentUsernameFromLink;
+                                      debugPrint("shout clicked: $username");
+
+                                      if (username != null) {
+                                        Navigator.push(
+                                          context,
+                                          UserProfileScreen.route(
+                                              nickname: username),
+                                        );
+                                      }
+                                    } else if (section.title
+                                        .toLowerCase()
+                                        .contains('journals')) {
+                                      if (item.journalId != null) {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => OpenJournal(
+                                                uniqueNumber: item.journalId!),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4),
+                                    constraints:
+                                        const BoxConstraints(minHeight: 64),
+                                    alignment: Alignment.centerLeft,
+                                    color: Colors.transparent,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Transform.translate(
+                                          offset: (section.title
+                                                      .toLowerCase()
+                                                      .contains('favorites') ||
+                                                  section.title
+                                                      .toLowerCase()
+                                                      .contains(
+                                                          'submission comments'))
+                                              ? const Offset(0, 0)
+                                              : const Offset(0, 8),
+                                          child: Html(
+                                            data: item.content.replaceAll(
+                                                RegExp(r'\btitled\b',
+                                                    caseSensitive: false),
+                                                ''),
+                                            style: {
+                                              "a[href^='/user']": Style(
+                                                textDecoration:
+                                                    TextDecoration.none,
+                                                color: const Color(0xFFE09321),
+                                                fontStyle: FontStyle.normal,
+                                              ),
+                                              "div.info > span": Style(
+                                                color: const Color(0xFFE09321),
+                                                fontWeight: FontWeight.normal,
+                                              ),
+                                              "a[href^='/journal']": Style(
+                                                textDecoration:
+                                                    TextDecoration.none,
+                                                color: Colors.white,
+                                                fontStyle: FontStyle.normal,
+                                              ),
+                                              "a[href^='/view']": Style(
+                                                textDecoration:
+                                                    TextDecoration.none,
+                                                color: Colors.white,
+                                                fontStyle: FontStyle.normal,
+                                              ),
+                                              "em": Style(
+                                                  fontStyle: FontStyle.normal),
+                                              "i": Style(
+                                                  fontStyle: FontStyle.normal),
+                                            },
+                                            onLinkTap: (String? url,
+                                                Map<String, String> attributes,
+                                                dom.Element? element) {
+                                              if (url != null) {
+                                                final uri = Uri.parse(url);
+                                                RegExp userRegex = RegExp(
+                                                    r'^/user/([^/]+)/?$');
+                                                RegExp journalRegex = RegExp(
+                                                    r'^/journal/(\d+)/.*$');
+                                                RegExp viewRegex =
+                                                    RegExp(r'^/view/(\d+)/.*$');
+                                                String path = uri.path;
+                                                if (userRegex.hasMatch(path)) {
+                                                  final username = userRegex
+                                                      .firstMatch(path)!
+                                                      .group(1)!;
+                                                  Navigator.push(
+                                                    context,
+                                                    UserProfileScreen.route(
+                                                        nickname: username),
+                                                  );
+                                                } else if (journalRegex
+                                                    .hasMatch(path)) {
+                                                  final journalId = journalRegex
+                                                      .firstMatch(path)!
+                                                      .group(1)!;
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (context) =>
+                                                          OpenJournal(
+                                                              uniqueNumber:
+                                                                  journalId),
+                                                    ),
+                                                  );
+                                                } else if (viewRegex
+                                                    .hasMatch(path)) {
+                                                  final submissionId = viewRegex
+                                                      .firstMatch(path)!
+                                                      .group(1)!;
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (context) =>
+                                                          OpenPost(
+                                                              uniqueNumber:
+                                                                  submissionId,
+                                                              imageUrl: ''),
+                                                    ),
+                                                  );
+                                                }
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(height: 0),
+                                        if (!(section.title
+                                                .toLowerCase()
+                                                .contains('favorites') ||
+                                            section.title
+                                                .toLowerCase()
+                                                .contains(
+                                                    'submission comments')))
+                                          const SizedBox(height: 0),
+                                        if (!(section.title
+                                                .toLowerCase()
+                                                .contains('favorites') ||
+                                            section.title
+                                                .toLowerCase()
+                                                .contains(
+                                                    'submission comments')))
+                                          Align(
+                                            alignment: Alignment.centerRight,
+                                            child: ToggleableDate(
+                                              relativeDate: item.date,
+                                              absoluteDate: item.fullDate,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              if (section.title
+                                      .toLowerCase()
+                                      .contains('favorites') ||
+                                  section.title
+                                      .toLowerCase()
+                                      .contains('submission comments'))
+                                Builder(
+                                  builder: (context) {
+                                    final submissionId =
+                                        item.submissionId ?? '';
+                                    if (submissionId.isEmpty) {
+                                      return const SizedBox(
+                                          width: 60, height: 60);
+                                    }
+                                    return Padding(
+                                      padding: const EdgeInsets.only(
+                                          left: 4.0,
+                                          right: 12.0,
+                                          top: 4,
+                                          bottom: 4),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          GestureDetector(
+                                            onTap: () {
+                                              if (item.submissionId != null) {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        OpenPost(
+                                                            uniqueNumber: item
+                                                                .submissionId!,
+                                                            imageUrl: ''),
                                                   ),
                                                 );
+                                              }
+                                            },
+                                            child: FutureBuilder<String?>(
+                                              future: FANotificationService
+                                                  .fetchSubmissionPreview(
+                                                      submissionId),
+                                              builder: (context, snapshot) {
+                                                return SizedBox(
+                                                  width: 56,
+                                                  height: 56,
+                                                  child: snapshot.hasData &&
+                                                          snapshot.data != null
+                                                      ? FutureBuilder<bool>(
+                                                          future:
+                                                              isSfwModeEnabled(),
+                                                          builder: (context,
+                                                              sfwSnapshot) {
+                                                            if (!sfwSnapshot
+                                                                .hasData) {
+                                                              return Container(
+                                                                  color: const Color(
+                                                                      0xFF1F1F1F));
+                                                            }
+                                                            final bool
+                                                                sfwEnabled =
+                                                                sfwSnapshot
+                                                                    .data!;
+                                                            return FadeInNetworkImage(
+                                                              imageUrl: snapshot
+                                                                  .data!,
+                                                              fit: BoxFit.cover,
+                                                              alignment:
+                                                                  Alignment
+                                                                      .topCenter,
+                                                              placeholder:
+                                                                  Container(
+                                                                color: const Color(
+                                                                    0xFF1F1F1F),
+                                                              ),
+                                                              errorWidget:
+                                                                  Image.asset(
+                                                                sfwEnabled
+                                                                    ? 'assets/images/nsfw.png'
+                                                                    : 'assets/images/defaultpic.gif',
+                                                                fit: BoxFit
+                                                                    .cover,
+                                                                alignment:
+                                                                    Alignment
+                                                                        .topCenter,
+                                                              ),
+                                                            );
+                                                          },
+                                                        )
+                                                      : Container(
+                                                          color: const Color(
+                                                              0xFF1F1F1F)),
+                                                );
                                               },
-                                            )
-                                                : Container(color: const Color(0xFF1F1F1F)),
-                                          );
-                                        },
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          SizedBox(
+                                            height: 16,
+                                            child: ToggleableDate(
+                                              relativeDate: item.date,
+                                              absoluteDate: item.fullDate,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-
-                                    ),
-                                    const SizedBox(height: 4),
-                                    SizedBox(
-                                      height: 16,
-                                      child: ToggleableDate(
-                                        relativeDate: item.date,
-                                        absoluteDate: item.fullDate,
-                                      ),
-                                    ),
-                                  ],
+                                    );
+                                  },
                                 ),
-                              );
-                            },
+                            ],
                           ),
+                        ),
                       ],
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+                    );
+                  },
+                ),
         );
       },
     );
@@ -968,7 +1090,9 @@ class NotificationsScreen extends StatefulWidget {
   final String? initialSection;
   final GlobalKey<DrawerUserControllerState> drawerKey;
 
-  const NotificationsScreen({Key? key, required this.drawerKey, this.initialSection}) : super(key: key);
+  const NotificationsScreen(
+      {Key? key, required this.drawerKey, this.initialSection})
+      : super(key: key);
 
   @override
   _NotificationsScreenState createState() => _NotificationsScreenState();
@@ -984,7 +1108,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   int _previousSectionCount = 0;
   int _lastTabIndex = -1;
 
-  final GlobalKey<ShoutsSectionWidgetState> _shoutsSectionKey = GlobalKey<ShoutsSectionWidgetState>();
+  final GlobalKey<ShoutsSectionWidgetState> _shoutsSectionKey =
+      GlobalKey<ShoutsSectionWidgetState>();
 
   @override
   void initState() {
@@ -1069,12 +1194,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 
-  void _initializeTabController(int sectionCount, FANotificationService service) {
+  void _initializeTabController(
+      int sectionCount, FANotificationService service) {
     _tabController?.dispose();
     _initialTabIndex = 0;
     if (widget.initialSection != null) {
       int desiredIndex = service.sections.indexWhere(
-            (section) => section.title.toLowerCase().contains(widget.initialSection!.toLowerCase()),
+        (section) => section.title
+            .toLowerCase()
+            .contains(widget.initialSection!.toLowerCase()),
       );
       if (desiredIndex != -1) {
         _initialTabIndex = desiredIndex;
@@ -1083,7 +1211,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     if (_initialTabIndex >= sectionCount) {
       _initialTabIndex = sectionCount > 0 ? sectionCount - 1 : 0;
     }
-    _tabController = TabController(length: sectionCount, vsync: this, initialIndex: _initialTabIndex);
+    _tabController = TabController(
+        length: sectionCount, vsync: this, initialIndex: _initialTabIndex);
     _lastTabIndex = _tabController!.index;
     _tabController!.addListener(() {
       if (!mounted) return;
@@ -1123,7 +1252,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                 ),
               ],
             ),
-            body: const Center(child: PulsatingLoadingIndicator(size: 88.0, assetPath: 'assets/icons/fathemed.png')),
+            body: const Center(
+                child: PulsatingLoadingIndicator(
+                    size: 88.0, assetPath: 'assets/icons/fathemed.png')),
           );
         }
         if (sections.isEmpty) {
@@ -1146,7 +1277,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   icon: const Icon(Icons.block, color: Color(0xFFE09321)),
                   onPressed: () async {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('No notifications to remove.')),
+                      const SnackBar(
+                          content: Text('No notifications to remove.')),
                     );
                   },
                 ),
@@ -1166,7 +1298,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: const [
-                  SizedBox(height: 200, child: Center(child: Text('No notifications.'))),
+                  SizedBox(
+                      height: 200,
+                      child: Center(child: Text('No notifications.'))),
                 ],
               ),
             ),
@@ -1177,7 +1311,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             _initializeTabController(sections.length, service);
           });
         }
-        if (_tabController == null || _tabController!.length != sections.length) {
+        if (_tabController == null ||
+            _tabController!.length != sections.length) {
           return const Scaffold(body: SizedBox.shrink());
         }
         return Scaffold(
@@ -1194,12 +1329,16 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: const Text('Confirm'),
-                      content: const Text('Are you sure you want to remove ALL notifications?'),
+                      content: const Text(
+                          'Are you sure you want to remove ALL notifications?'),
                       actions: [
-                        TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                        TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            child: const Text('Cancel')),
                         TextButton(
                           onPressed: () => Navigator.of(ctx).pop(true),
-                          style: TextButton.styleFrom(foregroundColor: Colors.red),
+                          style:
+                              TextButton.styleFrom(foregroundColor: Colors.red),
                           child: const Text('Confirm'),
                         ),
                       ],
@@ -1221,8 +1360,10 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               preferredSize: const Size.fromHeight(kToolbarHeight + 8),
               child: Column(
                 children: [
-                  const Divider(height: 4.0, color: Color(0xFF111111), thickness: 4.0),
-                  const Divider(height: 3.4, color: Colors.black, thickness: 4.0),
+                  const Divider(
+                      height: 4.0, color: Color(0xFF111111), thickness: 4.0),
+                  const Divider(
+                      height: 3.4, color: Colors.black, thickness: 4.0),
                   Container(
                     decoration: const BoxDecoration(color: Color(0xFF111111)),
                     child: Padding(
@@ -1233,11 +1374,14 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                             controller: _tabController,
                             isScrollable: true,
                             indicator: const UnderlineTabIndicator(
-                              borderSide: BorderSide(color: Color(0xFFE09321), width: 3.4),
+                              borderSide: BorderSide(
+                                  color: Color(0xFFE09321), width: 3.4),
                               insets: EdgeInsets.symmetric(horizontal: -6.0),
                             ),
-                            labelStyle: const TextStyle(fontSize: 17.0, fontWeight: FontWeight.bold),
-                            unselectedLabelStyle: const TextStyle(fontSize: 15.0),
+                            labelStyle: const TextStyle(
+                                fontSize: 17.0, fontWeight: FontWeight.bold),
+                            unselectedLabelStyle:
+                                const TextStyle(fontSize: 15.0),
                             tabAlignment: TabAlignment.start,
                             dividerColor: Colors.black,
                             dividerHeight: 3.7,
@@ -1249,14 +1393,16 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                 typeKey = 'W';
                               } else if (titleLower.contains('favorite')) {
                                 typeKey = 'F';
-                              } else if (titleLower.contains('journal') && !titleLower.contains('comment')) {
+                              } else if (titleLower.contains('journal') &&
+                                  !titleLower.contains('comment')) {
                                 typeKey = 'J';
                               }
 
-
                               // Get count from messageBarCounts if W/F/J, else use section.items.length
                               int rawCount = 0;
-                              if (typeKey != null && service.messageBarCounts.containsKey(typeKey)) {
+                              if (typeKey != null &&
+                                  service.messageBarCounts
+                                      .containsKey(typeKey)) {
                                 rawCount = service.messageBarCounts[typeKey]!;
                               } else {
                                 rawCount = section.items.length;
@@ -1264,8 +1410,10 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
                               // Apply "30+" rule for Comments and Shouts
                               String displayText;
-                              if (titleLower.contains('comment') || titleLower.contains('shout')) {
-                                displayText = rawCount >= 30 ? '30+' : '$rawCount';
+                              if (titleLower.contains('comment') ||
+                                  titleLower.contains('shout')) {
+                                displayText =
+                                    rawCount >= 30 ? '30+' : '$rawCount';
                               } else {
                                 displayText = '$rawCount';
                               }
@@ -1280,10 +1428,12 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                       const SizedBox(width: 4),
                                       if (rawCount > 0)
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
                                           decoration: BoxDecoration(
                                             color: const Color(0xFFE09321),
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
                                           child: Text(
                                             displayText,
@@ -1313,71 +1463,104 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 0.0),
                 child: Column(
                   children: [
-                    const Divider(height: 4.0, color: Color(0xFF111111), thickness: 4.0),
+                    const Divider(
+                        height: 4.0, color: Color(0xFF111111), thickness: 4.0),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 0.0, vertical: 2.0),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 0.0, vertical: 2.0),
                       child: Row(
                         children: [
                           Expanded(
                             child: ElevatedButton(
                               onPressed: () {
-                                final currentTabIndex = _tabController?.index ?? 0;
-                                if (sections[currentTabIndex].title.toLowerCase().contains('shouts')) {
-                                  _shoutsSectionKey.currentState?.toggleSelectAll();
+                                final currentTabIndex =
+                                    _tabController?.index ?? 0;
+                                if (sections[currentTabIndex]
+                                    .title
+                                    .toLowerCase()
+                                    .contains('shouts')) {
+                                  _shoutsSectionKey.currentState
+                                      ?.toggleSelectAll();
                                 } else {
                                   service.toggleSelectAll(currentTabIndex);
                                 }
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF1F1F1F),
-                                padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 11, horizontal: 8),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(4)),
                               ),
-                              child: const FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.center, child: Text('Select All')),
+                              child: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.center,
+                                  child: Text('Select All')),
                             ),
                           ),
                           const SizedBox(width: 5),
                           Expanded(
                             child: ElevatedButton(
                               onPressed: () async {
-                                final currentTabIndex = _tabController?.index ?? 0;
-                                if (sections[currentTabIndex].title.toLowerCase().contains('shouts')) {
-                                  await _shoutsSectionKey.currentState?.removeSelected();
+                                final currentTabIndex =
+                                    _tabController?.index ?? 0;
+                                if (sections[currentTabIndex]
+                                    .title
+                                    .toLowerCase()
+                                    .contains('shouts')) {
+                                  await _shoutsSectionKey.currentState
+                                      ?.removeSelected();
                                 } else {
                                   await service.removeSelected(currentTabIndex);
                                 }
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF1F1F1F),
-                                padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 11, horizontal: 8),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(4)),
                               ),
-                              child: const FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.center, child: Text('Remove Selected')),
+                              child: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.center,
+                                  child: Text('Remove Selected')),
                             ),
                           ),
                           const SizedBox(width: 5),
                           Expanded(
                             child: ElevatedButton(
                               onPressed: () async {
-                                final currentTabIndex = _tabController?.index ?? 0;
+                                final currentTabIndex =
+                                    _tabController?.index ?? 0;
                                 bool confirm = await showDialog(
                                   context: context,
                                   builder: (ctx) => AlertDialog(
                                     title: const Text('Confirm Nuke'),
-                                    content: const Text('Are you sure you want to nuke all items in this section?'),
+                                    content: const Text(
+                                        'Are you sure you want to nuke all items in this section?'),
                                     actions: [
-                                      TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
                                       TextButton(
-                                        onPressed: () => Navigator.of(ctx).pop(true),
-                                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                          onPressed: () =>
+                                              Navigator.of(ctx).pop(false),
+                                          child: const Text('Cancel')),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(ctx).pop(true),
+                                        style: TextButton.styleFrom(
+                                            foregroundColor: Colors.red),
                                         child: const Text('Confirm'),
                                       ),
                                     ],
                                   ),
                                 );
                                 if (confirm) {
-                                  if (sections[currentTabIndex].title.toLowerCase().contains('shouts')) {
-                                    await _shoutsSectionKey.currentState?.nukeSection();
+                                  if (sections[currentTabIndex]
+                                      .title
+                                      .toLowerCase()
+                                      .contains('shouts')) {
+                                    await _shoutsSectionKey.currentState
+                                        ?.nukeSection();
                                   } else {
                                     await service.nukeSection(currentTabIndex);
                                     await service.fetchNotifications();
@@ -1386,10 +1569,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFE09321),
-                                padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 11, horizontal: 8),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(4)),
                               ),
-                              child: const FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.center, child: Text('Nuke')),
+                              child: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.center,
+                                  child: Text('Nuke')),
                             ),
                           ),
                         ],
@@ -1410,16 +1598,20 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                           controller: _tabController,
                           children: List.generate(
                             sections.length,
-                                (index) {
+                            (index) {
                               final section = sections[index];
-                              if (section.title.toLowerCase().contains('shouts')) {
+                              if (section.title
+                                  .toLowerCase()
+                                  .contains('shouts')) {
                                 return ShoutsSectionWidget(
                                   key: _shoutsSectionKey,
                                   service: service,
-                                  isActive: (_tabController?.index ?? 0) == index,
+                                  isActive:
+                                      (_tabController?.index ?? 0) == index,
                                 );
                               } else {
-                                return NotificationSectionWidget(sectionIndex: index);
+                                return NotificationSectionWidget(
+                                    sectionIndex: index);
                               }
                             },
                           ),
@@ -1444,19 +1636,28 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   },
                   onHorizontalDragUpdate: (details) {
                     if (_isDraggingFromEdge) {
-                      final drawerWidth = widget.drawerKey.currentState?.widget.drawerWidth ?? 250.0;
-                      final currentOffset = widget.drawerKey.currentState?.scrollController?.offset ?? drawerWidth;
+                      final drawerWidth =
+                          widget.drawerKey.currentState?.widget.drawerWidth ??
+                              250.0;
+                      final currentOffset = widget.drawerKey.currentState
+                              ?.scrollController?.offset ??
+                          drawerWidth;
                       double newOffset = currentOffset - details.delta.dx;
                       if (newOffset < 0) newOffset = 0;
                       if (newOffset > drawerWidth) newOffset = drawerWidth;
-                      widget.drawerKey.currentState?.setDrawerPosition(newOffset);
+                      widget.drawerKey.currentState
+                          ?.setDrawerPosition(newOffset);
                     }
                   },
                   onHorizontalDragEnd: (details) {
                     if (_isDraggingFromEdge) {
                       _isDraggingFromEdge = false;
-                      final drawerWidth = widget.drawerKey.currentState?.widget.drawerWidth ?? 250.0;
-                      final currentOffset = widget.drawerKey.currentState?.scrollController?.offset ?? drawerWidth;
+                      final drawerWidth =
+                          widget.drawerKey.currentState?.widget.drawerWidth ??
+                              250.0;
+                      final currentOffset = widget.drawerKey.currentState
+                              ?.scrollController?.offset ??
+                          drawerWidth;
                       final threshold = drawerWidth / 2;
                       if (currentOffset < threshold) {
                         widget.drawerKey.currentState?.openDrawer();
@@ -1475,6 +1676,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 }
+
 class FadeInNetworkImage extends StatefulWidget {
   final String imageUrl;
   final BoxFit fit;
@@ -1533,6 +1735,7 @@ class _FadeInNetworkImageState extends State<FadeInNetworkImage> {
     );
   }
 }
+
 class _AvatarFadeInImage extends StatefulWidget {
   final String imageUrl;
   final String fallbackAsset;

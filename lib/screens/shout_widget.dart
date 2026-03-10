@@ -17,8 +17,7 @@ class ShoutWidget extends StatefulWidget {
     this.onDelete,
     this.isSelectionMode = false,
     this.isSelected = false,
-  })
-      : super(key: key);
+  }) : super(key: key);
 
   @override
   _ShoutWidgetState createState() => _ShoutWidgetState();
@@ -47,9 +46,7 @@ class _ShoutWidgetState extends State<ShoutWidget> {
           ),
           border: Border.all(
             color: widget.isSelectionMode
-                ? (widget.isSelected
-                    ? const Color(0xFFE09321)
-                    : Colors.white24)
+                ? (widget.isSelected ? const Color(0xFFE09321) : Colors.white24)
                 : Colors.transparent,
             width: widget.isSelectionMode ? 1.2 : 0,
           ),
@@ -77,20 +74,21 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                                   return;
                                 }
                                 if (widget.shout.profileNickname.isNotEmpty) {
-                                  final parentState = context.findAncestorStateOfType<UserProfileScreenState>();
+                                  final parentState =
+                                      context.findAncestorStateOfType<
+                                          UserProfileScreenState>();
                                   parentState?.exitShoutSelectionMode();
                                   Navigator.push(
                                     context,
-                                    MaterialPageRoute(
-                                      builder: (context) => UserProfileScreen(
-                                        nickname: widget.shout.profileNickname,
-                                      ),
+                                    UserProfileScreen.route(
+                                      nickname: widget.shout.profileNickname,
                                     ),
                                   );
                                 }
                               },
                               child: Padding(
-                                padding: const EdgeInsets.only(top: 4.0, right: 8.0),
+                                padding:
+                                    const EdgeInsets.only(top: 4.0, right: 8.0),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(8.0),
                                   child: SizedBox(
@@ -100,7 +98,8 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                                       widget.shout.avatarUrl,
                                       fit: BoxFit.cover,
                                       filterQuality: FilterQuality.low,
-                                      loadingBuilder: (context, child, loadingProgress) {
+                                      loadingBuilder:
+                                          (context, child, loadingProgress) {
                                         if (loadingProgress == null) {
                                           return child;
                                         }
@@ -108,7 +107,8 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                                           child: CircularProgressIndicator(),
                                         );
                                       },
-                                      errorBuilder: (context, error, stackTrace) {
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
                                         return Image.asset(
                                           'assets/images/defaultpic.gif',
                                           fit: BoxFit.cover,
@@ -128,9 +128,11 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        if (widget.shout.iconBeforeUrls.isNotEmpty)
-                                          ...widget.shout.iconBeforeUrls.map((url) =>
-                                              Image.network(url, width: 16, height: 16)),
+                                        if (widget
+                                            .shout.iconBeforeUrls.isNotEmpty)
+                                          ...widget.shout.iconBeforeUrls.map(
+                                              (url) => Image.network(url,
+                                                  width: 16, height: 16)),
                                         Flexible(
                                           child: AutoSizeText(
                                             widget.shout.username,
@@ -142,13 +144,16 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                                             minFontSize: 16,
                                           ),
                                         ),
-                                        if (widget.shout.iconAfterUrls.isNotEmpty)
-                                          ...widget.shout.iconAfterUrls.map((url) =>
-                                              Image.network(url, width: 16, height: 16)),
+                                        if (widget
+                                            .shout.iconAfterUrls.isNotEmpty)
+                                          ...widget.shout.iconAfterUrls.map(
+                                              (url) => Image.network(url,
+                                                  width: 16, height: 16)),
                                       ],
                                     ),
                                   ),
-                                  if ((widget.shout.symbol?.isNotEmpty ?? false) ||
+                                  if ((widget.shout.symbol?.isNotEmpty ??
+                                          false) ||
                                       widget.shout.profileNickname.isNotEmpty)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 0.0),
@@ -324,8 +329,10 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                               return Image.asset('assets/emojis/badhairday.png',
                                   width: 20, height: 20);
                             case 'smilie embarrassed':
-                              return Image.asset('assets/emojis/embarrassed.png',
-                                  width: 20, height: 20);
+                              return Image.asset(
+                                  'assets/emojis/embarrassed.png',
+                                  width: 20,
+                                  height: 20);
                             case 'smilie note':
                               return Image.asset('assets/emojis/note.png',
                                   width: 20, height: 20);

@@ -39,9 +39,9 @@ class UserDescriptionWebView extends StatefulWidget {
 class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     with AutomaticKeepAliveClientMixin<UserDescriptionWebView> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock),
+    iOptions: IOSOptions(
+        accountName: 'flutter_secure_storage_service',
+        accessibility: KeychainAccessibility.first_unlock),
   );
   late Future<String> _userDescriptionFuture;
   double _webViewHeight = 50.0;
@@ -79,15 +79,17 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   Future<String> _processInitialHtml(String html) async {
     final doc = html_parser.parse(html);
 
-    doc.querySelectorAll(
-      'script, .footerAds, #ddmenu, .mobile-navigation, '
+    doc
+        .querySelectorAll(
+          'script, .footerAds, #ddmenu, .mobile-navigation, '
           '.mobile-notification-bar, #header, .userpage-layout-left-col, '
           '.userpage-layout-right-col, #footer, .online-stats, .news-block',
-    ).forEach((e) => e.remove());
+        )
+        .forEach((e) => e.remove());
 
-    final userDescElem = doc.querySelector('section.userpage-layout-profile')
-        ?? doc.querySelector('td.ldot')
-        ?? doc.body;
+    final userDescElem = doc.querySelector('section.userpage-layout-profile') ??
+        doc.querySelector('td.ldot') ??
+        doc.body;
 
     if (userDescElem == null) {
       return '<p>No user profile found.</p>';
@@ -101,7 +103,8 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
       const headerMarker = '<b>Artist Profile:</b><br>';
       final splitIndex = classicHtml.indexOf(headerMarker);
       if (splitIndex != -1) {
-        extractedHtml = classicHtml.substring(splitIndex + headerMarker.length).trim();
+        extractedHtml =
+            classicHtml.substring(splitIndex + headerMarker.length).trim();
       } else {
         extractedHtml = classicHtml.trim();
       }
@@ -142,15 +145,16 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     final doc = html_parser.parse(decodedBody);
 
     // Remove unwanted elements
-    doc.querySelectorAll(
-      'script, .footerAds, #ddmenu, .mobile-navigation, '
+    doc
+        .querySelectorAll(
+          'script, .footerAds, #ddmenu, .mobile-navigation, '
           '.mobile-notification-bar, #header, .userpage-layout-left-col, '
           '.userpage-layout-right-col, #footer, .online-stats, .news-block',
-    ).forEach((e) => e.remove());
+        )
+        .forEach((e) => e.remove());
 
-
-    final userDescElem = doc.querySelector('section.userpage-layout-profile')
-        ?? doc.querySelector('td.ldot');
+    final userDescElem = doc.querySelector('section.userpage-layout-profile') ??
+        doc.querySelector('td.ldot');
 
     if (userDescElem == null) {
       return '<p>No user profile found.</p>';
@@ -166,7 +170,8 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
       const headerMarker = '<b>Artist Profile:</b><br>';
       final splitIndex = classicHtml.indexOf(headerMarker);
       if (splitIndex != -1) {
-        extractedHtml = classicHtml.substring(splitIndex + headerMarker.length).trim();
+        extractedHtml =
+            classicHtml.substring(splitIndex + headerMarker.length).trim();
       } else {
         extractedHtml = classicHtml.trim();
       }
@@ -299,14 +304,12 @@ user-select: none !important;
 ''';
   }
 
-
-
-
   /// Searches the given [htmlSource] for an <a> tag with class "auto_link_shortened"
   /// whose inner text equals [truncatedUrl]. If found, returns the full URL from its
   /// title attribute (or from its href if title is missing). If no match is found, returns null.
   /// If [htmlSource] is not provided, it falls back to using the stored _userDescriptionHtml.
-  String? _getFullLinkFromFetchedHtml(String truncatedUrl, {String? htmlSource}) {
+  String? _getFullLinkFromFetchedHtml(String truncatedUrl,
+      {String? htmlSource}) {
     final String? source = htmlSource ?? _userDescriptionHtml;
     if (source == null) return null;
 
@@ -330,11 +333,13 @@ user-select: none !important;
   /// Processes a FurAffinity URL.
   /// It handles gallery folder links, user links, journal links, and submission/view links.
   /// If no match is found, it opens the URL externally.
-  Future<void> _handleFALink(BuildContext context, String url, {String? htmlSource}) async {
+  Future<void> _handleFALink(BuildContext context, String url,
+      {String? htmlSource}) async {
     String fullUrlToMatch = url;
     // If the URL appears truncated (contains "....."), tries to recover the full URL.
     if (url.contains('.....')) {
-      final recoveredLink = _getFullLinkFromFetchedHtml(url, htmlSource: htmlSource);
+      final recoveredLink =
+          _getFullLinkFromFetchedHtml(url, htmlSource: htmlSource);
       if (recoveredLink != null) {
         fullUrlToMatch = recoveredLink;
         debugPrint("Recovered full URL: $fullUrlToMatch");
@@ -358,13 +363,11 @@ user-select: none !important;
 
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(
-            nickname: tappedUsername,
-            initialSection: ProfileSection.Gallery,
-            initialFolderUrl: folderUrl,
-            initialFolderName: folderName,
-          ),
+        UserProfileScreen.route(
+          nickname: tappedUsername,
+          initialSection: ProfileSection.Gallery,
+          initialFolderUrl: folderUrl,
+          initialFolderName: folderName,
         ),
       );
       return;
@@ -378,9 +381,7 @@ user-select: none !important;
       final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileScreen(nickname: tappedUsername),
-        ),
+        UserProfileScreen.route(nickname: tappedUsername),
       );
       return;
     }
@@ -399,11 +400,9 @@ user-select: none !important;
         // Matched: /journals/username/
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => UserProfileScreen(
-              nickname: username,
-              initialSection: ProfileSection.Journals,
-            ),
+          UserProfileScreen.route(
+            nickname: username,
+            initialSection: ProfileSection.Journals,
           ),
         );
       } else if (journalId != null) {
@@ -528,7 +527,8 @@ user-select: none !important;
                   }
                   return NavigationActionPolicy.ALLOW;
                 } else if (Platform.isIOS) {
-                  if (navAction.navigationType == NavigationType.LINK_ACTIVATED) {
+                  if (navAction.navigationType ==
+                      NavigationType.LINK_ACTIVATED) {
                     if (url == "https://www.furaffinity.net/") {
                       return NavigationActionPolicy.ALLOW;
                     }
@@ -561,7 +561,6 @@ user-select: none !important;
             ),
           ),
         );
-
       },
     );
   }
@@ -570,7 +569,8 @@ user-select: none !important;
 class UserDescriptionWebViewScreen extends StatelessWidget {
   final String sanitizedUsername;
   final String? initialHtml;
-  const UserDescriptionWebViewScreen({Key? key, required this.sanitizedUsername, this.initialHtml})
+  const UserDescriptionWebViewScreen(
+      {Key? key, required this.sanitizedUsername, this.initialHtml})
       : super(key: key);
 
   @override
