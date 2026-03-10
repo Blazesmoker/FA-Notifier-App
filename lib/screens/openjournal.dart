@@ -925,12 +925,18 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final double viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
-          _closeJournal();
-        }
+    return ValueListenableBuilder<bool>(
+      valueListenable: _commentDraftHasText,
+      builder: (context, hasDraft, child) {
+        return PopScope(
+          canPop: !hasDraft,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop) {
+              _closeJournal();
+            }
+          },
+          child: child!,
+        );
       },
       child: Scaffold(
         resizeToAvoidBottomInset: false,
@@ -1534,13 +1540,6 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                         index + 1 < comments.length
                                             ? comments[index + 1]
                                             : null;
-                                    final currentNestingLevel = ((100.0 -
-                                                (comment['width'] ?? 100)
-                                                    .toDouble()) /
-                                            3.0)
-                                        .round()
-                                        .clamp(0, 4)
-                                        .toInt();
                                     final previousNestingLevel =
                                         previousComment == null
                                             ? 0
@@ -1563,27 +1562,6 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                             .round()
                                             .clamp(0, 4)
                                             .toInt();
-                                    var continuesCurrentLevelBelow = false;
-                                    for (var i = index + 1;
-                                        i < comments.length;
-                                        i++) {
-                                      final futureNestingLevel = ((100.0 -
-                                                  (comments[i]['width'] ?? 100)
-                                                      .toDouble()) /
-                                              3.0)
-                                          .round()
-                                          .clamp(0, 4)
-                                          .toInt();
-                                      if (futureNestingLevel <
-                                          currentNestingLevel) {
-                                        break;
-                                      }
-                                      if (futureNestingLevel ==
-                                          currentNestingLevel) {
-                                        continuesCurrentLevelBelow = true;
-                                        break;
-                                      }
-                                    }
                                     return CommentWidget(
                                       key: ValueKey(
                                           comment['commentId'] ?? index),
@@ -1591,8 +1569,6 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
                                       previousNestingLevel:
                                           previousNestingLevel,
                                       nextNestingLevel: nextNestingLevel,
-                                      continuesCurrentLevelBelow:
-                                          continuesCurrentLevelBelow,
                                       onHide: (comment['hideLink'] != null)
                                           ? () => hideComment(
                                               comment['hideLink'],

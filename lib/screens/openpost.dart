@@ -2387,12 +2387,18 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
         statusBarColor: Color(0xFF111111),
         statusBarIconBrightness: Brightness.light,
       ),
-      child: PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, result) {
-          if (!didPop) {
-            _closePost();
-          }
+      child: ValueListenableBuilder<bool>(
+        valueListenable: _commentDraftHasText,
+        builder: (context, hasDraft, child) {
+          return PopScope(
+            canPop: !hasDraft,
+            onPopInvokedWithResult: (didPop, result) {
+              if (!didPop) {
+                _closePost();
+              }
+            },
+            child: child!,
+          );
         },
         child: Scaffold(
           backgroundColor: Colors.black,
@@ -2663,10 +2669,10 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                                                 size: 20,
                                                               ),
                                                             ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
+                ),
+              ),
+            ],
+          ),
                                                   ),
                                                 ),
                                               ],
@@ -3635,11 +3641,6 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
               final previousComment = index > 0 ? comments[index - 1] : null;
               final nextComment =
                   index + 1 < comments.length ? comments[index + 1] : null;
-              final currentNestingLevel =
-                  ((100.0 - (comment['width'] ?? 100).toDouble()) / 3.0)
-                      .round()
-                      .clamp(0, 4)
-                      .toInt();
               final previousNestingLevel = previousComment == null
                   ? 0
                   : ((100.0 - (previousComment['width'] ?? 100).toDouble()) /
@@ -3653,27 +3654,11 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                       .round()
                       .clamp(0, 4)
                       .toInt();
-              var continuesCurrentLevelBelow = false;
-              for (var i = index + 1; i < comments.length; i++) {
-                final futureNestingLevel =
-                    ((100.0 - (comments[i]['width'] ?? 100).toDouble()) / 3.0)
-                        .round()
-                        .clamp(0, 4)
-                        .toInt();
-                if (futureNestingLevel < currentNestingLevel) {
-                  break;
-                }
-                if (futureNestingLevel == currentNestingLevel) {
-                  continuesCurrentLevelBelow = true;
-                  break;
-                }
-              }
               return CommentWidget(
                 key: ValueKey(comment['commentId'] ?? index),
                 comment: comment,
                 previousNestingLevel: previousNestingLevel,
                 nextNestingLevel: nextNestingLevel,
-                continuesCurrentLevelBelow: continuesCurrentLevelBelow,
                 onHide: () {
                   final hideLink = comment['hideLink'] as String?;
                   final cId = comment['commentId'] as String?;

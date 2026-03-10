@@ -11,7 +11,6 @@ class CommentWidget extends StatefulWidget {
   final Map<String, dynamic> comment;
   final int previousNestingLevel;
   final int nextNestingLevel;
-  final bool continuesCurrentLevelBelow;
   final VoidCallback? onHide;
   final VoidCallback? onEdit;
   final VoidCallback? onReply;
@@ -27,7 +26,6 @@ class CommentWidget extends StatefulWidget {
     required this.comment,
     required this.previousNestingLevel,
     required this.nextNestingLevel,
-    required this.continuesCurrentLevelBelow,
     this.onHide,
     this.onEdit,
     this.onReply,
@@ -84,7 +82,7 @@ class _CommentWidgetState extends State<CommentWidget> {
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFF0b0b0b), Color(0xFF202020)],
+        colors: [Color(0xFF101010), Color(0xFF202020)],
       ),
       borderRadius: BorderRadius.circular(8.0),
     );
@@ -95,7 +93,6 @@ class _CommentWidgetState extends State<CommentWidget> {
           nestingLevel: nestingLevel,
           previousNestingLevel: widget.previousNestingLevel,
           nextNestingLevel: widget.nextNestingLevel,
-          continuesCurrentLevelBelow: widget.continuesCurrentLevelBelow,
         ),
         child: Padding(
           padding: EdgeInsets.only(left: leftPadding, bottom: 6.0),
@@ -143,7 +140,6 @@ class _CommentWidgetState extends State<CommentWidget> {
         nestingLevel: nestingLevel,
         previousNestingLevel: widget.previousNestingLevel,
         nextNestingLevel: widget.nextNestingLevel,
-        continuesCurrentLevelBelow: widget.continuesCurrentLevelBelow,
       ),
       child: Padding(
         padding: EdgeInsets.only(left: leftPadding, bottom: 6.0),
@@ -477,13 +473,11 @@ class _CommentTreePainter extends CustomPainter {
   final int nestingLevel;
   final int previousNestingLevel;
   final int nextNestingLevel;
-  final bool continuesCurrentLevelBelow;
 
   const _CommentTreePainter({
     required this.nestingLevel,
     required this.previousNestingLevel,
     required this.nextNestingLevel,
-    required this.continuesCurrentLevelBelow,
   });
 
   @override
@@ -493,63 +487,47 @@ class _CommentTreePainter extends CustomPainter {
     }
 
     const indentWidth = 16.0;
-    const lineWidth = 1.1;
+    const lineWidth = 3.0;
     const bottomSpacing = 6.0;
     final paint = Paint()
-      ..color = const Color(0xFF5C5C5C)
+      ..color = const Color(0xFF1C1B1B)
       ..strokeWidth = lineWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.butt;
     final contentHeight =
         (size.height - bottomSpacing).clamp(0.0, size.height).toDouble();
-    final branchY = contentHeight / 2;
-    final cornerRadius = branchY < 6.0 ? branchY : 6.0;
-    final leftPadding = nestingLevel * indentWidth;
     final currentX = nestingLevel * indentWidth - (indentWidth / 2);
-    final branchEndX = leftPadding;
     final topJoinY = -bottomSpacing;
 
     for (int level = 1; level < nestingLevel; level++) {
-      if (nextNestingLevel < level) {
-        continue;
-      }
       final x = level * indentWidth - (indentWidth / 2);
       final startY = previousNestingLevel >= level ? topJoinY : 0.0;
+      final endY = nextNestingLevel >= level ? size.height : contentHeight;
+      if (endY <= startY) {
+        continue;
+      }
       canvas.drawLine(
         Offset(x, startY),
-        Offset(x, size.height),
+        Offset(x, endY),
         paint,
       );
     }
 
-    final currentLineStartY = topJoinY;
-    final currentLineEndY =
-        continuesCurrentLevelBelow ? size.height : branchY - cornerRadius;
-    if (currentLineEndY > currentLineStartY) {
+    final currentEndY =
+        nextNestingLevel >= nestingLevel ? size.height : contentHeight;
+    if (currentEndY > topJoinY) {
       canvas.drawLine(
-        Offset(currentX, currentLineStartY),
-        Offset(currentX, currentLineEndY),
+        Offset(currentX, topJoinY),
+        Offset(currentX, currentEndY),
         paint,
       );
     }
-
-    final path = Path()
-      ..moveTo(currentX, branchY - cornerRadius)
-      ..quadraticBezierTo(
-        currentX,
-        branchY,
-        currentX + cornerRadius,
-        branchY,
-      )
-      ..lineTo(branchEndX, branchY);
-    canvas.drawPath(path, paint);
   }
 
   @override
   bool shouldRepaint(covariant _CommentTreePainter oldDelegate) {
     return oldDelegate.nestingLevel != nestingLevel ||
         oldDelegate.previousNestingLevel != previousNestingLevel ||
-        oldDelegate.nextNestingLevel != nextNestingLevel ||
-        oldDelegate.continuesCurrentLevelBelow != continuesCurrentLevelBelow;
+        oldDelegate.nextNestingLevel != nextNestingLevel;
   }
 }
