@@ -259,17 +259,25 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     }
 
     override func applicationDidEnterBackground(_ application: UIApplication) {
-        fLog("App entering background")
-        scheduleBackgroundFetch()
-        logApproxNextFetch("didEnterBackground")
+        handleDidEnterBackground(source: "appDelegate")
     }
 
     override func applicationDidBecomeActive(_ application: UIApplication) {
-        fLog("App became active")
+        handleDidBecomeActive(source: "appDelegate")
+    }
+
+    func handleDidEnterBackground(source: String) {
+        fLog("App entering background (\(source))")
+        scheduleBackgroundFetch()
+        logApproxNextFetch("didEnterBackground:\(source)")
+    }
+
+    func handleDidBecomeActive(source: String) {
+        fLog("App became active (\(source))")
         setupNotificationChannelIfNeeded()
         setupTranslationChannelIfNeeded()
         getPendingBackgroundTasks()
-        logApproxNextFetch("didBecomeActive")
+        logApproxNextFetch("didBecomeActive:\(source)")
     }
 
     private func handleBackgroundFetch(task: BGTask) {

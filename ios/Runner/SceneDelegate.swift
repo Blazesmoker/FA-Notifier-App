@@ -26,7 +26,6 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
-    
         if window == nil {
             if let ws = (scene as? UIWindowScene) ?? pendingWindowScene {
                 createWindow(using: ws)
@@ -34,8 +33,12 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
 
         let appDelegate = UIApplication.shared.delegate as? AppDelegate
-        appDelegate?.setupNotificationChannelIfNeeded()
-        appDelegate?.setupTranslationChannelIfNeeded()
+        appDelegate?.handleDidBecomeActive(source: "sceneDelegate")
+    }
+
+    func sceneDidEnterBackground(_ scene: UIScene) {
+        let appDelegate = UIApplication.shared.delegate as? AppDelegate
+        appDelegate?.handleDidEnterBackground(source: "sceneDelegate")
     }
 
     private func createWindow(using windowScene: UIWindowScene) {

@@ -96,14 +96,60 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     });
   }
 
-  String _buildNotificationMessage(NotificationCounts counts) {
+  String _formatNotificationPart({
+    required int current,
+    required int increasedBy,
+    required String suffix,
+  }) {
+    if (current <= 0) return '';
+    final int previous = current - increasedBy;
+    if (increasedBy > 0 && previous > 0) {
+      return '$current$suffix(+${increasedBy})';
+    }
+    return '$current$suffix';
+  }
+
+  String _buildNotificationMessage(
+    NotificationCounts counts,
+    NotificationCounts increases,
+  ) {
     final parts = <String>[];
-    if (counts.submissions > 0) parts.add('${counts.submissions}S');
-    if (counts.watches > 0) parts.add('${counts.watches}W');
-    if (counts.comments > 0) parts.add('${counts.comments}C');
-    if (counts.favorites > 0) parts.add('${counts.favorites}F');
-    if (counts.journals > 0) parts.add('${counts.journals}J');
-    if (counts.notes > 0) parts.add('${counts.notes}N');
+    final submissions = _formatNotificationPart(
+      current: counts.submissions,
+      increasedBy: increases.submissions,
+      suffix: 'S',
+    );
+    if (submissions.isNotEmpty) parts.add(submissions);
+    final watches = _formatNotificationPart(
+      current: counts.watches,
+      increasedBy: increases.watches,
+      suffix: 'W',
+    );
+    if (watches.isNotEmpty) parts.add(watches);
+    final comments = _formatNotificationPart(
+      current: counts.comments,
+      increasedBy: increases.comments,
+      suffix: 'C',
+    );
+    if (comments.isNotEmpty) parts.add(comments);
+    final favorites = _formatNotificationPart(
+      current: counts.favorites,
+      increasedBy: increases.favorites,
+      suffix: 'F',
+    );
+    if (favorites.isNotEmpty) parts.add(favorites);
+    final journals = _formatNotificationPart(
+      current: counts.journals,
+      increasedBy: increases.journals,
+      suffix: 'J',
+    );
+    if (journals.isNotEmpty) parts.add(journals);
+    final notes = _formatNotificationPart(
+      current: counts.notes,
+      increasedBy: increases.notes,
+      suffix: 'N',
+    );
+    if (notes.isNotEmpty) parts.add(notes);
     return parts.join(' | ');
   }
 
@@ -152,7 +198,10 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
         journals: journalsEnabled ? currentCounts.journals : 0,
         notes: notesEnabled ? currentCounts.notes : 0,
       );
-      final String messageBody = _buildNotificationMessage(filteredCounts);
+      final String messageBody = _buildNotificationMessage(
+        filteredCounts,
+        enabledIncreases,
+      );
 
       await NotificationService().showNotification(
         999999,

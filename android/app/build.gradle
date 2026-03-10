@@ -10,6 +10,25 @@ plugins {
 
 def flutterRoot = "../.."
 
+def readVersionFromPubspec() {
+    def pubspecFile = rootProject.file("../pubspec.yaml")
+    if (!pubspecFile.exists()) {
+        throw new GradleException("pubspec.yaml not found at ${pubspecFile}")
+    }
+
+    def matcher = (pubspecFile.text =~ /(?m)^version:\s*([^\s+]+)(?:\+(\d+))?\s*$/)
+    if (!matcher.find()) {
+        throw new GradleException("Could not parse version from ${pubspecFile}")
+    }
+
+    return [
+        name: matcher.group(1),
+        code: (matcher.group(2) ?: "1").toInteger(),
+    ]
+}
+
+def appVersion = readVersionFromPubspec()
+
 
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file("key.properties")
@@ -40,8 +59,8 @@ android {
 
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode.toInteger()
-        versionName = flutter.versionName
+        versionCode = appVersion.code
+        versionName = appVersion.name
 
     }
 
@@ -86,4 +105,3 @@ dependencies {
     implementation 'com.google.android.material:material:1.12.0'
     implementation "androidx.work:work-runtime-ktx:2.10.0"
 }
-

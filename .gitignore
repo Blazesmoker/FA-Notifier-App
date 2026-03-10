@@ -47,6 +47,7 @@ app.*.map.json
 /android/app/release
 /android/key.properties
 /android/local.properties
+/android/app/google-services.json
 
 # iOS/macOS
 /ios/Flutter/Generated.xcconfig
@@ -54,6 +55,7 @@ app.*.map.json
 /ios/Pods/
 /ios/.symlinks/
 /ios/Runner.xcworkspace
+/ios/Runner/GoogleService-Info.plist
 /ios/build/
 /macos/Flutter/ephemeral/
 /macos/Pods/
