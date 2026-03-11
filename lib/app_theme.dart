@@ -137,6 +137,9 @@ class AppTheme {
         backgroundColor: background,
         foregroundColor: white,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.transparent,
       ),
       textSelectionTheme: TextSelectionThemeData(
 

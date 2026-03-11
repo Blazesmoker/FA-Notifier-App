@@ -2,13 +2,16 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../utils/content_rating_filters.dart';
 
 class SearchFiltersScreen extends StatefulWidget {
   final Map<String, String> selectedSearchFilters;
+  final bool sfwEnabled;
   final Map<String, List<Map<String, String>>> searchFilterOptions;
 
   SearchFiltersScreen({
     required this.selectedSearchFilters,
+    required this.sfwEnabled,
     required this.searchFilterOptions,
     Key? key,
   }) : super(key: key);
@@ -18,16 +21,15 @@ class SearchFiltersScreen extends StatefulWidget {
 }
 
 class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
-
   final Color _applyButtonColor = const Color(0xFFE09321);
 
   static const List<Map<String, String>> _genderOptions = [
-    {'key': 'male',         'label': 'Male'},
-    {'key': 'female',       'label': 'Female'},
-    {'key': 'trans_male',   'label': 'Trans Male'},
+    {'key': 'male', 'label': 'Male'},
+    {'key': 'female', 'label': 'Female'},
+    {'key': 'trans_male', 'label': 'Trans Male'},
     {'key': 'trans_female', 'label': 'Trans Female'},
-    {'key': 'intersex',     'label': 'Intersex'},
-    {'key': 'non_binary',   'label': 'Non Binary'},
+    {'key': 'intersex', 'label': 'Intersex'},
+    {'key': 'non_binary', 'label': 'Non Binary'},
   ];
 
   late Map<String, String> currentSearchFilters;
@@ -37,28 +39,29 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
   @override
   void initState() {
     super.initState();
-    currentSearchFilters = Map<String, String>.from(widget.selectedSearchFilters);
+    currentSearchFilters = ContentRatingFilters.normalizeSearchFilters(
+      widget.selectedSearchFilters,
+      sfwEnabled: widget.sfwEnabled,
+    );
 
-
-    currentSearchFilters['rating-general'] ??= '1';
-    currentSearchFilters['rating-mature'] ??= '1';
-    currentSearchFilters['rating-adult'] ??= '1';
-
-
-    if (currentSearchFilters['mode'] == null || currentSearchFilters['mode']!.isEmpty) {
+    if (currentSearchFilters['mode'] == null ||
+        currentSearchFilters['mode']!.isEmpty) {
       currentSearchFilters['mode'] = 'extended';
     }
     for (final g in _genderOptions) {
       currentSearchFilters['gender-${g['key']}'] ??= '0';
     }
 
-
     if (currentSearchFilters['range'] == 'manual') {
-      if (currentSearchFilters['range_from'] != null && currentSearchFilters['range_from']!.isNotEmpty) {
-        fromDate = DateFormat('yyyy-MM-dd').parse(currentSearchFilters['range_from']!);
+      if (currentSearchFilters['range_from'] != null &&
+          currentSearchFilters['range_from']!.isNotEmpty) {
+        fromDate =
+            DateFormat('yyyy-MM-dd').parse(currentSearchFilters['range_from']!);
       }
-      if (currentSearchFilters['range_to'] != null && currentSearchFilters['range_to']!.isNotEmpty) {
-        toDate = DateFormat('yyyy-MM-dd').parse(currentSearchFilters['range_to']!);
+      if (currentSearchFilters['range_to'] != null &&
+          currentSearchFilters['range_to']!.isNotEmpty) {
+        toDate =
+            DateFormat('yyyy-MM-dd').parse(currentSearchFilters['range_to']!);
       }
     }
   }
@@ -67,7 +70,6 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
     bool finishedEditing = false;
 
     while (!finishedEditing) {
-
       final fieldToEdit = await showDialog<String>(
         context: context,
         builder: (dialogContext) {
@@ -90,15 +92,16 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
               ),
               ElevatedButton(
                 onPressed: () async {
-
-                  if (fromDate != null && toDate != null && fromDate!.isAfter(toDate!)) {
-
+                  if (fromDate != null &&
+                      toDate != null &&
+                      fromDate!.isAfter(toDate!)) {
                     await showDialog(
                       context: dialogContext,
                       builder: (errorContext) {
                         return AlertDialog(
                           title: Text('Invalid Date Range'),
-                          content: Text('"From" date cannot be after "To" date.'),
+                          content:
+                              Text('"From" date cannot be after "To" date.'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.of(errorContext).pop(),
@@ -111,7 +114,6 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
                     return;
                   }
 
-
                   Navigator.of(dialogContext).pop(null);
                 },
                 child: Text('Apply'),
@@ -121,14 +123,11 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
         },
       );
 
-
       if (fieldToEdit == null) {
-
         finishedEditing = true;
       } else {
-
-        DateTime initialDate = (fieldToEdit == 'from' ? fromDate : toDate) ?? DateTime.now();
-
+        DateTime initialDate =
+            (fieldToEdit == 'from' ? fromDate : toDate) ?? DateTime.now();
 
         await Future.delayed(Duration.zero);
 
@@ -147,17 +146,18 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
               toDate = pickedDate;
             }
           });
-
         }
       }
     }
 
-
-    currentSearchFilters['range_from'] = fromDate != null ? DateFormat('yyyy-MM-dd').format(fromDate!) : '';
-    currentSearchFilters['range_to'] = toDate != null ? DateFormat('yyyy-MM-dd').format(toDate!) : '';
+    currentSearchFilters['range_from'] =
+        fromDate != null ? DateFormat('yyyy-MM-dd').format(fromDate!) : '';
+    currentSearchFilters['range_to'] =
+        toDate != null ? DateFormat('yyyy-MM-dd').format(toDate!) : '';
   }
 
-  Widget _buildDateFieldChooser(String label, DateTime? date, BuildContext context, String fieldKey) {
+  Widget _buildDateFieldChooser(
+      String label, DateTime? date, BuildContext context, String fieldKey) {
     return Row(
       children: [
         Text(label, style: TextStyle(fontSize: 14)),
@@ -165,12 +165,12 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
         Expanded(
           child: InkWell(
             onTap: () {
-
               Navigator.of(context).pop(fieldKey);
             },
             child: InputDecorator(
               decoration: InputDecoration(
-                contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                contentPadding:
+                    EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -179,7 +179,9 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    date != null ? DateFormat('dd.MM.yyyy').format(date) : 'Select Date',
+                    date != null
+                        ? DateFormat('dd.MM.yyyy').format(date)
+                        : 'Select Date',
                     style: TextStyle(fontSize: 14),
                   ),
                   Icon(Icons.calendar_today, size: 18),
@@ -239,7 +241,8 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Sort Criteria', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Text('Sort Criteria',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         Row(
           children: [
             DropdownButton<String>(
@@ -286,7 +289,8 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Gender Filter', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Text('Gender Filter',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         Wrap(
           spacing: 12.0,
@@ -304,7 +308,8 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Sort by Range', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Text('Sort by Range',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
         Wrap(
           spacing: 12.0,
@@ -351,7 +356,8 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Sort by Rating', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Text('Sort by Rating',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         Wrap(
           spacing: 8.0,
           children: [
@@ -368,7 +374,8 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Sort by Type', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Text('Sort by Type',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         Wrap(
           spacing: 8.0,
           children: [
@@ -388,7 +395,8 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Sort by Matching Keywords', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Text('Sort by Matching Keywords',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         _buildRadioOption('All of the words', 'mode', 'all'),
         _buildRadioOption('Any of the words', 'mode', 'any'),
         _buildRadioOption('Extended (See "Advanced")', 'mode', 'extended'),
@@ -409,7 +417,6 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
               currentSearchFilters[filterKey] = newValue!;
             });
             if (filterKey == 'range' && newValue == 'manual') {
-
               WidgetsBinding.instance.addPostFrameCallback((_) async {
                 await _editManualDates();
               });
@@ -426,8 +433,9 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
         Text(
           label,
           style: TextStyle(
-
-            color: currentSearchFilters[filterKey] == value ? _applyButtonColor : Colors.white,
+            color: currentSearchFilters[filterKey] == value
+                ? _applyButtonColor
+                : Colors.white,
           ),
         ),
       ],
@@ -450,8 +458,9 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
         Text(
           label,
           style: TextStyle(
-
-            color: currentSearchFilters[filterKey] == value ? _applyButtonColor : Colors.white,
+            color: currentSearchFilters[filterKey] == value
+                ? _applyButtonColor
+                : Colors.white,
           ),
         ),
       ],
@@ -479,27 +488,10 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
                   highlightColor: Colors.transparent,
                   onTap: () {
                     setState(() {
-                      currentSearchFilters = {
-                        'order-by': 'relevancy',
-                        'order-direction': 'desc',
-                        'range': '5years',
-                        'mode': 'extended',
-                        'rating-general': '1',
-                        'rating-mature': '1',
-                        'rating-adult': '1',
-                        'type-art': '1',
-                        'type-music': '1',
-                        'type-story': '1',
-                        'type-photo': '1',
-                        'type-flash': '1',
-                        'type-poetry': '1',
-                        'gender-male': '0',
-                        'gender-female': '0',
-                        'gender-trans_male': '0',
-                        'gender-trans_female': '0',
-                        'gender-intersex': '0',
-                        'gender-non_binary': '0',
-                      };
+                      currentSearchFilters =
+                          ContentRatingFilters.defaultSearchFilters(
+                        sfwEnabled: widget.sfwEnabled,
+                      );
                       fromDate = null;
                       toDate = null;
                       currentSearchFilters['range'] = '5years';

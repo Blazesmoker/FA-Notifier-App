@@ -56,152 +56,139 @@ class _NotificationsSettingsScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Notifications Settings')),
-      body: SafeArea(child:
-    SingleChildScrollView(
-        child: Padding(
+      body: SafeArea(
+        child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: Column(
-            children: [
-              if (Platform.isAndroid) ...[
-                // Icon style toggle
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Text(
-                            'Classic icon',
-                            style: TextStyle(fontSize: 14),
-                            textAlign: TextAlign.center,
-                          ),
-
-                        ],
-                      ),
+          children: [
+            if (Platform.isAndroid) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Text(
+                          'Classic icon',
+                          style: TextStyle(fontSize: 14),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
-                    Switch(
-                      value: useAdaptiveNotificationIcon,
-                      activeThumbColor: const Color(0xFFE09321),
-                      onChanged: _toggleNotificationIcon,
+                  ),
+                  Switch(
+                    value: useAdaptiveNotificationIcon,
+                    activeThumbColor: const Color(0xFFE09321),
+                    onChanged: _toggleNotificationIcon,
+                  ),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Text(
+                          'Adaptive icon',
+                          style: TextStyle(fontSize: 14),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Text(
-                            'Adaptive icon',
-                            style: TextStyle(fontSize: 14),
-                            textAlign: TextAlign.center,
-                          ),
-
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                const Divider(
-                  height: 1,
-                  color: Color(0xFF111111),
-                  thickness: 3,
-                ),
-              ],
-
-              // Notification type toggles
-              Consumer<NotificationSettingsProvider>(
-                builder: (context, settings, child) {
-                  return Column(
-                    children: [
-                      SwitchListTile(
-                        activeThumbColor: const Color(0xFFE09321),
-                        title: const Text('Submissions'),
-                        value: settings.drawerSubmissionsEnabled,
-                        onChanged: settings.setDrawerSubmissionsEnabled,
-                      ),
-                      SwitchListTile(
-                        activeThumbColor: const Color(0xFFE09321),
-                        title: const Text('Watches'),
-                        value: settings.drawerWatchesEnabled,
-                        onChanged: settings.setDrawerWatchesEnabled,
-                      ),
-                      SwitchListTile(
-                        activeThumbColor: const Color(0xFFE09321),
-                        title: const Text('Comments'),
-                        value: settings.drawerCommentsEnabled,
-                        onChanged: settings.setDrawerCommentsEnabled,
-                      ),
-                      SwitchListTile(
-                        activeThumbColor: const Color(0xFFE09321),
-                        title: const Text('Favorites'),
-                        value: settings.drawerFavoritesEnabled,
-                        onChanged: settings.setDrawerFavoritesEnabled,
-                      ),
-                      SwitchListTile(
-                        activeThumbColor: const Color(0xFFE09321),
-                        title: const Text('Journals'),
-                        value: settings.drawerJournalsEnabled,
-                        onChanged: settings.setDrawerJournalsEnabled,
-                      ),
-                      SwitchListTile(
-                        activeThumbColor: const Color(0xFFE09321),
-                        title: const Text('Notes'),
-                        value: settings.drawerNotesEnabled,
-                        onChanged: settings.setDrawerNotesEnabled,
-                      ),
-                      const Divider(
-                        height: 8.0,
-                        color: Color(0xFF111111),
-                        thickness: 3.0,
-                      ),
-                      SwitchListTile(
-                        activeThumbColor: const Color(0xFFE09321),
-                        title: const Text('Sound for Notes'),
-                        value: settings.soundNewNotesEnabled,
-                        onChanged: (bool value) async {
-                          settings.setSoundNewNotesEnabled(value);
-                          await NotificationService()
-                              .updateNotificationChannels();
-                        },
-                      ),
-                      SwitchListTile(
-                        activeThumbColor: const Color(0xFFE09321),
-                        title: const Text('Vibration for Notes'),
-                        value: settings.vibrationNewNotesEnabled,
-                        onChanged: (bool value) async {
-                          settings.setVibrationNewNotesEnabled(value);
-                          await NotificationService()
-                              .updateNotificationChannels();
-                        },
-                      ),
-                      SwitchListTile(
-                        activeThumbColor: const Color(0xFFE09321),
-                        title: const Text('Sound for Activities'),
-                        value: settings.soundNewActivitiesEnabled,
-                        onChanged: (bool value) async {
-                          settings.setSoundNewActivitiesEnabled(value);
-                          await NotificationService()
-                              .updateNotificationChannels();
-                        },
-                      ),
-                      SwitchListTile(
-                        activeThumbColor: const Color(0xFFE09321),
-                        title: const Text('Vibration for Activities'),
-                        value: settings.vibrationNewActivitiesEnabled,
-                        onChanged: (bool value) async {
-                          settings.setVibrationNewActivitiesEnabled(value);
-                          await NotificationService()
-                              .updateNotificationChannels();
-                        },
-                      ),
-                    ],
-                  );
-                },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Divider(
+                height: 1,
+                color: Color(0xFF111111),
+                thickness: 3,
               ),
             ],
-          ),
+            Consumer<NotificationSettingsProvider>(
+              builder: (context, settings, child) {
+                return Column(
+                  children: [
+                    SwitchListTile(
+                      activeThumbColor: const Color(0xFFE09321),
+                      title: const Text('Submissions'),
+                      value: settings.drawerSubmissionsEnabled,
+                      onChanged: settings.setDrawerSubmissionsEnabled,
+                    ),
+                    SwitchListTile(
+                      activeThumbColor: const Color(0xFFE09321),
+                      title: const Text('Watches'),
+                      value: settings.drawerWatchesEnabled,
+                      onChanged: settings.setDrawerWatchesEnabled,
+                    ),
+                    SwitchListTile(
+                      activeThumbColor: const Color(0xFFE09321),
+                      title: const Text('Comments'),
+                      value: settings.drawerCommentsEnabled,
+                      onChanged: settings.setDrawerCommentsEnabled,
+                    ),
+                    SwitchListTile(
+                      activeThumbColor: const Color(0xFFE09321),
+                      title: const Text('Favorites'),
+                      value: settings.drawerFavoritesEnabled,
+                      onChanged: settings.setDrawerFavoritesEnabled,
+                    ),
+                    SwitchListTile(
+                      activeThumbColor: const Color(0xFFE09321),
+                      title: const Text('Journals'),
+                      value: settings.drawerJournalsEnabled,
+                      onChanged: settings.setDrawerJournalsEnabled,
+                    ),
+                    SwitchListTile(
+                      activeThumbColor: const Color(0xFFE09321),
+                      title: const Text('Notes'),
+                      value: settings.drawerNotesEnabled,
+                      onChanged: settings.setDrawerNotesEnabled,
+                    ),
+                    const Divider(
+                      height: 8.0,
+                      color: Color(0xFF111111),
+                      thickness: 3.0,
+                    ),
+                    SwitchListTile(
+                      activeThumbColor: const Color(0xFFE09321),
+                      title: const Text('Sound for Notes'),
+                      value: settings.soundNewNotesEnabled,
+                      onChanged: (bool value) async {
+                        settings.setSoundNewNotesEnabled(value);
+                        await NotificationService().updateNotificationChannels();
+                      },
+                    ),
+                    SwitchListTile(
+                      activeThumbColor: const Color(0xFFE09321),
+                      title: const Text('Vibration for Notes'),
+                      value: settings.vibrationNewNotesEnabled,
+                      onChanged: (bool value) async {
+                        settings.setVibrationNewNotesEnabled(value);
+                        await NotificationService().updateNotificationChannels();
+                      },
+                    ),
+                    SwitchListTile(
+                      activeThumbColor: const Color(0xFFE09321),
+                      title: const Text('Sound for Activities'),
+                      value: settings.soundNewActivitiesEnabled,
+                      onChanged: (bool value) async {
+                        settings.setSoundNewActivitiesEnabled(value);
+                        await NotificationService().updateNotificationChannels();
+                      },
+                    ),
+                    SwitchListTile(
+                      activeThumbColor: const Color(0xFFE09321),
+                      title: const Text('Vibration for Activities'),
+                      value: settings.vibrationNewActivitiesEnabled,
+                      onChanged: (bool value) async {
+                        settings.setVibrationNewActivitiesEnabled(value);
+                        await NotificationService().updateNotificationChannels();
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
         ),
-      ),
       ),
     );
   }

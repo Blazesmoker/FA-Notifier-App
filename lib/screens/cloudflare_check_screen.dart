@@ -1,16 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:io';
 
 import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 
+class CloudflareCheckResult {
+  final bool passed;
+  final String? pageHtml;
+  final String? finalUrl;
+
+  const CloudflareCheckResult({
+    required this.passed,
+    this.pageHtml,
+    this.finalUrl,
+  });
+}
+
 class CloudflareCheckScreen extends StatefulWidget {
   final String initialUrl;
+  final bool returnPageHtml;
 
   const CloudflareCheckScreen({
     super.key,
     this.initialUrl = 'https://www.furaffinity.net/',
+    this.returnPageHtml = false,
   });
 
   @override
@@ -20,8 +35,6 @@ class CloudflareCheckScreen extends StatefulWidget {
 class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
   InAppWebViewController? _controller;
   bool _didComplete = false;
-  bool _hasSeenChallenge = false;
-  String? _initialCfClearance;
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     iOptions: IOSOptions(
@@ -84,31 +97,159 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
     } else if (latestCf != null && latestCf.isNotEmpty) {
       await FaCookieHelper.writeCfClearance(latestCf);
     }
+
+    if (_controller != null) {
+      try {
+        final rawDocumentCookie = await _controller!.evaluateJavascript(
+          source: 'document.cookie',
+        );
+        final documentCookie = rawDocumentCookie?.toString() ?? '';
+        final cookiePairs = documentCookie.split(';');
+        for (final pair in cookiePairs) {
+          final separator = pair.indexOf('=');
+          if (separator <= 0) continue;
+          final name = pair.substring(0, separator).trim();
+          final value = pair.substring(separator + 1).trim();
+          if (name.isEmpty || value.isEmpty) continue;
+          await _secureStorage.write(key: 'fa_cookie_$name', value: value);
+          if (name == 'cf_clearance') {
+            await FaCookieHelper.writeCfClearance(value);
+          }
+        }
+      } catch (_) {}
+    }
   }
 
-  Future<void> _completeIfChallengePassed() async {
+  Future<String> _getCookieHeader() async {
+    const cookieKeys = <String>[
+      'a',
+      'b',
+      'cc',
+      'cf_clearance',
+      'folder',
+      'nodesc',
+      'sz',
+      'sfw',
+    ];
+
+    final cookies = <String>[];
+    for (final key in cookieKeys) {
+      final value = await _secureStorage.read(key: 'fa_cookie_$key');
+      if (value != null && value.isNotEmpty) {
+        cookies.add('$key=$value');
+      }
+    }
+    return cookies.join('; ');
+  }
+
+  Future<bool> _verifyHttpAccess(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await Future.delayed(Duration(milliseconds: 250 * attempt));
+        await _saveCookiesToSecureStorage();
+      }
+
+      final cookieHeader = await FaCookieHelper.appendCfClearanceToCookieHeader(
+        await _getCookieHeader(),
+      );
+      try {
+        final response = await FAHttp.get(
+          uri,
+          headers: {
+            if (cookieHeader.isNotEmpty) HttpHeaders.cookieHeader: cookieHeader,
+            'User-Agent': FAHttp.userAgent,
+            'Referer': 'https://www.furaffinity.net/',
+            'Accept':
+                'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          },
+        );
+
+        final refreshedCf = FaCookieHelper.extractCfClearanceFromSetCookieHeader(
+          response.headers['set-cookie'],
+        );
+        if (refreshedCf != null && refreshedCf.isNotEmpty) {
+          await FaCookieHelper.writeCfClearance(refreshedCf);
+        }
+
+        final isChallenge = FaCookieHelper.isCloudflareChallengePage(
+          body: response.body,
+          statusCode: response.statusCode,
+        );
+        debugPrint(
+          '[Cloudflare] HTTP verification attempt ${attempt + 1} for $url => '
+          'status=${response.statusCode}, challenge=$isChallenge',
+        );
+        if (!isChallenge) {
+          return true;
+        }
+      } catch (e) {
+        debugPrint(
+          '[Cloudflare] HTTP verification attempt ${attempt + 1} failed: $e',
+        );
+      }
+    }
+
+    return false;
+  }
+
+  Future<void> _completeIfChallengePassed({String? urlOverride}) async {
     if (_didComplete || _controller == null || !mounted) return;
 
-    final html = await _controller!.evaluateJavascript(
-      source: 'document.documentElement.outerHTML;',
-    );
-    final body = (html ?? '').toString();
-    final isChallenge = FaCookieHelper.isCloudflareChallengePage(body: body);
-    final cfClearance = await _secureStorage.read(key: 'fa_cookie_cf_clearance');
-    final hasCf = cfClearance != null && cfClearance.isNotEmpty;
-    final cfChanged =
-        hasCf && (_initialCfClearance == null || _initialCfClearance != cfClearance);
-
-    if (isChallenge) {
-      _hasSeenChallenge = true;
+    final currentUrl =
+        urlOverride ?? (await _controller!.getUrl())?.toString() ?? '';
+    if (currentUrl.isEmpty ||
+        currentUrl == 'about:blank' ||
+        !currentUrl.contains('furaffinity.net')) {
       return;
     }
 
-    if ((_hasSeenChallenge && hasCf) || cfChanged) {
+    String body = '';
+    try {
+      final html = await _controller!.evaluateJavascript(
+        source: 'document.documentElement.outerHTML;',
+      );
+      body = (html ?? '').toString();
+    } catch (_) {
+      return;
+    }
+
+    final isChallenge =
+        currentUrl.contains('/cdn-cgi/challenge-platform') ||
+        FaCookieHelper.isCloudflareChallengePage(body: body);
+
+    if (isChallenge) {
+      debugPrint('[Cloudflare] WebView is still on a challenge page: $currentUrl');
+      return;
+    }
+
+    if (widget.returnPageHtml) {
       _didComplete = true;
       if (mounted) {
-        Navigator.of(context).pop(true);
+        Navigator.of(context).pop(
+          CloudflareCheckResult(
+            passed: true,
+            pageHtml: body,
+            finalUrl: currentUrl,
+          ),
+        );
       }
+      return;
+    }
+
+    final verified = await _verifyHttpAccess(currentUrl);
+    if (!verified || !mounted) {
+      debugPrint(
+        '[Cloudflare] WebView loaded a normal page but HTTP verification is still failing.',
+      );
+      return;
+    }
+
+    _didComplete = true;
+    if (mounted) {
+      Navigator.of(context).pop(const CloudflareCheckResult(passed: true));
     }
   }
 
@@ -124,7 +265,9 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop(false);
+                Navigator.of(context).pop(
+                  const CloudflareCheckResult(passed: false),
+                );
               },
               child: const Text(
                 'Close',
@@ -149,8 +292,6 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
           },
           onWebViewCreated: (controller) async {
             _controller = controller;
-            _initialCfClearance =
-                await _secureStorage.read(key: 'fa_cookie_cf_clearance');
             await _setCookiesFromSecureStorage();
             await controller.loadUrl(
               urlRequest: URLRequest(
@@ -164,7 +305,8 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
               return;
             }
             await _saveCookiesToSecureStorage();
-            await _completeIfChallengePassed();
+            await Future.delayed(const Duration(milliseconds: 250));
+            await _completeIfChallengePassed(urlOverride: currentUrl);
           },
         ),
       ),

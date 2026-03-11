@@ -3,14 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import '../services/fa_http.dart';
+import '../utils/content_rating_filters.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 
 class FiltersScreen extends StatefulWidget {
   /// Pass in the currently selected filters.
   final Map<String, String> selectedFilters;
+  final bool sfwEnabled;
 
   const FiltersScreen({
     required this.selectedFilters,
+    required this.sfwEnabled,
     Key? key,
   }) : super(key: key);
 
@@ -19,7 +22,6 @@ class FiltersScreen extends StatefulWidget {
 }
 
 class _FiltersScreenState extends State<FiltersScreen> {
-
   late Map<String, String> currentFilters;
 
   // Tracks if filter options are loading.
@@ -35,9 +37,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
     'gender': 'Gender',
   };
 
-
   static const Color applyButtonColor = Color(0xFFE09321);
-
 
   bool _ratingGeneral = true;
   bool _ratingMature = true;
@@ -47,28 +47,21 @@ class _FiltersScreenState extends State<FiltersScreen> {
   void initState() {
     super.initState();
 
+    final selectedFilters = ContentRatingFilters.normalizeBrowseFilters(
+      widget.selectedFilters,
+      sfwEnabled: widget.sfwEnabled,
+    );
 
     currentFilters = {};
     filterDisplayNames.forEach((internalKey, displayLabel) {
-      if (widget.selectedFilters.containsKey(internalKey)) {
-        currentFilters[internalKey] = widget.selectedFilters[internalKey]!;
-      } else if (widget.selectedFilters.containsKey(displayLabel)) {
-        currentFilters[internalKey] = widget.selectedFilters[displayLabel]!;
-      } else {
-        currentFilters[internalKey] = 'Unknown';
-      }
+      currentFilters[internalKey] = selectedFilters[displayLabel]!;
     });
 
-
-    if (widget.selectedFilters.containsKey('rating-general')) {
-      _ratingGeneral = widget.selectedFilters['rating-general'] == '1';
-    }
-    if (widget.selectedFilters.containsKey('rating-mature')) {
-      _ratingMature = widget.selectedFilters['rating-mature'] == '1';
-    }
-    if (widget.selectedFilters.containsKey('rating-adult')) {
-      _ratingAdult = widget.selectedFilters['rating-adult'] == '1';
-    }
+    _ratingGeneral =
+        selectedFilters[ContentRatingFilters.ratingGeneralKey] == '1';
+    _ratingMature =
+        selectedFilters[ContentRatingFilters.ratingMatureKey] == '1';
+    _ratingAdult = selectedFilters[ContentRatingFilters.ratingAdultKey] == '1';
 
     // Start fetching filter options.
     _fetchFilterData();
@@ -81,8 +74,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
     });
     try {
       debugPrint('Fetching all filters...');
-      final response =
-      await http.get(
+      final response = await http.get(
         Uri.parse('https://www.furaffinity.net/browse/'),
         headers: {'User-Agent': FAHttp.userAgent},
       );
@@ -92,7 +84,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
         List<String> filterNames = ['cat', 'atype', 'species', 'gender'];
         for (String filterName in filterNames) {
           var selectElement =
-          document.querySelector('select[name="$filterName"]');
+              document.querySelector('select[name="$filterName"]');
           if (selectElement != null) {
             var options = selectElement.querySelectorAll('option').map((e) {
               String label = e.text.trim();
@@ -112,7 +104,8 @@ class _FiltersScreenState extends State<FiltersScreen> {
           _isLoadingFilters = false;
         });
       } else {
-        debugPrint('Failed to fetch filters. Status code: ${response.statusCode}');
+        debugPrint(
+            'Failed to fetch filters. Status code: ${response.statusCode}');
         setState(() {
           _filterOptions = {
             'cat': [],
@@ -137,7 +130,6 @@ class _FiltersScreenState extends State<FiltersScreen> {
     }
   }
 
-
   void _updateCurrentFilters() {
     _filterOptions.forEach((filterName, options) {
       if (options.isEmpty) return;
@@ -151,29 +143,31 @@ class _FiltersScreenState extends State<FiltersScreen> {
     });
   }
 
-
   String getFilterLabel(String filterName, String valueCode) {
     final options = _filterOptions[filterName];
     if (options == null || options.isEmpty || valueCode == 'Unknown') {
       return 'Loading...';
     }
     final match = options.firstWhere(
-          (option) => option['value'] == valueCode,
+      (option) => option['value'] == valueCode,
       orElse: () => {'label': 'Unknown'},
     );
     return match['label']!;
   }
 
-
   Map<String, String> getMappedFilters() {
-    final mapped = <String, String>{};
-    filterDisplayNames.forEach((internalKey, displayLabel) {
-      mapped[displayLabel] = currentFilters[internalKey] ?? 'Unknown';
-    });
-    mapped['rating-general'] = _ratingGeneral ? '1' : '0';
-    mapped['rating-mature'] = _ratingMature ? '1' : '0';
-    mapped['rating-adult'] = _ratingAdult ? '1' : '0';
-    return mapped;
+    return ContentRatingFilters.normalizeBrowseFilters(
+      {
+        'Category': currentFilters['cat'] ?? '1',
+        'Type': currentFilters['atype'] ?? '1',
+        'Species': currentFilters['species'] ?? '1',
+        'Gender': currentFilters['gender'] ?? '0',
+        ContentRatingFilters.ratingGeneralKey: _ratingGeneral ? '1' : '0',
+        ContentRatingFilters.ratingMatureKey: _ratingMature ? '1' : '0',
+        ContentRatingFilters.ratingAdultKey: _ratingAdult ? '1' : '0',
+      },
+      sfwEnabled: widget.sfwEnabled,
+    );
   }
 
   @override
@@ -181,14 +175,12 @@ class _FiltersScreenState extends State<FiltersScreen> {
     // While filters are loading, shows a loading indicator.
     if (_isLoadingFilters) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Filters'),
-        ),
-        body: Center(child: PulsatingLoadingIndicator(size: 108.0, assetPath: 'assets/icons/fathemed.png'))
-
-
-
-      );
+          appBar: AppBar(
+            title: const Text('Filters'),
+          ),
+          body: Center(
+              child: PulsatingLoadingIndicator(
+                  size: 108.0, assetPath: 'assets/icons/fathemed.png')));
     }
 
     return Scaffold(
@@ -204,162 +196,165 @@ class _FiltersScreenState extends State<FiltersScreen> {
         ],
       ),
       body: SafeArea(
-        child:
-        Column(
-        children: <Widget>[
-          Expanded(
-            child: SingleChildScrollView(
-              child: Padding(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-                child: Column(
-                  children: <Widget>[
-
-                    ...filterDisplayNames.entries.map((entry) {
-                      return Column(
-                        children: [
-                          buildFilterButton(context, entry.key, entry.value),
-                          const SizedBox(height: 20),
-                        ],
-                      );
-                    }).toList(),
-
-                    const SizedBox(height: 10),
-                    Container(
-                      alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.only(bottom: 5),
-                      child: const Text(
-                        'Filter by Rating',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
+        child: Column(
+          children: <Widget>[
+            Expanded(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0, vertical: 16.0),
+                  child: Column(
+                    children: <Widget>[
+                      ...filterDisplayNames.entries.map((entry) {
+                        return Column(
+                          children: [
+                            buildFilterButton(context, entry.key, entry.value),
+                            const SizedBox(height: 20),
+                          ],
+                        );
+                      }).toList(),
+                      const SizedBox(height: 10),
+                      Container(
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.only(bottom: 5),
+                        child: const Text(
+                          'Filter by Rating',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
                       ),
-                    ),
-
-                    buildRatingCheckbox(
-                      label: 'General',
-                      value: _ratingGeneral,
-                      onChanged: (bool? newVal) {
-                        setState(() {
-                          _ratingGeneral = newVal ?? true;
-                        });
-                      },
-                    ),
-                    buildRatingCheckbox(
-                      label: 'Mature',
-                      value: _ratingMature,
-                      onChanged: (bool? newVal) {
-                        setState(() {
-                          _ratingMature = newVal ?? true;
-                        });
-                      },
-                    ),
-                    buildRatingCheckbox(
-                      label: 'Adult',
-                      value: _ratingAdult,
-                      onChanged: (bool? newVal) {
-                        setState(() {
-                          _ratingAdult = newVal ?? true;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+                      buildRatingCheckbox(
+                        label: 'General',
+                        value: _ratingGeneral,
+                        onChanged: (bool? newVal) {
+                          setState(() {
+                            _ratingGeneral = newVal ?? true;
+                          });
+                        },
+                      ),
+                      buildRatingCheckbox(
+                        label: 'Mature',
+                        value: _ratingMature,
+                        onChanged: (bool? newVal) {
+                          setState(() {
+                            _ratingMature = newVal ?? true;
+                          });
+                        },
+                      ),
+                      buildRatingCheckbox(
+                        label: 'Adult',
+                        value: _ratingAdult,
+                        onChanged: (bool? newVal) {
+                          setState(() {
+                            _ratingAdult = newVal ?? true;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          const Divider(
-            height: 3.0,
-            color: Colors.black,
-            thickness: 3.0,
-          ),
-          Padding(
-            padding:
-            const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              children: [
-                // Reset Button
-                Expanded(
-                  child: Container(
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.circular(24.0),
-                      border: Border.all(color: applyButtonColor),
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(24.0),
-                        onTap: () {
-                          setState(() {
-                            // Reset standard filters.
-                            currentFilters['cat'] = '1';
-                            currentFilters['atype'] = '1';
-                            currentFilters['species'] = '1';
-                            currentFilters['gender'] = '1';
-                            // Reset rating filters.
-                            _ratingGeneral = true;
-                            _ratingMature = true;
-                            _ratingAdult = true;
-                          });
-                          Navigator.pop(context, getMappedFilters());
-                        },
-                        child: const Center(
-                          child: Text(
-                            'Reset',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 18,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                // Apply Button
-                Expanded(
-                  child: Container(
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: applyButtonColor,
-                      borderRadius: BorderRadius.circular(24.0),
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(24.0),
-                        onTap: () {
-                          Navigator.pop(context, getMappedFilters());
-                        },
-                        child: const Center(
-                          child: Text(
-                            'Apply',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 18,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            const Divider(
+              height: 3.0,
+              color: Colors.black,
+              thickness: 3.0,
             ),
-          ),
-        ],
-      ),
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Row(
+                children: [
+                  // Reset Button
+                  Expanded(
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(24.0),
+                        border: Border.all(color: applyButtonColor),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(24.0),
+                          onTap: () {
+                            final defaults =
+                                ContentRatingFilters.defaultBrowseFilters(
+                                    sfwEnabled: widget.sfwEnabled);
+                            setState(() {
+                              currentFilters['cat'] = defaults['Category']!;
+                              currentFilters['atype'] = defaults['Type']!;
+                              currentFilters['species'] = defaults['Species']!;
+                              currentFilters['gender'] = defaults['Gender']!;
+                              _ratingGeneral = defaults[
+                                      ContentRatingFilters.ratingGeneralKey] ==
+                                  '1';
+                              _ratingMature = defaults[
+                                      ContentRatingFilters.ratingMatureKey] ==
+                                  '1';
+                              _ratingAdult = defaults[
+                                      ContentRatingFilters.ratingAdultKey] ==
+                                  '1';
+                            });
+                            Navigator.pop(context, getMappedFilters());
+                          },
+                          child: const Center(
+                            child: Text(
+                              'Reset',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w500,
+                                fontSize: 18,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  // Apply Button
+                  Expanded(
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: applyButtonColor,
+                        borderRadius: BorderRadius.circular(24.0),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(24.0),
+                          onTap: () {
+                            Navigator.pop(context, getMappedFilters());
+                          },
+                          child: const Center(
+                            child: Text(
+                              'Apply',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w500,
+                                fontSize: 18,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-
-  Widget buildFilterButton(BuildContext context, String internalKey, String displayLabel) {
+  Widget buildFilterButton(
+      BuildContext context, String internalKey, String displayLabel) {
     String selectedValueCode = currentFilters[internalKey] ?? 'Unknown';
     String selectedValueLabel = getFilterLabel(internalKey, selectedValueCode);
 
@@ -368,8 +363,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
         _showFilterDialog(context, internalKey, selectedValueCode);
       },
       style: TextButton.styleFrom(
-        padding:
-        const EdgeInsets.symmetric(vertical: 16.0, horizontal: 24.0),
+        padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 24.0),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8.0),
           side: const BorderSide(color: applyButtonColor),
@@ -400,7 +394,6 @@ class _FiltersScreenState extends State<FiltersScreen> {
     );
   }
 
-
   Widget buildRatingCheckbox({
     required String label,
     required bool value,
@@ -427,7 +420,6 @@ class _FiltersScreenState extends State<FiltersScreen> {
       ),
     );
   }
-
 
   void _showFilterDialog(
       BuildContext context, String filterType, String selectedValueCode) async {
@@ -460,9 +452,9 @@ class _FiltersScreenState extends State<FiltersScreen> {
                     itemCount: _filterOptions[filterType]?.length ?? 0,
                     itemBuilder: (context, index) {
                       String optionLabel =
-                      _filterOptions[filterType]![index]['label']!;
+                          _filterOptions[filterType]![index]['label']!;
                       String optionValue =
-                      _filterOptions[filterType]![index]['value']!;
+                          _filterOptions[filterType]![index]['value']!;
                       return RadioListTile<String>(
                         title: Text(optionLabel),
                         value: optionValue,

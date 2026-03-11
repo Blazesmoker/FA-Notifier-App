@@ -27,6 +27,7 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'package:FANotifier/widgets/confirm_close_dialog.dart';
+import 'package:FANotifier/utils/content_rating_filters.dart';
 import 'custom_drawer/drawer_user_controller.dart';
 import 'app_theme.dart';
 import 'model/user_profile.dart';
@@ -53,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isCheckingLoginStatus = true;
   bool isLoggedIn = false;
   bool _forceNotesRefresh = false;
+  bool _sfwEnabled = true;
 
   bool _profileFetched = false;
 
@@ -65,30 +67,11 @@ class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey<DrawerUserControllerState> _drawerKey =
       GlobalKey<DrawerUserControllerState>();
 
-  Map<String, String> browseFilters = {
-    'cat': '1',
-    'atype': '1',
-    'species': '1',
-    'gender': '0',
-  };
+  Map<String, String> browseFilters =
+      ContentRatingFilters.defaultBrowseFilters(sfwEnabled: true);
 
-  Map<String, String> searchFilters = {
-    'order-by': 'relevancy',
-    'order-direction': 'desc',
-    'range': '5years',
-    'mode': 'extended',
-    'rating-general': '1',
-    'rating-mature': '1',
-    'rating-adult': '1',
-    'type-art': '1',
-    'type-music': '1',
-    'type-flash': '1',
-    'type-story': '1',
-    'type-photo': '1',
-    'type-poetry': '1',
-    'range_from': '',
-    'range_to': '',
-  };
+  Map<String, String> searchFilters =
+      ContentRatingFilters.defaultSearchFilters(sfwEnabled: true);
 
   final ValueNotifier<Map<String, List<Map<String, String>>>>
       filterOptionsNotifier = ValueNotifier({});
@@ -119,6 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey<SearchScreenState> _searchKey =
       GlobalKey<SearchScreenState>();
   final GlobalKey<NotesScreenState> _notesKey = GlobalKey<NotesScreenState>();
+  late final NotificationNavigationProvider _navProvider;
 
   // Gate login SnackBar to only show once per real login
   bool _loginSnackShownThisRun = false;
@@ -126,6 +110,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _navProvider =
+        Provider.of<NotificationNavigationProvider>(context, listen: false);
+    _navProvider.addListener(_handleNavProviderChange);
 
     _initializeAndLoadLoginState();
     _handlePendingNavigation();
@@ -136,10 +123,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _triggerSearch(widget.initialSearchQuery!);
       }
     });
-
-    final navProvider =
-        Provider.of<NotificationNavigationProvider>(context, listen: false);
-    navProvider.addListener(_handleNavProviderChange);
   }
 
   @override
@@ -148,18 +131,14 @@ class _HomeScreenState extends State<HomeScreen> {
     _foregroundFetchTimer?.cancel();
     _elementCheckTimer?.cancel();
     filterOptionsNotifier.dispose();
-    final navProvider =
-        Provider.of<NotificationNavigationProvider>(context, listen: false);
-    navProvider.removeListener(_handleNavProviderChange);
+    _navProvider.removeListener(_handleNavProviderChange);
     super.dispose();
   }
 
   void _handleNavProviderChange() {
     if (!mounted) return;
 
-    final navProvider =
-        Provider.of<NotificationNavigationProvider>(context, listen: false);
-    final int? next = navProvider.takeTargetIndex();
+    final int? next = _navProvider.takeTargetIndex();
     if (next == null) return;
     if (next == _selectedIndex) return;
 
@@ -172,6 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _handlePendingNavigation() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
+    if (!mounted) return;
     final String? pendingPayload = prefs.getString('pending_navigation');
     if (pendingPayload == null) return;
     if (pendingPayload.isEmpty) {
@@ -179,8 +159,6 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    final navProvider =
-        Provider.of<NotificationNavigationProvider>(context, listen: false);
     final bool isNotes = pendingPayload.startsWith('note_') ||
         pendingPayload.contains('DrawerIndex.Notes') ||
         pendingPayload == 'note_native';
@@ -189,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
         pendingPayload == 'activity_native';
 
     if (isNotes) {
-      navProvider.setTargetIndex(4);
+      _navProvider.setTargetIndex(4);
       setState(
           () => _forceNotesRefresh = true); // keep if you rely on it elsewhere
 
@@ -198,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
         debugPrint("NOTES REFRESH TRIGGERED_home_postframe");
       });
     } else if (isActivities) {
-      navProvider.setTargetIndex(3);
+      _navProvider.setTargetIndex(3);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         NotificationRefreshService().triggerRefresh();
@@ -210,6 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _initializeAndLoadLoginState() async {
+    await _loadSfwEnabled();
     await _loadLoginState();
     final canProceed = await _runStartupCloudflareCheck();
     if (!canProceed) {
@@ -286,12 +265,12 @@ class _HomeScreenState extends State<HomeScreen> {
       return false;
     }
 
-    final passed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
+    final result = await Navigator.of(context).push<CloudflareCheckResult>(
+      MaterialPageRoute<CloudflareCheckResult>(
         builder: (_) => const CloudflareCheckScreen(),
       ),
     );
-    return passed == true;
+    return result?.passed == true;
   }
 
   void _startActivitiesPolling({required bool triggerImmediate}) {
@@ -333,6 +312,18 @@ class _HomeScreenState extends State<HomeScreen> {
     bool savedLoginState = prefs.getBool('isLoggedIn') ?? false;
     setState(() {
       isLoggedIn = savedLoginState;
+    });
+  }
+
+  Future<void> _loadSfwEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    final sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+    setState(() {
+      _sfwEnabled = sfwEnabled;
+      browseFilters =
+          ContentRatingFilters.defaultBrowseFilters(sfwEnabled: sfwEnabled);
+      searchFilters =
+          ContentRatingFilters.defaultSearchFilters(sfwEnabled: sfwEnabled);
     });
   }
 
@@ -701,12 +692,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         await Navigator.push<Map<String, String>>(
                       context,
                       MaterialPageRoute(
-                        builder: (context) =>
-                            FiltersScreen(selectedFilters: browseFilters),
+                        builder: (context) => FiltersScreen(
+                          selectedFilters: browseFilters,
+                          sfwEnabled: _sfwEnabled,
+                        ),
                       ),
                     );
                     if (updatedFilters != null) {
-                      setState(() => browseFilters = updatedFilters);
+                      setState(() {
+                        browseFilters =
+                            ContentRatingFilters.normalizeBrowseFilters(
+                          updatedFilters,
+                          sfwEnabled: _sfwEnabled,
+                        );
+                      });
                     }
                   },
                 ),
@@ -722,9 +721,13 @@ class _HomeScreenState extends State<HomeScreen> {
         SearchScreen(
           key: _searchKey,
           searchFilters: searchFilters,
+          sfwEnabled: _sfwEnabled,
           onFilterUpdated: (updatedSearchFilters) {
             setState(() {
-              searchFilters = updatedSearchFilters;
+              searchFilters = ContentRatingFilters.normalizeSearchFilters(
+                updatedSearchFilters,
+                sfwEnabled: _sfwEnabled,
+              );
             });
           },
         ),

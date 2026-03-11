@@ -8,10 +8,12 @@ import 'search_filters_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   final Map<String, String> searchFilters;
+  final bool sfwEnabled;
   final Function(Map<String, String>) onFilterUpdated;
 
   const SearchScreen({
     required this.searchFilters,
+    required this.sfwEnabled,
     required this.onFilterUpdated,
     Key? key,
   }) : super(key: key);
@@ -24,12 +26,12 @@ class SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
   String _currentSearchQuery = '';
-  final GlobalKey<FASearchImageState> _resultsKey = GlobalKey<FASearchImageState>();
+  final GlobalKey<FASearchImageState> _resultsKey =
+      GlobalKey<FASearchImageState>();
 
   @override
   void initState() {
     super.initState();
-
   }
 
   @override
@@ -93,7 +95,6 @@ class SearchScreenState extends State<SearchScreen> {
                         ),
                         onChanged: _onSearchChanged,
                       ),
-
                     ),
                     IconButton(
                       icon: const Icon(Icons.search),
@@ -105,7 +106,8 @@ class SearchScreenState extends State<SearchScreen> {
                           });
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please enter a search query.')),
+                            const SnackBar(
+                                content: Text('Please enter a search query.')),
                           );
                         }
                       },
@@ -118,11 +120,12 @@ class SearchScreenState extends State<SearchScreen> {
               icon: const Icon(Icons.filter_list),
               onPressed: () async {
                 final updatedSearchFilters =
-                await Navigator.push<Map<String, String>>(
+                    await Navigator.push<Map<String, String>>(
                   context,
                   MaterialPageRoute(
                     builder: (context) => SearchFiltersScreen(
                       selectedSearchFilters: widget.searchFilters,
+                      sfwEnabled: widget.sfwEnabled,
                       searchFilterOptions: {
                         'order-by': [
                           {'label': 'Relevancy', 'value': 'relevancy'},
@@ -192,13 +195,13 @@ class SearchScreenState extends State<SearchScreen> {
       ),
       body: _currentSearchQuery.isEmpty
           ? const Center(
-        child: Text('Enter a search query and apply filters.'),
-      )
+              child: Text('Enter a search query and apply filters.'),
+            )
           : FASearchImage(
-        key: _resultsKey,
-        selectedFilters: widget.searchFilters,
-        searchQuery: _currentSearchQuery,
-      ),
+              key: _resultsKey,
+              selectedFilters: widget.searchFilters,
+              searchQuery: _currentSearchQuery,
+            ),
     );
   }
 }

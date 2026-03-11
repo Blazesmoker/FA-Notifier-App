@@ -1,13 +1,15 @@
 // keyword_search_screen.dart
 import 'package:flutter/material.dart';
 import 'package:FANotifier/screens/fasearchimage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/content_rating_filters.dart';
 import 'search_filters_screen.dart';
-
 
 class KeywordSearchScreen extends StatefulWidget {
   final String initialKeyword;
 
-  const KeywordSearchScreen({required this.initialKeyword, Key? key}) : super(key: key);
+  const KeywordSearchScreen({required this.initialKeyword, Key? key})
+      : super(key: key);
 
   @override
   _KeywordSearchScreenState createState() => _KeywordSearchScreenState();
@@ -17,27 +19,29 @@ class _KeywordSearchScreenState extends State<KeywordSearchScreen> {
   late TextEditingController _searchController;
   late String _currentSearchQuery;
   late Map<String, String> _currentSearchFilters;
+  bool _sfwEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController(text: widget.initialKeyword);
     _currentSearchQuery = widget.initialKeyword;
-    _currentSearchFilters = {
-      'order-by': 'relevancy',
-      'order-direction': 'desc',
-      'range': '5years',
-      'mode': 'extended',
-      'rating_general': '1',
-      'rating_mature': '1',
-      'rating_adult': '1',
-      'type_art': '1',
-      'type_music': '1',
-      'type_flash': '1',
-      'type_story': '1',
-      'type_photo': '1',
-      'type_poetry': '1',
-    };
+    _currentSearchFilters =
+        ContentRatingFilters.defaultSearchFilters(sfwEnabled: true);
+    _loadSfwEnabled();
+  }
+
+  Future<void> _loadSfwEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    final sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+    if (!mounted) return;
+    setState(() {
+      _sfwEnabled = sfwEnabled;
+      _currentSearchFilters = ContentRatingFilters.normalizeSearchFilters(
+        _currentSearchFilters,
+        sfwEnabled: sfwEnabled,
+      );
+    });
   }
 
   @override
@@ -67,6 +71,7 @@ class _KeywordSearchScreenState extends State<KeywordSearchScreen> {
       MaterialPageRoute(
         builder: (context) => SearchFiltersScreen(
           selectedSearchFilters: _currentSearchFilters,
+          sfwEnabled: _sfwEnabled,
           searchFilterOptions: {
             'order-by': [
               {'label': 'Relevancy', 'value': 'relevancy'},
@@ -94,31 +99,31 @@ class _KeywordSearchScreenState extends State<KeywordSearchScreen> {
               {'label': 'Any', 'value': 'any'},
               {'label': 'Extended', 'value': 'extended'},
             ],
-            'rating_general': [
+            'rating-general': [
               {'label': 'General', 'value': '1'},
             ],
-            'rating_mature': [
+            'rating-mature': [
               {'label': 'Mature', 'value': '1'},
             ],
-            'rating_adult': [
+            'rating-adult': [
               {'label': 'Adult', 'value': '1'},
             ],
-            'type_art': [
+            'type-art': [
               {'label': 'Art', 'value': '1'},
             ],
-            'type_music': [
+            'type-music': [
               {'label': 'Music', 'value': '1'},
             ],
-            'type_flash': [
+            'type-flash': [
               {'label': 'Flash', 'value': '1'},
             ],
-            'type_story': [
+            'type-story': [
               {'label': 'Story', 'value': '1'},
             ],
-            'type_photo': [
+            'type-photo': [
               {'label': 'Photo', 'value': '1'},
             ],
-            'type_poetry': [
+            'type-poetry': [
               {'label': 'Poetry', 'value': '1'},
             ],
           },
@@ -128,7 +133,10 @@ class _KeywordSearchScreenState extends State<KeywordSearchScreen> {
 
     if (updatedFilters != null) {
       setState(() {
-        _currentSearchFilters = updatedFilters;
+        _currentSearchFilters = ContentRatingFilters.normalizeSearchFilters(
+          updatedFilters,
+          sfwEnabled: _sfwEnabled,
+        );
       });
     }
   }
@@ -178,8 +186,6 @@ class _KeywordSearchScreenState extends State<KeywordSearchScreen> {
           ],
         ),
       ),
-
-
       body: FASearchImage(
         selectedFilters: _currentSearchFilters,
         searchQuery: _currentSearchQuery,

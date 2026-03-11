@@ -9,6 +9,7 @@ import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
 import '../services/fa_thumbnail_parser.dart';
+import '../utils/content_rating_filters.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import '../widgets/heart_animation.dart';
 import '../widgets/fa_thumbnail_display.dart';
@@ -16,7 +17,8 @@ import 'openpost.dart';
 
 class FAImageGrid extends StatefulWidget {
   final Map<String, String> selectedFilters;
-  const FAImageGrid({required this.selectedFilters, Key? key}) : super(key: key);
+  const FAImageGrid({required this.selectedFilters, Key? key})
+      : super(key: key);
 
   @override
   FAImageGridState createState() => FAImageGridState();
@@ -29,7 +31,6 @@ class FAImageGridState extends State<FAImageGrid> {
 
   bool _isError = false;
   String? _errorMessage;
-
 
   /// Each image is a Map with:
   ///   - 'url': thumbnail URL
@@ -55,21 +56,19 @@ class FAImageGridState extends State<FAImageGrid> {
   final FavoriteService _favoriteService = FavoriteService();
 
   bool _sfwEnabled = true;
+  late final Future<void> _sfwLoadFuture;
 
   @override
   void initState() {
     super.initState();
-    _loadSfwEnabled();
+    _sfwLoadFuture = _loadSfwEnabled();
     _fetchImages(currentPage);
     _scrollController.addListener(_scrollListener);
-
   }
 
   Future<void> _loadSfwEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
-    });
+    _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
   }
 
   @override
@@ -101,7 +100,7 @@ class FAImageGridState extends State<FAImageGrid> {
 
   void _scrollListener() {
     if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent * 0.4 &&
+            _scrollController.position.maxScrollExtent * 0.4 &&
         !isLoading &&
         hasMore) {
       currentPage++;
@@ -167,7 +166,8 @@ class FAImageGridState extends State<FAImageGrid> {
       var resp = await FAHttp.post(uri, headers: headers, body: body);
 
       // Follow redirect if present
-      if (resp.isRedirect || (resp.statusCode >= 300 && resp.statusCode < 400)) {
+      if (resp.isRedirect ||
+          (resp.statusCode >= 300 && resp.statusCode < 400)) {
         final loc = resp.headers['location'];
         if (loc == null || loc.isEmpty) {
           throw Exception('Redirect without Location header');
@@ -177,7 +177,8 @@ class FAImageGridState extends State<FAImageGrid> {
           redirectUri,
           headers: {
             HttpHeaders.cookieHeader:
-                await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
+                await FaCookieHelper.appendCfClearanceToCookieHeader(
+                    cookieHeader),
             'User-Agent': FAHttp.userAgent,
             'Referer': uri.toString(),
           },
@@ -189,7 +190,7 @@ class FAImageGridState extends State<FAImageGrid> {
         if (newImages.isEmpty) setState(() => hasMore = false);
 
         final filtered =
-        newImages.where((img) => !imageUrls.contains(img['url'])).toList();
+            newImages.where((img) => !imageUrls.contains(img['url'])).toList();
         for (final img in filtered) {
           imageUrls.add(img['url']);
         }
@@ -204,7 +205,8 @@ class FAImageGridState extends State<FAImageGrid> {
         });
       } else {
         setState(() => isLoading = false);
-        throw Exception('FAImageGrid: HTTP ${resp.statusCode} fetching images.');
+        throw Exception(
+            'FAImageGrid: HTTP ${resp.statusCode} fetching images.');
       }
     } catch (e) {
       setState(() {
@@ -213,12 +215,20 @@ class FAImageGridState extends State<FAImageGrid> {
         _errorMessage = e.toString();
       });
       debugPrint('FAImageGrid: Error fetching images => $e');
-
     }
   }
 
   Future<String> _getAllCookies() async {
-    final cookieNames = ['a', 'b', 'cc', 'cf_clearance', 'folder', 'nodesc', 'sz'];
+    await _sfwLoadFuture;
+    final cookieNames = [
+      'a',
+      'b',
+      'cc',
+      'cf_clearance',
+      'folder',
+      'nodesc',
+      'sz'
+    ];
     final cookies = <String>[];
     for (var name in cookieNames) {
       final storageKey = 'fa_cookie_$name';
@@ -227,7 +237,9 @@ class FAImageGridState extends State<FAImageGrid> {
         cookies.add('$name=$value');
       }
     }
-    cookies.add('sfw=${_sfwEnabled ? '1' : '0'}');
+    cookies.add(
+      'sfw=${ContentRatingFilters.effectiveSfwCookieValue(globalSfwEnabled: _sfwEnabled, filters: widget.selectedFilters)}',
+    );
     return cookies.join('; ');
   }
 
@@ -307,7 +319,8 @@ class FAImageGridState extends State<FAImageGrid> {
         Uri.parse(postUrl),
         headers: {
           HttpHeaders.cookieHeader:
-              await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
+              await FaCookieHelper.appendCfClearanceToCookieHeader(
+                  cookieHeader),
           'User-Agent': FAHttp.userAgent,
         },
       );
@@ -322,12 +335,14 @@ class FAImageGridState extends State<FAImageGrid> {
           for (var aTag in anchors) {
             final href = aTag.attributes['href'] ?? '';
             if (href.contains('/fav/')) {
-              _favUrls[uniqueNumber] =
-              href.startsWith('http') ? href : 'https://www.furaffinity.net$href';
+              _favUrls[uniqueNumber] = href.startsWith('http')
+                  ? href
+                  : 'https://www.furaffinity.net$href';
               foundFav = true;
             } else if (href.contains('/unfav/')) {
-              _unfavUrls[uniqueNumber] =
-              href.startsWith('http') ? href : 'https://www.furaffinity.net$href';
+              _unfavUrls[uniqueNumber] = href.startsWith('http')
+                  ? href
+                  : 'https://www.furaffinity.net$href';
               foundUnfav = true;
             }
           }
@@ -355,14 +370,14 @@ class FAImageGridState extends State<FAImageGrid> {
   }
 
   Future<void> _toggleFavorite(String uniqueNumber, bool wantFavorite) async {
-    bool hasFavUrl =
-        _favUrls.containsKey(uniqueNumber) && _favUrls[uniqueNumber]!.isNotEmpty;
+    bool hasFavUrl = _favUrls.containsKey(uniqueNumber) &&
+        _favUrls[uniqueNumber]!.isNotEmpty;
     bool hasUnfavUrl = _unfavUrls.containsKey(uniqueNumber) &&
         _unfavUrls[uniqueNumber]!.isNotEmpty;
     if (!hasFavUrl && !hasUnfavUrl) {
       await _fetchPostDetails(uniqueNumber);
-      hasFavUrl =
-          _favUrls.containsKey(uniqueNumber) && _favUrls[uniqueNumber]!.isNotEmpty;
+      hasFavUrl = _favUrls.containsKey(uniqueNumber) &&
+          _favUrls[uniqueNumber]!.isNotEmpty;
       hasUnfavUrl = _unfavUrls.containsKey(uniqueNumber) &&
           _unfavUrls[uniqueNumber]!.isNotEmpty;
     }
@@ -377,9 +392,11 @@ class FAImageGridState extends State<FAImageGrid> {
       return;
     }
 
-    final urlToUse = wantFavorite ? _favUrls[uniqueNumber] : _unfavUrls[uniqueNumber];
+    final urlToUse =
+        wantFavorite ? _favUrls[uniqueNumber] : _unfavUrls[uniqueNumber];
     if (urlToUse == null || urlToUse.isEmpty) {
-      debugPrint('DEBUG: No URL found for fav/unfav operation on $uniqueNumber.');
+      debugPrint(
+          'DEBUG: No URL found for fav/unfav operation on $uniqueNumber.');
       return;
     }
 
@@ -393,7 +410,8 @@ class FAImageGridState extends State<FAImageGrid> {
 
     final success = await _favoriteService.executePostWithRetry(urlToUse);
     if (success) {
-      await _refetchFavLinks(uniqueNumber); // re-parse the page to see updated state
+      await _refetchFavLinks(
+          uniqueNumber); // re-parse the page to see updated state
       setState(() {});
     } else {
       // rollback
@@ -417,60 +435,65 @@ class FAImageGridState extends State<FAImageGrid> {
         padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
         child: imageRows.isEmpty
             ? ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            SizedBox(height: screenHeight * 0.25),
-            if (isLoading)
-              const Center(
-                child: PulsatingLoadingIndicator(
-                  size: 88.0,
-                  assetPath: 'assets/icons/fathemed.png',
-                ),
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(height: screenHeight * 0.25),
+                  if (isLoading)
+                    const Center(
+                      child: PulsatingLoadingIndicator(
+                        size: 88.0,
+                        assetPath: 'assets/icons/fathemed.png',
+                      ),
+                    )
+                  else
+                    Center(
+                      child: Text(
+                        _isError
+                            ? 'Network error. Pull to retry.'
+                            : 'No results. Pull to refresh.',
+                      ),
+                    ),
+                  if (!isLoading && _errorMessage != null)
+                    const SizedBox(height: 8),
+                  if (!isLoading && _errorMessage != null)
+                    Text(
+                      _errorMessage!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                ],
               )
-            else
-              Center(
-                child: Text(
-                  _isError ? 'Network error. Pull to retry.' : 'No results. Pull to refresh.',
-                ),
-              ),
-            if (!isLoading && _errorMessage != null) const SizedBox(height: 8),
-            if (!isLoading && _errorMessage != null)
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12),
-              ),
-          ],
-        )
             : ListView.builder(
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-          controller: _scrollController,
-          itemCount: imageRows.length + (isLoading ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (index == imageRows.length) {
-              return const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(
-                  child: PulsatingLoadingIndicator(
-                    size: 58.0,
-                    assetPath: 'assets/icons/fathemed.png',
-                  ),
-                ),
-              );
-            }
+                physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics()),
+                controller: _scrollController,
+                itemCount: imageRows.length + (isLoading ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index == imageRows.length) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Center(
+                        child: PulsatingLoadingIndicator(
+                          size: 58.0,
+                          assetPath: 'assets/icons/fathemed.png',
+                        ),
+                      ),
+                    );
+                  }
 
-            final rowImages = imageRows[index];
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2.0),
-              child: _buildImageRow(rowImages, maxHeight),
-            );
-          },
-        ),
+                  final rowImages = imageRows[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2.0),
+                    child: _buildImageRow(rowImages, maxHeight),
+                  );
+                },
+              ),
       ),
     );
   }
 
-  Widget _buildImageRow(List<Map<String, dynamic>> rowImages, double maxHeight) {
+  Widget _buildImageRow(
+      List<Map<String, dynamic>> rowImages, double maxHeight) {
     if (rowImages.length == 1) {
       return _buildSingleImage(rowImages[0], maxHeight);
     } else {
@@ -501,7 +524,8 @@ class FAImageGridState extends State<FAImageGrid> {
               width: width,
               height: height,
               isFav: _favoritedImages.contains(image['uniqueNumber']),
-              onToggle: (wantFav) => _toggleFavorite(image['uniqueNumber'], wantFav),
+              onToggle: (wantFav) =>
+                  _toggleFavorite(image['uniqueNumber'], wantFav),
               onTap: () {
                 Navigator.push(
                   context,
@@ -522,10 +546,10 @@ class FAImageGridState extends State<FAImageGrid> {
   }
 
   Widget _buildDoubleImage(
-      Map<String, dynamic> left,
-      Map<String, dynamic> right,
-      double maxHeight,
-      ) {
+    Map<String, dynamic> left,
+    Map<String, dynamic> right,
+    double maxHeight,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
         const margin = 4.0;
@@ -553,7 +577,8 @@ class FAImageGridState extends State<FAImageGrid> {
               width: wL,
               height: h,
               isFav: _favoritedImages.contains(left['uniqueNumber']),
-              onToggle: (wantFav) => _toggleFavorite(left['uniqueNumber'], wantFav),
+              onToggle: (wantFav) =>
+                  _toggleFavorite(left['uniqueNumber'], wantFav),
               onTap: () {
                 Navigator.push(
                   context,
@@ -573,7 +598,8 @@ class FAImageGridState extends State<FAImageGrid> {
               width: wR,
               height: h,
               isFav: _favoritedImages.contains(right['uniqueNumber']),
-              onToggle: (wantFav) => _toggleFavorite(right['uniqueNumber'], wantFav),
+              onToggle: (wantFav) =>
+                  _toggleFavorite(right['uniqueNumber'], wantFav),
               onTap: () {
                 Navigator.push(
                   context,

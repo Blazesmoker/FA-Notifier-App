@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,7 @@ import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
 import '../services/fa_thumbnail_parser.dart';
+import '../utils/content_rating_filters.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import '../widgets/heart_animation.dart';
 import '../widgets/fa_thumbnail_display.dart';
@@ -50,24 +52,28 @@ class FASearchImageState extends State<FASearchImage> {
   final Map<String, String> _unfavUrls = {};
 
   bool _sfwEnabled = true;
+  late final Future<void> _sfwLoadFuture;
 
   int _detailsEpoch = 0;
   final Map<String, Future<void>> _detailsInFlight = {};
   bool _isHandlingCloudflareChallenge = false;
+  InAppWebViewController? _backgroundWebViewController;
+  final Completer<void> _backgroundWebViewReady = Completer<void>();
+  Completer<String>? _backgroundHtmlCompleter;
+  String? _backgroundTargetUrl;
+  bool _preferWebViewFetch = false;
 
   @override
   void initState() {
     super.initState();
-    _loadSfwEnabled();
+    _sfwLoadFuture = _loadSfwEnabled();
     _fetchImages(currentPage);
     _scrollController.addListener(_scrollListener);
   }
 
   Future<void> _loadSfwEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
-    });
+    _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
   }
 
   @override
@@ -116,7 +122,16 @@ class FASearchImageState extends State<FASearchImage> {
   }
 
   Future<String> _getAllCookies() async {
-    final cookieNames = ['a', 'b', 'cc', 'cf_clearance', 'folder', 'nodesc', 'sz'];
+    await _sfwLoadFuture;
+    final cookieNames = [
+      'a',
+      'b',
+      'cc',
+      'cf_clearance',
+      'folder',
+      'nodesc',
+      'sz'
+    ];
     final cookies = <String>[];
 
     for (var name in cookieNames) {
@@ -127,116 +142,15 @@ class FASearchImageState extends State<FASearchImage> {
       }
     }
 
-    cookies.add('sfw=${_sfwEnabled ? '1' : '0'}');
+    cookies.add(
+      'sfw=${ContentRatingFilters.effectiveSfwCookieValue(globalSfwEnabled: _sfwEnabled, filters: widget.selectedFilters)}',
+    );
     return cookies.join('; ');
   }
 
-  Future<void> _fetchImages(
-    int pageNumber, {
-    bool isRefresh = false,
-    bool allowCloudflareRecovery = true,
-  }) async {
-    setState(() {
-      isLoading = true;
-    });
-    try {
-      if (isRefresh) {
-        images.clear();
-        imageUrls.clear();
-        imageRows.clear();
-        normalImagesQueue.clear();
-        currentPage = 1;
-      }
-
-      final cookieHeader = await _getAllCookies();
-
-      final newImages = await fetchImagesWithFilters(pageNumber, cookieHeader);
-      final filteredImages =
-      newImages.where((image) => !imageUrls.contains(image['url'])).toList();
-
-      for (var image in filteredImages) {
-        imageUrls.add(image['url']);
-      }
-
-      setState(() {
-        images.addAll(filteredImages);
-        _processImagesIntoRows(filteredImages);
-        _preloadImagesImmediately(filteredImages);
-        isLoading = false;
-      });
-    } on _CloudflareChallengeException catch (e) {
-      debugPrint('Cloudflare challenge detected while fetching search images.');
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
-
-      if (!allowCloudflareRecovery) {
-        return;
-      }
-
-      final passed = await _showCloudflareDialog(initialUrl: e.initialUrl);
-      if (!passed || !mounted) {
-        return;
-      }
-
-      await _fetchImages(
-        pageNumber,
-        isRefresh: isRefresh,
-        allowCloudflareRecovery: false,
-      );
-      return;
-    } catch (e) {
-      debugPrint('Error fetching images: $e');
-      setState(() {
-        isLoading = false;
-      });
-    }
-  }
-
-  Future<bool> _showCloudflareDialog({String? initialUrl}) async {
-    if (!mounted || _isHandlingCloudflareChallenge) return false;
-    _isHandlingCloudflareChallenge = true;
-    try {
-      final result = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        useSafeArea: false,
-        builder: (_) => CloudflareCheckScreen(
-          initialUrl: initialUrl ?? 'https://www.furaffinity.net/',
-        ),
-      );
-      return result == true;
-    } finally {
-      _isHandlingCloudflareChallenge = false;
-    }
-  }
-
-  String _buildGenderQuery(Map<String, String> f, {required bool useOr}) {
-    const map = {
-      'male': 'male',
-      'female': 'female',
-      'trans_male': '"trans male"',
-      'trans_female': '"trans female"',
-      'intersex': 'intersex',
-      'non_binary': '"non binary"',
-    };
-
-    final selected = <String>[];
-    map.forEach((k, term) {
-      if (f['gender-$k'] == '1') selected.add(term);
-    });
-    if (selected.isEmpty) return '';
-
-    final glue = useOr ? ' | ' : ' ';
-    return selected.join(glue);
-  }
-
-  Future<List<Map<String, dynamic>>> fetchImagesWithFilters(
-      int pageNumber, String cookieHeader) async {
+  Uri _buildSearchUri(int pageNumber) {
     final filters = widget.selectedFilters;
-    final baseQ = (widget.searchQuery).trim();
+    final baseQ = widget.searchQuery.trim();
 
     final genderQ = _buildGenderQuery(
       filters,
@@ -270,7 +184,270 @@ class FASearchImageState extends State<FASearchImage> {
       queryParams['range_to'] = filters['range_to'] ?? '';
     }
 
-    final uri = Uri.https('www.furaffinity.net', '/search/', queryParams);
+    return Uri.https('www.furaffinity.net', '/search/', queryParams);
+  }
+
+  Future<void> _setBackgroundWebViewCookiesFromStorage() async {
+    const cookieKeys = <String>[
+      'a',
+      'b',
+      'cc',
+      'cf_clearance',
+      'folder',
+      'nodesc',
+      'sz',
+      'sfw',
+    ];
+
+    for (final key in cookieKeys) {
+      final value = await _secureStorage.read(key: 'fa_cookie_$key');
+      if (value == null || value.isEmpty) continue;
+      await CookieManager.instance().setCookie(
+        url: WebUri('https://www.furaffinity.net'),
+        name: key,
+        value: value,
+        domain: '.furaffinity.net',
+        path: '/',
+        isHttpOnly: true,
+        isSecure: true,
+        expiresDate:
+            DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch,
+      );
+    }
+  }
+
+  Future<void> _saveBackgroundWebViewCookiesToStorage() async {
+    final cookies = await CookieManager.instance().getCookies(
+      url: WebUri('https://www.furaffinity.net'),
+    );
+
+    for (final cookie in cookies) {
+      await _secureStorage.write(
+        key: 'fa_cookie_${cookie.name}',
+        value: cookie.value,
+      );
+      if (cookie.name == 'cf_clearance' && cookie.value.isNotEmpty) {
+        await FaCookieHelper.writeCfClearance(cookie.value);
+      }
+    }
+
+    if (_backgroundWebViewController != null) {
+      try {
+        final rawDocumentCookie = await _backgroundWebViewController!
+            .evaluateJavascript(source: 'document.cookie');
+        final documentCookie = rawDocumentCookie?.toString() ?? '';
+        final cookiePairs = documentCookie.split(';');
+        for (final pair in cookiePairs) {
+          final separator = pair.indexOf('=');
+          if (separator <= 0) continue;
+          final name = pair.substring(0, separator).trim();
+          final value = pair.substring(separator + 1).trim();
+          if (name.isEmpty || value.isEmpty) continue;
+          await _secureStorage.write(key: 'fa_cookie_$name', value: value);
+          if (name == 'cf_clearance') {
+            await FaCookieHelper.writeCfClearance(value);
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _onBackgroundWebViewLoadStop(
+    InAppWebViewController controller,
+    WebUri? url,
+  ) async {
+    final completer = _backgroundHtmlCompleter;
+    final currentUrl = url?.toString() ?? '';
+    final targetUrl = _backgroundTargetUrl;
+    if (completer == null ||
+        completer.isCompleted ||
+        currentUrl.isEmpty ||
+        currentUrl == 'about:blank' ||
+        targetUrl == null ||
+        currentUrl != targetUrl) {
+      return;
+    }
+
+    await _saveBackgroundWebViewCookiesToStorage();
+
+    try {
+      final rawHtml = await controller.evaluateJavascript(
+        source: 'document.documentElement.outerHTML;',
+      );
+      final html = (rawHtml ?? '').toString();
+      _backgroundHtmlCompleter = null;
+      _backgroundTargetUrl = null;
+
+      if (FaCookieHelper.isCloudflareChallengePage(body: html)) {
+        debugPrint('[Search] Background webview still hit a Cloudflare page.');
+        completer.completeError(
+          _CloudflareChallengeException(initialUrl: currentUrl),
+        );
+        return;
+      }
+
+      debugPrint('[Search] Background webview loaded HTML for $currentUrl');
+      completer.complete(html);
+    } catch (e) {
+      _backgroundHtmlCompleter = null;
+      _backgroundTargetUrl = null;
+      completer.completeError(e);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchImagesViaBackgroundWebView(
+    int pageNumber,
+  ) async {
+    await _backgroundWebViewReady.future;
+    await _setBackgroundWebViewCookiesFromStorage();
+
+    final uri = _buildSearchUri(pageNumber);
+    if (_backgroundHtmlCompleter != null &&
+        !_backgroundHtmlCompleter!.isCompleted) {
+      throw StateError('Background search webview is already loading a page.');
+    }
+
+    final completer = Completer<String>();
+    _backgroundHtmlCompleter = completer;
+    _backgroundTargetUrl = uri.toString();
+
+    await _backgroundWebViewController!.loadUrl(
+      urlRequest: URLRequest(url: WebUri(uri.toString())),
+    );
+
+    final html = await completer.future.timeout(FAHttp.defaultTimeout);
+    return parseHtml(html);
+  }
+
+  void _appendImages(List<Map<String, dynamic>> newImages) {
+    final filteredImages =
+        newImages.where((image) => !imageUrls.contains(image['url'])).toList();
+
+    debugPrint(
+      '[Search] Parsed ${newImages.length} thumbnails, '
+      'appending ${filteredImages.length} new ones.',
+    );
+
+    for (final image in filteredImages) {
+      imageUrls.add(image['url']);
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      images.addAll(filteredImages);
+      _processImagesIntoRows(filteredImages);
+      _preloadImagesImmediately(filteredImages);
+      isLoading = false;
+    });
+  }
+
+  Future<void> _fetchImages(
+    int pageNumber, {
+    bool isRefresh = false,
+    int remainingCloudflareRecoveries = 2,
+  }) async {
+    setState(() {
+      isLoading = true;
+    });
+    try {
+      if (isRefresh) {
+        images.clear();
+        imageUrls.clear();
+        imageRows.clear();
+        normalImagesQueue.clear();
+        currentPage = 1;
+      }
+
+      final newImages = _preferWebViewFetch
+          ? await _fetchImagesViaBackgroundWebView(pageNumber)
+          : await fetchImagesWithFilters(
+              pageNumber,
+              await _getAllCookies(),
+            );
+      _appendImages(newImages);
+    } on _CloudflareChallengeException catch (e) {
+      debugPrint('Cloudflare challenge detected while fetching search images.');
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+
+      if (remainingCloudflareRecoveries <= 0) {
+        return;
+      }
+
+      _preferWebViewFetch = true;
+      final result = await _showCloudflareDialog(initialUrl: e.initialUrl);
+      if (result?.passed != true || !mounted) {
+        return;
+      }
+
+      final recoveredHtml = result?.pageHtml;
+      if (recoveredHtml != null && recoveredHtml.isNotEmpty) {
+        final recoveredImages = await parseHtml(recoveredHtml);
+        _appendImages(recoveredImages);
+        return;
+      }
+
+      await _fetchImages(
+        pageNumber,
+        isRefresh: isRefresh,
+        remainingCloudflareRecoveries: remainingCloudflareRecoveries - 1,
+      );
+      return;
+    } catch (e) {
+      debugPrint('Error fetching images: $e');
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  Future<CloudflareCheckResult?> _showCloudflareDialog({
+    String? initialUrl,
+  }) async {
+    if (!mounted || _isHandlingCloudflareChallenge) return null;
+    _isHandlingCloudflareChallenge = true;
+    try {
+      return await showDialog<CloudflareCheckResult>(
+        context: context,
+        barrierDismissible: false,
+        useSafeArea: false,
+        builder: (_) => CloudflareCheckScreen(
+          initialUrl: initialUrl ?? 'https://www.furaffinity.net/',
+          returnPageHtml: true,
+        ),
+      );
+    } finally {
+      _isHandlingCloudflareChallenge = false;
+    }
+  }
+
+  String _buildGenderQuery(Map<String, String> f, {required bool useOr}) {
+    const map = {
+      'male': 'male',
+      'female': 'female',
+      'trans_male': '"trans male"',
+      'trans_female': '"trans female"',
+      'intersex': 'intersex',
+      'non_binary': '"non binary"',
+    };
+
+    final selected = <String>[];
+    map.forEach((k, term) {
+      if (f['gender-$k'] == '1') selected.add(term);
+    });
+    if (selected.isEmpty) return '';
+
+    final glue = useOr ? ' | ' : ' ';
+    return selected.join(glue);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchImagesWithFilters(
+      int pageNumber, String cookieHeader) async {
+    final uri = _buildSearchUri(pageNumber);
 
     final response = await FAHttp.get(
       uri,
@@ -280,7 +457,7 @@ class FASearchImageState extends State<FASearchImage> {
         'User-Agent': FAHttp.userAgent,
         'Referer': 'https://www.furaffinity.net/search/',
         'Accept':
-        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
       },
     );
 
@@ -326,6 +503,8 @@ class FASearchImageState extends State<FASearchImage> {
       });
     }
 
+    debugPrint(
+        '[Search] HTML parser found ${figures.length} figures and ${imageMetadata.length} usable thumbnails.');
     return imageMetadata;
   }
 
@@ -350,7 +529,8 @@ class FASearchImageState extends State<FASearchImage> {
     }
 
     while (normalImagesQueue.length >= 2) {
-      imageRows.add([normalImagesQueue.removeAt(0), normalImagesQueue.removeAt(0)]);
+      imageRows
+          .add([normalImagesQueue.removeAt(0), normalImagesQueue.removeAt(0)]);
     }
 
     if (normalImagesQueue.isNotEmpty) {
@@ -366,7 +546,7 @@ class FASearchImageState extends State<FASearchImage> {
 
   void _scrollListener() {
     if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent * 0.4 &&
+            _scrollController.position.maxScrollExtent * 0.4 &&
         !isLoading &&
         !_isHandlingCloudflareChallenge) {
       currentPage++;
@@ -427,8 +607,9 @@ class FASearchImageState extends State<FASearchImage> {
   }
 
   Future<Map<String, String>?> _fetchPostDetails(String postUrl) async {
-    final absolute =
-    postUrl.startsWith('http') ? postUrl : 'https://www.furaffinity.net$postUrl';
+    final absolute = postUrl.startsWith('http')
+        ? postUrl
+        : 'https://www.furaffinity.net$postUrl';
     final cookie = await _getAllCookies();
     if (cookie.isEmpty) return null;
 
@@ -511,9 +692,11 @@ class FASearchImageState extends State<FASearchImage> {
       return;
     }
 
-    final urlToUse = wantFavorite ? _favUrls[uniqueNumber] : _unfavUrls[uniqueNumber];
+    final urlToUse =
+        wantFavorite ? _favUrls[uniqueNumber] : _unfavUrls[uniqueNumber];
     if (urlToUse == null || urlToUse.isEmpty) {
-      debugPrint('DEBUG: No URL found for fav/unfav operation on $uniqueNumber.');
+      debugPrint(
+          'DEBUG: No URL found for fav/unfav operation on $uniqueNumber.');
       return;
     }
 
@@ -534,15 +717,46 @@ class FASearchImageState extends State<FASearchImage> {
           _favoritedImages.add(uniqueNumber);
         }
       });
-      debugPrint('DEBUG: Failed to ${wantFavorite ? 'fav' : 'unfav'} $uniqueNumber.');
+      debugPrint(
+          'DEBUG: Failed to ${wantFavorite ? 'fav' : 'unfav'} $uniqueNumber.');
       return;
     }
 
-    debugPrint('DEBUG: Successfully ${wantFavorite ? 'favored' : 'unfavored'} $uniqueNumber.');
+    debugPrint(
+        'DEBUG: Successfully ${wantFavorite ? 'favored' : 'unfavored'} $uniqueNumber.');
 
     _favUrls[uniqueNumber] = '';
     _unfavUrls[uniqueNumber] = '';
     await _ensurePostDetails(uniqueNumber: uniqueNumber, postUrl: postUrl);
+  }
+
+  Widget _buildBackgroundFetchWebView() {
+    return Positioned(
+      right: 0,
+      bottom: 0,
+      width: 1,
+      height: 1,
+      child: IgnorePointer(
+        child: Opacity(
+          opacity: 0.01,
+          child: InAppWebView(
+            initialUrlRequest: URLRequest(url: WebUri('about:blank')),
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              clearCache: false,
+              userAgent: FAHttp.userAgent,
+            ),
+            onWebViewCreated: (controller) {
+              _backgroundWebViewController = controller;
+              if (!_backgroundWebViewReady.isCompleted) {
+                _backgroundWebViewReady.complete();
+              }
+            },
+            onLoadStop: _onBackgroundWebViewLoadStop,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -550,43 +764,52 @@ class FASearchImageState extends State<FASearchImage> {
     final screenHeight = MediaQuery.of(context).size.height;
     final maxHeight = screenHeight * 0.4;
 
-    return RefreshIndicator(
-      onRefresh: _refreshImages,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-        child: imageRows.isEmpty && isLoading
-            ? Center(
-          child: PulsatingLoadingIndicator(
-            size: 88.0,
-            assetPath: 'assets/icons/fathemed.png',
-          ),
-        )
-            : ListView.builder(
-          controller: _scrollController,
-          itemCount: imageRows.length + (isLoading ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (index == imageRows.length) {
-              return const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(
-                  child: PulsatingLoadingIndicator(
-                    size: 58.0,
-                    assetPath: 'assets/icons/fathemed.png',
-                  ),
-                ),
-              );
-            }
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: _refreshImages,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+            child: imageRows.isEmpty && isLoading
+                ? Center(
+                    child: PulsatingLoadingIndicator(
+                      size: 88.0,
+                      assetPath: 'assets/icons/fathemed.png',
+                    ),
+                  )
+                : ListView.builder(
+                    controller: _scrollController,
+                    itemCount: imageRows.length + (isLoading ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index == imageRows.length) {
+                        return const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Center(
+                            child: PulsatingLoadingIndicator(
+                              size: 58.0,
+                              assetPath: 'assets/icons/fathemed.png',
+                            ),
+                          ),
+                        );
+                      }
 
-            final rowImages = imageRows[index];
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4.0),
-              child: rowImages.length == 1
-                  ? _buildSingleImage(rowImages[0], maxHeight)
-                  : _buildDoubleImage(rowImages[0], rowImages[1], maxHeight),
-            );
-          },
+                      final rowImages = imageRows[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: rowImages.length == 1
+                            ? _buildSingleImage(rowImages[0], maxHeight)
+                            : _buildDoubleImage(
+                                rowImages[0],
+                                rowImages[1],
+                                maxHeight,
+                              ),
+                      );
+                    },
+                  ),
+          ),
         ),
-      ),
+        _buildBackgroundFetchWebView(),
+      ],
     );
   }
 
@@ -788,10 +1011,12 @@ class _FavSearchTileState extends State<_FavSearchTile> {
                       fit: BoxFit.cover,
                       loadingBuilder: (context, child, progress) {
                         if (progress == null) return child;
-                        return buildEmptyPlaceholder(widget.width, widget.height);
+                        return buildEmptyPlaceholder(
+                            widget.width, widget.height);
                       },
                       errorBuilder: (context, error, stackTrace) {
-                        return buildEmptyPlaceholder(widget.width, widget.height);
+                        return buildEmptyPlaceholder(
+                            widget.width, widget.height);
                       },
                     ),
                   ),
@@ -801,7 +1026,8 @@ class _FavSearchTileState extends State<_FavSearchTile> {
                     child: AnimatedOpacity(
                       opacity: _localFav ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 200),
-                      child: const Icon(Icons.favorite, color: Colors.redAccent, size: 24),
+                      child: const Icon(Icons.favorite,
+                          color: Colors.redAccent, size: 24),
                     ),
                   ),
                 ],
