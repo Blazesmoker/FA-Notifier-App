@@ -11,7 +11,8 @@ import 'notification_refresh_service.dart';
 import 'notification_service.dart';
 
 class FaActivitiesPollingService with WidgetsBindingObserver {
-  static final FaActivitiesPollingService _i = FaActivitiesPollingService._internal();
+  static final FaActivitiesPollingService _i =
+      FaActivitiesPollingService._internal();
   factory FaActivitiesPollingService() => _i;
   FaActivitiesPollingService._internal();
 
@@ -71,7 +72,8 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     return future;
   }
 
-  Future<void> _runOnce(FANotificationService svc, {required String source}) async {
+  Future<void> _runOnce(FANotificationService svc,
+      {required String source}) async {
     try {
       await svc.fetchNotifications();
     } catch (_) {
@@ -153,20 +155,27 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     return parts.join(' | ');
   }
 
-  Future<void> _maybeSendActivitiesNotification(NotificationCounts currentCounts) async {
+  Future<void> _maybeSendActivitiesNotification(
+      NotificationCounts currentCounts) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
 
-      final bool submissionsEnabled = prefs.getBool('drawer_notif_submissions_enabled') ?? true;
-      final bool watchesEnabled = prefs.getBool('drawer_notif_watches_enabled') ?? true;
-      final bool commentsEnabled = prefs.getBool('drawer_notif_comments_enabled') ?? true;
-      final bool favoritesEnabled = prefs.getBool('drawer_notif_favorites_enabled') ?? true;
-      final bool journalsEnabled = prefs.getBool('drawer_notif_journals_enabled') ?? true;
-      final bool notesEnabled = prefs.getBool('drawer_notif_notes_enabled') ?? true;
+      final bool submissionsEnabled =
+          prefs.getBool('drawer_notif_submissions_enabled') ?? true;
+      final bool watchesEnabled =
+          prefs.getBool('drawer_notif_watches_enabled') ?? true;
+      final bool commentsEnabled =
+          prefs.getBool('drawer_notif_comments_enabled') ?? true;
+      final bool favoritesEnabled =
+          prefs.getBool('drawer_notif_favorites_enabled') ?? true;
+      final bool journalsEnabled =
+          prefs.getBool('drawer_notif_journals_enabled') ?? true;
+      final bool notesEnabled =
+          prefs.getBool('drawer_notif_notes_enabled') ?? true;
 
-      final ActivitiesDiff diff =
-          await ActivitiesNotificationStateStore().diffAndUpdateLastSeen(currentCounts: currentCounts);
+      final ActivitiesDiff diff = await ActivitiesNotificationStateStore()
+          .diffAndUpdateLastSeen(currentCounts: currentCounts);
 
       final NotificationCounts enabledIncreases = NotificationCounts(
         submissions: submissionsEnabled ? diff.increasedBy.submissions : 0,
@@ -186,8 +195,10 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
 
       if (!shouldNotify) return;
 
-      final bool soundActivitiesEnabled = prefs.getBool('sound_new_activities_enabled') ?? true;
-      final bool vibrationActivitiesEnabled = prefs.getBool('vibration_new_activities_enabled') ?? true;
+      final bool soundActivitiesEnabled =
+          prefs.getBool('sound_new_activities_enabled') ?? true;
+      final bool vibrationActivitiesEnabled =
+          prefs.getBool('vibration_new_activities_enabled') ?? true;
       if (!soundActivitiesEnabled && !vibrationActivitiesEnabled) return;
 
       final NotificationCounts filteredCounts = NotificationCounts(
@@ -203,8 +214,12 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
         enabledIncreases,
       );
 
-      await NotificationService().showNotification(
-        999999,
+      final notificationService = NotificationService();
+      final int activityNotificationId =
+          await notificationService.allocateActivityNotificationId();
+
+      await notificationService.showNotification(
+        activityNotificationId,
         'New FA Activity',
         messageBody,
         'activity_fa_activity',
@@ -219,8 +234,9 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     _lastLifecycleState = state;
 
     if (state == AppLifecycleState.resumed) {
-      final bool realResume =
-          prev == AppLifecycleState.paused || prev == AppLifecycleState.hidden || prev == AppLifecycleState.detached;
+      final bool realResume = prev == AppLifecycleState.paused ||
+          prev == AppLifecycleState.hidden ||
+          prev == AppLifecycleState.detached;
       _ensureTimer();
       if (realResume) {
         triggerNow(resetTimer: true, source: 'lifecycle_resumed');

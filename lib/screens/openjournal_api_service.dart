@@ -123,6 +123,72 @@ class OpenJournalApiService {
     return m2?.group(1);
   }
 
+  String? _extractDeleteLinkFromOnClick(
+    String? onClick,
+    String uniqueNumber,
+  ) {
+    if (onClick == null || onClick.trim().isEmpty) return null;
+    final escapedNumber = RegExp.escape(uniqueNumber);
+    final match = RegExp(
+      "(/controls/deletejournal/$escapedNumber/\\?key=[^'\"\\)\\s]+)",
+    ).firstMatch(onClick);
+    return _absFaUrl(match?.group(1));
+  }
+
+  String? _extractDeleteLinkFromDocument(
+    dom.Document document,
+    String uniqueNumber,
+  ) {
+    final directDeleteHref = document
+        .querySelector('a[href*="/controls/deletejournal/$uniqueNumber/"]')
+        ?.attributes['href'];
+    final normalizedDirectHref = _absFaUrl(directDeleteHref);
+    if (normalizedDirectHref != null) {
+      return normalizedDirectHref;
+    }
+
+    final candidateAnchors = document.querySelectorAll(
+      'a[onclick*="/controls/deletejournal/"], '
+      'a[href*="/controls/deletejournal/"], '
+      'a.delete, '
+      'a.delete_journal',
+    );
+
+    for (final anchor in candidateAnchors) {
+      final href = _absFaUrl(anchor.attributes['href']);
+      if (href != null) {
+        final hrefMatch =
+            RegExp(r'/controls/deletejournal/(\d+)/').firstMatch(href);
+        if (hrefMatch?.group(1) == uniqueNumber) {
+          return href;
+        }
+      }
+
+      final deleteFromOnClick = _extractDeleteLinkFromOnClick(
+        anchor.attributes['onclick'],
+        uniqueNumber,
+      );
+      if (deleteFromOnClick != null) {
+        return deleteFromOnClick;
+      }
+    }
+
+    return null;
+  }
+
+  bool _looksLikeMissingJournalDocument(dom.Document document) {
+    final titleLower =
+        (document.querySelector('title')?.text ?? '').toLowerCase();
+    final bodyLower = (document.body?.text ?? '').toLowerCase();
+
+    return titleLower.contains('system error') ||
+        bodyLower.contains('not in our database') ||
+        bodyLower.contains('this journal does not exist') ||
+        bodyLower.contains('this submission does not exist') ||
+        bodyLower
+            .contains('the item you are trying to reach is not in our database');
+  }
+
   String _extractCommentText(dom.Element c) {
     final textEl = c.querySelector('comment-user-text.comment_text') ??
         c.querySelector('comment-user-text') ??
@@ -645,8 +711,7 @@ class OpenJournalApiService {
       commentsCount = commentBodies.length;
     }
 
-    final deleteLink =
-        document.querySelector('a.delete_journal')?.attributes['href'];
+    final deleteLink = _extractDeleteLinkFromDocument(document, uniqueNumber);
 
     return OpenJournalFetchResult(
       profileImageUrl: profileImageUrl,
@@ -682,11 +747,45 @@ class OpenJournalApiService {
     );
   }
 
-  Future<String?> fetchDeleteKey(String uniqueNumber) async {
+  Future<String?> fetchDeleteLinkFromControls(String uniqueNumber) async {
     final cookies = await _getCookies();
-    final resp = await httpClient.get(
-      Uri.parse(
-          'https://www.furaffinity.net/controls/journal/delete/$uniqueNumber/'),
+    final candidateUrls = [
+      'https://www.furaffinity.net/controls/journal/1/$uniqueNumber/',
+      'https://www.furaffinity.net/controls/journal/',
+    ];
+
+    for (final url in candidateUrls) {
+      final resp = await httpClient.get(
+        Uri.parse(url),
+        headers: {
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=${cookies.cookieA}; b=${cookies.cookieB}',
+          ),
+          'User-Agent': FAHttp.userAgent,
+          'Accept-Encoding': 'gzip',
+          'Referer': 'https://www.furaffinity.net/journal/$uniqueNumber/',
+        },
+      );
+
+      if (resp.statusCode != 200) {
+        continue;
+      }
+
+      final doc =
+          html_parser.parse(utf8.decode(resp.bodyBytes, allowMalformed: true));
+      final deleteLink = _extractDeleteLinkFromDocument(doc, uniqueNumber);
+      if (deleteLink != null) {
+        return deleteLink;
+      }
+    }
+
+    return null;
+  }
+
+  Future<bool> isJournalDeleted(String uniqueNumber) async {
+    final cookies = await _getCookies();
+    final response = await httpClient.get(
+      Uri.parse('https://www.furaffinity.net/journal/$uniqueNumber/'),
       headers: {
         'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
           'a=${cookies.cookieA}; b=${cookies.cookieB}',
@@ -695,12 +794,18 @@ class OpenJournalApiService {
         'Accept-Encoding': 'gzip',
       },
     );
-    if (resp.statusCode != 200) {
-      throw Exception('Failed to fetch delete key: ${resp.statusCode}');
+
+    if (response.statusCode == 404) {
+      return true;
     }
+
+    if (response.statusCode != 200) {
+      return false;
+    }
+
     final doc =
-        html_parser.parse(utf8.decode(resp.bodyBytes, allowMalformed: true));
-    return doc.querySelector('input[name="key"]')?.attributes['value'];
+        html_parser.parse(utf8.decode(response.bodyBytes, allowMalformed: true));
+    return _looksLikeMissingJournalDocument(doc);
   }
 
   Future<Map<String, String?>> fetchUserPageLinks(String? authorSlug) async {

@@ -10,7 +10,13 @@ import 'openjournal.dart';
 
 class CreateJournalScreen extends StatefulWidget {
   final String? uniqueNumber;
-  const CreateJournalScreen({Key? key, this.uniqueNumber}) : super(key: key);
+  final VoidCallback? onJournalSubmitted;
+
+  const CreateJournalScreen({
+    Key? key,
+    this.uniqueNumber,
+    this.onJournalSubmitted,
+  }) : super(key: key);
 
   @override
   _CreateJournalScreenState createState() => _CreateJournalScreenState();
@@ -36,6 +42,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
   Timer? _timer;
 
   bool _handledCurrentJournal = false;
+  bool _didNotifyJournalSubmitted = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -69,6 +76,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     if (journalId == null) return;
 
     _handledCurrentJournal = true;
+    _notifyJournalSubmitted();
     debugPrint("Journal created with ID: $journalId");
 
     await _webViewController?.loadUrl(
@@ -103,7 +111,10 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => OpenJournal(uniqueNumber: _journalId!),
+              builder: (context) => OpenJournal(
+                uniqueNumber: _journalId!,
+                onJournalMutated: widget.onJournalSubmitted,
+              ),
             ),
           ).then((_) {
             setState(() {
@@ -154,6 +165,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     if (journalId == null) return;
 
     _handledCurrentJournal = true;
+    _notifyJournalSubmitted();
 
     setState(() {
       _isWaitingToOpenJournal = true;
@@ -164,6 +176,11 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     _startCountdown();
   }
 
+  void _notifyJournalSubmitted() {
+    if (_didNotifyJournalSubmitted) return;
+    _didNotifyJournalSubmitted = true;
+    widget.onJournalSubmitted?.call();
+  }
 
   Future<void> _setCookies() async {
     final cookieManager = CookieManager.instance();

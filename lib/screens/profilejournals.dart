@@ -23,6 +23,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
   bool isLoading = false;
   List<Map<String, dynamic>> journals = [];
   bool hasMore = true;
+  int _fetchGeneration = 0;
 
   bool _sfwEnabled = true;
 
@@ -61,13 +62,32 @@ class ProfileJournalsState extends State<ProfileJournals> {
   }
 
   Future<void> refreshJournals() async {
+    _fetchGeneration++;
     setState(() {
       journals.clear();
       currentPage = 1;
       hasMore = true;
+      isLoading = false;
     });
     await _loadSfwEnabled();
     await _fetchJournals(currentPage);
+  }
+
+  void _handleJournalMutated() {
+    if (!mounted) return;
+    unawaited(refreshJournals());
+  }
+
+  Future<void> _openJournal(String uniqueNumber) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => OpenJournal(
+          uniqueNumber: uniqueNumber,
+          onJournalMutated: _handleJournalMutated,
+        ),
+      ),
+    );
   }
 
   Future<String> _getAllCookies() async {
@@ -103,11 +123,15 @@ class ProfileJournalsState extends State<ProfileJournals> {
     if (isLoading || !hasMore) {
       return;
     }
+    final fetchGeneration = _fetchGeneration;
     setState(() {
       isLoading = true;
     });
     try {
       final newJournals = await fetchJournals(pageNumber);
+      if (!mounted || fetchGeneration != _fetchGeneration) {
+        return;
+      }
 
       setState(() {
         journals.addAll(newJournals);
@@ -115,6 +139,9 @@ class ProfileJournalsState extends State<ProfileJournals> {
         currentPage = pageNumber + 1;
       });
     } catch (e, stackTrace) {
+      if (!mounted || fetchGeneration != _fetchGeneration) {
+        return;
+      }
       setState(() {
         isLoading = false;
       });
@@ -312,15 +339,8 @@ class ProfileJournalsState extends State<ProfileJournals> {
                             display: Display.block,
                           ),
                         },
-                        onLinkTap: (url, _, __) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => OpenJournal(
-                                uniqueNumber: journal['uniqueNumber'],
-                              ),
-                            ),
-                          );
+                        onLinkTap: (url, _, __) async {
+                          await _openJournal(journal['uniqueNumber']);
                         },
                         extensions: [
                           TagExtension(
@@ -452,14 +472,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
                               right: 0.0, top: 0.0, bottom: 4.0),
                           child: GestureDetector(
                             onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => OpenJournal(
-                                    uniqueNumber: journal['uniqueNumber'],
-                                  ),
-                                ),
-                              );
+                              _openJournal(journal['uniqueNumber']);
                             },
                             child: Text(
                               '${journal['commentsCount']} Comments',
@@ -471,14 +484,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
                     ],
                   ),
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => OpenJournal(
-                          uniqueNumber: journal['uniqueNumber'],
-                        ),
-                      ),
-                    );
+                    _openJournal(journal['uniqueNumber']);
                   },
                 ),
               ),

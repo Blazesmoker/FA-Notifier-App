@@ -22,9 +22,9 @@ class NotificationService {
   NotificationService._internal();
 
   final GlobalKey<DrawerUserControllerState> drawerKey =
-  GlobalKey<DrawerUserControllerState>();
+      GlobalKey<DrawerUserControllerState>();
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-  FlutterLocalNotificationsPlugin();
+      FlutterLocalNotificationsPlugin();
 
   static const List<String> notificationTypes = <String>[
     'submissions',
@@ -37,19 +37,44 @@ class NotificationService {
   ];
 
   static const MethodChannel _iosChannel = MethodChannel('app.notifications');
+  static const String _kNextActivityNotificationId =
+      'next_activity_notification_id';
+  static const int _kActivityNotificationIdBase = 1500000000;
+  static const int _kActivityNotificationIdMax = 1999999999;
+
+  Future<int> allocateActivityNotificationId() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+
+    int nextId = prefs.getInt(_kNextActivityNotificationId) ??
+        _kActivityNotificationIdBase;
+    if (nextId < _kActivityNotificationIdBase ||
+        nextId > _kActivityNotificationIdMax) {
+      nextId = _kActivityNotificationIdBase;
+    }
+
+    final int allocatedId = nextId;
+    final int followingId = allocatedId >= _kActivityNotificationIdMax
+        ? _kActivityNotificationIdBase
+        : allocatedId + 1;
+    await prefs.setInt(_kNextActivityNotificationId, followingId);
+
+    return allocatedId;
+  }
 
   Future<void> init() async {
     const AndroidInitializationSettings initializationSettingsAndroid =
-    AndroidInitializationSettings('@mipmap/fathemednotif');
+        AndroidInitializationSettings('@mipmap/fathemednotif');
 
     const DarwinInitializationSettings initializationSettingsDarwin =
-    DarwinInitializationSettings(
+        DarwinInitializationSettings(
       requestSoundPermission: false,
       requestBadgePermission: false,
       requestAlertPermission: false,
     );
 
-    const InitializationSettings initializationSettings = InitializationSettings(
+    const InitializationSettings initializationSettings =
+        InitializationSettings(
       android: initializationSettingsAndroid,
       iOS: initializationSettingsDarwin,
     );
@@ -69,7 +94,7 @@ class NotificationService {
     _iosChannel.setMethodCallHandler((call) async {
       if (call.method == 'notificationTapped') {
         final Map<String, dynamic> map =
-        Map<String, dynamic>.from(call.arguments as Map);
+            Map<String, dynamic>.from(call.arguments as Map);
         final String? payload = _extractPayloadFromNative(map);
         if (payload != null) {
           await _handleTapPayload(payload, source: 'iosChannel');
@@ -91,7 +116,7 @@ class NotificationService {
     } catch (_) {}
 
     final details =
-    await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
+        await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
     if ((details?.didNotificationLaunchApp ?? false) &&
         details?.notificationResponse != null) {
       final payload = details!.notificationResponse!.payload;
@@ -102,11 +127,10 @@ class NotificationService {
     }
   }
 
-
   Future<void> _requestIOSPermissions() async {
-    final implementation = flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>();
+    final implementation =
+        flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>();
     if (implementation != null) {
       await implementation.requestPermissions(
         alert: true,
@@ -115,7 +139,6 @@ class NotificationService {
       );
     }
   }
-
 
   Future<void> _createNotificationChannels() async {
     final prefs = await SharedPreferences.getInstance();
@@ -126,8 +149,7 @@ class NotificationService {
 
       switch (type) {
         case 'submissions':
-          soundEnabled =
-              prefs.getBool('sound_new_submissions_enabled') ?? true;
+          soundEnabled = prefs.getBool('sound_new_submissions_enabled') ?? true;
           vibrationEnabled =
               prefs.getBool('vibration_new_submissions_enabled') ?? true;
           break;
@@ -183,11 +205,10 @@ class NotificationService {
 
       await flutterLocalNotificationsPlugin
           .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>()
+              AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(channel);
     }
   }
-
 
   Future<void> onDidReceiveNotificationResponse(
       NotificationResponse response) async {
@@ -196,11 +217,10 @@ class NotificationService {
     await _handleTapPayload(payload, source: 'plugin');
   }
 
-
   Future<void> _handleTapPayload(
-      String payload, {
-        required String source,
-      }) async {
+    String payload, {
+    required String source,
+  }) async {
     try {
       appLog('[NOTIF] Notification tap received (source=$source)');
       kDebugPrint(
@@ -209,44 +229,38 @@ class NotificationService {
 
       final prefs = await SharedPreferences.getInstance();
 
-
-        final BuildContext? context = navigatorKey.currentContext;
+      final BuildContext? context = navigatorKey.currentContext;
       if (context == null) {
         await prefs.setString('pending_navigation', payload);
         appLog('[NOTIF] No UI context; saved pending navigation.');
-        kDebugPrint('[NOTIF] No UI context; saved pending_navigation="$payload"');
+        kDebugPrint(
+            '[NOTIF] No UI context; saved pending_navigation="$payload"');
         return;
       }
 
-
-
       navigatorKey.currentState?.popUntil((r) => r.isFirst);
-
 
       await prefs.remove('pending_navigation');
 
       WidgetsBinding.instance.addPostFrameCallback((_) async {
-
         await Future<void>.delayed(const Duration(milliseconds: 16));
 
         final ctx = navigatorKey.currentContext;
         if (ctx == null) {
-
           await prefs.setString('pending_navigation', payload);
-          appLog('[NOTIF] Lost context after frame; re-stashed pending navigation.');
+          appLog(
+              '[NOTIF] Lost context after frame; re-stashed pending navigation.');
           return;
         }
 
         final navProvider =
-        Provider.of<NotificationNavigationProvider>(ctx, listen: false);
+            Provider.of<NotificationNavigationProvider>(ctx, listen: false);
 
         final bool isNotes = payload.startsWith('note_') ||
             payload.contains('DrawerIndex.Notes') ||
             payload == 'note_native';
 
-
         navProvider.setTargetIndex(isNotes ? 4 : 3);
-
 
         try {
           if (isNotes) {
@@ -259,7 +273,6 @@ class NotificationService {
         } catch (e) {
           appLog('[_handleTapPayload] refresh error: $e');
         }
-
 
         await prefs.setString('last_handled_payload', payload);
       });
@@ -274,8 +287,6 @@ class NotificationService {
     }
   }
 
-
-
   String? _extractPayloadFromNative(Map<String, dynamic> native) {
     if (native['payload'] is String &&
         (native['payload'] as String).isNotEmpty) {
@@ -289,17 +300,16 @@ class NotificationService {
     return null;
   }
 
-
   String _capitalize(String s) =>
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
   Future<void> showNotification(
-      int id,
-      String title,
-      String body,
-      String payload,
-      String type,
-      ) async {
+    int id,
+    String title,
+    String body,
+    String payload,
+    String type,
+  ) async {
     appLog('NotificationService.showNotification type=$type');
     kDebugPrint(
         'NotificationService.showNotification id=$id title=$title type=$type');
@@ -310,12 +320,10 @@ class NotificationService {
     switch (type) {
       case 'notes':
         soundEnabled = prefs.getBool('sound_new_notes_enabled') ?? true;
-        vibrationEnabled =
-            prefs.getBool('vibration_new_notes_enabled') ?? true;
+        vibrationEnabled = prefs.getBool('vibration_new_notes_enabled') ?? true;
         break;
       case 'activities':
-        soundEnabled =
-            prefs.getBool('sound_new_activities_enabled') ?? true;
+        soundEnabled = prefs.getBool('sound_new_activities_enabled') ?? true;
         vibrationEnabled =
             prefs.getBool('vibration_new_activities_enabled') ?? true;
         break;
@@ -365,9 +373,9 @@ class NotificationService {
   }
 
   Future<void> updateNotificationChannels() async {
-    final androidPlugin = flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final androidPlugin =
+        flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
     if (androidPlugin != null) {
       for (final type in notificationTypes) {
         for (final channelId in <String>[
@@ -391,7 +399,6 @@ class NotificationService {
     return useAdaptiveNotify ? 'ic_stat_notify' : null;
   }
 }
-
 
 @pragma('vm:entry-point')
 void notificationTapBackground(NotificationResponse response) async {

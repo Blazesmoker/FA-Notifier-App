@@ -62,8 +62,13 @@ final Map<String, String> faTimezoneToIana = {
 
 class OpenJournal extends StatefulWidget {
   final String uniqueNumber;
+  final VoidCallback? onJournalMutated;
 
-  const OpenJournal({required this.uniqueNumber, Key? key}) : super(key: key);
+  const OpenJournal({
+    required this.uniqueNumber,
+    this.onJournalMutated,
+    Key? key,
+  }) : super(key: key);
 
   @override
   _OpenJournalState createState() => _OpenJournalState();
@@ -480,16 +485,15 @@ class _OpenJournalState extends State<OpenJournal>
 
   Future<void> _fetchDeleteLinkFallback() async {
     try {
-      final key = await _api.fetchDeleteKey(widget.uniqueNumber);
-      if (key != null && key.trim().isNotEmpty) {
+      final fetchedDeleteLink =
+          await _api.fetchDeleteLinkFromControls(widget.uniqueNumber);
+      if (fetchedDeleteLink != null && fetchedDeleteLink.trim().isNotEmpty) {
         setState(() {
-          // Controls page returns a delete "key"; construct a safe delete URL.
-          deleteLink =
-              'https://www.furaffinity.net/controls/deletejournal/${widget.uniqueNumber}/?key=${Uri.encodeQueryComponent(key.trim())}';
+          deleteLink = fetchedDeleteLink;
         });
       }
     } catch (e) {
-      debugPrint('Failed to fetch delete key: $e');
+      debugPrint('Failed to fetch delete link: $e');
     }
   }
 
@@ -562,9 +566,9 @@ class _OpenJournalState extends State<OpenJournal>
         return;
       }
 
-      if (deleteLink == null || !_deleteLinkMatchesCurrentId(deleteLink!)) {
-        await _fetchDeleteLinkFallback();
-      }
+      final previousDeleteLink = deleteLink;
+      await _fetchDeleteLinkFallback();
+      deleteLink ??= previousDeleteLink;
       if (deleteLink == null || !_deleteLinkMatchesCurrentId(deleteLink!)) {
         showAppSnackBar(context,
             "Safe delete failed: couldn't confirm delete link for this journal.",
@@ -580,18 +584,32 @@ class _OpenJournalState extends State<OpenJournal>
             'a=$cookieA; b=$cookieB',
           ),
           'User-Agent': FAHttp.userAgent,
+          'Referer': 'https://www.furaffinity.net/journal/${widget.uniqueNumber}/',
         },
       );
 
-      if (resp.statusCode >= 200 && resp.statusCode < 400) {
+      if (resp.statusCode < 200 || resp.statusCode >= 400) {
         if (!mounted) return;
+        showAppSnackBar(context, 'Delete failed (HTTP ${resp.statusCode}).',
+            backgroundColor: Colors.red);
+        return;
+      }
+
+      final wasDeleted = await _api.isJournalDeleted(widget.uniqueNumber);
+      if (!mounted) return;
+
+      if (wasDeleted) {
+        widget.onJournalMutated?.call();
         showAppSnackBar(context, 'Journal "$titleForDialog" deleted.',
             backgroundColor: Colors.green);
         Navigator.of(context).pop(true);
       } else {
-        if (!mounted) return;
-        showAppSnackBar(context, 'Delete failed (HTTP ${resp.statusCode}).',
-            backgroundColor: Colors.red);
+        await _fetchDeleteLinkFallback();
+        showAppSnackBar(
+          context,
+          'Delete request completed, but the journal still exists.',
+          backgroundColor: Colors.red,
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -1026,6 +1044,7 @@ class _OpenJournalState extends State<OpenJournal>
                       MaterialPageRoute(
                         builder: (context) => CreateJournalScreen(
                           uniqueNumber: widget.uniqueNumber,
+                          onJournalSubmitted: widget.onJournalMutated,
                         ),
                       ),
                     ).then((_) => _fetchPostDetailsNew());

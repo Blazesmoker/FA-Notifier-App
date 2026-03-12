@@ -165,11 +165,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
     super.dispose();
   }
 
-  @override
-  void didPopNext() {
-    _journalsKey.currentState?.refreshJournals();
-  }
-
   final GlobalKey<ProfileJournalsState> _journalsKey =
       GlobalKey<ProfileJournalsState>();
   final GlobalKey<UserDescriptionWebViewState> _webViewKey =
@@ -2660,6 +2655,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
     return UserProfileFavoritesSection(sanitizedUsername: sanitizedUsername);
   }
 
+  void _refreshJournalsList() {
+    final journalsState = _journalsKey.currentState;
+    if (journalsState == null) return;
+    unawaited(journalsState.refreshJournals());
+  }
+
   /// Builds the Journals section content.
   Widget _buildJournalsSection() {
     return UserProfileJournalsSection(
@@ -2670,7 +2671,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => CreateJournalScreen(),
+            builder: (context) => CreateJournalScreen(
+              onJournalSubmitted: _refreshJournalsList,
+            ),
           ),
         );
       },

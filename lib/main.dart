@@ -46,7 +46,6 @@ import 'package:app_links/app_links.dart';
 import 'dart:async';
 import 'utils/app_logging.dart';
 
-
 class FreshHttpOverrides extends HttpOverrides {
   @override
   HttpClient createHttpClient(SecurityContext? context) {
@@ -60,10 +59,11 @@ class FreshHttpOverrides extends HttpOverrides {
   }
 }
 
-
-final RouteObserver<ModalRoute<dynamic>> routeObserver = RouteObserver<ModalRoute<dynamic>>();
+final RouteObserver<ModalRoute<dynamic>> routeObserver =
+    RouteObserver<ModalRoute<dynamic>>();
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-final GlobalKey<DrawerUserControllerState> drawerKey = GlobalKey<DrawerUserControllerState>();
+final GlobalKey<DrawerUserControllerState> drawerKey =
+    GlobalKey<DrawerUserControllerState>();
 
 const String fetchBackgroundTask = "fetchBackgroundTask";
 const String iOSWorkInitTask = "com.blazesmoker.FANotifier.refresh";
@@ -97,7 +97,8 @@ void callbackDispatcher() {
       appLog('[BG] App active status: $isAppActive');
       if (isAppActive) {
         appLog('[BG] App is ACTIVE - skipping background fetch');
-        appLog('[BG] Task completed (skipped) in ${DateTime.now().difference(startTime).inSeconds}s');
+        appLog(
+            '[BG] Task completed (skipped) in ${DateTime.now().difference(startTime).inSeconds}s');
         return Future.value(true);
       }
       appLog('[BG] App is INACTIVE - proceeding with background fetch');
@@ -113,18 +114,23 @@ void callbackDispatcher() {
           appLog('[BG] === Starting UNREAD NOTES CHECK ===');
           try {
             final List<Message> fetchedInbox = await _fetchInboxTwoPagesBg();
-            kDebugPrint('[BG] Fetched ${fetchedInbox.length} messages from inbox');
+            kDebugPrint(
+                '[BG] Fetched ${fetchedInbox.length} messages from inbox');
             final Set<String> shownSet = await MessageStorage.getShownNoteIds();
             kDebugPrint('[BG] Already shown: ${shownSet.length} message IDs');
-            final List<Message> unread = fetchedInbox.where((m) => m.isUnread).toList();
+            final List<Message> unread =
+                fetchedInbox.where((m) => m.isUnread).toList();
             kDebugPrint('[BG] Found ${unread.length} unread messages');
             if (unread.isNotEmpty) {
-              final List<Message> newNotes = unread.where((m) => !shownSet.contains(m.id)).toList();
+              final List<Message> newNotes =
+                  unread.where((m) => !shownSet.contains(m.id)).toList();
               kDebugPrint('[BG] New unread messages: ${newNotes.length}');
               for (var msg in newNotes) {
                 try {
-                  kDebugPrint('[BG] Processing message: ${msg.id} from ${msg.sender}');
-                  final String content = await _fetchMessageContentInBackground(msg.link);
+                  kDebugPrint(
+                      '[BG] Processing message: ${msg.id} from ${msg.sender}');
+                  final String content =
+                      await _fetchMessageContentInBackground(msg.link);
                   final String payload = 'note_${msg.id}';
                   await notificationService.showNotification(
                     msg.id.hashCode,
@@ -141,9 +147,11 @@ void callbackDispatcher() {
                     kDebugPrint('[BG] Badge updated to: $newBadge');
                   }
                   await _markAsUnreadBackground(msg);
-                  kDebugPrint('[BG] Message ${msg.id} marked as unread on server');
+                  kDebugPrint(
+                      '[BG] Message ${msg.id} marked as unread on server');
                 } catch (e) {
-                  kDebugPrint('[BG ERROR] Failed to process message ${msg.id}: $e');
+                  kDebugPrint(
+                      '[BG ERROR] Failed to process message ${msg.id}: $e');
                 }
               }
               if (newNotes.isNotEmpty) {
@@ -158,7 +166,8 @@ void callbackDispatcher() {
           appLog('[BG] === Starting NOTIFICATION COUNTS CHECK ===');
           try {
             final faService = FaService();
-            final Notifications? newNotifications = await faService.fetchNotifications();
+            final Notifications? newNotifications =
+                await faService.fetchNotifications();
             if (newNotifications != null) {
               final NotificationCounts newCounts = NotificationCounts(
                 submissions: int.tryParse(newNotifications.submissions) ?? 0,
@@ -168,16 +177,24 @@ void callbackDispatcher() {
                 journals: int.tryParse(newNotifications.journals) ?? 0,
                 notes: int.tryParse(newNotifications.notes) ?? 0,
               );
-              kDebugPrint('[BG] New counts: S:${newCounts.submissions} W:${newCounts.watches} C:${newCounts.comments} F:${newCounts.favorites} J:${newCounts.journals} N:${newCounts.notes}');
-              final bool submissionsEnabled = prefs.getBool('drawer_notif_submissions_enabled') ?? true;
-              final bool watchesEnabled = prefs.getBool('drawer_notif_watches_enabled') ?? true;
-              final bool commentsEnabled = prefs.getBool('drawer_notif_comments_enabled') ?? true;
-              final bool favoritesEnabled = prefs.getBool('drawer_notif_favorites_enabled') ?? true;
-              final bool journalsEnabled = prefs.getBool('drawer_notif_journals_enabled') ?? true;
-              final bool notesEnabled = prefs.getBool('drawer_notif_notes_enabled') ?? true;
+              kDebugPrint(
+                  '[BG] New counts: S:${newCounts.submissions} W:${newCounts.watches} C:${newCounts.comments} F:${newCounts.favorites} J:${newCounts.journals} N:${newCounts.notes}');
+              final bool submissionsEnabled =
+                  prefs.getBool('drawer_notif_submissions_enabled') ?? true;
+              final bool watchesEnabled =
+                  prefs.getBool('drawer_notif_watches_enabled') ?? true;
+              final bool commentsEnabled =
+                  prefs.getBool('drawer_notif_comments_enabled') ?? true;
+              final bool favoritesEnabled =
+                  prefs.getBool('drawer_notif_favorites_enabled') ?? true;
+              final bool journalsEnabled =
+                  prefs.getBool('drawer_notif_journals_enabled') ?? true;
+              final bool notesEnabled =
+                  prefs.getBool('drawer_notif_notes_enabled') ?? true;
 
-              final ActivitiesDiff diff = await ActivitiesNotificationStateStore()
-                  .diffAndUpdateLastSeen(currentCounts: newCounts);
+              final ActivitiesDiff diff =
+                  await ActivitiesNotificationStateStore()
+                      .diffAndUpdateLastSeen(currentCounts: newCounts);
               kDebugPrint(
                   '[BG] Last-seen counts: S:${diff.previous.submissions} W:${diff.previous.watches} C:${diff.previous.comments} F:${diff.previous.favorites} J:${diff.previous.journals} N:${diff.previous.notes}');
               kDebugPrint(
@@ -185,7 +202,8 @@ void callbackDispatcher() {
 
               // Notify based on per-category increases, but only for enabled categories.
               final NotificationCounts enabledIncreases = NotificationCounts(
-                submissions: submissionsEnabled ? diff.increasedBy.submissions : 0,
+                submissions:
+                    submissionsEnabled ? diff.increasedBy.submissions : 0,
                 watches: watchesEnabled ? diff.increasedBy.watches : 0,
                 comments: commentsEnabled ? diff.increasedBy.comments : 0,
                 favorites: favoritesEnabled ? diff.increasedBy.favorites : 0,
@@ -199,7 +217,6 @@ void callbackDispatcher() {
                   enabledIncreases.favorites > 0 ||
                   enabledIncreases.journals > 0 ||
                   enabledIncreases.notes > 0;
-
 
               final NotificationCounts filteredCounts = NotificationCounts(
                 submissions: submissionsEnabled ? newCounts.submissions : 0,
@@ -221,8 +238,10 @@ void callbackDispatcher() {
                 final bool vibrationActivitiesEnabled =
                     prefs.getBool('vibration_new_activities_enabled') ?? true;
                 if (soundActivitiesEnabled || vibrationActivitiesEnabled) {
+                  final int activityNotificationId = await notificationService
+                      .allocateActivityNotificationId();
                   await notificationService.showNotification(
-                    999999,
+                    activityNotificationId,
                     'New FA Activity',
                     messageBody,
                     'activity_fa_activity',
@@ -244,7 +263,8 @@ void callbackDispatcher() {
             appLog('[BG ERROR] Notification counts check failed: $e');
           }
           appLog('[BG] === Task completed successfully ===');
-          appLog('[BG] Total duration: ${DateTime.now().difference(startTime).inSeconds}s');
+          appLog(
+              '[BG] Total duration: ${DateTime.now().difference(startTime).inSeconds}s');
           return Future.value(true);
         } catch (e, stackTrace) {
           appLog('[BG ERROR] Task failed: $e');
@@ -380,15 +400,21 @@ Future<List<Message>> _fetchInboxTwoPagesBg() async {
     if (resp.statusCode == 200) {
       final decoded = utf8.decode(resp.bodyBytes, allowMalformed: true);
       final doc = html_parser.parse(decoded);
-      var noteElements = doc.querySelectorAll('.message-center-pms-note-list-view .note-list-container');
+      var noteElements = doc.querySelectorAll(
+          '.message-center-pms-note-list-view .note-list-container');
       if (noteElements.isEmpty) {
         noteElements = doc.querySelectorAll('#notes-list .note-list-container');
       }
       if (noteElements.isEmpty) {
-        final bool isClassic = doc.querySelector('body[data-static-path="/themes/classic"]') != null;
+        final bool isClassic =
+            doc.querySelector('body[data-static-path="/themes/classic"]') !=
+                null;
         if (isClassic) {
-          List<dom.Element> classicRows = List.from(doc.querySelectorAll('#notes-list tr.note'));
-          if (classicRows.isNotEmpty && classicRows.last.querySelector('input[type="checkbox"]') == null) {
+          List<dom.Element> classicRows =
+              List.from(doc.querySelectorAll('#notes-list tr.note'));
+          if (classicRows.isNotEmpty &&
+              classicRows.last.querySelector('input[type="checkbox"]') ==
+                  null) {
             classicRows.removeLast();
           }
           noteElements = classicRows;
@@ -398,8 +424,13 @@ Future<List<Message>> _fetchInboxTwoPagesBg() async {
       }
       if (noteElements.isEmpty) break;
       for (var noteEl in noteElements) {
-        final subject = noteEl.querySelector('a.notelink')?.text.trim() ?? 'No subject';
-        final sender = noteEl.querySelector('.c-usernameBlock__displayName .js-displayName')?.text.trim() ?? 'Unknown sender';
+        final subject =
+            noteEl.querySelector('a.notelink')?.text.trim() ?? 'No subject';
+        final sender = noteEl
+                .querySelector('.c-usernameBlock__displayName .js-displayName')
+                ?.text
+                .trim() ??
+            'Unknown sender';
         final checkbox = noteEl.querySelector('input[type="checkbox"]');
         final id = checkbox?.attributes['value'] ?? '';
         final aTag = noteEl.querySelector('a.notelink');
@@ -412,7 +443,9 @@ Future<List<Message>> _fetchInboxTwoPagesBg() async {
             link = aTag.attributes['newhref'] ?? classicLink;
           }
         }
-        final date = noteEl.querySelector('span.popup_date')?.attributes['title'] ?? 'Unknown date';
+        final date =
+            noteEl.querySelector('span.popup_date')?.attributes['title'] ??
+                'Unknown date';
         final isUnread = noteEl.querySelector('img.unread') != null;
         result.add(Message(
           id: id,
@@ -458,18 +491,26 @@ Future<String> _fetchMessageContentInBackground(String link) async {
       responseType: ResponseType.plain,
       headers: {
         'User-Agent': FAHttp.userAgent,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept':
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
-      validateStatus: (status) => status != null && status >= 200 && status < 400,
+      validateStatus: (status) =>
+          status != null && status >= 200 && status < 400,
     ),
   );
   if (resp.statusCode == 200) {
     final doc = html_parser.parse(resp.data);
-    final modernContentElement = doc.querySelector('.section-body .user-submitted-links');
+    final modernContentElement =
+        doc.querySelector('.section-body .user-submitted-links');
     if (modernContentElement != null) {
-      modernContentElement.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam').forEach((e) => e.remove());
-      modernContentElement.querySelectorAll('a.auto_link_shortened').forEach((anchor) {
-        final fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
+      modernContentElement
+          .querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
+          .forEach((e) => e.remove());
+      modernContentElement
+          .querySelectorAll('a.auto_link_shortened')
+          .forEach((anchor) {
+        final fullLink =
+            anchor.attributes['title'] ?? anchor.attributes['href'];
         if (fullLink != null) {
           anchor.innerHtml = fullLink;
         }
@@ -482,10 +523,17 @@ Future<String> _fetchMessageContentInBackground(String link) async {
     }
     final classicContentElement = doc.querySelector('td.noteContent.alt1');
     if (classicContentElement != null) {
-      classicContentElement.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam').forEach((e) => e.remove());
-      classicContentElement.querySelector('span[style*="color: #999999"]')?.remove();
-      classicContentElement.querySelectorAll('a.auto_link_shortened').forEach((anchor) {
-        final fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
+      classicContentElement
+          .querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
+          .forEach((e) => e.remove());
+      classicContentElement
+          .querySelector('span[style*="color: #999999"]')
+          ?.remove();
+      classicContentElement
+          .querySelectorAll('a.auto_link_shortened')
+          .forEach((anchor) {
+        final fullLink =
+            anchor.attributes['title'] ?? anchor.attributes['href'];
         if (fullLink != null) {
           anchor.innerHtml = fullLink;
         }
@@ -559,7 +607,8 @@ Future<void> requestAndroidNotificationPermission() async {
     final status = await Permission.notification.status;
     if (status.isDenied || status.isPermanentlyDenied) {
       final newStatus = await Permission.notification.request();
-      debugPrint('Android notification permission: ${newStatus.isGranted ? "granted" : "denied"}');
+      debugPrint(
+          'Android notification permission: ${newStatus.isGranted ? "granted" : "denied"}');
     }
   }
 }
@@ -569,11 +618,11 @@ Future<void> requestIOSNotificationPermission() async {
     final status = await Permission.notification.status;
     if (status.isDenied || status.isPermanentlyDenied) {
       final newStatus = await Permission.notification.request();
-      debugPrint('iOS notification permission: ${newStatus.isGranted ? "granted" : "denied"}');
+      debugPrint(
+          'iOS notification permission: ${newStatus.isGranted ? "granted" : "denied"}');
     }
   }
 }
-
 
 Future<void> _afterFirstFrameBoot(TimezoneProvider timezoneProvider) async {
   try {
@@ -616,7 +665,8 @@ Future<void> _afterFirstFrameBoot(TimezoneProvider timezoneProvider) async {
 }
 
 class AppLifecycleNetworkReset with WidgetsBindingObserver {
-  static final AppLifecycleNetworkReset _instance = AppLifecycleNetworkReset._();
+  static final AppLifecycleNetworkReset _instance =
+      AppLifecycleNetworkReset._();
   AppLifecycleNetworkReset._();
 
   static void attach() {
@@ -669,11 +719,13 @@ void main() async {
   );
   final t0 = DateTime.now();
   WidgetsBinding.instance.addPostFrameCallback((_) async {
-    debugPrint('[BOOT] First frame at ${DateTime.now()} (+${DateTime.now().difference(t0)})');
+    debugPrint(
+        '[BOOT] First frame at ${DateTime.now()} (+${DateTime.now().difference(t0)})');
     await _afterFirstFrameBoot(timezoneProvider);
   });
   Future.delayed(const Duration(seconds: 3), () {
-    debugPrint('[BOOT][WATCHDOG] If no first-frame log appeared, splash is still gating.');
+    debugPrint(
+        '[BOOT][WATCHDOG] If no first-frame log appeared, splash is still gating.');
   });
 }
 
@@ -796,4 +848,5 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 }
 
-final GlobalKey<ScaffoldMessengerState> rootMessengerKey = GlobalKey<ScaffoldMessengerState>();
+final GlobalKey<ScaffoldMessengerState> rootMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
