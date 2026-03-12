@@ -20,6 +20,7 @@ import 'package:like_button/like_button.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../app_theme.dart';
+import '../main.dart';
 import '../parsing_utils.dart';
 import '../utils/html_tags_debug.dart';
 import '../utils/bbcode_context_menu.dart';
@@ -91,7 +92,8 @@ class OpenPost extends StatefulWidget {
   _OpenPostState createState() => _OpenPostState();
 }
 
-class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
+class _OpenPostState extends State<OpenPost>
+    with RouteAware, WidgetsBindingObserver {
   bool _showFullPublicationDate = false;
   String? profileImageUrl;
   String? username;
@@ -112,6 +114,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   );
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _commentFocusNode = FocusNode();
+  bool _commentComposerFocusRequestedByUser = false;
+  bool _blockRestoredCommentComposerFocus = true;
   Timer? _debounceTimer;
   bool _pendingFavoriteState = false;
   String? userTimezoneIanaName;
@@ -196,7 +200,18 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.unsubscribe(this);
+    final route = ModalRoute.of(context);
+    if (route != null) {
+      routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
   void dispose() {
+    routeObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     _commentController.removeListener(_onCommentDraftChanged);
     _commentController.dispose();
@@ -210,6 +225,20 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     _commentDraftHasText.dispose();
     _commentDraftCollapsedLines.dispose();
     super.dispose();
+  }
+
+  @override
+  void didPushNext() {
+    _dismissCommentComposerFocus();
+  }
+
+  @override
+  void didPopNext() {
+    _armCommentComposerFocusGuard();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_commentFocusNode.hasFocus) return;
+      _commentFocusNode.unfocus();
+    });
   }
 
   List<String> iconBeforeUrls = [];
@@ -1756,12 +1785,40 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
 
   void _syncCommentComposerExpansion() {
     final shouldExpand = _commentFocusNode.hasFocus;
+    if (shouldExpand &&
+        _blockRestoredCommentComposerFocus &&
+        !_commentComposerFocusRequestedByUser) {
+      _dismissCommentComposerFocus();
+      return;
+    }
     if (shouldExpand != _isCommentComposerExpanded.value) {
       _isCommentComposerExpanded.value = shouldExpand;
     }
+    if (shouldExpand) {
+      _commentComposerFocusRequestedByUser = false;
+      _blockRestoredCommentComposerFocus = false;
+    } else {
+      _commentComposerFocusRequestedByUser = false;
+      _blockRestoredCommentComposerFocus = true;
+    }
+  }
+
+  void _armCommentComposerFocusGuard() {
+    _commentComposerFocusRequestedByUser = false;
+    _blockRestoredCommentComposerFocus = true;
+  }
+
+  void _allowCommentComposerFocusFromUser() {
+    _commentComposerFocusRequestedByUser = true;
+    _blockRestoredCommentComposerFocus = false;
+  }
+
+  void _handleCommentComposerPointerDown(PointerDownEvent event) {
+    _allowCommentComposerFocusFromUser();
   }
 
   void _dismissCommentComposerFocus() {
+    _armCommentComposerFocusGuard();
     if (_commentFocusNode.hasFocus) {
       _commentFocusNode.unfocus();
     }
@@ -3409,44 +3466,50 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                                     Expanded(
                                       child: Stack(
                                         children: [
-                                          TextField(
-                                            controller: _commentController,
-                                            focusNode: _commentFocusNode,
-                                            style: const TextStyle(
-                                                color: Colors.white),
-                                            keyboardType:
-                                                TextInputType.multiline,
-                                            textInputAction:
-                                                TextInputAction.newline,
-                                            minLines: minLines,
-                                            maxLines: maxLines,
-                                            scrollPadding:
-                                                const EdgeInsets.only(
-                                                    bottom: 8),
-                                            decoration: InputDecoration(
-                                              hintText: 'Add a comment...',
-                                              hintStyle: const TextStyle(
-                                                  color: Colors.white54),
-                                              contentPadding:
-                                                  EdgeInsets.fromLTRB(
-                                                12,
-                                                topPadding,
-                                                56,
-                                                bottomPadding,
+                                          Listener(
+                                            behavior:
+                                                HitTestBehavior.translucent,
+                                            onPointerDown:
+                                                _handleCommentComposerPointerDown,
+                                            child: TextField(
+                                              controller: _commentController,
+                                              focusNode: _commentFocusNode,
+                                              style: const TextStyle(
+                                                  color: Colors.white),
+                                              keyboardType:
+                                                  TextInputType.multiline,
+                                              textInputAction:
+                                                  TextInputAction.newline,
+                                              minLines: minLines,
+                                              maxLines: maxLines,
+                                              scrollPadding:
+                                                  const EdgeInsets.only(
+                                                      bottom: 8),
+                                              decoration: InputDecoration(
+                                                hintText: 'Add a comment...',
+                                                hintStyle: const TextStyle(
+                                                    color: Colors.white54),
+                                                contentPadding:
+                                                    EdgeInsets.fromLTRB(
+                                                  12,
+                                                  topPadding,
+                                                  56,
+                                                  bottomPadding,
+                                                ),
+                                                filled: true,
+                                                isDense: isCollapsedSingleLine,
+                                                fillColor:
+                                                    const Color(0xFF151515),
+                                                border: OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                  borderSide: BorderSide.none,
+                                                ),
                                               ),
-                                              filled: true,
-                                              isDense: isCollapsedSingleLine,
-                                              fillColor:
-                                                  const Color(0xFF151515),
-                                              border: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                                borderSide: BorderSide.none,
-                                              ),
+                                              contextMenuBuilder:
+                                                  BBCodeContextMenu.builder(
+                                                      _commentController),
                                             ),
-                                            contextMenuBuilder:
-                                                BBCodeContextMenu.builder(
-                                                    _commentController),
                                           ),
                                           if (isCollapsedSingleLine)
                                             Positioned.fill(
