@@ -8,7 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
-import '../services/fa_thumbnail_parser.dart';
+import '../services/fa_thumbnail_processing.dart';
+import '../utils/app_logging.dart';
 import '../utils/content_rating_filters.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import '../widgets/heart_animation.dart';
@@ -31,8 +32,11 @@ class FASearchImage extends StatefulWidget {
 }
 
 class FASearchImageState extends State<FASearchImage> {
+  static const double _nextPageLeadScreens = 2.5;
+
   int currentPage = 1;
   bool isLoading = false;
+  bool hasMore = true;
   List<Map<String, dynamic>> images = [];
   List<List<Map<String, dynamic>>> imageRows = [];
   List<Map<String, dynamic>> normalImagesQueue = [];
@@ -56,6 +60,9 @@ class FASearchImageState extends State<FASearchImage> {
   int _detailsEpoch = 0;
   final Map<String, Future<void>> _detailsInFlight = {};
   bool _isHandlingCloudflareChallenge = false;
+  double _nextPageTriggerOffset = double.infinity;
+  bool _pendingNextPageFetch = false;
+  bool _isNextPageFetchQueued = false;
 
   @override
   void initState() {
@@ -108,6 +115,10 @@ class FASearchImageState extends State<FASearchImage> {
       imageRows.clear();
       normalImagesQueue.clear();
       currentPage = 1;
+      hasMore = true;
+      _nextPageTriggerOffset = double.infinity;
+      _pendingNextPageFetch = false;
+      _isNextPageFetchQueued = false;
       _favoritedImages.clear();
       _favUrls.clear();
       _unfavUrls.clear();
@@ -183,11 +194,14 @@ class FASearchImageState extends State<FASearchImage> {
 
   // Background WebView-based fetching has been removed.
 
-  void _appendImages(List<Map<String, dynamic>> newImages) {
+  Future<void> _appendImages(
+    List<Map<String, dynamic>> newImages, {
+    required double previousMaxScrollExtent,
+  }) async {
     final filteredImages =
         newImages.where((image) => !imageUrls.contains(image['url'])).toList();
 
-    debugPrint(
+    kDebugPrint(
       '[Search] Parsed ${newImages.length} thumbnails, '
       'appending ${filteredImages.length} new ones.',
     );
@@ -196,14 +210,31 @@ class FASearchImageState extends State<FASearchImage> {
       imageUrls.add(image['url']);
     }
 
+    final rowProcessing = await processFaImageRows(
+      newImages: filteredImages,
+      normalImagesQueue: normalImagesQueue,
+    );
+    final appendedRows = (rowProcessing['rows'] as List)
+        .map(
+          (row) => List<Map<String, dynamic>>.from(row as List),
+        )
+        .toList();
+    final nextQueue =
+        List<Map<String, dynamic>>.from(rowProcessing['queue'] as List);
+
     if (!mounted) return;
 
     setState(() {
+      hasMore = newImages.isNotEmpty && filteredImages.isNotEmpty;
       images.addAll(filteredImages);
-      _processImagesIntoRows(filteredImages);
-      _preloadImagesImmediately(filteredImages);
+      imageRows.addAll(appendedRows);
+      normalImagesQueue = nextQueue;
+      _pendingNextPageFetch = false;
+      _isNextPageFetchQueued = false;
       isLoading = false;
     });
+
+    _scheduleNextPageTrigger(previousMaxScrollExtent: previousMaxScrollExtent);
   }
 
   Future<void> _fetchImages(
@@ -211,9 +242,20 @@ class FASearchImageState extends State<FASearchImage> {
     bool isRefresh = false,
     int remainingCloudflareRecoveries = 2,
   }) async {
-    setState(() {
+    if (isLoading || !hasMore) return;
+    kDebugPrint('[Search] Fetching page $pageNumber${isRefresh ? ' (refresh)' : ''}');
+    final previousMaxScrollExtent = isRefresh || !_scrollController.hasClients
+        ? 0.0
+        : _scrollController.position.maxScrollExtent;
+
+    final shouldRebuildImmediately = isRefresh || imageRows.isEmpty;
+    if (shouldRebuildImmediately) {
+      setState(() {
+        isLoading = true;
+      });
+    } else {
       isLoading = true;
-    });
+    }
     try {
       if (isRefresh) {
         images.clear();
@@ -221,33 +263,55 @@ class FASearchImageState extends State<FASearchImage> {
         imageRows.clear();
         normalImagesQueue.clear();
         currentPage = 1;
+        hasMore = true;
+        _nextPageTriggerOffset = double.infinity;
+        _pendingNextPageFetch = false;
+        _isNextPageFetchQueued = false;
       }
 
       final newImages = await fetchImagesWithFilters(
         pageNumber,
         await _getAllCookies(),
       );
-      _appendImages(newImages);
+      await _appendImages(
+        newImages,
+        previousMaxScrollExtent: previousMaxScrollExtent,
+      );
     } on _CloudflareChallengeException catch (e) {
-      debugPrint('Cloudflare challenge detected while fetching search images.');
+      kDebugPrint('Cloudflare challenge detected while fetching search images.');
       if (mounted) {
         setState(() {
+          _pendingNextPageFetch = false;
+          _isNextPageFetchQueued = false;
           isLoading = false;
         });
       }
 
       if (remainingCloudflareRecoveries <= 0) {
+        _pendingNextPageFetch = false;
+        _isNextPageFetchQueued = false;
+        _nextPageTriggerOffset = _scrollController.hasClients
+            ? _scrollController.position.pixels + 1
+            : double.infinity;
         return;
       }
       final result = await _showCloudflareDialog(initialUrl: e.initialUrl);
       if (result?.passed != true || !mounted) {
+        _pendingNextPageFetch = false;
+        _isNextPageFetchQueued = false;
+        _nextPageTriggerOffset = _scrollController.hasClients
+            ? _scrollController.position.pixels + 1
+            : double.infinity;
         return;
       }
 
       final recoveredHtml = result?.pageHtml;
       if (recoveredHtml != null && recoveredHtml.isNotEmpty) {
         final recoveredImages = await parseHtml(recoveredHtml);
-        _appendImages(recoveredImages);
+        await _appendImages(
+          recoveredImages,
+          previousMaxScrollExtent: previousMaxScrollExtent,
+        );
         return;
       }
 
@@ -258,10 +322,15 @@ class FASearchImageState extends State<FASearchImage> {
       );
       return;
     } catch (e) {
-      debugPrint('Error fetching images: $e');
+      kDebugPrint('Error fetching images: $e');
       setState(() {
+        _pendingNextPageFetch = false;
+        _isNextPageFetchQueued = false;
         isLoading = false;
       });
+      _nextPageTriggerOffset = _scrollController.hasClients
+          ? _scrollController.position.pixels + 1
+          : double.infinity;
     }
   }
 
@@ -344,74 +413,112 @@ class FASearchImageState extends State<FASearchImage> {
   }
 
   Future<List<Map<String, dynamic>>> parseHtml(String html) async {
-    final document = html_parser.parse(html);
-    final figures = FaThumbnailParser.selectThumbnailFigures(document);
-    final imageMetadata = <Map<String, dynamic>>[];
-
-    for (final fig in figures) {
-      final data = FaThumbnailParser.extract(fig);
-      if (data == null) continue;
-      imageMetadata.add({
-        'url': data['thumbnailUrl'],
-        'width': data['width'],
-        'height': data['height'],
-        'postUrl': data['postUrl'],
-        'uniqueNumber': data['uniqueNumber'],
-        'rating': data['rating'],
-        'title': data['title'],
-        'author': data['author'],
-      });
-    }
-
-    debugPrint(
-        '[Search] HTML parser found ${figures.length} figures and ${imageMetadata.length} usable thumbnails.');
+    final imageMetadata = await parseFaThumbnailHtml(html);
+    kDebugPrint(
+      '[Search] HTML parser found ${imageMetadata.length} usable thumbnails.',
+    );
     return imageMetadata;
   }
 
-  bool isWideImage(Map<String, dynamic> image) {
-    final width = image['width'];
-    final height = image['height'];
-    final aspectRatio = width / height;
-    return aspectRatio > 1.5;
-  }
-
-  void _processImagesIntoRows(List<Map<String, dynamic>> newImages) {
-    for (var image in newImages) {
-      if (isWideImage(image)) {
-        if (normalImagesQueue.isNotEmpty) {
-          imageRows.add([normalImagesQueue.removeAt(0), image]);
-        } else {
-          imageRows.add([image]);
-        }
-      } else {
-        normalImagesQueue.add(image);
-      }
-    }
-
-    while (normalImagesQueue.length >= 2) {
-      imageRows
-          .add([normalImagesQueue.removeAt(0), normalImagesQueue.removeAt(0)]);
-    }
-
-    if (normalImagesQueue.isNotEmpty) {
-      imageRows.add([normalImagesQueue.removeAt(0)]);
-    }
-  }
-
-  void _preloadImagesImmediately(List<Map<String, dynamic>> fetchedImages) {
-    for (var image in fetchedImages) {
-      precacheImage(NetworkImage(image['url']), context);
-    }
-  }
-
   void _scrollListener() {
-    if (_scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent * 0.4 &&
-        !isLoading &&
-        !_isHandlingCloudflareChallenge) {
-      currentPage++;
-      _fetchImages(currentPage);
+    if (!_scrollController.hasClients ||
+        isLoading ||
+        _isNextPageFetchQueued ||
+        !hasMore ||
+        _isHandlingCloudflareChallenge) {
+      return;
     }
+
+    if (!_hasReachedNextPageTrigger(_scrollController.position)) {
+      return;
+    }
+
+    _pendingNextPageFetch = true;
+    _tryStartPendingNextPageFetch();
+  }
+
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.vertical) return false;
+
+    if (!mounted ||
+        isLoading ||
+        _isNextPageFetchQueued ||
+        !hasMore ||
+        _isHandlingCloudflareChallenge) {
+      return false;
+    }
+
+    if (_hasReachedNextPageTrigger(notification.metrics)) {
+      _pendingNextPageFetch = true;
+      _tryStartPendingNextPageFetch();
+    }
+
+    return false;
+  }
+
+  void _tryStartPendingNextPageFetch() {
+    if (!_pendingNextPageFetch ||
+        !_scrollController.hasClients ||
+        isLoading ||
+        _isNextPageFetchQueued ||
+        !hasMore ||
+        _isHandlingCloudflareChallenge) {
+      return;
+    }
+    if (!_hasReachedNextPageTrigger(_scrollController.position)) {
+      return;
+    }
+
+    _pendingNextPageFetch = false;
+    _isNextPageFetchQueued = true;
+    _nextPageTriggerOffset = double.infinity;
+    final nextPage = currentPage + 1;
+    currentPage = nextPage;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        _isNextPageFetchQueued = false;
+        return;
+      }
+      unawaited(_fetchImages(nextPage));
+    });
+  }
+
+  bool _hasReachedNextPageTrigger(ScrollMetrics metrics) {
+    final reachedPageThreshold = metrics.pixels >= _nextPageTriggerOffset;
+    final reachedLeadThreshold =
+        metrics.extentAfter <= metrics.viewportDimension * _nextPageLeadScreens;
+    return reachedPageThreshold || reachedLeadThreshold;
+  }
+
+  void _scheduleNextPageTrigger({required double previousMaxScrollExtent}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !hasMore) {
+        _pendingNextPageFetch = false;
+        _isNextPageFetchQueued = false;
+        _nextPageTriggerOffset = double.infinity;
+        return;
+      }
+
+      if (!_scrollController.hasClients) {
+        _scheduleNextPageTrigger(
+          previousMaxScrollExtent: previousMaxScrollExtent,
+        );
+        return;
+      }
+
+      final newMaxScrollExtent = _scrollController.position.maxScrollExtent;
+      final addedExtent = newMaxScrollExtent - previousMaxScrollExtent;
+      if (addedExtent <= 0) {
+        _pendingNextPageFetch = false;
+        _isNextPageFetchQueued = false;
+        _nextPageTriggerOffset = double.infinity;
+        return;
+      }
+
+      _nextPageTriggerOffset =
+          previousMaxScrollExtent + (addedExtent * 0.6);
+    });
   }
 
   Future<void> _ensurePostDetails({
@@ -597,46 +704,50 @@ class FASearchImageState extends State<FASearchImage> {
 
     return RefreshIndicator(
       onRefresh: _refreshImages,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-        child: imageRows.isEmpty && isLoading
-            ? Center(
-                child: PulsatingLoadingIndicator(
-                  size: 88.0,
-                  assetPath: 'assets/icons/fathemed.png',
-                ),
-              )
-            : ListView.builder(
-                physics: const AlwaysScrollableScrollPhysics(
-                    parent: BouncingScrollPhysics()),
-                controller: _scrollController,
-                itemCount: imageRows.length + (isLoading ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == imageRows.length) {
-                    return const Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Center(
-                        child: PulsatingLoadingIndicator(
-                          size: 58.0,
-                          assetPath: 'assets/icons/fathemed.png',
-                        ),
-                      ),
-                    );
-                  }
-
-                  final rowImages = imageRows[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2.0),
-                    child: rowImages.length == 1
-                        ? _buildSingleImage(rowImages[0], maxHeight)
-                        : _buildDoubleImage(
-                            rowImages[0],
-                            rowImages[1],
-                            maxHeight,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _handleScrollNotification,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+          child: imageRows.isEmpty && isLoading
+              ? Center(
+                  child: PulsatingLoadingIndicator(
+                    size: 88.0,
+                    assetPath: 'assets/icons/fathemed.png',
+                  ),
+                )
+              : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics()),
+                  controller: _scrollController,
+                  cacheExtent: screenHeight * 1.5,
+                  itemCount: imageRows.length + (isLoading ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == imageRows.length) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(
+                          child: PulsatingLoadingIndicator(
+                            size: 58.0,
+                            assetPath: 'assets/icons/fathemed.png',
                           ),
-                  );
-                },
-              ),
+                        ),
+                      );
+                    }
+
+                    final rowImages = imageRows[index];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2.0),
+                      child: rowImages.length == 1
+                          ? _buildSingleImage(rowImages[0], maxHeight)
+                          : _buildDoubleImage(
+                              rowImages[0],
+                              rowImages[1],
+                              maxHeight,
+                            ),
+                    );
+                  },
+                ),
+        ),
       ),
     );
   }

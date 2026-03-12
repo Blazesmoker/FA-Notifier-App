@@ -13,6 +13,7 @@ import '../main.dart';
 import 'package:FANotifier/providers/NotificationNavigationProvider.dart';
 import 'package:FANotifier/services/notes_refresh_service.dart';
 import 'package:FANotifier/services/notification_refresh_service.dart';
+import '../utils/app_logging.dart';
 
 /// Manages notification channels, shows notifications, and handles taps.
 class NotificationService {
@@ -201,17 +202,19 @@ class NotificationService {
         required String source,
       }) async {
     try {
-      debugPrint(
+      appLog('[NOTIF] Notification tap received (source=$source)');
+      kDebugPrint(
         'NOTES REFRESH TRIGGERED_handletappayload (source=$source, payload=$payload)',
       );
 
       final prefs = await SharedPreferences.getInstance();
 
 
-      final BuildContext? context = navigatorKey.currentContext;
+        final BuildContext? context = navigatorKey.currentContext;
       if (context == null) {
         await prefs.setString('pending_navigation', payload);
-        debugPrint('[NOTIF] No UI context; saved pending_navigation="$payload"');
+        appLog('[NOTIF] No UI context; saved pending navigation.');
+        kDebugPrint('[NOTIF] No UI context; saved pending_navigation="$payload"');
         return;
       }
 
@@ -230,7 +233,7 @@ class NotificationService {
         if (ctx == null) {
 
           await prefs.setString('pending_navigation', payload);
-          debugPrint('[NOTIF] Lost context after frame; re-stashed payload.');
+          appLog('[NOTIF] Lost context after frame; re-stashed pending navigation.');
           return;
         }
 
@@ -248,13 +251,13 @@ class NotificationService {
         try {
           if (isNotes) {
             NotesRefreshService().triggerRefresh();
-            debugPrint('NOTES REFRESH TRIGGERED_service');
+            appLog('[NOTIF] Notes refresh triggered.');
           } else {
             NotificationRefreshService().triggerRefresh();
-            debugPrint('ACTIVITIES REFRESH TRIGGERED_service');
+            appLog('[NOTIF] Activities refresh triggered.');
           }
         } catch (e) {
-          debugPrint('[_handleTapPayload] refresh error: $e');
+          appLog('[_handleTapPayload] refresh error: $e');
         }
 
 
@@ -263,7 +266,8 @@ class NotificationService {
 
       SchedulerBinding.instance.ensureVisualUpdate();
     } catch (e, st) {
-      debugPrint('[_handleTapPayload] error: $e\n$st');
+      appLog('[_handleTapPayload] error: $e');
+      kDebugPrint('[_handleTapPayload] error: $e\n$st');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pending_navigation', payload);
@@ -296,7 +300,8 @@ class NotificationService {
       String payload,
       String type,
       ) async {
-    debugPrint(
+    appLog('NotificationService.showNotification type=$type');
+    kDebugPrint(
         'NotificationService.showNotification id=$id title=$title type=$type');
 
     final prefs = await SharedPreferences.getInstance();
@@ -356,7 +361,7 @@ class NotificationService {
       payload: payload,
     );
 
-    debugPrint('flutterLocalNotificationsPlugin.show completed');
+    appLog('Notification displayed for type=$type');
   }
 
   Future<void> updateNotificationChannels() async {
@@ -398,5 +403,6 @@ void notificationTapBackground(NotificationResponse response) async {
   final payload = response.payload ?? '';
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString('pending_navigation', payload);
-  debugPrint('[NOTIF_TAP_BG] saved payload "$payload"');
+  appLog('[NOTIF_TAP_BG] saved pending notification payload.');
+  kDebugPrint('[NOTIF_TAP_BG] saved payload "$payload"');
 }

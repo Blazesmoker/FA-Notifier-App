@@ -1622,6 +1622,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   }
 
   void _showInfoDialog() {
+    _dismissCommentComposerFocus();
     showDialog(
       context: context,
       builder: (context) {
@@ -1757,6 +1758,12 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
     final shouldExpand = _commentFocusNode.hasFocus;
     if (shouldExpand != _isCommentComposerExpanded.value) {
       _isCommentComposerExpanded.value = shouldExpand;
+    }
+  }
+
+  void _dismissCommentComposerFocus() {
+    if (_commentFocusNode.hasFocus) {
+      _commentFocusNode.unfocus();
     }
   }
 
@@ -2203,6 +2210,7 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
   }
 
   void _showEditDialog() {
+    _dismissCommentComposerFocus();
     showDialog(
       context: context,
       builder: (context) {
@@ -2450,6 +2458,8 @@ class _OpenPostState extends State<OpenPost> with WidgetsBindingObserver {
                   return IconButton(
                     icon: const Icon(Icons.more_vert),
                     onPressed: () async {
+                      _dismissCommentComposerFocus();
+
                       final RenderBox button =
                           context.findRenderObject() as RenderBox;
                       final RenderBox overlay = Overlay.of(context)

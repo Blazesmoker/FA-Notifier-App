@@ -44,6 +44,7 @@ import 'package:html/dom.dart' as dom;
 import 'utils/fa_link_handler.dart';
 import 'package:app_links/app_links.dart';
 import 'dart:async';
+import 'utils/app_logging.dart';
 
 
 class FreshHttpOverrides extends HttpOverrides {
@@ -70,59 +71,59 @@ const String iOSWorkInitTask = "com.blazesmoker.FANotifier.refresh";
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   WidgetsFlutterBinding.ensureInitialized();
+  configureAppLogging();
   Workmanager().executeTask((task, inputData) async {
-    debugPrint("===============================================");
-    debugPrint("BACKGROUND TASK TRIGGERED: $task");
-    debugPrint("Time: ${DateTime.now()}");
-    debugPrint("Input data: $inputData");
-    debugPrint("===============================================");
+    appLog("===============================================");
+    appLog("BACKGROUND TASK TRIGGERED: $task");
+    appLog("Time: ${DateTime.now()}");
+    appLog("===============================================");
     final startTime = DateTime.now();
     try {
       final notificationService = NotificationService();
       await notificationService.init();
-      debugPrint("[BG] NotificationService initialized");
+      appLog("[BG] NotificationService initialized");
       SharedPreferences prefs;
       try {
         prefs = await SharedPreferences.getInstance();
         await prefs.reload();
-        debugPrint('[BG] SharedPreferences loaded successfully');
+        appLog('[BG] SharedPreferences loaded successfully');
         await FAHttp.initFromPrefs(prefs: prefs);
         HttpOverrides.global = FreshHttpOverrides();
       } catch (e) {
-        debugPrint('[BG ERROR] Failed to load SharedPreferences: $e');
+        appLog('[BG ERROR] Failed to load SharedPreferences: $e');
         return Future.value(false);
       }
       bool isAppActive = prefs.getBool("isAppActive") ?? false;
-      debugPrint('[BG] App active status: $isAppActive');
+      appLog('[BG] App active status: $isAppActive');
       if (isAppActive) {
-        debugPrint('[BG] App is ACTIVE - skipping background fetch');
-        debugPrint('[BG] Task completed (skipped) in ${DateTime.now().difference(startTime).inSeconds}s');
+        appLog('[BG] App is ACTIVE - skipping background fetch');
+        appLog('[BG] Task completed (skipped) in ${DateTime.now().difference(startTime).inSeconds}s');
         return Future.value(true);
       }
-      debugPrint('[BG] App is INACTIVE - proceeding with background fetch');
+      appLog('[BG] App is INACTIVE - proceeding with background fetch');
       if (task == fetchBackgroundTask || task == iOSWorkInitTask) {
-        debugPrint('[BG] Valid background task detected: $task');
+        appLog('[BG] Valid background task detected: $task');
         try {
           bool didFirstRunSkip = prefs.getBool('did_first_run_skip') ?? false;
-          debugPrint('[BG] First run skip status: $didFirstRunSkip');
+          appLog('[BG] First run skip status: $didFirstRunSkip');
           if (!didFirstRunSkip) {
-            debugPrint('[BG] First run not complete - skipping notifications');
+            appLog('[BG] First run not complete - skipping notifications');
             return Future.value(true);
           }
-          debugPrint('[BG] === Starting UNREAD NOTES CHECK ===');
+          appLog('[BG] === Starting UNREAD NOTES CHECK ===');
           try {
             final List<Message> fetchedInbox = await _fetchInboxTwoPagesBg();
-            debugPrint('[BG] Fetched ${fetchedInbox.length} messages from inbox');
+            kDebugPrint('[BG] Fetched ${fetchedInbox.length} messages from inbox');
             final Set<String> shownSet = await MessageStorage.getShownNoteIds();
-            debugPrint('[BG] Already shown: ${shownSet.length} message IDs');
+            kDebugPrint('[BG] Already shown: ${shownSet.length} message IDs');
             final List<Message> unread = fetchedInbox.where((m) => m.isUnread).toList();
-            debugPrint('[BG] Found ${unread.length} unread messages');
+            kDebugPrint('[BG] Found ${unread.length} unread messages');
             if (unread.isNotEmpty) {
               final List<Message> newNotes = unread.where((m) => !shownSet.contains(m.id)).toList();
-              debugPrint('[BG] New unread messages: ${newNotes.length}');
+              kDebugPrint('[BG] New unread messages: ${newNotes.length}');
               for (var msg in newNotes) {
                 try {
-                  debugPrint('[BG] Processing message: ${msg.id} from ${msg.sender}');
+                  kDebugPrint('[BG] Processing message: ${msg.id} from ${msg.sender}');
                   final String content = await _fetchMessageContentInBackground(msg.link);
                   final String payload = 'note_${msg.id}';
                   await notificationService.showNotification(
@@ -132,29 +133,29 @@ void callbackDispatcher() {
                     payload,
                     'notes',
                   );
-                  debugPrint('[BG] Notification shown for message ${msg.id}');
+                  kDebugPrint('[BG] Notification shown for message ${msg.id}');
                   if (Platform.isIOS) {
                     int currentBadge = await getBadgeCounter();
                     int newBadge = currentBadge + 1;
                     await updateBadgeCounter(newBadge);
-                    debugPrint('[BG] Badge updated to: $newBadge');
+                    kDebugPrint('[BG] Badge updated to: $newBadge');
                   }
                   await _markAsUnreadBackground(msg);
-                  debugPrint('[BG] Message ${msg.id} marked as unread on server');
+                  kDebugPrint('[BG] Message ${msg.id} marked as unread on server');
                 } catch (e) {
-                  debugPrint('[BG ERROR] Failed to process message ${msg.id}: $e');
+                  kDebugPrint('[BG ERROR] Failed to process message ${msg.id}: $e');
                 }
               }
               if (newNotes.isNotEmpty) {
                 final List<String> newIds = newNotes.map((m) => m.id).toList();
                 await MessageStorage.addShownNoteIds(newIds);
-                debugPrint('[BG] Saved ${newIds.length} new message IDs');
+                kDebugPrint('[BG] Saved ${newIds.length} new message IDs');
               }
             }
           } catch (e) {
-            debugPrint('[BG ERROR] Notes check failed: $e');
+            appLog('[BG ERROR] Notes check failed: $e');
           }
-          debugPrint('[BG] === Starting NOTIFICATION COUNTS CHECK ===');
+          appLog('[BG] === Starting NOTIFICATION COUNTS CHECK ===');
           try {
             final faService = FaService();
             final Notifications? newNotifications = await faService.fetchNotifications();
@@ -167,7 +168,7 @@ void callbackDispatcher() {
                 journals: int.tryParse(newNotifications.journals) ?? 0,
                 notes: int.tryParse(newNotifications.notes) ?? 0,
               );
-              debugPrint('[BG] New counts: S:${newCounts.submissions} W:${newCounts.watches} C:${newCounts.comments} F:${newCounts.favorites} J:${newCounts.journals} N:${newCounts.notes}');
+              kDebugPrint('[BG] New counts: S:${newCounts.submissions} W:${newCounts.watches} C:${newCounts.comments} F:${newCounts.favorites} J:${newCounts.journals} N:${newCounts.notes}');
               final bool submissionsEnabled = prefs.getBool('drawer_notif_submissions_enabled') ?? true;
               final bool watchesEnabled = prefs.getBool('drawer_notif_watches_enabled') ?? true;
               final bool commentsEnabled = prefs.getBool('drawer_notif_comments_enabled') ?? true;
@@ -177,9 +178,9 @@ void callbackDispatcher() {
 
               final ActivitiesDiff diff = await ActivitiesNotificationStateStore()
                   .diffAndUpdateLastSeen(currentCounts: newCounts);
-              debugPrint(
+              kDebugPrint(
                   '[BG] Last-seen counts: S:${diff.previous.submissions} W:${diff.previous.watches} C:${diff.previous.comments} F:${diff.previous.favorites} J:${diff.previous.journals} N:${diff.previous.notes}');
-              debugPrint(
+              kDebugPrint(
                   '[BG] Increased by:     S:${diff.increasedBy.submissions} W:${diff.increasedBy.watches} C:${diff.increasedBy.comments} F:${diff.increasedBy.favorites} J:${diff.increasedBy.journals} N:${diff.increasedBy.notes}');
 
               // Notify based on per-category increases, but only for enabled categories.
@@ -227,41 +228,42 @@ void callbackDispatcher() {
                     'activity_fa_activity',
                     'activities',
                   );
-                  debugPrint('[BG] Activity notification shown: $messageBody');
+                  appLog('[BG] Activity notification shown.');
+                  kDebugPrint('[BG] Activity notification shown: $messageBody');
                 } else {
-                  debugPrint(
+                  appLog(
                       '[BG] Activities sound+vibration disabled; not showing notification.');
                 }
               } else {
-                debugPrint('[BG] No enabled category increased; not notifying.');
+                appLog('[BG] No enabled category increased; not notifying.');
               }
             } else {
-              debugPrint('[BG] No notification data received from FA');
+              appLog('[BG] No notification data received from FA');
             }
           } catch (e) {
-            debugPrint('[BG ERROR] Notification counts check failed: $e');
+            appLog('[BG ERROR] Notification counts check failed: $e');
           }
-          debugPrint('[BG] === Task completed successfully ===');
-          debugPrint('[BG] Total duration: ${DateTime.now().difference(startTime).inSeconds}s');
+          appLog('[BG] === Task completed successfully ===');
+          appLog('[BG] Total duration: ${DateTime.now().difference(startTime).inSeconds}s');
           return Future.value(true);
         } catch (e, stackTrace) {
-          debugPrint('[BG ERROR] Task failed: $e');
-          debugPrint('[BG ERROR] Stack: $stackTrace');
+          appLog('[BG ERROR] Task failed: $e');
+          kDebugPrint('[BG ERROR] Stack: $stackTrace');
           if (e.toString().contains('network') ||
               e.toString().contains('timeout') ||
               e.toString().contains('connection') ||
               e.toString().contains('SocketException')) {
-            debugPrint('[BG] Network error detected - will retry');
+            appLog('[BG] Network error detected - will retry');
             return Future.value(false);
           }
-          debugPrint('[BG] Non-network error - marking as complete');
+          appLog('[BG] Non-network error - marking as complete');
           return Future.value(true);
         }
       }
-      debugPrint('[BG] Unknown task type: $task');
+      appLog('[BG] Unknown task type: $task');
       return Future.value(true);
     } catch (e) {
-      debugPrint('[BG FATAL ERROR] Callback dispatcher crash: $e');
+      appLog('[BG FATAL ERROR] Callback dispatcher crash: $e');
       return Future.value(false);
     }
   });
@@ -635,6 +637,7 @@ class AppLifecycleNetworkReset with WidgetsBindingObserver {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  configureAppLogging();
   await Firebase.initializeApp();
   await setupAnalyticsPrivacy();
   await FAHttp.init();
@@ -691,43 +694,43 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _setAppActive(true);
     _initDeepLinks();
-    if (kDebugMode || true) {
+    if (kDebugMode) {
       _stateDebugTimer = Timer.periodic(const Duration(minutes: 3), (_) async {
         final prefs = await SharedPreferences.getInstance();
         final isActive = prefs.getBool("isAppActive") ?? false;
-        debugPrint("[STATE CHECK] App active: $isActive at ${DateTime.now()}");
+        kDebugPrint("[STATE CHECK] App active: $isActive at ${DateTime.now()}");
       });
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    debugPrint('===============================================');
-    debugPrint('APP LIFECYCLE CHANGED: $state');
-    debugPrint('Time: ${DateTime.now()}');
-    debugPrint('===============================================');
+    appLog('===============================================');
+    appLog('APP LIFECYCLE CHANGED: $state');
+    appLog('Time: ${DateTime.now()}');
+    appLog('===============================================');
     switch (state) {
       case AppLifecycleState.resumed:
         _setAppActive(true);
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           await processPendingNavigation(from: 'app_lifecycle_resumed');
         });
-        debugPrint('→ App RESUMED - Background fetch DISABLED');
+        appLog('→ App RESUMED - Background fetch DISABLED');
         break;
       case AppLifecycleState.inactive:
-        debugPrint('→ App INACTIVE (transitional state)');
+        appLog('→ App INACTIVE (transitional state)');
         break;
       case AppLifecycleState.paused:
         _setAppActive(false);
-        debugPrint('→ App PAUSED - Background fetch ENABLED');
+        appLog('→ App PAUSED - Background fetch ENABLED');
         break;
       case AppLifecycleState.detached:
         _setAppActive(false);
-        debugPrint('→ App DETACHED - Background fetch ENABLED');
+        appLog('→ App DETACHED - Background fetch ENABLED');
         break;
       case AppLifecycleState.hidden:
         _setAppActive(false);
-        debugPrint('→ App HIDDEN - Background fetch ENABLED');
+        appLog('→ App HIDDEN - Background fetch ENABLED');
         break;
     }
   }
@@ -755,12 +758,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool("isAppActive", active);
       await prefs.reload();
-      debugPrint("[APP STATE] Set to: ${active ? 'ACTIVE' : 'INACTIVE'}");
+      appLog("[APP STATE] Set to: ${active ? 'ACTIVE' : 'INACTIVE'}");
       if (active) {
         await resetBadgeCounter();
       }
     } catch (e) {
-      debugPrint("[ERROR] Failed to set app state: $e");
+      appLog("[ERROR] Failed to set app state: $e");
     }
   }
 

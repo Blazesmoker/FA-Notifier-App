@@ -798,6 +798,12 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
     }
   }
 
+  void _dismissCommentComposerFocus() {
+    if (_commentFocusNode.hasFocus) {
+      _commentFocusNode.unfocus();
+    }
+  }
+
   void _onCommentDraftChanged() {
     final bool hasText = _commentController.text.trim().isNotEmpty;
     if (hasText != _commentDraftHasText.value) {
@@ -951,6 +957,7 @@ class _OpenJournalState extends State<OpenJournal> with WidgetsBindingObserver {
               icon: const Icon(Icons.more_vert),
               position: PopupMenuPosition.under,
               offset: const Offset(0, 8),
+              onOpened: _dismissCommentComposerFocus,
               onSelected: (value) {
                 switch (value) {
                   case 'share':

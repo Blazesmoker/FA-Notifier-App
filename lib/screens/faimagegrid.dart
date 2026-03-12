@@ -8,11 +8,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/fa_cookie_helper.dart';
 import '../services/fa_http.dart';
 import '../services/favorite_service.dart';
-import '../services/fa_thumbnail_parser.dart';
+import '../services/fa_thumbnail_processing.dart';
+import '../utils/app_logging.dart';
 import '../utils/content_rating_filters.dart';
 import '../widgets/PulsatingLoadingIndicator.dart';
 import '../widgets/heart_animation.dart';
 import '../widgets/fa_thumbnail_display.dart';
+import 'cloudflare_check_screen.dart';
 import 'openpost.dart';
 
 class FAImageGrid extends StatefulWidget {
@@ -25,6 +27,8 @@ class FAImageGrid extends StatefulWidget {
 }
 
 class FAImageGridState extends State<FAImageGrid> {
+  static const double _nextPageLeadScreens = 2.5;
+
   int currentPage = 1;
   bool isLoading = false;
   bool hasMore = true;
@@ -57,6 +61,10 @@ class FAImageGridState extends State<FAImageGrid> {
 
   bool _sfwEnabled = true;
   late final Future<void> _sfwLoadFuture;
+  bool _isHandlingCloudflareChallenge = false;
+  double _nextPageTriggerOffset = double.infinity;
+  bool _pendingNextPageFetch = false;
+  bool _isNextPageFetchQueued = false;
 
   @override
   void initState() {
@@ -99,13 +107,20 @@ class FAImageGridState extends State<FAImageGrid> {
   }
 
   void _scrollListener() {
-    if (_scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent * 0.4 &&
-        !isLoading &&
-        hasMore) {
-      currentPage++;
-      _fetchImages(currentPage);
+    if (!_scrollController.hasClients ||
+        isLoading ||
+        _isNextPageFetchQueued ||
+        !hasMore ||
+        _isHandlingCloudflareChallenge) {
+      return;
     }
+
+    if (!_hasReachedNextPageTrigger(_scrollController.position)) {
+      return;
+    }
+
+    _pendingNextPageFetch = true;
+    _tryStartPendingNextPageFetch();
   }
 
   Future<void> _refreshImages() async {
@@ -116,6 +131,9 @@ class FAImageGridState extends State<FAImageGrid> {
       normalImagesQueue.clear();
       currentPage = 1;
       hasMore = true;
+      _nextPageTriggerOffset = double.infinity;
+      _pendingNextPageFetch = false;
+      _isNextPageFetchQueued = false;
       _favoritedImages.clear();
       _favUrls.clear();
       _unfavUrls.clear();
@@ -125,9 +143,22 @@ class FAImageGridState extends State<FAImageGrid> {
     await _fetchImages(currentPage, isRefresh: true);
   }
 
-  Future<void> _fetchImages(int pageNumber, {bool isRefresh = false}) async {
+  Future<void> _fetchImages(
+    int pageNumber, {
+    bool isRefresh = false,
+    int remainingCloudflareRecoveries = 2,
+  }) async {
     if (isLoading || !hasMore) return;
-    setState(() => isLoading = true);
+    kDebugPrint('[Browse] Fetching page $pageNumber${isRefresh ? ' (refresh)' : ''}');
+    final previousMaxScrollExtent = isRefresh || !_scrollController.hasClients
+        ? 0.0
+        : _scrollController.position.maxScrollExtent;
+    final shouldRebuildImmediately = isRefresh || imageRows.isEmpty;
+    if (shouldRebuildImmediately) {
+      setState(() => isLoading = true);
+    } else {
+      isLoading = true;
+    }
 
     try {
       if (isRefresh) {
@@ -137,10 +168,14 @@ class FAImageGridState extends State<FAImageGrid> {
         normalImagesQueue.clear();
         currentPage = 1;
         hasMore = true;
+        _nextPageTriggerOffset = double.infinity;
+        _pendingNextPageFetch = false;
+        _isNextPageFetchQueued = false;
       }
 
       final cookieHeader = await _getAllCookies();
       final uri = Uri.parse('https://www.furaffinity.net/browse/$pageNumber');
+      Uri currentUri = uri;
 
       final headers = {
         HttpHeaders.cookieHeader:
@@ -158,14 +193,12 @@ class FAImageGridState extends State<FAImageGrid> {
         'rating_general': getFilterValue('rating-general'),
         'rating_mature': getFilterValue('rating-mature'),
         'rating_adult': getFilterValue('rating-adult'),
-        'perpage': '48',
+        'perpage': '72',
         'btn': 'Next',
       };
 
-      // POST browse filters (FA may redirect to /search/… depending on filters)
       var resp = await FAHttp.post(uri, headers: headers, body: body);
 
-      // Follow redirect if present
       if (resp.isRedirect ||
           (resp.statusCode >= 300 && resp.statusCode < 400)) {
         final loc = resp.headers['location'];
@@ -173,6 +206,7 @@ class FAImageGridState extends State<FAImageGrid> {
           throw Exception('Redirect without Location header');
         }
         final redirectUri = uri.resolve(loc);
+        currentUri = redirectUri;
         resp = await FAHttp.get(
           redirectUri,
           headers: {
@@ -185,36 +219,229 @@ class FAImageGridState extends State<FAImageGrid> {
         );
       }
 
+      final refreshedCf = FaCookieHelper.extractCfClearanceFromSetCookieHeader(
+        resp.headers['set-cookie'],
+      );
+      if (refreshedCf != null && refreshedCf.isNotEmpty) {
+        await FaCookieHelper.writeCfClearance(refreshedCf);
+      }
+
+      final isChallenge = FaCookieHelper.isCloudflareChallengePage(
+        body: resp.body,
+        statusCode: resp.statusCode,
+      );
+      if (isChallenge) {
+        throw _CloudflareChallengeException(initialUrl: currentUri.toString());
+      }
+
       if (resp.statusCode == 200) {
         final newImages = await parseHtml(resp.body);
-        if (newImages.isEmpty) setState(() => hasMore = false);
-
-        final filtered =
-            newImages.where((img) => !imageUrls.contains(img['url'])).toList();
-        for (final img in filtered) {
-          imageUrls.add(img['url']);
-        }
-
-        setState(() {
-          _isError = false;
-          _errorMessage = null;
-          images.addAll(filtered);
-          _processImagesIntoRows(filtered);
-          _preloadImagesImmediately(filtered);
-          isLoading = false;
-        });
+        await _appendImages(
+          newImages,
+          previousMaxScrollExtent: previousMaxScrollExtent,
+        );
       } else {
         setState(() => isLoading = false);
         throw Exception(
             'FAImageGrid: HTTP ${resp.statusCode} fetching images.');
       }
+    } on _CloudflareChallengeException catch (e) {
+      kDebugPrint('Cloudflare challenge detected while fetching browse images.');
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+
+      if (remainingCloudflareRecoveries <= 0) {
+        _pendingNextPageFetch = false;
+        _isNextPageFetchQueued = false;
+        _nextPageTriggerOffset = _scrollController.hasClients
+            ? _scrollController.position.pixels + 1
+            : double.infinity;
+        return;
+      }
+
+      final result = await _showCloudflareDialog(initialUrl: e.initialUrl);
+      if (result?.passed != true || !mounted) {
+        _pendingNextPageFetch = false;
+        _isNextPageFetchQueued = false;
+        _nextPageTriggerOffset = _scrollController.hasClients
+            ? _scrollController.position.pixels + 1
+            : double.infinity;
+        return;
+      }
+
+      final recoveredHtml = result?.pageHtml;
+      if (recoveredHtml != null && recoveredHtml.isNotEmpty) {
+        final recoveredImages = await parseHtml(recoveredHtml);
+        await _appendImages(
+          recoveredImages,
+          previousMaxScrollExtent: previousMaxScrollExtent,
+        );
+        return;
+      }
+
+      await _fetchImages(
+        pageNumber,
+        isRefresh: isRefresh,
+        remainingCloudflareRecoveries: remainingCloudflareRecoveries - 1,
+      );
     } catch (e) {
       setState(() {
+        _pendingNextPageFetch = false;
+        _isNextPageFetchQueued = false;
         isLoading = false;
         _isError = true;
         _errorMessage = e.toString();
       });
-      debugPrint('FAImageGrid: Error fetching images => $e');
+      kDebugPrint('FAImageGrid: Error fetching images => $e');
+      _nextPageTriggerOffset = _scrollController.hasClients
+          ? _scrollController.position.pixels + 1
+          : double.infinity;
+    }
+  }
+
+  Future<void> _appendImages(
+    List<Map<String, dynamic>> newImages, {
+    required double previousMaxScrollExtent,
+  }) async {
+    final filtered =
+        newImages.where((img) => !imageUrls.contains(img['url'])).toList();
+    for (final img in filtered) {
+      imageUrls.add(img['url']);
+    }
+
+    final rowProcessing = await processFaImageRows(
+      newImages: filtered,
+      normalImagesQueue: normalImagesQueue,
+    );
+    final appendedRows = (rowProcessing['rows'] as List)
+        .map(
+          (row) => List<Map<String, dynamic>>.from(row as List),
+        )
+        .toList();
+    final nextQueue =
+        List<Map<String, dynamic>>.from(rowProcessing['queue'] as List);
+
+    if (!mounted) return;
+
+    setState(() {
+      _isError = false;
+      _errorMessage = null;
+      hasMore = newImages.isNotEmpty && filtered.isNotEmpty;
+      images.addAll(filtered);
+      imageRows.addAll(appendedRows);
+      normalImagesQueue = nextQueue;
+      _pendingNextPageFetch = false;
+      _isNextPageFetchQueued = false;
+      isLoading = false;
+    });
+
+    _scheduleNextPageTrigger(previousMaxScrollExtent: previousMaxScrollExtent);
+  }
+
+  void _scheduleNextPageTrigger({required double previousMaxScrollExtent}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !hasMore) {
+        _pendingNextPageFetch = false;
+        _isNextPageFetchQueued = false;
+        _nextPageTriggerOffset = double.infinity;
+        return;
+      }
+
+      if (!_scrollController.hasClients) {
+        _scheduleNextPageTrigger(
+          previousMaxScrollExtent: previousMaxScrollExtent,
+        );
+        return;
+      }
+
+      final newMaxScrollExtent = _scrollController.position.maxScrollExtent;
+      final addedExtent = newMaxScrollExtent - previousMaxScrollExtent;
+      if (addedExtent <= 0) {
+        _pendingNextPageFetch = false;
+        _isNextPageFetchQueued = false;
+        _nextPageTriggerOffset = double.infinity;
+        return;
+      }
+
+      _nextPageTriggerOffset =
+          previousMaxScrollExtent + (addedExtent * 0.6);
+    });
+  }
+
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.vertical) return false;
+
+    if (!mounted ||
+        isLoading ||
+        _isNextPageFetchQueued ||
+        !hasMore ||
+        _isHandlingCloudflareChallenge) {
+      return false;
+    }
+
+    if (_hasReachedNextPageTrigger(notification.metrics)) {
+      _pendingNextPageFetch = true;
+      _tryStartPendingNextPageFetch();
+    }
+
+    return false;
+  }
+
+  void _tryStartPendingNextPageFetch() {
+    if (!_pendingNextPageFetch ||
+        !_scrollController.hasClients ||
+        isLoading ||
+        _isNextPageFetchQueued ||
+        !hasMore ||
+        _isHandlingCloudflareChallenge) {
+      return;
+    }
+    if (!_hasReachedNextPageTrigger(_scrollController.position)) {
+      return;
+    }
+
+    _pendingNextPageFetch = false;
+    _isNextPageFetchQueued = true;
+    _nextPageTriggerOffset = double.infinity;
+    final nextPage = currentPage + 1;
+    currentPage = nextPage;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        _isNextPageFetchQueued = false;
+        return;
+      }
+      unawaited(_fetchImages(nextPage));
+    });
+  }
+
+  bool _hasReachedNextPageTrigger(ScrollMetrics metrics) {
+    final reachedPageThreshold = metrics.pixels >= _nextPageTriggerOffset;
+    final reachedLeadThreshold =
+        metrics.extentAfter <= metrics.viewportDimension * _nextPageLeadScreens;
+    return reachedPageThreshold || reachedLeadThreshold;
+  }
+
+  Future<CloudflareCheckResult?> _showCloudflareDialog({
+    String? initialUrl,
+  }) async {
+    if (!mounted || _isHandlingCloudflareChallenge) return null;
+    _isHandlingCloudflareChallenge = true;
+    try {
+      return await showDialog<CloudflareCheckResult>(
+        context: context,
+        barrierDismissible: false,
+        useSafeArea: false,
+        builder: (_) => CloudflareCheckScreen(
+          initialUrl: initialUrl ?? 'https://www.furaffinity.net/',
+          returnPageHtml: true,
+        ),
+      );
+    } finally {
+      _isHandlingCloudflareChallenge = false;
     }
   }
 
@@ -249,64 +476,11 @@ class FAImageGridState extends State<FAImageGrid> {
 
   /// Parses the browse page HTML for the thumbnail images
   Future<List<Map<String, dynamic>>> parseHtml(String html) async {
-    final document = parse(html);
-    final figures = FaThumbnailParser.selectThumbnailFigures(document);
-    final imageMetadata = <Map<String, dynamic>>[];
-
-    for (final fig in figures) {
-      final data = FaThumbnailParser.extract(fig);
-      if (data == null) continue;
-      imageMetadata.add({
-        'url': data['thumbnailUrl'],
-        'width': data['width'],
-        'height': data['height'],
-        'uniqueNumber': data['uniqueNumber'],
-        'rating': data['rating'],
-        'title': data['title'],
-        'author': data['author'],
-        'postUrl': data['postUrl'],
-      });
-    }
-
+    final imageMetadata = await parseFaThumbnailHtml(html);
+    kDebugPrint(
+      '[Browse] HTML parser found ${imageMetadata.length} usable thumbnails.',
+    );
     return imageMetadata;
-  }
-
-  bool isWideImage(Map<String, dynamic> image) {
-    final double width = image['width'];
-    final double height = image['height'];
-    final double aspectRatio = width / height;
-    return aspectRatio > 1.5;
-  }
-
-  void _processImagesIntoRows(List<Map<String, dynamic>> newImages) {
-    for (var image in newImages) {
-      if (isWideImage(image)) {
-        if (normalImagesQueue.isNotEmpty) {
-          imageRows.add([normalImagesQueue.removeAt(0), image]);
-        } else {
-          imageRows.add([image]);
-        }
-      } else {
-        normalImagesQueue.add(image);
-      }
-    }
-
-    while (normalImagesQueue.length >= 2) {
-      imageRows.add([
-        normalImagesQueue.removeAt(0),
-        normalImagesQueue.removeAt(0),
-      ]);
-    }
-
-    if (normalImagesQueue.isNotEmpty) {
-      imageRows.add([normalImagesQueue.removeAt(0)]);
-    }
-  }
-
-  void _preloadImagesImmediately(List<Map<String, dynamic>> fetchedImages) {
-    for (var image in fetchedImages) {
-      precacheImage(NetworkImage(image['url']), context);
-    }
   }
 
   /// Fetch post details (like /fav/ or /unfav/ links) for [uniqueNumber].
@@ -431,63 +605,67 @@ class FAImageGridState extends State<FAImageGrid> {
 
     return RefreshIndicator(
       onRefresh: _refreshImages,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-        child: imageRows.isEmpty
-            ? ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  SizedBox(height: screenHeight * 0.25),
-                  if (isLoading)
-                    const Center(
-                      child: PulsatingLoadingIndicator(
-                        size: 88.0,
-                        assetPath: 'assets/icons/fathemed.png',
-                      ),
-                    )
-                  else
-                    Center(
-                      child: Text(
-                        _isError
-                            ? 'Network error. Pull to retry.'
-                            : 'No results. Pull to refresh.',
-                      ),
-                    ),
-                  if (!isLoading && _errorMessage != null)
-                    const SizedBox(height: 8),
-                  if (!isLoading && _errorMessage != null)
-                    Text(
-                      _errorMessage!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                ],
-              )
-            : ListView.builder(
-                physics: const AlwaysScrollableScrollPhysics(
-                    parent: BouncingScrollPhysics()),
-                controller: _scrollController,
-                itemCount: imageRows.length + (isLoading ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == imageRows.length) {
-                    return const Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Center(
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _handleScrollNotification,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+          child: imageRows.isEmpty
+              ? ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    SizedBox(height: screenHeight * 0.25),
+                    if (isLoading)
+                      const Center(
                         child: PulsatingLoadingIndicator(
-                          size: 58.0,
+                          size: 88.0,
                           assetPath: 'assets/icons/fathemed.png',
                         ),
+                      )
+                    else
+                      Center(
+                        child: Text(
+                          _isError
+                              ? 'Network error. Pull to retry.'
+                              : 'No results. Pull to refresh.',
+                        ),
                       ),
-                    );
-                  }
+                    if (!isLoading && _errorMessage != null)
+                      const SizedBox(height: 8),
+                    if (!isLoading && _errorMessage != null)
+                      Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                  ],
+                )
+              : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics()),
+                  controller: _scrollController,
+                  cacheExtent: screenHeight * 1.5,
+                  itemCount: imageRows.length + (isLoading ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == imageRows.length) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(
+                          child: PulsatingLoadingIndicator(
+                            size: 58.0,
+                            assetPath: 'assets/icons/fathemed.png',
+                          ),
+                        ),
+                      );
+                    }
 
-                  final rowImages = imageRows[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2.0),
-                    child: _buildImageRow(rowImages, maxHeight),
-                  );
-                },
-              ),
+                    final rowImages = imageRows[index];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2.0),
+                      child: _buildImageRow(rowImages, maxHeight),
+                    );
+                  },
+                ),
+        ),
       ),
     );
   }
@@ -618,6 +796,12 @@ class FAImageGridState extends State<FAImageGrid> {
       },
     );
   }
+}
+
+class _CloudflareChallengeException implements Exception {
+  final String? initialUrl;
+
+  const _CloudflareChallengeException({this.initialUrl});
 }
 
 class _FavImageTile extends StatefulWidget {
