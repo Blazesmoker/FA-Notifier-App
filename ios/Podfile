@@ -48,10 +48,11 @@ post_install do |installer|
         # Enable camera permission if needed (e.g., when sharing images that might require camera usage)
         'PERMISSION_CAMERA=1',
         # Enable media library permission (if you're accessing or sharing media files)
-        'PERMISSION_MEDIA_LIBRARY=1'
+        'PERMISSION_MEDIA_LIBRARY=1',
+        # Enable notification permission checks for permission_handler on iOS
+        'PERMISSION_NOTIFICATIONS=1'
       ]
       config.build_settings['CODE_SIGN_ENTITLEMENTS'] = ''
     end
   end
 end
-
