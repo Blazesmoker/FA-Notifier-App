@@ -1567,9 +1567,6 @@ class _OpenPostState extends State<OpenPost>
       passwordController.dispose();
       passwordFocusNode.dispose();
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      passwordFocusNode.requestFocus();
-    });
   }
 
   Future<void> _confirmDeletion(

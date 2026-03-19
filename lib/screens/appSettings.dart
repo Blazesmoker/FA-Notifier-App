@@ -77,7 +77,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
           ),
           ListTile(
             leading: const Icon(Icons.notifications, color: Color(0xFFE09321)),
-            title: const Text('Notifications Settings'),
+            title: const Text('Notification Settings'),
             onTap: () {
               Navigator.push(
                 context,

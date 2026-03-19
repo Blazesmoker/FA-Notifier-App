@@ -4,9 +4,11 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -14,7 +16,8 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var customEngine: FlutterEngine? = null
-    private val CHANNEL = "com.blazesmoker.fanotifier/icon"
+    private val iconChannel = "com.blazesmoker.fanotifier/icon"
+    private val settingsChannel = "com.blazesmoker.fanotifier/settings"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,13 +34,31 @@ class MainActivity : FlutterActivity() {
         PlatformViewsHandlerFix.fix(flutterEngine.platformViewsController)
 
         // Listen for "switchIcon" calls from Flutter
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, iconChannel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "switchIcon" -> {
                         val useAdaptive = call.argument<Boolean>("useAdaptive") ?: false
                         switchAppIcon(useAdaptive)
                         result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, settingsChannel)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "openAppSettings" -> {
+                        try {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                addCategory(Intent.CATEGORY_DEFAULT)
+                                data = Uri.parse("package:$packageName")
+                            }
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.success(false)
+                        }
                     }
                     else -> result.notImplemented()
                 }

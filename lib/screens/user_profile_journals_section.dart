@@ -1,8 +1,10 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 
 import 'profilejournals.dart';
 
-class UserProfileJournalsSection extends StatelessWidget {
+class UserProfileJournalsSection extends StatefulWidget {
   const UserProfileJournalsSection({
     super.key,
     required this.sanitizedUsername,
@@ -17,7 +19,18 @@ class UserProfileJournalsSection extends StatelessWidget {
   final VoidCallback onCreateJournalPressed;
 
   @override
+  State<UserProfileJournalsSection> createState() =>
+      _UserProfileJournalsSectionState();
+}
+
+class _UserProfileJournalsSectionState extends State<UserProfileJournalsSection>
+    with AutomaticKeepAliveClientMixin<UserProfileJournalsSection> {
+  @override
+  bool get wantKeepAlive => Platform.isAndroid;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
@@ -30,9 +43,9 @@ class UserProfileJournalsSection extends StatelessWidget {
                   'Journals',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
-                if (isOwnProfile)
+                if (widget.isOwnProfile)
                   ElevatedButton(
-                    onPressed: onCreateJournalPressed,
+                    onPressed: widget.onCreateJournalPressed,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Color(0xFFE09321),
                     ),
@@ -48,12 +61,11 @@ class UserProfileJournalsSection extends StatelessWidget {
           ),
         ),
         ProfileJournals(
-          key: journalsKey,
-          username: sanitizedUsername,
+          key: widget.journalsKey,
+          username: widget.sanitizedUsername,
         ),
       ],
     );
   }
 }
-
 

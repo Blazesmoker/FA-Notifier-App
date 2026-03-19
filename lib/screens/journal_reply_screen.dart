@@ -202,19 +202,27 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
 
               Row(
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: Image.network(
-                      widget.profileImage,
+                  Image.network(
+                    widget.profileImage,
+                    width: 36,
+                    height: 36,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) {
+                        return child;
+                      }
+                      return Image.asset(
+                        'assets/images/defaultpic.gif',
+                        width: 36,
+                        height: 36,
+                        fit: BoxFit.cover,
+                      );
+                    },
+                    errorBuilder: (_, __, ___) => Image.asset(
+                      'assets/images/defaultpic.gif',
                       width: 36,
                       height: 36,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        width: 36,
-                        height: 36,
-                        color: Colors.grey,
-                        child: const Icon(Icons.person),
-                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
