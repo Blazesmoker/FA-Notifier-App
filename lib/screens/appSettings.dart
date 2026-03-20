@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'notificationsSettings.dart';
 import 'thumbnail_display_settings_screen.dart';
 import 'app_icon_settings_screen.dart';
+import 'set_home_screen_screen.dart';
 
 class AppSettingsScreen extends StatefulWidget {
   const AppSettingsScreen({Key? key}) : super(key: key);
@@ -60,7 +61,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               Icons.photo_library_outlined,
               color: Color(0xFFE09321),
             ),
-            title: const Text('Thumbnail display'),
+            title: const Text('Thumbnail Display'),
             onTap: () {
               Navigator.push(
                 context,
@@ -83,6 +84,26 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => const NotificationsSettingsScreen(),
+                ),
+              );
+            },
+          ),
+          const Divider(
+            height: 1.0,
+            color: Color(0xFF111111),
+            thickness: 3.0,
+          ),
+          ListTile(
+            leading: const Icon(
+              Icons.home_sharp,
+              color: Color(0xFFE09321),
+            ),
+            title: const Text('Set Home Screen'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const SetHomeScreenScreen(),
                 ),
               );
             },

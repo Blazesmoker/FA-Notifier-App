@@ -12,7 +12,7 @@ class ThumbnailDisplaySettingsScreen extends StatelessWidget {
     final settings = context.watch<ThumbnailDisplaySettingsProvider>();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Thumbnail display'),
+        title: const Text('Thumbnail Display'),
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 8.0),

@@ -43,6 +43,8 @@ class _AndroidUserProfilePageRoute<T> extends PageRoute<T> {
     this.allowSnapshotting = true,
     this.fullscreenDialog = false,
     this.maintainState = true,
+    this.routeTransitionDuration = const Duration(milliseconds: 280),
+    this.routeReverseTransitionDuration = const Duration(milliseconds: 280),
   });
 
   final WidgetBuilder builder;
@@ -51,6 +53,8 @@ class _AndroidUserProfilePageRoute<T> extends PageRoute<T> {
   final bool fullscreenDialog;
   @override
   final bool maintainState;
+  final Duration routeTransitionDuration;
+  final Duration routeReverseTransitionDuration;
 
   @override
   bool get opaque => false;
@@ -62,10 +66,10 @@ class _AndroidUserProfilePageRoute<T> extends PageRoute<T> {
   String? get barrierLabel => null;
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 280);
+  Duration get transitionDuration => routeTransitionDuration;
 
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 280);
+  Duration get reverseTransitionDuration => routeReverseTransitionDuration;
 
   @override
   Widget buildPage(
@@ -97,6 +101,24 @@ class _AndroidUserProfilePageRoute<T> extends PageRoute<T> {
   }
 }
 
+class _InstantCupertinoUserProfilePageRoute<T> extends CupertinoPageRoute<T> {
+  _InstantCupertinoUserProfilePageRoute({
+    required super.builder,
+    super.settings,
+    super.requestFocus,
+    super.maintainState = true,
+    super.fullscreenDialog,
+    super.allowSnapshotting = true,
+    super.barrierDismissible = false,
+  });
+
+  @override
+  Duration get transitionDuration => Duration.zero;
+
+  @override
+  Duration get reverseTransitionDuration => Duration.zero;
+}
+
 class UserProfileScreen extends StatefulWidget {
   final String nickname;
   final ProfileSection initialSection;
@@ -116,6 +138,7 @@ class UserProfileScreen extends StatefulWidget {
     String? initialFolderUrl,
     String? initialFolderName,
     RouteSettings? settings,
+    bool instant = false,
   }) {
     final builder = (BuildContext context) => UserProfileScreen(
           nickname: nickname,
@@ -128,13 +151,21 @@ class UserProfileScreen extends StatefulWidget {
       return _AndroidUserProfilePageRoute<T>(
         settings: settings,
         builder: builder,
+        routeTransitionDuration:
+            instant ? Duration.zero : const Duration(milliseconds: 280),
+        routeReverseTransitionDuration:
+            instant ? Duration.zero : const Duration(milliseconds: 280),
       );
     }
 
-    return CupertinoPageRoute<T>(
-      settings: settings,
-      builder: builder,
-    );
+    if (instant) {
+      return _InstantCupertinoUserProfilePageRoute<T>(
+        settings: settings,
+        builder: builder,
+      );
+    }
+
+    return CupertinoPageRoute<T>(settings: settings, builder: builder);
   }
 
   @override

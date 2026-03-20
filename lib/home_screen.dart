@@ -7,6 +7,7 @@ import 'package:FANotifier/screens/notifications_screen.dart';
 import 'package:FANotifier/screens/search_screen.dart';
 import 'package:FANotifier/screens/submissions_screen.dart';
 import 'package:FANotifier/screens/upload_submission.dart';
+import 'package:FANotifier/screens/user_profile_screen.dart';
 import 'package:FANotifier/services/fa_activities_polling_service.dart';
 import 'package:FANotifier/services/fa_cookie_helper.dart';
 import 'package:FANotifier/services/fa_notification_service.dart';
@@ -28,6 +29,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'package:FANotifier/widgets/confirm_close_dialog.dart';
 import 'package:FANotifier/utils/content_rating_filters.dart';
+import 'package:FANotifier/utils/home_start_screen_preference.dart';
 import 'custom_drawer/drawer_user_controller.dart';
 import 'app_theme.dart';
 import 'model/user_profile.dart';
@@ -55,6 +57,10 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isLoggedIn = false;
   bool _forceNotesRefresh = false;
   bool _sfwEnabled = true;
+  HomeStartScreenPreference _homeStartScreenPreference =
+      HomeStartScreenPreference.browse;
+  bool _didOpenStartupProfile = false;
+  bool _isOpeningStartupProfile = false;
 
   bool _profileFetched = false;
 
@@ -114,6 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
         Provider.of<NotificationNavigationProvider>(context, listen: false);
     _navProvider.addListener(_handleNavProviderChange);
 
+    _loadHomeStartScreenPreference();
     _initializeAndLoadLoginState();
     _handlePendingNavigation();
 
@@ -146,6 +153,23 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectedIndex = next;
       if (next == 4) _forceNotesRefresh = true;
     });
+  }
+
+  Future<void> _loadHomeStartScreenPreference() async {
+    final preference = await loadHomeStartScreenPreference();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _homeStartScreenPreference = preference;
+      if (preference == HomeStartScreenPreference.submissions &&
+          _selectedIndex == 0) {
+        _selectedIndex = 2;
+      }
+    });
+
+    _maybeOpenStartupProfile();
   }
 
   Future<void> _handlePendingNavigation() async {
@@ -294,6 +318,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _userProfile = profile;
         isLoadingProfile = false;
       });
+      _maybeOpenStartupProfile();
     } catch (e) {
       debugPrint("Error fetching user profile: $e");
       setState(() {
@@ -312,6 +337,9 @@ class _HomeScreenState extends State<HomeScreen> {
     bool savedLoginState = prefs.getBool('isLoggedIn') ?? false;
     setState(() {
       isLoggedIn = savedLoginState;
+      if (!savedLoginState) {
+        _didOpenStartupProfile = false;
+      }
     });
   }
 
@@ -409,6 +437,78 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onNoteCounterTap() {
     _changeIndex(DrawerIndex.Notes);
+  }
+
+  bool get _shouldHoldForStartupProfile {
+    if (_homeStartScreenPreference != HomeStartScreenPreference.profile ||
+        !isLoggedIn ||
+        _selectedIndex != 0) {
+      return false;
+    }
+
+    if (_isOpeningStartupProfile) {
+      return true;
+    }
+
+    if (_didOpenStartupProfile) {
+      return false;
+    }
+
+    if (isLoadingProfile || _userProfile == null) {
+      return true;
+    }
+
+    return _userProfile!.profileImageUrl.isNotEmpty;
+  }
+
+  void _maybeOpenStartupProfile() {
+    if (!mounted ||
+        _isOpeningStartupProfile ||
+        _didOpenStartupProfile ||
+        _homeStartScreenPreference != HomeStartScreenPreference.profile ||
+        _selectedIndex != 0) {
+      return;
+    }
+
+    final profile = _userProfile;
+    if (profile == null || profile.profileImageUrl.isEmpty) {
+      return;
+    }
+
+    final String imageUrl = profile.profileImageUrl;
+    final String filename = imageUrl.split('/').last;
+    final String nickname = filename.contains('.')
+        ? filename.substring(
+            0,
+            filename.lastIndexOf('.'),
+          )
+        : filename;
+    final String lowercaseNickname = nickname.toLowerCase();
+    debugPrint("Extracted nickname: $lowercaseNickname");
+
+    setState(() {
+      _didOpenStartupProfile = true;
+      _isOpeningStartupProfile = true;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).push(
+        UserProfileScreen.route<void>(
+          nickname: lowercaseNickname,
+          instant: true,
+        ),
+      ).whenComplete(() {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _isOpeningStartupProfile = false;
+        });
+      });
+    });
   }
 
   Widget _buildWebView() {
@@ -605,7 +705,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMainAppScreen(BuildContext context) {
-    if (isLoadingProfile || _userProfile == null) {
+    if (_shouldHoldForStartupProfile ||
+        isLoadingProfile ||
+        _userProfile == null) {
       return const Center(
           child: PulsatingLoadingIndicator(
               size: 108.0, assetPath: 'assets/icons/fathemed.png'));
@@ -832,6 +934,8 @@ class _HomeScreenState extends State<HomeScreen> {
         isLoadingProfile = false;
         drawerIndex = DrawerIndex.HOME;
         _selectedIndex = 0;
+        _didOpenStartupProfile = false;
+        _isOpeningStartupProfile = false;
       });
 
       Navigator.of(context).pop();
@@ -946,110 +1050,114 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           child: Scaffold(
             body: isLoggedIn ? _buildMainAppScreen(context) : _buildWebView(),
-            bottomNavigationBar: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Divider(
-                  height: 1.0,
-                  color: Color(0xFF111111),
-                  thickness: 3.0,
-                ),
-                Theme(
-                  data: Theme.of(context).copyWith(
-                    splashFactory: NoSplash.splashFactory,
-                  ),
-                  child: BottomNavigationBar(
-                    type: BottomNavigationBarType.shifting,
-                    items: [
-                      BottomNavigationBarItem(
-                        icon: const Icon(Icons.home),
-                        label: 'Browse',
-                        backgroundColor: AppTheme.background,
+            bottomNavigationBar: _shouldHoldForStartupProfile
+                ? null
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Divider(
+                        height: 1.0,
+                        color: Color(0xFF111111),
+                        thickness: 3.0,
                       ),
-                      BottomNavigationBarItem(
-                        icon: const Icon(Icons.search),
-                        label: 'Search',
-                        backgroundColor: AppTheme.background,
-                      ),
-                      BottomNavigationBarItem(
-                        icon: Image.asset(
-                          'assets/icons/submissions.png',
-                          width: 27,
-                          height: 27,
-                          color: Colors.grey,
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          splashFactory: NoSplash.splashFactory,
                         ),
-                        activeIcon: Image.asset(
-                          'assets/icons/submissions.png',
-                          width: 27,
-                          height: 27,
-                          color: const Color(0xFFE09321),
-                        ),
-                        label: 'Submissions',
-                        backgroundColor: AppTheme.background,
-                      ),
-                      BottomNavigationBarItem(
-                        icon: badges.Badge(
-                          badgeContent: SizedBox(
-                            width: 13,
-                            height: 13,
-                            child: Center(
-                              child: FittedBox(
-                                child: Text(
-                                  _getNotificationsEnabledSum(
-                                          settings, faNotificationService)
-                                      .toString(),
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ),
+                        child: BottomNavigationBar(
+                          type: BottomNavigationBarType.shifting,
+                          items: [
+                            BottomNavigationBarItem(
+                              icon: const Icon(Icons.home),
+                              label: 'Browse',
+                              backgroundColor: AppTheme.background,
                             ),
-                          ),
-                          showBadge: _getNotificationsEnabledSum(
-                                  settings, faNotificationService) >
-                              0,
-                          child: const Icon(Icons.notifications),
-                          position:
-                              badges.BadgePosition.topEnd(top: -5, end: -7),
-                          padding: const EdgeInsets.all(2),
-                          badgeColor: Colors.red,
-                        ),
-                        label: 'Notifications',
-                        backgroundColor: AppTheme.background,
-                      ),
-                      BottomNavigationBarItem(
-                        icon: badges.Badge(
-                          badgeContent: SizedBox(
-                            width: 13,
-                            height: 13,
-                            child: Center(
-                              child: FittedBox(
-                                child: Text(
-                                  _unreadCount.toString(),
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ),
+                            BottomNavigationBarItem(
+                              icon: const Icon(Icons.search),
+                              label: 'Search',
+                              backgroundColor: AppTheme.background,
                             ),
-                          ),
-                          showBadge: _unreadCount > 0,
-                          child: const Icon(Icons.mail),
-                          position:
-                              badges.BadgePosition.topEnd(top: -5, end: -7),
-                          padding: const EdgeInsets.all(2),
-                          badgeColor: Colors.red,
+                            BottomNavigationBarItem(
+                              icon: Image.asset(
+                                'assets/icons/submissions.png',
+                                width: 27,
+                                height: 27,
+                                color: Colors.grey,
+                              ),
+                              activeIcon: Image.asset(
+                                'assets/icons/submissions.png',
+                                width: 27,
+                                height: 27,
+                                color: const Color(0xFFE09321),
+                              ),
+                              label: 'Submissions',
+                              backgroundColor: AppTheme.background,
+                            ),
+                            BottomNavigationBarItem(
+                              icon: badges.Badge(
+                                badgeContent: SizedBox(
+                                  width: 13,
+                                  height: 13,
+                                  child: Center(
+                                    child: FittedBox(
+                                      child: Text(
+                                        _getNotificationsEnabledSum(
+                                                settings, faNotificationService)
+                                            .toString(),
+                                        style: const TextStyle(
+                                            color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                showBadge: _getNotificationsEnabledSum(
+                                        settings, faNotificationService) >
+                                    0,
+                                child: const Icon(Icons.notifications),
+                                position: badges.BadgePosition.topEnd(
+                                    top: -5, end: -7),
+                                padding: const EdgeInsets.all(2),
+                                badgeColor: Colors.red,
+                              ),
+                              label: 'Notifications',
+                              backgroundColor: AppTheme.background,
+                            ),
+                            BottomNavigationBarItem(
+                              icon: badges.Badge(
+                                badgeContent: SizedBox(
+                                  width: 13,
+                                  height: 13,
+                                  child: Center(
+                                    child: FittedBox(
+                                      child: Text(
+                                        _unreadCount.toString(),
+                                        style: const TextStyle(
+                                            color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                showBadge: _unreadCount > 0,
+                                child: const Icon(Icons.mail),
+                                position: badges.BadgePosition.topEnd(
+                                    top: -5, end: -7),
+                                padding: const EdgeInsets.all(2),
+                                badgeColor: Colors.red,
+                              ),
+                              label: 'Notes',
+                              backgroundColor: AppTheme.background,
+                            ),
+                          ],
+                          currentIndex: _selectedIndex,
+                          selectedItemColor: const Color(0xFFE09321),
+                          unselectedItemColor: Colors.grey,
+                          onTap: _onBottomNavigationItemTapped,
+                          showSelectedLabels: true,
+                          showUnselectedLabels: false,
                         ),
-                        label: 'Notes',
-                        backgroundColor: AppTheme.background,
                       ),
                     ],
-                    currentIndex: _selectedIndex,
-                    selectedItemColor: const Color(0xFFE09321),
-                    unselectedItemColor: Colors.grey,
-                    onTap: _onBottomNavigationItemTapped,
-                    showSelectedLabels: true,
-                    showUnselectedLabels: false,
                   ),
-                ),
-              ],
-            ),
           ),
         );
       },
