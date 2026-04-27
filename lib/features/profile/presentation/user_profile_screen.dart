@@ -1,0 +1,2713 @@
+// user_profile_screen.dart
+import 'dart:async';
+import 'dart:io' show Platform;
+import 'dart:math';
+import 'package:FANotifier/features/profile/presentation/user_description_webview.dart';
+import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_html/flutter_html.dart' as html_pkg;
+import 'package:url_launcher/url_launcher.dart';
+import 'package:url_launcher/url_launcher_string.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:FANotifier/main.dart';
+import 'package:FANotifier/features/profile/domain/shout.dart';
+import 'package:FANotifier/features/profile/domain/user_link.dart';
+import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:FANotifier/features/profile/presentation/user_profile_styles.dart';
+import 'package:FANotifier/features/profile/presentation/user_profile_components.dart';
+import 'package:FANotifier/features/journals/presentation/create_journal.dart';
+import 'package:FANotifier/features/notes/presentation/new_message.dart';
+import 'package:FANotifier/features/journals/presentation/openjournal.dart';
+import 'package:FANotifier/features/submissions/presentation/openpost.dart';
+import 'package:FANotifier/features/profile/presentation/profilegallery.dart';
+import 'package:FANotifier/features/profile/presentation/post_shout.dart';
+import 'package:FANotifier/features/profile/presentation/profilejournals.dart';
+import 'package:FANotifier/shared/utils/utils.dart';
+import 'package:FANotifier/features/profile/data/user_profile_api_service.dart';
+import 'package:FANotifier/features/profile/presentation/user_profile_sliver_helpers.dart';
+import 'package:FANotifier/features/profile/presentation/user_profile_favorites_section.dart';
+import 'package:FANotifier/features/profile/presentation/user_profile_gallery_section.dart';
+import 'package:FANotifier/features/profile/presentation/user_profile_home_section.dart';
+import 'package:FANotifier/features/profile/presentation/user_profile_journals_section.dart';
+import 'package:FANotifier/features/profile/presentation/user_profile_scraps_section.dart';
+
+class _AndroidUserProfilePageRoute<T> extends PageRoute<T> {
+  _AndroidUserProfilePageRoute({
+    required this.builder,
+    super.settings,
+    super.requestFocus,
+    this.allowSnapshotting = true,
+    this.fullscreenDialog = false,
+    this.maintainState = true,
+    this.routeTransitionDuration = const Duration(milliseconds: 280),
+    this.routeReverseTransitionDuration = const Duration(milliseconds: 280),
+  });
+
+  final WidgetBuilder builder;
+  final bool allowSnapshotting;
+  @override
+  final bool fullscreenDialog;
+  @override
+  final bool maintainState;
+  final Duration routeTransitionDuration;
+  final Duration routeReverseTransitionDuration;
+
+  @override
+  bool get opaque => false;
+
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  String? get barrierLabel => null;
+
+  @override
+  Duration get transitionDuration => routeTransitionDuration;
+
+  @override
+  Duration get reverseTransitionDuration => routeReverseTransitionDuration;
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    return builder(context);
+  }
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return SlideTransition(
+      position: animation.drive(
+        Tween<Offset>(
+          begin: const Offset(1.0, 0.0),
+          end: Offset.zero,
+        ).chain(
+          CurveTween(curve: Curves.easeOutCubic),
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _InstantCupertinoUserProfilePageRoute<T> extends CupertinoPageRoute<T> {
+  _InstantCupertinoUserProfilePageRoute({
+    required super.builder,
+    super.settings,
+    super.requestFocus,
+    super.maintainState = true,
+    super.fullscreenDialog,
+    super.allowSnapshotting = true,
+    super.barrierDismissible = false,
+  });
+
+  @override
+  Duration get transitionDuration => Duration.zero;
+
+  @override
+  Duration get reverseTransitionDuration => Duration.zero;
+}
+
+class UserProfileScreen extends StatefulWidget {
+  final String nickname;
+  final ProfileSection initialSection;
+  final String? initialFolderUrl;
+  final String? initialFolderName;
+  const UserProfileScreen({
+    Key? key,
+    required this.nickname,
+    this.initialSection = ProfileSection.Home,
+    this.initialFolderUrl,
+    this.initialFolderName,
+  }) : super(key: key);
+
+  static Route<T> route<T>({
+    required String nickname,
+    ProfileSection initialSection = ProfileSection.Home,
+    String? initialFolderUrl,
+    String? initialFolderName,
+    RouteSettings? settings,
+    bool instant = false,
+  }) {
+    final builder = (BuildContext context) => UserProfileScreen(
+          nickname: nickname,
+          initialSection: initialSection,
+          initialFolderUrl: initialFolderUrl,
+          initialFolderName: initialFolderName,
+        );
+
+    if (Platform.isAndroid) {
+      return _AndroidUserProfilePageRoute<T>(
+        settings: settings,
+        builder: builder,
+        routeTransitionDuration:
+            instant ? Duration.zero : const Duration(milliseconds: 280),
+        routeReverseTransitionDuration:
+            instant ? Duration.zero : const Duration(milliseconds: 280),
+      );
+    }
+
+    if (instant) {
+      return _InstantCupertinoUserProfilePageRoute<T>(
+        settings: settings,
+        builder: builder,
+      );
+    }
+
+    return CupertinoPageRoute<T>(settings: settings, builder: builder);
+  }
+
+  @override
+  UserProfileScreenState createState() => UserProfileScreenState();
+}
+
+enum ProfileSection { Home, Gallery, Scraps, Favs, Journals }
+
+class UserProfileScreenState extends State<UserProfileScreen>
+    with RouteAware, TickerProviderStateMixin {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)! as PageRoute);
+  }
+
+  @override
+  void dispose() {
+    _tabSettleTimer?.cancel();
+    _backSwipeAnimationController.dispose();
+    _tabController.dispose();
+    _scrollController.removeListener(_updateAvatarTransform);
+    _scrollController.removeListener(_onScrollForMoveUpFab);
+    _scrollController.dispose();
+    _backSwipeOffsetNotifier.dispose();
+    _showMoveUpFab.dispose();
+    routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  final GlobalKey<ProfileJournalsState> _journalsKey =
+      GlobalKey<ProfileJournalsState>();
+  final GlobalKey<UserDescriptionWebViewState> _webViewKey =
+      GlobalKey<UserDescriptionWebViewState>();
+
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(
+        accountName: 'flutter_secure_storage_service',
+        accessibility: KeychainAccessibility.first_unlock),
+  );
+  late final UserProfileApiService _api;
+
+  bool _sfwEnabled = true;
+
+  Future<void> _loadSfwEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+    });
+  }
+
+  /// Handles long-press on the user description for copy/select actions.
+  Future<void> _handleDescriptionLongPress(
+      LongPressStartDetails details) async {
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RelativeRect position = RelativeRect.fromRect(
+      details.globalPosition & const Size(40, 40),
+      Offset.zero & overlay.size,
+    );
+    final selected = await showMenu<String>(
+      context: context,
+      position: position,
+      items: const [
+        PopupMenuItem<String>(
+          value: 'copy',
+          child: Text('Copy'),
+        ),
+        PopupMenuItem<String>(
+          value: 'select',
+          child: Text('Select Text'),
+        ),
+      ],
+    );
+    if (selected == 'copy') {
+      final plainText = await _webViewKey.currentState?.getPlainText();
+      if (plainText != null) {
+        await Clipboard.setData(ClipboardData(text: plainText));
+        showAppSnackBar(context, 'Text copied to clipboard',
+            backgroundColor: Colors.green);
+      }
+    } else if (selected == 'select') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => UserDescriptionWebViewScreen(
+            sanitizedUsername: sanitizedUsername,
+            initialHtml: userDescription,
+          ),
+        ),
+      );
+    }
+  }
+
+  String _selectedFolderName = 'Main Gallery';
+  String _selectedFolderUrl = '';
+  List<FaFolder> _allFolders = [];
+
+  UserProfileParsed? _profileParsed;
+
+  String? get profileBannerUrl => _profileParsed?.profileBannerUrl;
+  String? get profileImageUrl => _profileParsed?.profileImageUrl;
+  String? get profileDisplayName => _profileParsed?.profileDisplayName;
+  String? get profileUserNamePart => _profileParsed?.profileUserNamePart;
+  String? get symbolUsername => _profileParsed?.symbolUsername;
+  String? get username => _profileParsed?.username;
+  String? get userTitle => _profileParsed?.userTitle;
+  String? get registrationDate => _profileParsed?.registrationDate;
+  String? get userDescription => _profileParsed?.userDescription;
+  bool get hasRealUserProfile => _profileParsed?.hasRealUserProfile ?? true;
+
+  bool get isClassicMarkup => _profileParsed?.isClassicMarkup ?? false;
+  bool get acceptingTrades => _profileParsed?.acceptingTrades ?? false;
+  bool get acceptingCommissions =>
+      _profileParsed?.acceptingCommissions ?? false;
+
+  List<String> get userIconBeforeUrls =>
+      _profileParsed?.userIconBeforeUrls ?? const [];
+  List<String> get userIconAfterUrls =>
+      _profileParsed?.userIconAfterUrls ?? const [];
+
+  int? get views => _profileParsed?.views;
+  int? get submissions => _profileParsed?.submissions;
+  int? get favs => _profileParsed?.favs;
+  int? get commentsEarned => _profileParsed?.commentsEarned;
+  int? get commentsMade => _profileParsed?.commentsMade;
+  int? get journals => _profileParsed?.journals;
+
+  bool get isWatching => _profileParsed?.isWatching ?? false;
+  String? get watchLink => _profileParsed?.watchLink;
+  String? get unwatchLink => _profileParsed?.unwatchLink;
+  String? get unblockLink => _profileParsed?.unblockLink;
+  String? get blockLink => _profileParsed?.blockLink;
+  bool get isBlocked => _profileParsed?.isBlocked ?? false;
+  bool get blockUsesPost => _profileParsed?.blockUsesPost ?? false;
+  bool get unblockUsesPost => _profileParsed?.unblockUsesPost ?? false;
+
+  String? get featuredImageUrl => _profileParsed?.featuredImageUrl;
+  String? get featuredImageTitle => _profileParsed?.featuredImageTitle;
+  String? get featuredPostNumber => _profileParsed?.featuredPostNumber;
+
+  String? get userProfileImageUrl => _profileParsed?.userProfileImageUrl;
+  String? get userProfilePostNumber => _profileParsed?.userProfilePostNumber;
+  String? get userProfileTexts => _profileParsed?.userProfileTexts;
+
+  List<Map<String, String>> get contactInformationLinks =>
+      _profileParsed?.contactInformationLinks ?? const [];
+
+  List<UserLink> get recentWatchers =>
+      _profileParsed?.recentWatchers ?? const [];
+  int get recentWatchersCount => _profileParsed?.recentWatchersCount ?? 0;
+
+  List<UserLink> get recentlyWatched =>
+      _profileParsed?.recentlyWatched ?? const [];
+  int get recentlyWatchedCount => _profileParsed?.recentlyWatchedCount ?? 0;
+
+  List<Shout> get shouts => _profileParsed?.shouts ?? <Shout>[];
+  String? get shoutPaginationKey => _profileParsed?.shoutPaginationKey;
+  int get currentShoutPage => _profileParsed?.currentShoutPage ?? 1;
+  int get totalShoutPages => _profileParsed?.totalShoutPages ?? 1;
+
+  bool get isOwnProfile => _profileParsed?.isOwnProfile ?? false;
+
+  bool _compareFolderUrls(String url1, String url2) {
+    final uri1 = Uri.parse(url1);
+    final uri2 = Uri.parse(url2);
+
+    String normalizePath(String path) =>
+        path.endsWith('/') ? path.substring(0, path.length - 1) : path;
+
+    return uri1.scheme == uri2.scheme &&
+        uri1.host == uri2.host &&
+        normalizePath(uri1.path) == normalizePath(uri2.path);
+  }
+
+  void _onFoldersParsed(List<FaFolder> folders) {
+    setState(() {
+      if (_selectedFolderUrl.isNotEmpty) {
+        final matchingFolder = folders.firstWhere(
+          (folder) => _compareFolderUrls(folder.url, _selectedFolderUrl),
+          orElse: () =>
+              FaFolder(name: _selectedFolderName, url: _selectedFolderUrl),
+        );
+        _selectedFolderName = matchingFolder.name;
+        if (!_compareFolderUrls(matchingFolder.url, _selectedFolderUrl)) {
+          _selectedFolderUrl = matchingFolder.url;
+        }
+      } else if (folders.isNotEmpty) {
+        final mainGallery = folders.firstWhere(
+          (f) => f.name == 'Main Gallery',
+          orElse: () => folders.first,
+        );
+        _selectedFolderName = mainGallery.name;
+      }
+
+      _allFolders = folders;
+    });
+  }
+
+  void _onFolderSelected(FaFolder folder) {
+    setState(() {
+      _selectedFolderName = folder.name;
+      _selectedFolderUrl = folder.url;
+    });
+  }
+
+  String sanitizedUsername = '';
+  bool isLoading = true;
+  bool _webViewLoaded = false;
+  String errorMessage = '';
+
+  static const double sliverAppBarExpandedHeight = 120.0;
+  static const double sliverAppBarMinHeight = kToolbarHeight - 80.0; // 56.0
+  static const double collapsibleHeaderMaxHeight = 110.0;
+  static const double navigationSliderHeight = 64.0;
+  static const double _androidBackSwipeDetectorWidth = 25.0;
+  static const double _androidBackSwipeTriggerWidth = 62.0;
+  static const double _androidBackSwipeMinDistance = 72.0;
+  static const double _androidBackSwipeMinVelocity = 700.0;
+
+  final double _bannerScaleStart = 0.0;
+  final double _bannerScaleEnd = 180.0;
+
+  late ScrollController _scrollController;
+  late final ValueNotifier<bool> _showMoveUpFab = ValueNotifier<bool>(false);
+  late final ValueNotifier<double> _backSwipeOffsetNotifier =
+      ValueNotifier<double>(0.0);
+  late final AnimationController _backSwipeAnimationController;
+  Animation<double>? _backSwipeOffsetAnimation;
+  bool _popAfterBackSwipeAnimation = false;
+
+  late TabController _tabController;
+
+  static const Duration _tabSettleDelay = Duration(milliseconds: 100);
+  Timer? _tabSettleTimer;
+  final Set<ProfileSection> _lazyLoadedSections = <ProfileSection>{};
+
+  int _previousIndex = 0;
+
+  late Future<String> _userDescriptionFuture;
+
+  final double _avatarFadeStart = 0.0;
+  final double _avatarFadeEnd = 140.0;
+  final double _avatarScaleStart = 0.0;
+  final double _avatarScaleEnd = 140.0;
+
+  bool isLoadingMoreShouts = false;
+  bool _isShoutSelectionMode = false;
+  bool _isDeletingSelectedShouts = false;
+  bool _isDraggingBackFromEdge = false;
+  double _backDragStartX = 0.0;
+  double _backDragDistance = 0.0;
+
+  double get _backSwipeOffset => _backSwipeOffsetNotifier.value;
+  set _backSwipeOffset(double value) => _backSwipeOffsetNotifier.value = value;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _api = UserProfileApiService(_secureStorage);
+
+    if (widget.initialFolderUrl != null &&
+        widget.initialFolderUrl!.isNotEmpty) {
+      _selectedFolderUrl = widget.initialFolderUrl!;
+      _selectedFolderName = widget.initialFolderName ?? _selectedFolderName;
+    }
+    if (widget.initialSection != ProfileSection.Home) {
+      _webViewLoaded = true;
+    }
+
+    _loadSfwEnabled();
+
+    _scrollController = ScrollController();
+    _scrollController.addListener(_updateAvatarTransform);
+    _scrollController.addListener(_onScrollForMoveUpFab);
+
+    _tabController = TabController(
+      length: ProfileSection.values.length,
+      vsync: this,
+      initialIndex: widget.initialSection.index,
+    );
+    _backSwipeAnimationController = AnimationController(vsync: this)
+      ..addListener(_onBackSwipeAnimationTick)
+      ..addStatusListener(_onBackSwipeAnimationStatusChanged);
+
+    // Load only the initial tab immediately; others will load after "settling".
+    _lazyLoadedSections.add(ProfileSection.values[_tabController.index]);
+
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        // Cancel any pending lazy-load while the tab is still animating/dragging.
+        _tabSettleTimer?.cancel();
+        return;
+      }
+
+      // Tab finished changing; schedule lazy-load for the final tab.
+      _scheduleLazyLoadForIndex(_tabController.index);
+
+      if (_previousIndex != _tabController.index) {
+        final double appBarHeight =
+            sliverAppBarExpandedHeight - sliverAppBarMinHeight;
+        final double targetOffset =
+            appBarHeight + collapsibleHeaderMaxHeight - 24;
+
+        if (_scrollController.hasClients &&
+            _scrollController.offset >= targetOffset) {
+          _scrollController.animateTo(
+            targetOffset,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+        _previousIndex = _tabController.index;
+      }
+    });
+
+    sanitizedUsername = _sanitizeUsername(widget.nickname);
+
+    _initAsyncFetch();
+  }
+
+  void _scheduleLazyLoadForIndex(int index) {
+    _tabSettleTimer?.cancel();
+    _tabSettleTimer = Timer(_tabSettleDelay, () {
+      if (!mounted) return;
+      if (_tabController.index != index) return;
+      final section = ProfileSection.values[index];
+      if (_lazyLoadedSections.contains(section)) return;
+      setState(() {
+        _lazyLoadedSections.add(section);
+      });
+    });
+  }
+
+  void _onScrollForMoveUpFab() {
+    final bool shouldShow =
+        _scrollController.hasClients && _scrollController.offset > 140.0;
+    if (_showMoveUpFab.value != shouldShow) {
+      _showMoveUpFab.value = shouldShow;
+    }
+  }
+
+  Future<void> _initAsyncFetch() async {
+    await _loadSfwEnabled();
+    await _fetchUserProfile();
+  }
+
+  Future<bool> _attemptCloseProfileScreen({
+    bool resetBackSwipeOffset = true,
+  }) async {
+    _webViewKey.currentState?.hideWebView();
+    if (resetBackSwipeOffset) {
+      _resetAndroidBackSwipe();
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    if (!mounted) {
+      return false;
+    }
+    return Navigator.maybePop(context);
+  }
+
+  void _closeProfileScreen() {
+    _attemptCloseProfileScreen();
+  }
+
+  void _onBackSwipeAnimationTick() {
+    final animation = _backSwipeOffsetAnimation;
+    if (animation == null) {
+      return;
+    }
+    _backSwipeOffset = animation.value;
+  }
+
+  void _onBackSwipeAnimationStatusChanged(AnimationStatus status) {
+    if (status != AnimationStatus.completed) {
+      return;
+    }
+
+    final shouldPop = _popAfterBackSwipeAnimation;
+    _backSwipeOffsetAnimation = null;
+    _popAfterBackSwipeAnimation = false;
+
+    if (shouldPop) {
+      _finishBackSwipeClose();
+    }
+  }
+
+  Future<void> _finishBackSwipeClose() async {
+    final didPop =
+        await _attemptCloseProfileScreen(resetBackSwipeOffset: false);
+    if (!didPop && mounted) {
+      _animateBackSwipeTo(
+        0.0,
+        duration: const Duration(milliseconds: 180),
+      );
+    }
+  }
+
+  Duration _backSwipeCloseDuration(
+    double screenWidth,
+    double velocity,
+  ) {
+    final remaining = max(0.0, screenWidth - _backSwipeOffset);
+    if (remaining <= 0.0) {
+      return Duration.zero;
+    }
+
+    if (velocity > 0.0) {
+      final milliseconds = ((remaining / velocity) * 1000)
+          .round()
+          .clamp(90, 240);
+      return Duration(milliseconds: milliseconds);
+    }
+
+    final distanceFactor = (remaining / screenWidth).clamp(0.2, 1.0);
+    return Duration(milliseconds: (220 * distanceFactor).round());
+  }
+
+  Duration _backSwipeResetDuration(double screenWidth) {
+    if (screenWidth <= 0.0) {
+      return const Duration(milliseconds: 180);
+    }
+
+    final distanceFactor = (_backSwipeOffset / screenWidth).clamp(0.15, 1.0);
+    return Duration(milliseconds: (180 * distanceFactor).round());
+  }
+
+  void _animateBackSwipeTo(
+    double target, {
+    required Duration duration,
+    Curve curve = Curves.easeOutCubic,
+    bool popWhenDone = false,
+  }) {
+    _backSwipeAnimationController.stop();
+    _backSwipeAnimationController.duration = duration;
+    _backSwipeOffsetAnimation = Tween<double>(
+      begin: _backSwipeOffset,
+      end: target,
+    ).animate(
+      CurvedAnimation(
+        parent: _backSwipeAnimationController,
+        curve: curve,
+      ),
+    );
+    _popAfterBackSwipeAnimation = popWhenDone;
+    _backSwipeAnimationController.forward(from: 0.0);
+  }
+
+  void _handleAndroidBackSwipeStart(DragStartDetails details) {
+    if (!Platform.isAndroid || _isShoutSelectionMode) {
+      return;
+    }
+
+    if (details.globalPosition.dx <= _androidBackSwipeTriggerWidth) {
+      _backSwipeAnimationController.stop();
+      _backSwipeOffsetAnimation = null;
+      _popAfterBackSwipeAnimation = false;
+      _isDraggingBackFromEdge = true;
+      _backDragStartX = details.globalPosition.dx - _backSwipeOffset;
+      _backDragDistance = _backSwipeOffset;
+    }
+  }
+
+  void _handleAndroidBackSwipeUpdate(DragUpdateDetails details) {
+    if (!_isDraggingBackFromEdge) {
+      return;
+    }
+
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final distance = (details.globalPosition.dx - _backDragStartX)
+        .clamp(0.0, screenWidth)
+        .toDouble();
+    _backDragDistance = distance;
+    _backSwipeOffset = distance;
+  }
+
+  void _handleAndroidBackSwipeEnd(DragEndDetails details) {
+    if (!_isDraggingBackFromEdge) {
+      return;
+    }
+
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final closeDistanceThreshold =
+        max(_androidBackSwipeMinDistance, screenWidth * 0.25);
+    final shouldClose =
+        _backDragDistance >= closeDistanceThreshold ||
+        details.velocity.pixelsPerSecond.dx >= _androidBackSwipeMinVelocity;
+
+    _isDraggingBackFromEdge = false;
+    _backDragStartX = 0.0;
+    _backDragDistance = 0.0;
+
+    if (shouldClose) {
+      _animateBackSwipeTo(
+        screenWidth,
+        duration: _backSwipeCloseDuration(
+          screenWidth,
+          details.velocity.pixelsPerSecond.dx,
+        ),
+        popWhenDone: true,
+      );
+    } else {
+      _animateBackSwipeTo(
+        0.0,
+        duration: _backSwipeResetDuration(screenWidth),
+      );
+    }
+  }
+
+  void _resetAndroidBackSwipe() {
+    _isDraggingBackFromEdge = false;
+    _backDragStartX = 0.0;
+    _backDragDistance = 0.0;
+    _backSwipeAnimationController.stop();
+    _backSwipeOffsetAnimation = null;
+    _popAfterBackSwipeAnimation = false;
+    _backSwipeOffset = 0.0;
+  }
+
+  Widget _buildAndroidBackSwipeOverlay() {
+    if (!Platform.isAndroid) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned(
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: _androidBackSwipeDetectorWidth,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragStart: _handleAndroidBackSwipeStart,
+        onHorizontalDragUpdate: _handleAndroidBackSwipeUpdate,
+        onHorizontalDragEnd: _handleAndroidBackSwipeEnd,
+        onHorizontalDragCancel: _resetAndroidBackSwipe,
+        child: Container(color: Colors.transparent),
+      ),
+    );
+  }
+
+  Widget _buildAndroidBackSwipeTransition({required Widget child}) {
+    if (!Platform.isAndroid) {
+      return child;
+    }
+
+    return ValueListenableBuilder<double>(
+      valueListenable: _backSwipeOffsetNotifier,
+      child: child,
+      builder: (context, offset, swipeChild) {
+        final screenWidth = MediaQuery.sizeOf(context).width;
+        final progress = screenWidth > 0.0
+            ? (offset / screenWidth).clamp(0.0, 1.0).toDouble()
+            : 0.0;
+
+        return Transform.translate(
+          offset: Offset(offset, 0.0),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              boxShadow: offset > 0.0
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: 0.24 * (1.0 - (progress * 0.5)),
+                        ),
+                        blurRadius: 24.0,
+                        offset: const Offset(-6.0, 0.0),
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: swipeChild,
+          ),
+        );
+      },
+    );
+  }
+
+  void _updateAvatarTransform() {
+    double offset = _scrollController.offset;
+
+    // Calculate new opacity based on offset
+    double newOpacity;
+    if (offset <= _avatarFadeStart) {
+      newOpacity = 1.0;
+    } else if (offset >= _avatarFadeEnd) {
+      newOpacity = 0.0;
+    } else {
+      // Linear interpolation between full opacity (1.0) and no opacity (0.0)
+      newOpacity = 1.0 -
+          ((offset - _avatarFadeStart) / (_avatarFadeEnd - _avatarFadeStart));
+    }
+
+    double newScale;
+    if (offset <= _avatarScaleStart) {
+      newScale = 1.0;
+    } else if (offset >= _avatarScaleEnd) {
+      newScale = 0.2;
+    } else {
+      double scaleFraction =
+          (offset - _avatarScaleStart) / (_avatarScaleEnd - _avatarScaleStart);
+      newScale = 1.0 - (0.8 * scaleFraction);
+    }
+  }
+
+  IconData _getIconForSection(ProfileSection section) {
+    switch (section) {
+      case ProfileSection.Home:
+        return Icons.home;
+      case ProfileSection.Gallery:
+        return Icons.photo;
+      case ProfileSection.Scraps:
+        return Icons.collections_bookmark;
+      case ProfileSection.Favs:
+        return Icons.favorite;
+      case ProfileSection.Journals:
+        return Icons.book;
+      default:
+        return Icons.home;
+    }
+  }
+
+  String _getTabTitle(ProfileSection section) {
+    switch (section) {
+      case ProfileSection.Home:
+        return 'Home';
+      case ProfileSection.Gallery:
+        return 'Gallery';
+      case ProfileSection.Scraps:
+        return 'Scraps';
+      case ProfileSection.Favs:
+        return 'Favs';
+      case ProfileSection.Journals:
+        return 'Journals';
+      default:
+        return 'Home';
+    }
+  }
+
+  Future<void> _setupWebviewCookies() async {
+    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    String? cfClearance =
+        await _secureStorage.read(key: 'fa_cookie_cf_clearance');
+
+    if (cookieA != null && cookieB != null) {
+      final cookieManager = CookieManager.instance();
+
+      await cookieManager.setCookie(
+        url: WebUri('https://www.furaffinity.net'),
+        name: 'a',
+        value: cookieA,
+      );
+
+      await cookieManager.setCookie(
+        url: WebUri('https://www.furaffinity.net'),
+        name: 'b',
+        value: cookieB,
+      );
+
+      if (cfClearance != null && cfClearance.isNotEmpty) {
+        await cookieManager.setCookie(
+          url: WebUri('https://www.furaffinity.net'),
+          name: 'cf_clearance',
+          value: cfClearance,
+        );
+      }
+    }
+  }
+
+  Future<void> _sendWatchUnwatchRequest(String urlPath,
+      {required bool shouldWatch}) async {
+    final result = await _api.sendWatchUnwatchRequest(
+      urlPath,
+      shouldWatch: shouldWatch,
+      sfwEnabled: _sfwEnabled,
+    );
+
+    if (result.missingCookies) {
+      debugPrint('No cookies found. User might not be logged in.');
+      showAppSnackBar(context, 'Please log in to perform this action.',
+          backgroundColor: Colors.red);
+      return;
+    }
+
+    if (result.success) {
+      debugPrint('${shouldWatch ? 'Watch' : 'Unwatch'} action successful.');
+
+      setState(() {
+        _profileParsed?.isWatching = shouldWatch;
+      });
+
+      showAppSnackBar(
+        context,
+        '${shouldWatch ? 'Now watching $username' : 'Stopped watching $username'}',
+        backgroundColor: Colors.green,
+      );
+    } else if (result.error != null) {
+      debugPrint(
+          'Error during ${shouldWatch ? 'watch' : 'unwatch'}: ${result.error}');
+      showAppSnackBar(
+        context,
+        'An error occurred while trying to ${shouldWatch ? 'watch' : 'unwatch'} user.',
+        backgroundColor: Colors.red,
+      );
+    } else {
+      debugPrint(
+          'Failed to ${shouldWatch ? 'watch' : 'unwatch'}. Status code: ${result.statusCode}');
+      showAppSnackBar(
+        context,
+        'Failed to ${shouldWatch ? 'watch' : 'unwatch'} user.',
+        backgroundColor: Colors.red,
+      );
+    }
+  }
+
+  Future<void> _handleWatchButtonPressed() async {
+    if (isWatching) {
+      if (unwatchLink == null) {
+        debugPrint('Unwatch link not available.');
+        return;
+      }
+      await _sendWatchUnwatchRequest(unwatchLink!, shouldWatch: false);
+      _fetchUserProfile();
+    } else {
+      if (watchLink == null) {
+        debugPrint('Watch link not available.');
+        return;
+      }
+      await _sendWatchUnwatchRequest(watchLink!, shouldWatch: true);
+      _fetchUserProfile();
+    }
+  }
+
+  int get _selectedShoutCount => shouts.where((shout) => shout.selected).length;
+
+  void _toggleShoutSelectionMode() {
+    setState(() {
+      final nextValue = !_isShoutSelectionMode;
+      _isShoutSelectionMode = nextValue;
+      if (!nextValue) {
+        for (final shout in shouts) {
+          shout.selected = false;
+        }
+      }
+    });
+  }
+
+  void exitShoutSelectionMode() {
+    if (!_isShoutSelectionMode) {
+      return;
+    }
+    setState(() {
+      _isShoutSelectionMode = false;
+      for (final shout in shouts) {
+        shout.selected = false;
+      }
+    });
+  }
+
+  void _toggleShoutSelection(Shout shout) {
+    if (!_isShoutSelectionMode) {
+      return;
+    }
+
+    setState(() {
+      shout.selected = !shout.selected;
+    });
+  }
+
+  Future<bool> _showDeleteShoutsDialog(List<Shout> shoutsToDelete) async {
+    final bool isSingle = shoutsToDelete.length == 1;
+    final String title =
+        isSingle ? 'Confirm deletion' : 'Delete selected shouts';
+    final String message = isSingle
+        ? 'Are you sure you want to delete shout from ${shoutsToDelete.first.username}?'
+        : 'Are you sure you want to delete ${shoutsToDelete.length} selected shouts?';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final maxHeight = MediaQuery.of(context).size.height * 0.55;
+        final dialogHeight = isSingle ? min(maxHeight, 320.0) : maxHeight;
+        return AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: dialogHeight,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message,
+                  style: const TextStyle(color: Colors.white),
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: Scrollbar(
+                    thumbVisibility: shoutsToDelete.length > 2,
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: shoutsToDelete.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final shout = shoutsToDelete[index];
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1F1F1F),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Image.network(
+                                      shout.avatarUrl,
+                                      width: 42,
+                                      height: 42,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                        return Image.asset(
+                                          'assets/images/defaultpic.gif',
+                                          width: 42,
+                                          height: 42,
+                                          fit: BoxFit.cover,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          shout.username,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        if ((shout.symbol?.isNotEmpty ??
+                                                false) ||
+                                            shout.profileNickname.isNotEmpty)
+                                          Text(
+                                            '${shout.symbol ?? '~'} ${shout.profileNickname}'
+                                                .trim(),
+                                            style: const TextStyle(
+                                              color: Color(0xFFE09321),
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              html_pkg.Html(
+                                data: shout.text,
+                                style: userProfileHtmlStyles(),
+                                extensions: buildUserProfileBBCodeExtensions(),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text(isSingle ? 'Delete' : 'Delete Selected'),
+            ),
+          ],
+        );
+      },
+    );
+
+    return confirmed ?? false;
+  }
+
+  Future<void> _confirmDeleteSelectedShouts() async {
+    if (!isOwnProfile || _isDeletingSelectedShouts) {
+      return;
+    }
+
+    final selectedShouts =
+        shouts.where((shout) => shout.selected).toList(growable: false);
+    if (selectedShouts.isEmpty) {
+      return;
+    }
+
+    final confirmed = await _showDeleteShoutsDialog(selectedShouts);
+    if (!confirmed) {
+      return;
+    }
+
+    await _deleteShouts(selectedShouts);
+  }
+
+  Future<void> _confirmDeleteShout(int index, Shout shout) async {
+    if (!isOwnProfile) {
+      return;
+    }
+
+    final confirmed = await _showDeleteShoutsDialog([shout]);
+    if (confirmed) {
+      await _deleteShout(index, shout);
+    }
+  }
+
+  Future<void> _deleteShout(int _, Shout shout) async {
+    await _deleteShouts([shout]);
+  }
+
+  Future<void> _deleteShouts(List<Shout> shoutsToDelete) async {
+    if (shoutsToDelete.isEmpty || _isDeletingSelectedShouts) {
+      return;
+    }
+
+    final loadedProfilePage = currentShoutPage;
+
+    setState(() {
+      _isDeletingSelectedShouts = true;
+    });
+
+    try {
+      final resolvedShouts = await _api.resolveControlsShouts(
+        shouts: shoutsToDelete,
+        sfwEnabled: _sfwEnabled,
+      );
+
+      if (resolvedShouts.length != shoutsToDelete.length) {
+        showAppSnackBar(
+          context,
+          "Failed to match one or more selected shouts on the controls page.",
+          backgroundColor: Colors.red,
+        );
+        return;
+      }
+
+      final shoutIdsByPage = <int, List<String>>{};
+      for (final resolvedShout in resolvedShouts) {
+        shoutIdsByPage.putIfAbsent(resolvedShout.page, () => <String>[]);
+        shoutIdsByPage[resolvedShout.page]!.add(resolvedShout.id);
+      }
+
+      final pages = shoutIdsByPage.keys.toList()
+        ..sort((a, b) => b.compareTo(a));
+      bool anySuccess = false;
+      DeleteShoutResult? failedResult;
+
+      for (final page in pages) {
+        final result = await _api.deleteShouts(
+          shoutIds: shoutIdsByPage[page]!,
+          sfwEnabled: _sfwEnabled,
+          page: page,
+        );
+
+        if (result.success) {
+          anySuccess = true;
+          continue;
+        }
+
+        failedResult = result;
+        break;
+      }
+
+      if (failedResult?.missingCookies == true) {
+        showAppSnackBar(context, "Please log in to perform this action.",
+            backgroundColor: Colors.red);
+      } else if (failedResult == null) {
+        final deletedCount = shoutsToDelete.length;
+        showAppSnackBar(
+          context,
+          deletedCount == 1
+              ? "Shout deleted."
+              : "$deletedCount shouts deleted.",
+          backgroundColor: Colors.green,
+        );
+        setState(() {
+          _isShoutSelectionMode = false;
+          for (final shout in shouts) {
+            shout.selected = false;
+          }
+        });
+        await _fetchUserProfile();
+        await _restoreLoadedShoutPages(loadedProfilePage);
+      } else if (anySuccess) {
+        showAppSnackBar(
+          context,
+          "Some selected shouts were deleted, but one page failed.",
+          backgroundColor: Colors.red,
+        );
+        setState(() {
+          _isShoutSelectionMode = false;
+          for (final shout in shouts) {
+            shout.selected = false;
+          }
+        });
+        await _fetchUserProfile();
+        await _restoreLoadedShoutPages(loadedProfilePage);
+      } else if (failedResult.error != null) {
+        showAppSnackBar(context, "Error: ${failedResult.error}",
+            backgroundColor: Colors.red);
+      } else {
+        showAppSnackBar(context, "Failed to delete shout.",
+            backgroundColor: Colors.red);
+      }
+    } catch (e) {
+      showAppSnackBar(context, "Error: $e", backgroundColor: Colors.red);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeletingSelectedShouts = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _restoreLoadedShoutPages(int targetPage) async {
+    while (mounted &&
+        currentShoutPage < targetPage &&
+        currentShoutPage < totalShoutPages) {
+      await _loadMoreShouts();
+    }
+  }
+
+  Future<void> _launchURL(String url) async {
+    final Uri uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      debugPrint('Could not launch $url');
+      showAppSnackBar(context, 'Could not launch URL: $url',
+          backgroundColor: Colors.red);
+    }
+  }
+
+  /// Handles FA links inside HTML/description, matching the legacy inline logic.
+  Future<void> _handleFALink(BuildContext context, String url) async {
+    final Uri uri = Uri.parse(url);
+    final String urlToMatch = uri.toString();
+
+    // Gallery Folder Link
+    final RegExp galleryFolderRegex = RegExp(
+      r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
+    );
+    if (galleryFolderRegex.hasMatch(urlToMatch)) {
+      final match = galleryFolderRegex.firstMatch(urlToMatch)!;
+      final String tappedUsername = match.group(1)!;
+      final String folderNumber = match.group(2)!;
+      final String folderName = match.group(3)!;
+      final String folderUrl =
+          'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+      exitShoutSelectionMode();
+      Navigator.push(
+        context,
+        UserProfileScreen.route(
+          nickname: tappedUsername,
+          initialSection: ProfileSection.Gallery,
+          initialFolderUrl: folderUrl,
+          initialFolderName: folderName,
+        ),
+      );
+      return;
+    }
+
+    // User Link
+    final RegExp userRegex = RegExp(
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$',
+    );
+    if (userRegex.hasMatch(urlToMatch)) {
+      final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
+      exitShoutSelectionMode();
+      Navigator.push(
+        context,
+        UserProfileScreen.route(nickname: tappedUsername),
+      );
+      return;
+    }
+
+    // Journal Link
+    final RegExp journalRegex = RegExp(
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
+    );
+    if (journalRegex.hasMatch(urlToMatch)) {
+      final match = journalRegex.firstMatch(urlToMatch)!;
+      final String? userNameFromJournal = match.group(1);
+      final String? journalId = match.group(2);
+      if (userNameFromJournal != null) {
+        exitShoutSelectionMode();
+        Navigator.push(
+          context,
+          UserProfileScreen.route(
+            nickname: userNameFromJournal,
+            initialSection: ProfileSection.Journals,
+          ),
+        );
+      } else if (journalId != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OpenJournal(uniqueNumber: journalId),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Submission/View Link
+    final RegExp viewRegex = RegExp(
+      r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$',
+    );
+    if (viewRegex.hasMatch(urlToMatch)) {
+      final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OpenPost(
+            uniqueNumber: submissionId,
+            imageUrl: '',
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Fallback: external link
+    await launchUrlString(url, mode: LaunchMode.externalApplication);
+  }
+
+  /// Fetches the user's profile data from FurAffinity.
+  Future<void> _fetchUserProfile() async {
+    try {
+      final payload = await _api.fetchProfile(
+        nickname: widget.nickname,
+        sfwEnabled: _sfwEnabled,
+      );
+
+      sanitizedUsername = payload.sanitizedUsername;
+
+      final parsed = _api.parseUserProfile(payload.htmlBody);
+      final bool shouldShowDescription = parsed.hasRealUserProfile &&
+          parsed.userDescription != null &&
+          parsed.userDescription!.trim().isNotEmpty;
+
+      setState(() {
+        _profileParsed = parsed;
+        _webViewLoaded = shouldShowDescription ? _webViewLoaded : true;
+        isLoading = false;
+      });
+
+      debugPrint("Block/Unblock Link: $blockLink / $unblockLink");
+      debugPrint("Watch/Unwatch Link: $watchLink / $unwatchLink");
+      debugPrint("isBlocked: $isBlocked");
+    } on StateError catch (e) {
+      setState(() {
+        errorMessage = e.message ?? e.toString();
+        isLoading = false;
+      });
+      debugPrint(e.toString());
+    } catch (e) {
+      setState(() {
+        errorMessage = 'An error occurred: $e';
+        isLoading = false;
+      });
+      debugPrint("An error occurred while fetching profile: $e");
+    }
+  }
+
+  final _usernameSanitizeRegex = RegExp(r'[^a-zA-Z0-9\-_.~]');
+  String _sanitizeUsername(String username) {
+    return username.replaceAll(_usernameSanitizeRegex, '').toLowerCase();
+  }
+
+  void switchToGalleryTab() {
+    _tabController.animateTo(ProfileSection.Gallery.index);
+  }
+
+  Future<void> _loadMoreShouts() async {
+    if (isLoadingMoreShouts || currentShoutPage >= totalShoutPages) {
+      debugPrint(
+          "Cannot load more shouts. Loading: $isLoadingMoreShouts, Current: $currentShoutPage, Total: $totalShoutPages");
+      return;
+    }
+
+    setState(() {
+      isLoadingMoreShouts = true;
+    });
+
+    try {
+      final nextPage = currentShoutPage + 1;
+      final payload = await _api.fetchAdditionalShouts(
+        sanitizedUsername: sanitizedUsername,
+        shoutPaginationKey: shoutPaginationKey,
+        nextPage: nextPage,
+        sfwEnabled: _sfwEnabled,
+        existingShoutIds: shouts.map((s) => s.id).toSet(),
+      );
+
+      if (payload == null) {
+        debugPrint("Missing shout pagination key; cannot load more shouts.");
+        return;
+      }
+
+      setState(() {
+        _profileParsed?.shouts.addAll(payload.newShouts);
+        if (_profileParsed != null) {
+          _profileParsed!.currentShoutPage = payload.nextPage;
+        }
+      });
+    } catch (e) {
+      debugPrint('Error loading more shouts: $e');
+      showAppSnackBar(context, 'Failed to load more shouts',
+          backgroundColor: Colors.red);
+    } finally {
+      setState(() {
+        isLoadingMoreShouts = false;
+      });
+    }
+  }
+
+  /// Helper function to extract integer values from the stats text
+  int? _extractStatValue(String statsText, String label) {
+    final regex = RegExp('$label\\s*(\\d+)');
+    final match = regex.firstMatch(statsText);
+    if (match != null && match.groupCount > 0) {
+      return int.tryParse(match.group(1)!);
+    }
+    return null;
+  }
+
+  // Animated banner/avatar helpers
+  Widget buildAnimatedBanner(BoxConstraints constraints) {
+    double alignmentX = -1.0;
+    if (profileBannerUrl?.contains('fa-banner') ?? false) {
+      double shiftFraction = 30.0 / constraints.maxWidth * 2;
+      alignmentX += shiftFraction;
+    }
+
+    return AnimatedBuilder(
+      animation: _scrollController,
+      builder: (context, child) {
+        double offset =
+            _scrollController.hasClients ? _scrollController.offset : 0.0;
+
+        double newScale;
+        if (offset <= _bannerScaleStart) {
+          newScale = 1.0;
+        } else if (offset >= _bannerScaleEnd) {
+          newScale = 1.0;
+        } else {
+          double scaleFraction = (offset - _bannerScaleStart) /
+              (_bannerScaleEnd - _bannerScaleStart);
+          newScale = 1.0 - (0.2 * scaleFraction);
+        }
+
+        return Transform.scale(
+          scale: newScale.clamp(1.0, 1.0),
+          alignment: Alignment(alignmentX, 0),
+          child: child,
+        );
+      },
+      child: Image.network(
+        profileBannerUrl ??
+            'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg',
+        fit: BoxFit.cover,
+        alignment: Alignment(alignmentX, 0),
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) {
+            return child;
+          }
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          return Container(color: Colors.grey);
+        },
+      ),
+    );
+  }
+
+  Widget buildAnimatedAvatar() {
+    const double avatarLeft = 16.0;
+    const double avatarSize = 90.0;
+
+    return AnimatedBuilder(
+      animation: _scrollController,
+      builder: (context, child) {
+        double offset =
+            _scrollController.hasClients ? _scrollController.offset : 0.0;
+
+        double newOpacity;
+        if (offset <= _avatarFadeStart) {
+          newOpacity = 1.0;
+        } else if (offset >= _avatarFadeEnd) {
+          newOpacity = 0.0;
+        } else {
+          newOpacity = 1.0 -
+              ((offset - _avatarFadeStart) /
+                  (_avatarFadeEnd - _avatarFadeStart));
+        }
+
+        double newScale;
+        if (offset <= _avatarScaleStart) {
+          newScale = 1.0;
+        } else if (offset >= _avatarScaleEnd) {
+          newScale = 0.2;
+        } else {
+          double scaleFraction = (offset - _avatarScaleStart) /
+              (_avatarScaleEnd - _avatarScaleStart);
+          newScale = 1.0 - (0.8 * scaleFraction);
+        }
+
+        return Positioned(
+          bottom: -avatarSize / 1.5,
+          left: avatarLeft,
+          child: Transform.scale(
+            scale: newScale.clamp(0.2, 1.0),
+            child: Opacity(
+              opacity: newOpacity.clamp(0.0, 1.0),
+              child: child,
+            ),
+          ),
+        );
+      },
+      child: GestureDetector(
+        onTap: () {},
+        child: profileImageUrl == null || profileImageUrl!.isEmpty
+            ? Image.asset(
+                'assets/images/defaultpic.gif',
+                width: avatarSize,
+                height: avatarSize,
+                fit: BoxFit.cover,
+              )
+            : Image.network(
+                profileImageUrl!,
+                width: avatarSize,
+                height: avatarSize,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.low,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return SizedBox(
+                    width: avatarSize / 2,
+                    height: avatarSize / 2,
+                    child: const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2.0),
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return Image.asset(
+                    'assets/images/defaultpic.gif',
+                    width: avatarSize,
+                    height: avatarSize,
+                    fit: BoxFit.cover,
+                  );
+                },
+              ),
+      ),
+    );
+  }
+
+  GlobalKey _profileNameRowKey = GlobalKey();
+
+  void _clearProfileNameSelection() {
+    setState(() {
+      _profileNameRowKey = GlobalKey();
+    });
+  }
+
+  void _copyProfileLinkToClipboard() {
+    final profileLink = 'https://www.furaffinity.net/user/$sanitizedUsername/';
+    Clipboard.setData(ClipboardData(text: profileLink)).then((_) {
+      showAppSnackBar(context, 'Copied profile link!',
+          backgroundColor: Colors.green);
+    }).catchError((error) {
+      debugPrint('Failed to copy profile link: $error');
+      showAppSnackBar(context, 'Failed to copy profile link.',
+          backgroundColor: Colors.red);
+    });
+  }
+
+  Widget _buildProfileHeaderNameRow() {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTapDown: (TapDownDetails details) {
+        final RenderBox? renderBox =
+            _profileNameRowKey.currentContext?.findRenderObject() as RenderBox?;
+        if (renderBox != null) {
+          final Offset localPosition =
+              renderBox.globalToLocal(details.globalPosition);
+          if (!renderBox.size.contains(localPosition)) {
+            _clearProfileNameSelection();
+          }
+        } else {
+          _clearProfileNameSelection();
+        }
+      },
+      child: Container(
+        key: _profileNameRowKey,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            if (userIconBeforeUrls.isNotEmpty)
+              ...userIconBeforeUrls.map(
+                (url) => Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Image.network(url, width: 20, height: 20),
+                ),
+              ),
+            SelectableLinkify(
+              text: profileDisplayName ?? '',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20.0,
+                fontWeight: FontWeight.bold,
+              ),
+              onOpen: (link) async {},
+              selectionControls: MaterialTextSelectionControls(),
+            ),
+            const SizedBox(width: 4),
+            if (userIconAfterUrls.isNotEmpty)
+              ...userIconAfterUrls.map(
+                (url) => Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Image.network(url, width: 20, height: 20),
+                ),
+              ),
+            SelectableLinkify(
+              text: profileUserNamePart ?? '',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20.0,
+              ),
+              onOpen: (link) async {},
+              selectionControls: MaterialTextSelectionControls(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendBlockUnblockRequest(
+    String urlOrPath,
+    String keyValue, {
+    required bool shouldBlock,
+    required bool usePost,
+  }) async {
+    final result = await _api.sendBlockUnblockRequest(
+      urlOrPath,
+      keyValue,
+      shouldBlock: shouldBlock,
+      usePost: usePost,
+      sfwEnabled: _sfwEnabled,
+      sanitizedUsername: sanitizedUsername,
+    );
+
+    if (result.missingCookies) {
+      showAppSnackBar(
+        context,
+        'Please log in to perform this action.',
+        backgroundColor: Colors.red,
+      );
+      return;
+    }
+
+    if (result.success) {
+      await _fetchUserProfile();
+      showAppSnackBar(
+        context,
+        shouldBlock ? 'Author blocked' : 'Author unblocked',
+        backgroundColor: Colors.green,
+      );
+    } else if (result.error != null) {
+      showAppSnackBar(
+        context,
+        'An error occurred while trying to ${shouldBlock ? 'block' : 'unblock'} author.',
+        backgroundColor: Colors.red,
+      );
+    } else {
+      showAppSnackBar(
+        context,
+        'Failed to ${shouldBlock ? 'block' : 'unblock'} author.',
+        backgroundColor: Colors.red,
+      );
+    }
+  }
+
+  Future<void> _handleBlockUnblock() async {
+    if (isBlocked) {
+      if (unblockLink == null) {
+        showAppSnackBar(
+          context,
+          'Cannot unblock author at this time.',
+          backgroundColor: Colors.red,
+        );
+        return;
+      }
+      final unblockUri = Uri.parse(unblockLink!);
+
+      final key = unblockUri.queryParameters['key'];
+
+      if (key == null || key.isEmpty) {
+        showAppSnackBar(
+          context,
+          'Cannot unblock author at this time.',
+          backgroundColor: Colors.red,
+        );
+        return;
+      }
+
+      await _sendBlockUnblockRequest(
+        unblockLink!,
+        key,
+        shouldBlock: false,
+        usePost: unblockUsesPost,
+      );
+    } else {
+      if (blockLink == null) {
+        showAppSnackBar(
+          context,
+          'Cannot block author at this time.',
+          backgroundColor: Colors.red,
+        );
+        return;
+      }
+
+      final blockUri = Uri.parse(blockLink!);
+
+      final key = blockUri.queryParameters['key'];
+
+      if (key == null || key.isEmpty) {
+        showAppSnackBar(
+          context,
+          'Cannot block author at this time.',
+          backgroundColor: Colors.red,
+        );
+        return;
+      }
+
+      await _sendBlockUnblockRequest(
+        blockLink!,
+        key,
+        shouldBlock: true,
+        usePost: blockUsesPost,
+      );
+    }
+  }
+
+  /// Builds the main UI of the screen with unified scrolling.
+  @override
+  Widget build(BuildContext context) {
+    // Define constants for the avatar and text alignment.
+    const double avatarLeft = 16.0;
+    const double avatarWidth = 90.0;
+    const double marginBetweenAvatarAndText = 0.0;
+    final double textLeftPadding =
+        avatarLeft + avatarWidth + marginBetweenAvatarAndText;
+    final bool needsDescriptionLoad =
+        hasRealUserProfile && userDescription != null;
+    bool showLoadingIndicator = isLoading ||
+        (needsDescriptionLoad &&
+            !_webViewLoaded &&
+            _tabController.index == ProfileSection.Home.index);
+    final platformViews = WidgetsBinding.instance.platformDispatcher.views;
+    final baseView =
+        platformViews.isNotEmpty ? platformViews.first : View.of(context);
+    final fixedTextScaleMediaQuery = MediaQueryData.fromView(baseView)
+        .copyWith(textScaler: TextScaler.linear(1.0));
+    final bool showDeleteSelectedFab = !isLoading &&
+        isOwnProfile &&
+        _isShoutSelectionMode &&
+        _selectedShoutCount > 0;
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        systemNavigationBarColor: Color(0xCC000000),
+        systemNavigationBarIconBrightness: Brightness.light,
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+      ),
+      child: PopScope(
+        canPop: !(Platform.isAndroid && _isShoutSelectionMode),
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop && Platform.isAndroid && _isShoutSelectionMode) {
+            _toggleShoutSelectionMode();
+          }
+        },
+        child: DefaultTabController(
+          length: ProfileSection.values.length,
+          child: _buildAndroidBackSwipeTransition(
+            child: Scaffold(
+              backgroundColor: Colors.black,
+              body: SafeArea(
+                top: false,
+                child: Stack(
+                  children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: () => _clearProfileNameSelection(),
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: (ScrollNotification notification) {
+                        _updateAvatarTransform();
+                        return false;
+                      },
+                      child: NestedScrollView(
+                        controller: _scrollController,
+                        headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                          SliverAppBar(
+                            centerTitle: false,
+                            leading: IconButton(
+                              icon: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Positioned(
+                                      left: 1,
+                                      child: Icon(Icons.arrow_back,
+                                          size: 24, color: Color(0xFF111111))),
+                                  Positioned(
+                                      right: 1,
+                                      child: Icon(Icons.arrow_back,
+                                          size: 24, color: Color(0xFF111111))),
+                                  Positioned(
+                                      top: 1,
+                                      child: Icon(Icons.arrow_back,
+                                          size: 24, color: Color(0xFF111111))),
+                                  Positioned(
+                                      bottom: 1,
+                                      child: Icon(Icons.arrow_back,
+                                          size: 24, color: Color(0xFF111111))),
+                                  Icon(Icons.arrow_back,
+                                      size: 24, color: Colors.white),
+                                ],
+                              ),
+                              onPressed: _closeProfileScreen,
+                            ),
+                            title: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Stack(
+                                  children: [
+                                    // Stroked text as outline
+                                    Text(
+                                      symbolUsername ?? 'Profile',
+                                      style: TextStyle(
+                                        fontSize: 18.0,
+                                        fontWeight: FontWeight.bold,
+                                        foreground: Paint()
+                                          ..style = PaintingStyle.stroke
+                                          ..strokeWidth = 2
+                                          ..color = Color(0xFF111111),
+                                      ),
+                                    ),
+                                    // Filled text on top
+                                    Text(
+                                      symbolUsername ?? 'Profile',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18.0,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (symbolUsername != null &&
+                                    symbolUsername!.startsWith('!'))
+                                  const Padding(
+                                    padding: EdgeInsets.only(left: 8.0),
+                                    child: Text(
+                                      "USER BANNED",
+                                      style: TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 18.0,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            expandedHeight: sliverAppBarExpandedHeight,
+                            pinned: true,
+                            floating: false,
+                            snap: false,
+                            backgroundColor: Colors.black.withOpacity(
+                              (_scrollController.hasClients &&
+                                      _scrollController.offset > 50)
+                                  ? (_scrollController.offset / 200)
+                                      .clamp(0.0, 1.0)
+                                  : 0.0,
+                            ),
+                            actions: [
+                              Builder(
+                                builder: (context) {
+                                  return IconButton(
+                                    icon: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        Positioned(
+                                            left: 1,
+                                            child: Icon(Icons.more_vert,
+                                                size: 24,
+                                                color: Color(0xFF111111))),
+                                        Positioned(
+                                            right: 1,
+                                            child: Icon(Icons.more_vert,
+                                                size: 24,
+                                                color: Color(0xFF111111))),
+                                        Positioned(
+                                            top: 1,
+                                            child: Icon(Icons.more_vert,
+                                                size: 24,
+                                                color: Color(0xFF111111))),
+                                        Positioned(
+                                            bottom: 1,
+                                            child: Icon(Icons.more_vert,
+                                                size: 24,
+                                                color: Color(0xFF111111))),
+                                        Icon(Icons.more_vert,
+                                            size: 24, color: Colors.white),
+                                      ],
+                                    ),
+                                    onPressed: () async {
+                                      final RenderBox button = context
+                                          .findRenderObject() as RenderBox;
+                                      final RenderBox overlay =
+                                          Overlay.of(context)
+                                              .context
+                                              .findRenderObject() as RenderBox;
+                                      final RelativeRect position =
+                                          RelativeRect.fromRect(
+                                        Rect.fromPoints(
+                                          button.localToGlobal(
+                                              const Offset(0, 0),
+                                              ancestor: overlay),
+                                          button.localToGlobal(
+                                              Offset(
+                                                  0, button.size.height + 10),
+                                              ancestor: overlay),
+                                        ),
+                                        Offset.zero & overlay.size,
+                                      );
+
+                                      List<PopupMenuEntry<String>> menuItems = [
+                                        const PopupMenuItem<String>(
+                                          value: 'report',
+                                          child: Text('Report'),
+                                        ),
+                                        if (!isOwnProfile)
+                                          PopupMenuItem<String>(
+                                            value: 'block_unblock',
+                                            child: Text(isBlocked
+                                                ? 'Unblock author'
+                                                : 'Block author'),
+                                          ),
+                                        const PopupMenuItem<String>(
+                                          value: 'copy_link',
+                                          child: Text('Copy link'),
+                                        ),
+                                      ];
+
+                                      final selected = await showMenu<String>(
+                                        context: context,
+                                        position: position,
+                                        items: menuItems,
+                                      );
+
+                                      switch (selected) {
+                                        case 'report':
+                                          launchUrlString(
+                                              'https://www.furaffinity.net/controls/troubletickets/');
+                                          break;
+                                        case 'block_unblock':
+                                          if (!isOwnProfile) {
+                                            await _handleBlockUnblock();
+                                          }
+                                          break;
+                                        case 'copy_link':
+                                          _copyProfileLinkToClipboard();
+                                          break;
+                                        default:
+                                          break;
+                                      }
+                                    },
+                                  );
+                                },
+                              ),
+                            ],
+                            flexibleSpace: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final double expandedHeight =
+                                    sliverAppBarExpandedHeight;
+                                final double scrollRange =
+                                    expandedHeight - kToolbarHeight;
+                                double shrinkOffset =
+                                    _scrollController.hasClients
+                                        ? _scrollController.offset
+                                            .clamp(0.0, scrollRange)
+                                        : 0.0;
+                                double alignmentX = -1.0;
+
+                                return Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Positioned.fill(
+                                      child: buildAnimatedBanner(constraints),
+                                    ),
+                                    Container(
+                                      color: Colors.black.withOpacity(0.15),
+                                    ),
+                                    buildAnimatedAvatar(),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
+                          SliverPersistentHeader(
+                            delegate: FixedSliverPersistentHeaderDelegate(
+                              height: 160,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  const Divider(
+                                    height: 4.0,
+                                    color: Color(0xFF111111),
+                                    thickness: 3.0,
+                                  ),
+                                  const Divider(
+                                    height: 2.0,
+                                    color: Colors.black,
+                                    thickness: 1.0,
+                                  ),
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: double.infinity,
+                                        color: const Color(0xFF111111),
+                                        child: Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                              8.0, 0.0, 8.0, 8.0),
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
+                                            children: [
+                                              MediaQuery(
+                                                data: fixedTextScaleMediaQuery,
+                                                child: Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      SizedBox(
+                                                        height: 30.0,
+                                                        child: Padding(
+                                                          padding: EdgeInsets.only(
+                                                              left:
+                                                                  textLeftPadding),
+                                                          child: FittedBox(
+                                                            fit: BoxFit
+                                                                .scaleDown,
+                                                            alignment: Alignment
+                                                                .centerLeft,
+                                                            child:
+                                                                _buildProfileHeaderNameRow(),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      SizedBox(
+                                                        height: 24.0,
+                                                        child: Visibility(
+                                                          visible: true,
+                                                          maintainSize: true,
+                                                          maintainAnimation:
+                                                              true,
+                                                          maintainState: true,
+                                                          child: Padding(
+                                                            padding:
+                                                                EdgeInsets.only(
+                                                              top: 0.0,
+                                                              left:
+                                                                  textLeftPadding,
+                                                            ),
+                                                            child: FittedBox(
+                                                              fit: BoxFit
+                                                                  .scaleDown,
+                                                              alignment:
+                                                                  Alignment
+                                                                      .center,
+                                                              child: Text(
+                                                                (userTitle?.isNotEmpty ??
+                                                                        false)
+                                                                    ? userTitle!
+                                                                    : " ",
+                                                                style:
+                                                                    const TextStyle(
+                                                                  color: Colors
+                                                                      .white70,
+                                                                  fontSize:
+                                                                      16.0,
+                                                                ),
+                                                                maxLines: 1,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(
+                                                          top: 8.0,
+                                                          left: 0.0,
+                                                        ),
+                                                        child: FittedBox(
+                                                          fit: BoxFit.scaleDown,
+                                                          alignment: Alignment
+                                                              .centerLeft,
+                                                          child: Text(
+                                                            registrationDate !=
+                                                                        null &&
+                                                                    registrationDate!
+                                                                        .isNotEmpty
+                                                                ? 'Joined $registrationDate'
+                                                                : '',
+                                                            style:
+                                                                const TextStyle(
+                                                              color: Colors
+                                                                  .white70,
+                                                              fontSize: 14.0,
+                                                            ),
+                                                            maxLines: 1,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              if (isOwnProfile)
+                                                SizedBox(
+                                                  width: 100,
+                                                  height: 38,
+                                                  child: ElevatedButton(
+                                                    onPressed:
+                                                        _showEditProfileDialog,
+                                                    style: ElevatedButton
+                                                        .styleFrom(
+                                                      backgroundColor:
+                                                          Colors.black,
+                                                      shape:
+                                                          RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(2),
+                                                      ),
+                                                      side: const BorderSide(
+                                                        color:
+                                                            Color(0xFFE09321),
+                                                      ),
+                                                    ),
+                                                    child: const FittedBox(
+                                                      fit: BoxFit.scaleDown,
+                                                      child: Text(
+                                                        "Edit Profile",
+                                                        style: TextStyle(
+                                                          color: Colors.white,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                )
+                                              else
+                                                Column(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 100,
+                                                      height: 38,
+                                                      child: ElevatedButton(
+                                                        onPressed:
+                                                            _handleWatchButtonPressed,
+                                                        style: ElevatedButton
+                                                            .styleFrom(
+                                                          backgroundColor:
+                                                              Colors.black,
+                                                          shape:
+                                                              RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        2),
+                                                          ),
+                                                          side:
+                                                              const BorderSide(
+                                                            color: Color(
+                                                                0xFFE09321),
+                                                          ),
+                                                        ),
+                                                        child: FittedBox(
+                                                          fit: BoxFit.scaleDown,
+                                                          child: Text(
+                                                            isWatching
+                                                                ? "-Watch"
+                                                                : "+Watch",
+                                                            style:
+                                                                const TextStyle(
+                                                              color:
+                                                                  Colors.white,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 5),
+                                                    SizedBox(
+                                                      width: 100,
+                                                      height: 38,
+                                                      child: ElevatedButton(
+                                                        onPressed: () {
+                                                          Navigator.push(
+                                                            context,
+                                                            MaterialPageRoute(
+                                                              builder: (context) =>
+                                                                  NewMessageScreen(
+                                                                recipient:
+                                                                    sanitizedUsername,
+                                                              ),
+                                                            ),
+                                                          );
+                                                        },
+                                                        style: ElevatedButton
+                                                            .styleFrom(
+                                                          backgroundColor:
+                                                              const Color(
+                                                                  0xFFE09321),
+                                                          shape:
+                                                              RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        2),
+                                                          ),
+                                                        ),
+                                                        child: const FittedBox(
+                                                          fit: BoxFit.scaleDown,
+                                                          child: Text(
+                                                            "Note",
+                                                            style: TextStyle(
+                                                              color:
+                                                                  Colors.white,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const Divider(
+                                        height: 3.0,
+                                        color: Colors.black,
+                                        thickness: 3.0,
+                                      ),
+                                      const Divider(
+                                        height: 4.0,
+                                        color: Color(0xFF111111),
+                                        thickness: 4.0,
+                                      ),
+                                    ],
+                                  ),
+                                  MediaQuery(
+                                    data: fixedTextScaleMediaQuery,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 8.0),
+                                      child: Table(
+                                        columnWidths: const {
+                                          0: FlexColumnWidth(1),
+                                          1: FlexColumnWidth(1),
+                                          2: FlexColumnWidth(1),
+                                          3: FlexColumnWidth(1),
+                                        },
+                                        defaultVerticalAlignment:
+                                            TableCellVerticalAlignment.middle,
+                                        children: [
+                                          TableRow(
+                                            children: [
+                                              ProfileStatItem(
+                                                  count:
+                                                      views?.toString() ?? '0',
+                                                  label: 'Views'),
+                                              ProfileStatItem(
+                                                  count:
+                                                      submissions?.toString() ??
+                                                          '0',
+                                                  label: 'Submissions'),
+                                              ProfileStatItem(
+                                                  count:
+                                                      favs?.toString() ?? '0',
+                                                  label: 'Favs'),
+                                              ProfileStatItem(
+                                                  count: recentWatchersCount
+                                                      .toString(),
+                                                  label: 'Watched'),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            pinned: false,
+                          ),
+                          SliverPersistentHeader(
+                            pinned: true,
+                            delegate: NavigationSliderSliverDelegate(
+                              minHeight: navigationSliderHeight + 1.0,
+                              maxHeight: navigationSliderHeight + 1.0,
+                              child: NavigationSlider(
+                                sections: ProfileSection.values,
+                                tabController: _tabController,
+                                getTabTitle: _getTabTitle,
+                                getIconForSection: _getIconForSection,
+                                onTabTapped: (index, isAlreadySelected) {
+                                  if (isAlreadySelected) {
+                                    _scrollController.animateTo(
+                                      0.0,
+                                      duration:
+                                          const Duration(milliseconds: 300),
+                                      curve: Curves.easeOut,
+                                    );
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
+                        body: TabBarView(
+                          controller: _tabController,
+                          children: ProfileSection.values.map((section) {
+                            return KeyedSubtree(
+                              key: ValueKey(section),
+                              child: _buildLazySection(section),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (showLoadingIndicator)
+                    Container(
+                      color: Colors.black.withOpacity(1.0),
+                      child: const Center(
+                        child: PulsatingLoadingIndicator(
+                          size: 88.0,
+                          assetPath: 'assets/icons/fathemed.png',
+                        ),
+                      ),
+                    ),
+                  _buildAndroidBackSwipeOverlay(),
+                  Positioned(
+                    left: 16.0,
+                    bottom: 16.0,
+                    child: IgnorePointer(
+                      ignoring: !showDeleteSelectedFab,
+                      child: ExcludeSemantics(
+                        excluding: !showDeleteSelectedFab,
+                        child: AnimatedOpacity(
+                          opacity: showDeleteSelectedFab ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 210),
+                          curve: Curves.easeInOut,
+                          child: AnimatedScale(
+                            scale: showDeleteSelectedFab ? 1.0 : 0.92,
+                            duration: const Duration(milliseconds: 210),
+                            curve: Curves.easeInOut,
+                            child: FloatingActionButton(
+                              heroTag: null,
+                              onPressed: _isDeletingSelectedShouts
+                                  ? null
+                                  : _confirmDeleteSelectedShouts,
+                              backgroundColor: Colors.red,
+                              tooltip: 'Delete Selected Shouts',
+                              child: _isDeletingSelectedShouts
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                Colors.white),
+                                      ),
+                                    )
+                                  : const Icon(Icons.delete,
+                                      color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  ],
+                ),
+              ),
+              floatingActionButton: !isLoading
+                  ? ValueListenableBuilder<bool>(
+                      valueListenable: _showMoveUpFab,
+                      builder: (context, showFab, child) {
+                        return IgnorePointer(
+                          ignoring: !showFab,
+                          child: ExcludeSemantics(
+                            excluding: !showFab,
+                            child: AnimatedOpacity(
+                              opacity: showFab ? 1.0 : 0.0,
+                              duration: const Duration(milliseconds: 210),
+                              curve: Curves.easeInOut,
+                              child: AnimatedScale(
+                                scale: showFab ? 1.0 : 0.92,
+                                duration: const Duration(milliseconds: 210),
+                                curve: Curves.easeInOut,
+                                child: child,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                      child: FloatingActionButton(
+                        onPressed: () {
+                          _scrollController.animateTo(
+                            0.0,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOut,
+                          );
+                        },
+                        backgroundColor: const Color(0xFFE09321),
+                        child:
+                            const Icon(Icons.arrow_upward, color: Colors.white),
+                        tooltip: 'Scroll to Top',
+                      ),
+                    )
+                  : null,
+              floatingActionButtonLocation:
+                  FloatingActionButtonLocation.endFloat,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLazySection(ProfileSection section) {
+    if (!_lazyLoadedSections.contains(section)) {
+      // Keep a scrollable child so NestedScrollView/TabBarView behave consistently,
+      // but don't build the real section yet (prevents initState fetches).
+      return CustomScrollView(
+        slivers: [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: PulsatingLoadingIndicator(
+                size: 72.0,
+                assetPath: 'assets/icons/fathemed.png',
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    switch (section) {
+      case ProfileSection.Home:
+        return _buildHomeSection();
+      case ProfileSection.Gallery:
+        return _buildGallerySection();
+      case ProfileSection.Scraps:
+        return _buildScrapsSection();
+      case ProfileSection.Favs:
+        return _buildFavoritesSection();
+      case ProfileSection.Journals:
+        return _buildJournalsSection();
+    }
+  }
+
+  void _showEditProfileDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.grey[850],
+          title: const Text(
+            'Edit Profile',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _launchURL('https://www.furaffinity.net/controls/profile/');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    side: const BorderSide(color: Color(0xFFE09321)),
+                  ),
+                  child: const Text(
+                    "Profile Info",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _launchURL(
+                        'https://www.furaffinity.net/controls/profilebanner/');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    side: const BorderSide(color: Color(0xFFE09321)),
+                  ),
+                  child: const Text(
+                    "Profile Banner",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _launchURL(
+                        'https://www.furaffinity.net/controls/contacts/');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    side: const BorderSide(color: Color(0xFFE09321)),
+                  ),
+                  child: const Text(
+                    "Contacts & Social Media",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _launchURL('https://www.furaffinity.net/controls/avatar/');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    side: const BorderSide(color: Color(0xFFE09321)),
+                  ),
+                  child: const Text(
+                    "Avatar Management",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text(
+                'Close',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildHomeSection() {
+    return UserProfileHomeSection(
+      hasRealUserProfile: hasRealUserProfile,
+      userDescription: userDescription,
+      webViewKey: _webViewKey,
+      sanitizedUsername: sanitizedUsername,
+      onDescriptionLongPressStart: _handleDescriptionLongPress,
+      onWebViewLoaded: (loaded) {
+        Future.delayed(Duration(milliseconds: 25), () {
+          setState(() {
+            _webViewLoaded = loaded;
+          });
+        });
+      },
+      featuredImageUrl: featuredImageUrl,
+      featuredImageTitle: featuredImageTitle,
+      featuredPostNumber: featuredPostNumber,
+      onOpenPost: (context, imageUrl, uniqueNumber) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OpenPost(
+              imageUrl: imageUrl,
+              uniqueNumber: uniqueNumber,
+            ),
+          ),
+        );
+      },
+      userProfileImageUrl: userProfileImageUrl,
+      userProfilePostNumber: userProfilePostNumber,
+      userProfileTexts: userProfileTexts,
+      isClassicMarkup: isClassicMarkup,
+      acceptingTrades: acceptingTrades,
+      acceptingCommissions: acceptingCommissions,
+      onHandleFALink: _handleFALink,
+      contactInformationLinks: contactInformationLinks,
+      onLaunchUrl: _launchURL,
+      recentWatchers: recentWatchers,
+      recentWatchersCount: recentWatchersCount,
+      recentlyWatched: recentlyWatched,
+      recentlyWatchedCount: recentlyWatchedCount,
+      shouts: shouts,
+      isOwnProfile: isOwnProfile,
+      isShoutSelectionMode: _isShoutSelectionMode,
+      selectedShoutCount: _selectedShoutCount,
+      currentShoutPage: currentShoutPage,
+      totalShoutPages: totalShoutPages,
+      isLoadingMoreShouts: isLoadingMoreShouts,
+      onOpenPostShout: (context) async {
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PostShoutScreen(username: sanitizedUsername),
+          ),
+        );
+        if (result == true) {
+          await _fetchUserProfile();
+        }
+      },
+      onLoadMoreShouts: _loadMoreShouts,
+      onConfirmDeleteShout: _confirmDeleteShout,
+      onToggleShoutSelectionMode: _toggleShoutSelectionMode,
+      onToggleShoutSelection: _toggleShoutSelection,
+    );
+  }
+
+  /// Builds the Gallery section content.
+  Widget _buildGallerySection() {
+    return UserProfileGallerySection(
+      nickname: widget.nickname,
+      sanitizedUsername: sanitizedUsername,
+      selectedFolderName: _selectedFolderName,
+      selectedFolderUrl: _selectedFolderUrl,
+      allFolders: _allFolders,
+      onFolderSelected: _onFolderSelected,
+      onFoldersParsed: _onFoldersParsed,
+    );
+  }
+
+  /// Builds the Scraps section content.
+  Widget _buildScrapsSection() {
+    return UserProfileScrapsSection(sanitizedUsername: sanitizedUsername);
+  }
+
+  Widget _buildFavoritesSection() {
+    return UserProfileFavoritesSection(sanitizedUsername: sanitizedUsername);
+  }
+
+  void _refreshJournalsList() {
+    final journalsState = _journalsKey.currentState;
+    if (journalsState == null) return;
+    unawaited(journalsState.refreshJournals());
+  }
+
+  /// Builds the Journals section content.
+  Widget _buildJournalsSection() {
+    return UserProfileJournalsSection(
+      sanitizedUsername: sanitizedUsername,
+      isOwnProfile: isOwnProfile,
+      journalsKey: _journalsKey,
+      onCreateJournalPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CreateJournalScreen(
+              onJournalSubmitted: _refreshJournalsList,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

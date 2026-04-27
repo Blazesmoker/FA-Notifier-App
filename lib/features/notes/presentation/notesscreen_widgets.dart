@@ -1,0 +1,289 @@
+import 'package:flutter/material.dart';
+
+import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:FANotifier/features/notes/domain/message_model.dart';
+
+class MessageList extends StatelessWidget {
+  static const Color _accent = Color(0xFFE09321);
+
+  /// Regulate selection highlight opacity here (0.0–1.0). Lower = more semi-transparent.
+  static const double selectionOpacity = 0.07;
+
+  final bool isLoading;
+  final bool isLoadingMore;
+  final String errorMessage;
+  final List<Message> messages;
+  final String folder;
+  final ScrollController scrollController;
+  final bool hasMore;
+  final Future<void> Function() refreshInbox;
+  final Future<void> Function() refreshSent;
+  final Future<void> Function() loadMore;
+  final void Function(Message msg) onOpenMessage;
+  final void Function(Message msg)? onPreviewMessage;
+  final bool isSelectionMode;
+  final Set<String> selectedIds;
+  final void Function(Message msg)? onLongPressItem;
+  final void Function(Message msg)? onTapItem;
+
+  const MessageList({
+    Key? key,
+    required this.isLoading,
+    required this.isLoadingMore,
+    required this.errorMessage,
+    required this.messages,
+    required this.folder,
+    required this.scrollController,
+    required this.hasMore,
+    required this.refreshInbox,
+    required this.refreshSent,
+    required this.loadMore,
+    required this.onOpenMessage,
+    this.onPreviewMessage,
+    this.isSelectionMode = false,
+    this.selectedIds = const {},
+    this.onLongPressItem,
+    this.onTapItem,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final onRefresh = () async {
+      if (folder == 'inbox') {
+        await refreshInbox();
+      } else {
+        await refreshSent();
+      }
+    };
+
+
+    if (isLoading && messages.isEmpty) {
+      return RefreshIndicator(
+        color: _accent,
+        backgroundColor: Colors.black,
+        onRefresh: onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            SizedBox(height: 180),
+            Center(
+              child: PulsatingLoadingIndicator(
+                size: 108.0,
+                assetPath: 'assets/icons/fathemed.png',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (errorMessage.isNotEmpty && messages.isEmpty) {
+      return RefreshIndicator(
+        color: _accent,
+        backgroundColor: Colors.black,
+        onRefresh: onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            const SizedBox(height: 180),
+            Center(
+              child: Text(
+                errorMessage,
+                style: const TextStyle(color: Colors.red, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (messages.isEmpty) {
+      return RefreshIndicator(
+        color: _accent,
+        backgroundColor: Colors.black,
+        onRefresh: onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            SizedBox(height: 180),
+            Center(
+              child: Text(
+                'No messages found.',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      color: _accent,
+      backgroundColor: Colors.black,
+      onRefresh: onRefresh,
+      child: ListView.builder(
+        controller: scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: messages.length + (hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == messages.length) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 44.0),
+              child: Center(
+                child: isLoadingMore
+                    ? const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.6,
+                    valueColor: AlwaysStoppedAnimation<Color>(_accent),
+                  ),
+                )
+                    : const SizedBox.shrink(),
+              ),
+            );
+          }
+
+          final msg = messages[index];
+          final isInbox = folder == 'inbox';
+          final isSelected = selectedIds.contains(msg.id);
+          final toFromLabel = isInbox
+              ? 'From: ${msg.sender}'
+              : 'To: ${msg.recipient.isNotEmpty ? msg.recipient : msg.sender}';
+          return GestureDetector(
+            onLongPress: onLongPressItem != null
+                ? () => onLongPressItem!(msg)
+                : null,
+            onTap: () {
+              if (onTapItem != null) {
+                onTapItem!(msg);
+              } else {
+                onOpenMessage(msg);
+              }
+            },
+            child: Column(
+              children: [
+                Container(
+                  color: isSelected
+                      ? _accent.withOpacity(selectionOpacity)
+                      : Colors.black,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8.0,
+                    horizontal: 16.0,
+                  ),
+                  child: Row(
+                    children: [
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeInOut,
+                        child: isSelectionMode
+                            ? _buildCheckbox(msg)
+                            : const SizedBox.shrink(),
+                      ),
+                      if (msg.isUnread)
+                        Container(
+                          width: 10,
+                          height: 10,
+                          margin: const EdgeInsets.only(right: 12),
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _accent,
+                          ),
+                        ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              msg.subject,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+
+                            Text(
+                              toFromLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'Date: ${msg.date}',
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (folder == 'inbox' && onPreviewMessage != null)
+                        IconTheme(
+                          data: const IconThemeData(color: Colors.white),
+                          child: IconButton(
+                            icon: const Icon(Icons.preview, color: Colors.white),
+                            tooltip: 'Preview',
+                            onPressed: () => onPreviewMessage!(msg),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const Divider(
+                  height: 1,
+                  thickness: 0.2,
+                  color: Colors.grey,
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCheckbox(Message msg) {
+    final isSelected = selectedIds.contains(msg.id);
+    return Padding(
+      padding: const EdgeInsets.only(right: 12.0),
+      child: IgnorePointer(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: Checkbox(
+            value: isSelected,
+            onChanged: (_) {},
+            fillColor: WidgetStateProperty.resolveWith((_) {
+              if (isSelected) return _accent;
+              return Colors.transparent;
+            }),
+            checkColor: Colors.white,
+            side: BorderSide(
+              color: isSelected ? _accent : Colors.grey,
+              width: 1.5,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
