@@ -112,11 +112,13 @@ class OpenPostApiService {
     // Submission author data
     final profileIcon = logQuery(
       document,
-      '.submission-id-avatar img, td.alt1 .avatar img, .classic-submission-title.avatar a img, .classic-submissiont-title.avatar a img',
+      '.submission-description-artist img.submission-user-icon.avatar, .submission-description-header img.submission-user-icon.avatar, .submission-id-avatar img, td.alt1 .avatar img, .classic-submission-title.avatar a img, .classic-submissiont-title.avatar a img',
     );
 
     var usernameAnchor = logQuery(
-            document, '.submission-id-sub-container a[href^="/user/"]') ??
+            document,
+            '.submission-description-artist span.c-usernameBlockSimple.username-underlined a[href^="/user/"], .submission-description-header span.c-usernameBlockSimple.username-underlined a[href^="/user/"]') ??
+        logQuery(document, '.submission-id-sub-container a[href^="/user/"]') ??
         logQuery(document,
             '.classic-submission-title.information span.c-usernameBlockSimple.username-underlined a[href^="/user/"]');
 
@@ -139,7 +141,7 @@ class OpenPostApiService {
 
     // Submission title
     final titleElem = logQuery(document,
-        '.submission-title h2 p, .classic-submission-title.information h2');
+        '.submission-title h2 p, .submission-title h2, .classic-submission-title.information h2');
 
     // Full image
     final imageElem = logQuery(document,
@@ -151,7 +153,8 @@ class OpenPostApiService {
 
     // Description
     var descElem = logQuery(
-            document, '.submission-description.user-submitted-links') ??
+            document, '.submission-description-text.user-submitted-links') ??
+        logQuery(document, '.submission-description.user-submitted-links') ??
         logQuery(document,
             '.submission-description, td.alt1[width="70%"][valign="top"][align="left"][style*="padding:8px"]');
     String fixedDescription = '';
@@ -179,8 +182,28 @@ class OpenPostApiService {
     String? rawTime = publicationTimeElem?.attributes['title']?.trim();
     rawTime ??= publicationTimeElem?.text.trim();
 
+    dom.Element? _submissionPageStat(String label) {
+      final containers = document.querySelectorAll('.submission-page-stats > div');
+      for (final container in containers) {
+        final title = container.attributes['title']?.trim().toLowerCase();
+        final hasLabel = title == label.toLowerCase() ||
+            container.querySelector('.highlight')?.text.trim().toLowerCase() ==
+                label.toLowerCase();
+        if (!hasLabel) continue;
+        for (final child in container.children) {
+          if (child.classes.contains('highlight')) continue;
+          final text = child.text.trim();
+          if (text.isNotEmpty) {
+            return dom.Element.tag('span')..text = text;
+          }
+        }
+      }
+      return null;
+    }
+
     // View count
     var viewCountElem = logQuery(document, '.views .font-large');
+    viewCountElem ??= _submissionPageStat('Views');
     if (viewCountElem == null) {
       final statsContainer = logQuery(document, 'td.alt1.stats-container');
       if (statsContainer != null) {
@@ -208,6 +231,7 @@ class OpenPostApiService {
 
     // Comments count
     var commentsCountElem = logQuery(document, '.comments .font-large');
+    commentsCountElem ??= _submissionPageStat('Comments');
     if (commentsCountElem == null) {
       final statsContainer = logQuery(document, 'td.alt1.stats-container');
       if (statsContainer != null) {
@@ -236,6 +260,7 @@ class OpenPostApiService {
     // Rating (General/Mature/Adult)
     String? rating;
     dom.Element? ratingElem = logQuery(document, '.rating .font-large') ??
+        logQuery(document, 'div[class*="c-contentRating--"]') ??
         logQuery(document, 'span[class*="c-contentRating--"]');
     if (ratingElem == null) {
       // Classic fallback: parse from stats container labels.
@@ -276,8 +301,8 @@ class OpenPostApiService {
     }
 
     // Info section
-    final infoSection =
-        logQuery(document, 'section.info.text, td.alt1.stats-container');
+    final infoSection = logQuery(
+        document, 'section.info.text, .submission-content-stats, td.alt1.stats-container');
     String? category;
     String? type;
     String? species;
@@ -291,7 +316,49 @@ class OpenPostApiService {
         false;
 
     if (infoSection != null) {
-      if (!isClassic) {
+      if (infoSection.classes.contains('submission-content-stats')) {
+        final spans = infoSection.children.where((e) => e.localName == 'span').toList();
+        if (spans.length >= 2) {
+          final labels = spans[0]
+              .children
+              .map((e) => e.text.trim())
+              .where((text) => text.isNotEmpty)
+              .toList();
+          final values = spans[1]
+              .children
+              .map((e) => e.text.trim())
+              .where((text) => text.isNotEmpty)
+              .toList();
+          for (var i = 0; i < labels.length && i < values.length; i++) {
+            final label = labels[i];
+            final value = values[i];
+            switch (label) {
+              case 'Category':
+                final parts = value.split('/').map((s) => s.trim()).toList();
+                category = parts.isNotEmpty ? parts.first : value;
+                if (parts.length > 1) type = parts.sublist(1).join(' / ');
+                break;
+              case 'Theme':
+              case 'Type':
+                type = value;
+                break;
+              case 'Species':
+                species = value;
+                break;
+              case 'Gender':
+                gender = value;
+                break;
+              case 'Resolution':
+              case 'Size':
+                size = value;
+                break;
+              case 'File Size':
+                fileSize = value;
+                break;
+            }
+          }
+        }
+      } else if (!isClassic) {
         final divs = infoSection.querySelectorAll('div');
         for (final div in divs) {
           final strong = div.querySelector('strong.highlight');
@@ -363,7 +430,16 @@ class OpenPostApiService {
     double? imageWidth;
     double? imageHeight;
     if (infoSection != null) {
-      if (!isClassic) {
+      if (infoSection.classes.contains('submission-content-stats')) {
+        final sizeText = size;
+        if (sizeText != null) {
+          final dims = sizeText.toLowerCase().split('x');
+          if (dims.length >= 2) {
+            imageWidth = double.tryParse(dims[0].trim());
+            imageHeight = double.tryParse(dims[1].trim());
+          }
+        }
+      } else if (!isClassic) {
         final divs = infoSection.querySelectorAll('div');
         for (final div in divs) {
           final strong = div.querySelector('strong.highlight');
@@ -411,8 +487,10 @@ class OpenPostApiService {
     dom.Element? keywordSection = document
             .querySelector('section.tags-row:not(.tags-row--meta)') ??
         document.querySelector('section.tags-mobile:not(.tags-mobile--meta)') ??
+        document.querySelector('.submission-tags') ??
         logQuery(document, 'section.tags-row:not(.tags-row--meta)') ??
         logQuery(document, 'section.tags-mobile:not(.tags-mobile--meta)') ??
+        logQuery(document, '.submission-tags') ??
         logQuery(document, '#keywords');
 
     dom.Element? metaKeywordSection =
@@ -438,6 +516,7 @@ class OpenPostApiService {
 
     // Favorite count (unused for state but kept parity)
     var favCountElem = logQuery(document, '.favorites .font-large');
+    favCountElem ??= _submissionPageStat('Favorites');
     if (favCountElem == null) {
       final statsContainer = logQuery(document, 'td.alt1.stats-container');
       if (statsContainer != null) {

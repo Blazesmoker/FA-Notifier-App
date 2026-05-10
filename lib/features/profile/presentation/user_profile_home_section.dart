@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:FANotifier/features/profile/domain/shout.dart';
 import 'package:FANotifier/features/profile/domain/user_link.dart';
@@ -101,13 +102,31 @@ class UserProfileHomeSection extends StatelessWidget {
             userDescription!.trim().isNotEmpty)
           GestureDetector(
             onLongPressStart: onDescriptionLongPressStart,
-            child: UserDescriptionWebView(
-              key: webViewKey,
-              sanitizedUsername: sanitizedUsername,
-              initialHtml: userDescription,
-              forceHybridComposition: false,
-              enableTextSelection: false,
-              onWebViewLoaded: onWebViewLoaded,
+            child: VisibilityDetector(
+              key: ObjectKey(webViewKey),
+              onVisibilityChanged: (info) {
+                final state = webViewKey.currentState;
+                if (state == null) {
+                  return;
+                }
+                if (info.visibleFraction > 0.15) {
+                  state.resumeWebView(
+                    reason: UserDescriptionWebViewPauseReason.visibility,
+                  );
+                } else {
+                  state.pauseWebView(
+                    reason: UserDescriptionWebViewPauseReason.visibility,
+                  );
+                }
+              },
+              child: UserDescriptionWebView(
+                key: webViewKey,
+                sanitizedUsername: sanitizedUsername,
+                initialHtml: userDescription,
+                forceHybridComposition: false,
+                enableTextSelection: false,
+                onWebViewLoaded: onWebViewLoaded,
+              ),
             ),
           ),
         const SizedBox(height: 16.0),

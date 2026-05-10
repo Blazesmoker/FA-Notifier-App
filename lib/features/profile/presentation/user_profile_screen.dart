@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'dart:math';
 import 'package:FANotifier/features/profile/presentation/user_description_webview.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -187,7 +188,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _tabSettleTimer?.cancel();
     _backSwipeAnimationController.dispose();
     _tabController.dispose();
-    _scrollController.removeListener(_updateAvatarTransform);
     _scrollController.removeListener(_onScrollForMoveUpFab);
     _scrollController.dispose();
     _backSwipeOffsetNotifier.dispose();
@@ -226,6 +226,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       details.globalPosition & const Size(40, 40),
       Offset.zero & overlay.size,
     );
+    _suppressNextRouteFreeze = true;
     final selected = await showMenu<String>(
       context: context,
       position: position,
@@ -239,7 +240,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
           child: Text('Select Text'),
         ),
       ],
-    );
+    ).whenComplete(() {
+      _suppressNextRouteFreeze = false;
+    });
     if (selected == 'copy') {
       final plainText = await _webViewKey.currentState?.getPlainText();
       if (plainText != null) {
@@ -386,9 +389,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
   static const double _androidBackSwipeMinDistance = 72.0;
   static const double _androidBackSwipeMinVelocity = 700.0;
 
-  final double _bannerScaleStart = 0.0;
-  final double _bannerScaleEnd = 180.0;
-
   late ScrollController _scrollController;
   late final ValueNotifier<bool> _showMoveUpFab = ValueNotifier<bool>(false);
   late final ValueNotifier<double> _backSwipeOffsetNotifier =
@@ -416,6 +416,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
   bool _isShoutSelectionMode = false;
   bool _isDeletingSelectedShouts = false;
   bool _isDraggingBackFromEdge = false;
+  bool _isProfileFrozen = false;
+  bool _suppressNextRouteFreeze = false;
   double _backDragStartX = 0.0;
   double _backDragDistance = 0.0;
 
@@ -440,7 +442,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _loadSfwEnabled();
 
     _scrollController = ScrollController();
-    _scrollController.addListener(_updateAvatarTransform);
     _scrollController.addListener(_onScrollForMoveUpFab);
 
     _tabController = TabController(
@@ -486,6 +487,34 @@ class UserProfileScreenState extends State<UserProfileScreen>
     sanitizedUsername = _sanitizeUsername(widget.nickname);
 
     _initAsyncFetch();
+  }
+
+  @override
+  void didPushNext() {
+    if (_suppressNextRouteFreeze) {
+      return;
+    }
+    _setProfileFrozen(true);
+  }
+
+  @override
+  void didPopNext() {
+    _setProfileFrozen(false);
+  }
+
+  void _setProfileFrozen(bool isFrozen) {
+    if (_isProfileFrozen == isFrozen) {
+      return;
+    }
+    _isProfileFrozen = isFrozen;
+    if (isFrozen) {
+      unawaited(_webViewKey.currentState?.pauseWebView() ?? Future.value());
+    } else {
+      unawaited(_webViewKey.currentState?.resumeWebView() ?? Future.value());
+    }
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _scheduleLazyLoadForIndex(int index) {
@@ -742,33 +771,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
         );
       },
     );
-  }
-
-  void _updateAvatarTransform() {
-    double offset = _scrollController.offset;
-
-    // Calculate new opacity based on offset
-    double newOpacity;
-    if (offset <= _avatarFadeStart) {
-      newOpacity = 1.0;
-    } else if (offset >= _avatarFadeEnd) {
-      newOpacity = 0.0;
-    } else {
-      // Linear interpolation between full opacity (1.0) and no opacity (0.0)
-      newOpacity = 1.0 -
-          ((offset - _avatarFadeStart) / (_avatarFadeEnd - _avatarFadeStart));
-    }
-
-    double newScale;
-    if (offset <= _avatarScaleStart) {
-      newScale = 1.0;
-    } else if (offset >= _avatarScaleEnd) {
-      newScale = 0.2;
-    } else {
-      double scaleFraction =
-          (offset - _avatarScaleStart) / (_avatarScaleEnd - _avatarScaleStart);
-      newScale = 1.0 - (0.8 * scaleFraction);
-    }
   }
 
   IconData _getIconForSection(ProfileSection section) {
@@ -1328,7 +1330,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
       sanitizedUsername = payload.sanitizedUsername;
 
-      final parsed = _api.parseUserProfile(payload.htmlBody);
+      final parsed = await compute(parseUserProfileHtml, payload.htmlBody);
       final bool shouldShowDescription = parsed.hasRealUserProfile &&
           parsed.userDescription != null &&
           parsed.userDescription!.trim().isNotEmpty;
@@ -1427,29 +1429,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       alignmentX += shiftFraction;
     }
 
-    return AnimatedBuilder(
-      animation: _scrollController,
-      builder: (context, child) {
-        double offset =
-            _scrollController.hasClients ? _scrollController.offset : 0.0;
-
-        double newScale;
-        if (offset <= _bannerScaleStart) {
-          newScale = 1.0;
-        } else if (offset >= _bannerScaleEnd) {
-          newScale = 1.0;
-        } else {
-          double scaleFraction = (offset - _bannerScaleStart) /
-              (_bannerScaleEnd - _bannerScaleStart);
-          newScale = 1.0 - (0.2 * scaleFraction);
-        }
-
-        return Transform.scale(
-          scale: newScale.clamp(1.0, 1.0),
-          alignment: Alignment(alignmentX, 0),
-          child: child,
-        );
-      },
+    return RepaintBoundary(
       child: Image.network(
         profileBannerUrl ??
             'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg',
@@ -1514,40 +1494,42 @@ class UserProfileScreenState extends State<UserProfileScreen>
           ),
         );
       },
-      child: GestureDetector(
-        onTap: () {},
-        child: profileImageUrl == null || profileImageUrl!.isEmpty
-            ? Image.asset(
-                'assets/images/defaultpic.gif',
-                width: avatarSize,
-                height: avatarSize,
-                fit: BoxFit.cover,
-              )
-            : Image.network(
-                profileImageUrl!,
-                width: avatarSize,
-                height: avatarSize,
-                fit: BoxFit.cover,
-                filterQuality: FilterQuality.low,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return SizedBox(
-                    width: avatarSize / 2,
-                    height: avatarSize / 2,
-                    child: const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2.0),
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return Image.asset(
-                    'assets/images/defaultpic.gif',
-                    width: avatarSize,
-                    height: avatarSize,
-                    fit: BoxFit.cover,
-                  );
-                },
-              ),
+      child: RepaintBoundary(
+        child: GestureDetector(
+          onTap: () {},
+          child: profileImageUrl == null || profileImageUrl!.isEmpty
+              ? Image.asset(
+                  'assets/images/defaultpic.gif',
+                  width: avatarSize,
+                  height: avatarSize,
+                  fit: BoxFit.cover,
+                )
+              : Image.network(
+                  profileImageUrl!,
+                  width: avatarSize,
+                  height: avatarSize,
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.low,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return SizedBox(
+                      width: avatarSize / 2,
+                      height: avatarSize / 2,
+                      child: const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2.0),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Image.asset(
+                      'assets/images/defaultpic.gif',
+                      width: avatarSize,
+                      height: avatarSize,
+                      fit: BoxFit.cover,
+                    );
+                  },
+                ),
+        ),
       ),
     );
   }
@@ -1781,8 +1763,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
         },
         child: DefaultTabController(
           length: ProfileSection.values.length,
-          child: _buildAndroidBackSwipeTransition(
-            child: Scaffold(
+          child: TickerMode(
+            enabled: !_isProfileFrozen,
+            child: _buildAndroidBackSwipeTransition(
+              child: Scaffold(
               backgroundColor: Colors.black,
               body: SafeArea(
                 top: false,
@@ -1791,12 +1775,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                   GestureDetector(
                     behavior: HitTestBehavior.translucent,
                     onTap: () => _clearProfileNameSelection(),
-                    child: NotificationListener<ScrollNotification>(
-                      onNotification: (ScrollNotification notification) {
-                        _updateAvatarTransform();
-                        return false;
-                      },
-                      child: NestedScrollView(
+                    child: NestedScrollView(
                         controller: _scrollController,
                         headerSliverBuilder: (context, innerBoxIsScrolled) => [
                           SliverAppBar(
@@ -2346,7 +2325,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
                           }).toList(),
                         ),
                       ),
-                    ),
                   ),
                   if (showLoadingIndicator)
                     Container(
@@ -2442,6 +2420,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                   : null,
               floatingActionButtonLocation:
                   FloatingActionButtonLocation.endFloat,
+              ),
             ),
           ),
         ),

@@ -95,6 +95,8 @@ class SubmissionDescriptionWebViewState
         .forEach((e) => e.remove());
 
     var submissionDesc = doc.querySelector(
+      '.submission-description-text.user-submitted-links, '
+      '.submission-description.user-submitted-links, '
       '.submission-description, '
       'td.alt1[width="70%"][valign="top"][align="left"][style*="padding:8px"]',
     );
@@ -149,7 +151,10 @@ class SubmissionDescriptionWebViewState
         )
         .forEach((e) => e.remove());
 
-    final submissionDesc = doc.querySelector('.submission-description, '
+    final submissionDesc = doc.querySelector(
+        '.submission-description-text.user-submitted-links, '
+        '.submission-description.user-submitted-links, '
+        '.submission-description, '
         'td.alt1[width="70%"][valign="top"][align="left"][style*="padding:8px"]');
 
     if (submissionDesc == null) {

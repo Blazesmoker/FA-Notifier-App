@@ -29,7 +29,17 @@ class ActivitiesNotificationStateStore {
   static const String _kJournals = 'last_seen_activities_journals';
   static const String _kNotes = 'last_seen_activities_notes';
 
+  static const String _kLastShownSubmissions =
+      'last_shown_activities_submissions';
+  static const String _kLastShownWatches = 'last_shown_activities_watches';
+  static const String _kLastShownComments = 'last_shown_activities_comments';
+  static const String _kLastShownFavorites = 'last_shown_activities_favorites';
+  static const String _kLastShownJournals = 'last_shown_activities_journals';
+  static const String _kLastShownNotes = 'last_shown_activities_notes';
+  static const String _kLastShownBody = 'last_shown_activities_body';
+
   static const String kLastSeenUpdatedAtMsKey = 'last_seen_activities_at_ms';
+  static const String kLastShownUpdatedAtMsKey = 'last_shown_activities_at_ms';
 
   // In-isolate mutex to avoid duplicate notifications caused by overlapping
   // refresh triggers (timer + lifecycle + notification tap refresh).
@@ -128,6 +138,42 @@ class ActivitiesNotificationStateStore {
       );
     });
   }
+
+  Future<bool> isDuplicateShownNotification({
+    required NotificationCounts currentCounts,
+    required String body,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+
+    final String? lastBody = prefs.getString(_kLastShownBody);
+    if (lastBody == null || lastBody != body) return false;
+
+    return prefs.getInt(_kLastShownSubmissions) == currentCounts.submissions &&
+        prefs.getInt(_kLastShownWatches) == currentCounts.watches &&
+        prefs.getInt(_kLastShownComments) == currentCounts.comments &&
+        prefs.getInt(_kLastShownFavorites) == currentCounts.favorites &&
+        prefs.getInt(_kLastShownJournals) == currentCounts.journals &&
+        prefs.getInt(_kLastShownNotes) == currentCounts.notes;
+  }
+
+  Future<void> markActivityNotificationShown({
+    required NotificationCounts currentCounts,
+    required String body,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kLastShownSubmissions, currentCounts.submissions);
+    await prefs.setInt(_kLastShownWatches, currentCounts.watches);
+    await prefs.setInt(_kLastShownComments, currentCounts.comments);
+    await prefs.setInt(_kLastShownFavorites, currentCounts.favorites);
+    await prefs.setInt(_kLastShownJournals, currentCounts.journals);
+    await prefs.setInt(_kLastShownNotes, currentCounts.notes);
+    await prefs.setString(_kLastShownBody, body);
+    await prefs.setInt(
+      kLastShownUpdatedAtMsKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+  }
 }
 
 class ActivitiesDiff {
@@ -148,6 +194,15 @@ class ActivitiesDiff {
       increasedBy.favorites > 0 ||
       increasedBy.journals > 0 ||
       increasedBy.notes > 0;
+
+  bool hasNonZeroPreviousIncrease(NotificationCounts enabledIncreases) {
+    return (enabledIncreases.submissions > 0 && previous.submissions > 0) ||
+        (enabledIncreases.watches > 0 && previous.watches > 0) ||
+        (enabledIncreases.comments > 0 && previous.comments > 0) ||
+        (enabledIncreases.favorites > 0 && previous.favorites > 0) ||
+        (enabledIncreases.journals > 0 && previous.journals > 0) ||
+        (enabledIncreases.notes > 0 && previous.notes > 0);
+  }
 }
 
 

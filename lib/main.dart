@@ -192,9 +192,9 @@ void callbackDispatcher() {
               final bool notesEnabled =
                   prefs.getBool('drawer_notif_notes_enabled') ?? true;
 
-              final ActivitiesDiff diff =
-                  await ActivitiesNotificationStateStore()
-                      .diffAndUpdateLastSeen(currentCounts: newCounts);
+              final activitiesStateStore = ActivitiesNotificationStateStore();
+              final ActivitiesDiff diff = await activitiesStateStore
+                  .diffAndUpdateLastSeen(currentCounts: newCounts);
               kDebugPrint(
                   '[BG] Last-seen counts: S:${diff.previous.submissions} W:${diff.previous.watches} C:${diff.previous.comments} F:${diff.previous.favorites} J:${diff.previous.journals} N:${diff.previous.notes}');
               kDebugPrint(
@@ -211,12 +211,14 @@ void callbackDispatcher() {
                 notes: notesEnabled ? diff.increasedBy.notes : 0,
               );
 
-              final bool shouldNotify = enabledIncreases.submissions > 0 ||
+              final bool hasEnabledIncrease = enabledIncreases.submissions > 0 ||
                   enabledIncreases.watches > 0 ||
                   enabledIncreases.comments > 0 ||
                   enabledIncreases.favorites > 0 ||
                   enabledIncreases.journals > 0 ||
                   enabledIncreases.notes > 0;
+              final bool shouldNotify = hasEnabledIncrease &&
+                  diff.hasNonZeroPreviousIncrease(enabledIncreases);
 
               final NotificationCounts filteredCounts = NotificationCounts(
                 submissions: submissionsEnabled ? newCounts.submissions : 0,
@@ -238,21 +240,39 @@ void callbackDispatcher() {
                 final bool vibrationActivitiesEnabled =
                     prefs.getBool('vibration_new_activities_enabled') ?? true;
                 if (soundActivitiesEnabled || vibrationActivitiesEnabled) {
-                  final int activityNotificationId = await notificationService
-                      .allocateActivityNotificationId();
-                  await notificationService.showNotification(
-                    activityNotificationId,
-                    'New FA Activity',
-                    messageBody,
-                    'activity_fa_activity',
-                    'activities',
+                  final bool isDuplicate = await activitiesStateStore
+                      .isDuplicateShownNotification(
+                    currentCounts: newCounts,
+                    body: messageBody,
                   );
-                  appLog('[BG] Activity notification shown.');
-                  kDebugPrint('[BG] Activity notification shown: $messageBody');
+                  if (isDuplicate) {
+                    appLog(
+                        '[BG] Duplicate activity notification skipped: $messageBody');
+                  } else {
+                    final int activityNotificationId =
+                        await notificationService.allocateActivityNotificationId();
+                    await notificationService.showNotification(
+                      activityNotificationId,
+                      'New FA Activity',
+                      messageBody,
+                      'activity_fa_activity',
+                      'activities',
+                    );
+                    await activitiesStateStore.markActivityNotificationShown(
+                      currentCounts: newCounts,
+                      body: messageBody,
+                    );
+                    appLog('[BG] Activity notification shown.');
+                    kDebugPrint(
+                        '[BG] Activity notification shown: $messageBody');
+                  }
                 } else {
                   appLog(
                       '[BG] Activities sound+vibration disabled; not showing notification.');
                 }
+              } else if (hasEnabledIncrease) {
+                appLog(
+                    '[BG] Enabled activity increase came from zero baseline; not notifying.');
               } else {
                 appLog('[BG] No enabled category increased; not notifying.');
               }

@@ -174,7 +174,8 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       final bool notesEnabled =
           prefs.getBool('drawer_notif_notes_enabled') ?? true;
 
-      final ActivitiesDiff diff = await ActivitiesNotificationStateStore()
+      final activitiesStateStore = ActivitiesNotificationStateStore();
+      final ActivitiesDiff diff = await activitiesStateStore
           .diffAndUpdateLastSeen(currentCounts: currentCounts);
 
       final NotificationCounts enabledIncreases = NotificationCounts(
@@ -186,12 +187,14 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
         notes: notesEnabled ? diff.increasedBy.notes : 0,
       );
 
-      final bool shouldNotify = enabledIncreases.submissions > 0 ||
+      final bool hasEnabledIncrease = enabledIncreases.submissions > 0 ||
           enabledIncreases.watches > 0 ||
           enabledIncreases.comments > 0 ||
           enabledIncreases.favorites > 0 ||
           enabledIncreases.journals > 0 ||
           enabledIncreases.notes > 0;
+      final bool shouldNotify = hasEnabledIncrease &&
+          diff.hasNonZeroPreviousIncrease(enabledIncreases);
 
       if (!shouldNotify) return;
 
@@ -214,6 +217,13 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
         enabledIncreases,
       );
 
+      final bool isDuplicate =
+          await activitiesStateStore.isDuplicateShownNotification(
+        currentCounts: currentCounts,
+        body: messageBody,
+      );
+      if (isDuplicate) return;
+
       final notificationService = NotificationService();
       final int activityNotificationId =
           await notificationService.allocateActivityNotificationId();
@@ -224,6 +234,10 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
         messageBody,
         'activity_fa_activity',
         'activities',
+      );
+      await activitiesStateStore.markActivityNotificationShown(
+        currentCounts: currentCounts,
+        body: messageBody,
       );
     } catch (_) {}
   }

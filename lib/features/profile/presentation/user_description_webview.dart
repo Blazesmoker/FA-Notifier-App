@@ -14,6 +14,8 @@ import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 
+enum UserDescriptionWebViewPauseReason { route, visibility }
+
 class UserDescriptionWebView extends StatefulWidget {
   final String sanitizedUsername;
   final String? initialHtml;
@@ -44,6 +46,9 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
         accessibility: KeychainAccessibility.first_unlock),
   );
   late Future<String> _userDescriptionFuture;
+  InAppWebViewController? _controller;
+  final Set<UserDescriptionWebViewPauseReason> _pauseReasons =
+      <UserDescriptionWebViewPauseReason>{};
   double _webViewHeight = 50.0;
   bool _isWebViewVisible = true;
   bool _webViewLoaded = false;
@@ -71,9 +76,67 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   bool get wantKeepAlive => true;
 
   void hideWebView() {
+    if (!_isWebViewVisible) {
+      return;
+    }
     setState(() {
       _isWebViewVisible = false;
     });
+  }
+
+  void showWebView() {
+    if (_isWebViewVisible) {
+      return;
+    }
+    setState(() {
+      _isWebViewVisible = true;
+    });
+  }
+
+  Future<void> pauseWebView({
+    UserDescriptionWebViewPauseReason reason =
+        UserDescriptionWebViewPauseReason.route,
+  }) async {
+    if (!_pauseReasons.add(reason)) {
+      return;
+    }
+    if (_pauseReasons.length > 1) {
+      return;
+    }
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
+    try {
+      if (Platform.isAndroid) {
+        await controller.pause();
+      }
+    } catch (e) {
+      debugPrint('Failed to pause profile WebView: $e');
+    }
+  }
+
+  Future<void> resumeWebView({
+    UserDescriptionWebViewPauseReason reason =
+        UserDescriptionWebViewPauseReason.route,
+  }) async {
+    if (!_pauseReasons.remove(reason)) {
+      return;
+    }
+    if (_pauseReasons.isNotEmpty) {
+      return;
+    }
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
+    try {
+      if (Platform.isAndroid) {
+        await controller.resume();
+      }
+    } catch (e) {
+      debugPrint('Failed to resume profile WebView: $e');
+    }
   }
 
   Future<String> _processInitialHtml(String html) async {
@@ -112,9 +175,8 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
       extractedHtml = userDescElem.outerHtml.trim();
     }
 
-    final cleanHtml = _injectFACSS(extractedHtml);
-    _userDescriptionHtml = cleanHtml;
-    return cleanHtml;
+    _userDescriptionHtml = extractedHtml;
+    return extractedHtml;
   }
 
   /// Fetches and cleans the HTML content for the user description.
@@ -179,10 +241,8 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
       extractedHtml = userDescElem.outerHtml.trim();
     }
 
-    final cleanHtml = _injectFACSS(extractedHtml);
-    // Save it for link processing.
-    _userDescriptionHtml = cleanHtml;
-    return cleanHtml;
+    _userDescriptionHtml = extractedHtml;
+    return extractedHtml;
   }
 
   /// Injects necessary CSS into the HTML content.
@@ -496,6 +556,12 @@ user-select: none !important;
                 supportMultipleWindows: true,
                 useHybridComposition: widget.forceHybridComposition,
               ),
+              onWebViewCreated: (controller) {
+                _controller = controller;
+                if (Platform.isAndroid && _pauseReasons.isNotEmpty) {
+                  controller.pause();
+                }
+              },
               onCreateWindow: (controller, createWindowReq) async {
                 final url = createWindowReq.request.url?.toString() ?? '';
                 if (url.isNotEmpty) {

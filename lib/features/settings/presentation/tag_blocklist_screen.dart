@@ -468,9 +468,9 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF111111),
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF111111),
+        backgroundColor: Colors.black,
         title: const Text('Tag Blocklist'),
       ),
       body: Stack(
@@ -489,7 +489,7 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
                     ),
                   ),
                 _buildManageSection(),
-                const Divider(height: 18, color: Colors.black, thickness: 4),
+                const Divider(height: 18, color: Color(0xFF111111), thickness: 4),
                 _buildAddSection(),
               ],
             ),
@@ -497,7 +497,7 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
           if (_loading)
             AbsorbPointer(
               child: Container(
-                color: const Color(0xFF111111),
+                color: Colors.black,
                 child: const Center(
                   child: PulsatingLoadingIndicator(
                     size: 78.0, // medium

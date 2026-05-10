@@ -108,6 +108,10 @@ class UserProfileParsed {
   bool isOwnProfile;
 }
 
+UserProfileParsed parseUserProfileHtml(String htmlBody) {
+  return UserProfileApiService.parseUserProfile(htmlBody);
+}
+
 class UserProfileFetchPayload {
   final String sanitizedUsername;
   final String htmlBody;
@@ -1078,7 +1082,7 @@ class UserProfileApiService {
     return newShouts;
   }
 
-  UserProfileParsed parseUserProfile(String htmlBody) {
+  static UserProfileParsed parseUserProfile(String htmlBody) {
     final document = html_parser.parse(htmlBody);
 
     bool localHasRealUserProfile = true;
@@ -1118,7 +1122,6 @@ class UserProfileApiService {
     profileImageUrl = profilePicElem != null
         ? (profilePicElem.attributes['src']?.replaceFirst('//', 'https://'))
         : null;
-    print("DEBUG api: $profileImageUrl");
 
     final displayNameElem = document
             .querySelector('a.c-usernameBlock__displayName .js-displayName') ??
