@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:FANotifier/app/app_theme.dart';
 import 'package:FANotifier/features/settings/data/thumbnail_display_settings_provider.dart';
+import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:provider/provider.dart';
 
 /// Applies an optional rating outline around the thumbnail.
@@ -55,12 +57,16 @@ class FaThumbnailCaption extends StatelessWidget {
   final double maxWidth;
   final String? title;
   final String? author;
+  final String? authorProfileUrl;
+  final Future<void> Function(String author)? onAuthorTap;
 
   const FaThumbnailCaption({
     super.key,
     required this.maxWidth,
     required this.title,
     required this.author,
+    this.authorProfileUrl,
+    this.onAuthorTap,
   });
 
   @override
@@ -86,6 +92,22 @@ class FaThumbnailCaption extends StatelessWidget {
           fontSize: 11,
         );
     final authorStyle = byStyle?.copyWith(color: const Color(0xFFE09321));
+    final authorTapHandler = onAuthorTap ??
+        (String authorName) async {
+          final profileUrl = authorProfileUrl?.trim();
+          if (profileUrl != null && profileUrl.isNotEmpty) {
+            final resolvedUrl = profileUrl.startsWith('http')
+                ? profileUrl
+                : 'https://www.furaffinity.net$profileUrl';
+            await handleFALink(context, resolvedUrl);
+            return;
+          }
+          final encodedAuthor = Uri.encodeComponent(authorName);
+          await handleFALink(
+            context,
+            'https://www.furaffinity.net/user/$encodedAuthor/',
+          );
+        };
 
     // Dynamic height (no hardcoding), but still width-constrained to avoid overflows.
     return Padding(
@@ -109,7 +131,14 @@ class FaThumbnailCaption extends StatelessWidget {
                 TextSpan(
                   children: [
                     TextSpan(text: 'by ', style: byStyle),
-                    TextSpan(text: a, style: authorStyle),
+                    TextSpan(
+                      text: a,
+                      style: authorStyle,
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = () {
+                          authorTapHandler(a);
+                        },
+                    ),
                   ],
                 ),
                 textAlign: TextAlign.center,
@@ -158,6 +187,7 @@ class FaThumbnailDisplay extends StatelessWidget {
             maxWidth: maxWidth!,
             title: title,
             author: author,
+            authorProfileUrl: null,
           ),
       ],
     );

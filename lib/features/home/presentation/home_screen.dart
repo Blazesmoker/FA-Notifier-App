@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:FANotifier/features/notifications/presentation/NotificationNavigationProvider.dart';
+import 'package:FANotifier/features/notifications/data/NotificationNavigationProvider.dart';
 import 'package:FANotifier/features/browse/presentation/faimagegrid.dart';
 import 'package:FANotifier/features/browse/presentation/filters_screen.dart';
 import 'package:FANotifier/features/notes/presentation/notesscreen.dart';
@@ -37,7 +37,9 @@ import 'package:FANotifier/features/notifications/domain/notifications.dart';
 import 'package:FANotifier/shared/fa/fa_service.dart';
 import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_settings_provider.dart';
+import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
+
+import '../../auth/domain/cloudflare_check_result.dart';
 
 class HomeScreen extends StatefulWidget {
   final String? initialSearchQuery;
@@ -137,6 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _dataRefreshTimer?.cancel();
     _foregroundFetchTimer?.cancel();
     _elementCheckTimer?.cancel();
+    _webViewController = null;
     filterOptionsNotifier.dispose();
     _navProvider.removeListener(_handleNavProviderChange);
     super.dispose();
@@ -193,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (isNotes) {
       _navProvider.setTargetIndex(4);
       setState(
-          () => _forceNotesRefresh = true); // keep if you rely on it elsewhere
+          () => _forceNotesRefresh = true);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         NotesRefreshService().triggerRefresh();
@@ -568,7 +571,10 @@ class _HomeScreenState extends State<HomeScreen> {
             final wasLoggedIn = prefs.getBool('isLoggedIn') ?? false;
 
             await _saveLoginState(true);
-            setState(() => isLoggedIn = true);
+            setState(() {
+              isLoggedIn = true;
+              _webViewController = null;
+            });
             _startActivitiesPolling(triggerImmediate: true);
 
             await _setSfwCookieToNSFW();
@@ -657,6 +663,7 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() {
               _mainPageStable = true;
               isLoggedIn = true;
+              _webViewController = null;
             });
             _cancelStabilityTimer();
 

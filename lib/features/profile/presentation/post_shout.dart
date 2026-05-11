@@ -1,14 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:dio/dio.dart';
-import 'package:cookie_jar/cookie_jar.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
-import 'package:html/parser.dart' as html_parser;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/features/profile/data/shout_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 
@@ -23,11 +16,10 @@ class PostShoutScreen extends StatefulWidget {
 
 class _PostShoutScreenState extends State<PostShoutScreen> {
   final TextEditingController _shoutController = TextEditingController();
-  final Dio _dio = Dio();
-  final CookieJar _cookieJar = CookieJar();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
     accessibility: KeychainAccessibility.first_unlock));
+  late final ShoutService _shoutService;
 
   int _currentLength = 0;
   final int _maxLength = 222;
@@ -37,7 +29,8 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeDio();
+    _shoutService = ShoutService(secureStorage: _secureStorage);
+    _shoutService.initialize();
     _shoutController.addListener(() {
       // Only update when TEXT changes, not selection
       final newLength = _shoutController.text.length;
@@ -55,72 +48,11 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
 
   @override
   void dispose() {
+    _shoutService.close();
     _shoutController.dispose();
     _lengthNotifier.dispose();
     super.dispose();
   }
-
-  Future<void> _initializeDio() async {
-    _dio.interceptors.add(CookieManager(_cookieJar));
-    _dio.options.headers['User-Agent'] = FAHttp.userAgent;
-    _dio.options.followRedirects = false;
-    _dio.options.validateStatus = (status) {
-      return status != null && (status >= 200 && status < 400);
-    };
-    await _loadCookies();
-  }
-
-  Future<void> _loadCookies() async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-    List<Cookie> cookies = [];
-    if (cookieA != null) cookies.add(Cookie('a', cookieA));
-    if (cookieB != null) cookies.add(Cookie('b', cookieB));
-
-    Uri uri = Uri.parse('https://www.furaffinity.net');
-    await _cookieJar.saveFromResponse(
-      uri,
-      await FaCookieHelper.addCfClearanceCookie(cookies),
-    );
-  }
-
-  Future<String?> _fetchShoutKey() async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-    if (cookieA == null || cookieB == null) {
-      throw Exception('Authentication cookies not found. Please log in again.');
-    }
-
-    final response = await _dio.get(
-      'https://www.furaffinity.net/user/${widget.username}/',
-      options: Options(
-        headers: {
-          'Referer': 'https://www.furaffinity.net/user/${widget.username}/',
-          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-            'a=$cookieA; b=$cookieB',
-          ),
-        },
-      ),
-    );
-
-    if (response.statusCode == 302) throw Exception('Authentication required');
-
-    final document = html_parser.parse(response.data);
-    // Modern (beta) layout selector.
-    String? key = document
-        .querySelector('form.shout-post-form input[name="key"]')
-        ?.attributes['value'];
-    // If the modern selector didn't return a key, fall back to the classic HTML layout.
-    if (key == null) {
-      key = document
-          .querySelector('form#JSForm input[name="key"]')
-          ?.attributes['value'];
-    }
-    return key;
-  }
-
 
   Future<void> _postShout() async {
     // Check for empty shout
@@ -142,74 +74,29 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
       _isLoading = true;
     });
 
-    try {
-      final key = await _fetchShoutKey();
+    final result = await _shoutService.postShout(
+      username: widget.username,
+      shout: _shoutController.text.trim(),
+    );
 
-      if (key == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to retrieve shout key.')),
-        );
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-      String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-      if (cookieA == null || cookieB == null) {
-        throw Exception('Authentication cookies not found. Please log in again.');
-      }
-
-      final formData = {
-        'action': 'shout',
-        'key': key,
-        'name': widget.username,
-        'shout': _shoutController.text.trim(),
-      };
-
-      String encodedFormData = Uri(queryParameters: formData).query;
-
-      final response = await _dio.post(
-        'https://www.furaffinity.net/user/${widget.username}/',
-        data: encodedFormData,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Origin': 'https://www.furaffinity.net',
-            'Referer': 'https://www.furaffinity.net/user/${widget.username}/',
-            'DNT': '1',
-            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-              'a=$cookieA; b=$cookieB',
-            ),
-          },
-          followRedirects: false,
+    if (result.message != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message!),
+          backgroundColor: result.isError
+              ? Colors.red
+              : result.success
+                  ? Colors.green
+                  : null,
         ),
       );
+    }
 
-      if (response.statusCode == 302) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Shout posted successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(context, true);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to post shout: ${response.statusCode}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+    if (result.success) {
+      Navigator.pop(context, true);
+    }
 
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
-    } finally {
+    if (mounted) {
       setState(() {
         _isLoading = false;
       });

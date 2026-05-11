@@ -1,24 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart';
-import 'dart:convert';
 import 'dart:async';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/shared/fa/fa_thumbnail_parser.dart';
+import 'package:FANotifier/features/profile/data/profile_image_row_layout.dart';
+import 'package:FANotifier/features/profile/data/profile_scraps_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 import 'package:FANotifier/features/submissions/data/favorite_service.dart';
 import 'package:FANotifier/shared/widgets/heart_animation.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
-
-
-class _ParseResult {
-  final List<Map<String, dynamic>> posts;
-  final String? nextPageUrl;
-  _ParseResult({required this.posts, this.nextPageUrl});
-}
 
 class ProfileScrapsSliver extends StatefulWidget {
   final String username;
@@ -40,9 +29,14 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   final List<List<Map<String, dynamic>>> _imageRows = [];
   final List<Map<String, dynamic>> _normalImagesQueue = [];
 
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock));
+  final ProfileScrapsService _profileScrapsService = ProfileScrapsService(
+    secureStorage: const FlutterSecureStorage(
+      iOptions: IOSOptions(
+        accountName: 'flutter_secure_storage_service',
+        accessibility: KeychainAccessibility.first_unlock,
+      ),
+    ),
+  );
 
   // Favorite functionality
   final Set<String> _favoritedImages = {};
@@ -59,49 +53,19 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   }
 
 
-  Future<String> _getSfwCookieValue() async {
-    final prefs = await SharedPreferences.getInstance();
-    final sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
-    return sfwEnabled ? '1' : '0';
-  }
-
-
-  Future<String> _getAllCookies() async {
-    final cookieNames = [
-      'a',
-      'b',
-      'cc',
-      'cf_clearance',
-      'folder',
-      'nodesc',
-      'sz',
-      'sfw',
-    ];
-    final cookies = <String>[];
-    for (final name in cookieNames) {
-      if (name == 'sfw') {
-        final sfwValue = await _getSfwCookieValue();
-        cookies.add('sfw=$sfwValue');
-      } else {
-        final storageKey = 'fa_cookie_$name';
-        final value = await _secureStorage.read(key: storageKey);
-        if (value != null && value.isNotEmpty) {
-          cookies.add('$name=$value');
-        }
-      }
-    }
-    return cookies.join('; ');
-  }
-
   Future<void> _fetchImages() async {
     if (_isLoading || _nextPageUrl == null) return;
     setState(() => _isLoading = true);
 
     try {
-      final result = await _fetchScrapsPage(_nextPageUrl!);
+      final result = await _profileScrapsService.fetchScrapsPage(_nextPageUrl!);
       setState(() {
         _images.addAll(result.posts);
-        _processImagesIntoRows(result.posts);
+        appendProfileImagesIntoRows(
+          newImages: result.posts,
+          imageRows: _imageRows,
+          normalImagesQueue: _normalImagesQueue,
+        );
         _preloadImagesImmediately(result.posts);
 
         _nextPageUrl = result.nextPageUrl;
@@ -114,90 +78,6 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     }
   }
 
-  Future<_ParseResult> _fetchScrapsPage(String url) async {
-    final cookieHeader = await _getAllCookies();
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Cookie': cookieHeader,
-        'User-Agent': FAHttp.userAgent,
-        'Referer': 'https://www.furaffinity.net',
-      },
-    );
-    if (response.statusCode != 200) {
-      throw Exception("Failed to load scraps: ${response.statusCode}");
-    }
-
-    final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-    return _parseScrapsHtml(decodedBody, url);
-  }
-
-  _ParseResult _parseScrapsHtml(String html, String currentUrl) {
-    final document = parse(html);
-    final figures = FaThumbnailParser.selectThumbnailFigures(document);
-
-    // Determine next page
-    String? nextPageUrl;
-    for (var form in document.querySelectorAll('form')) {
-      var button = form.querySelector('button[type="submit"]');
-      if (button != null && button.text.trim().toLowerCase() == 'next') {
-        final action = form.attributes['action'];
-        if (action != null && action.isNotEmpty) {
-          final nextUri = Uri.parse(currentUrl).resolve(action);
-          nextPageUrl = nextUri.toString();
-          break;
-        }
-      }
-    }
-
-    final posts = <Map<String, dynamic>>[];
-    for (final fig in figures) {
-      final data = FaThumbnailParser.extract(fig);
-      if (data == null) continue;
-      posts.add({
-        'url': data['thumbnailUrl'],
-        'width': data['width'],
-        'height': data['height'],
-        'uniqueNumber': data['uniqueNumber'],
-        'postUrl': data['postUrl'],
-        'rating': data['rating'],
-        'title': data['title'],
-        'author': data['author'],
-      });
-    }
-    return _ParseResult(posts: posts, nextPageUrl: nextPageUrl);
-  }
-
-  // Build row data
-  bool _isWideImage(Map<String, dynamic> img) {
-    final w = img['width'] as double;
-    final h = img['height'] as double;
-    return (w / h) > 1.5;
-  }
-
-  void _processImagesIntoRows(List<Map<String, dynamic>> newImages) {
-    for (var image in newImages) {
-      if (_isWideImage(image)) {
-        if (_normalImagesQueue.isNotEmpty) {
-          _imageRows.add([_normalImagesQueue.removeAt(0), image]);
-        } else {
-          _imageRows.add([image]);
-        }
-      } else {
-        _normalImagesQueue.add(image);
-      }
-    }
-    while (_normalImagesQueue.length >= 2) {
-      _imageRows.add([
-        _normalImagesQueue.removeAt(0),
-        _normalImagesQueue.removeAt(0),
-      ]);
-    }
-    if (_normalImagesQueue.isNotEmpty) {
-      _imageRows.add([_normalImagesQueue.removeAt(0)]);
-    }
-  }
-
   void _preloadImagesImmediately(List<Map<String, dynamic>> fetchedImages) {
     for (var image in fetchedImages) {
       precacheImage(NetworkImage(image['url']), context);
@@ -206,43 +86,17 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
 
   // Favorite logic
   Future<void> _fetchPostDetails(String uniqueNumber) async {
-    final postUrl = 'https://www.furaffinity.net/view/$uniqueNumber/';
     try {
-      final cookieHeader = await _getAllCookies();
-      final response = await http.get(
-        Uri.parse(postUrl),
-        headers: {
-          'Cookie': cookieHeader,
-          'User-Agent': FAHttp.userAgent,
-        },
-      );
-      if (response.statusCode == 200) {
-        final doc = parse(response.body);
-        final favDiv = doc.querySelector('div.fav');
-        if (favDiv != null) {
-          final anchors = favDiv.querySelectorAll('a');
-          bool foundFav = false;
-          bool foundUnfav = false;
-
-          for (var aTag in anchors) {
-            final href = aTag.attributes['href'] ?? '';
-            if (href.contains('/fav/')) {
-              _favUrls[uniqueNumber] = href.startsWith('http')
-                  ? href
-                  : 'https://www.furaffinity.net$href';
-              foundFav = true;
-            } else if (href.contains('/unfav/')) {
-              _unfavUrls[uniqueNumber] = href.startsWith('http')
-                  ? href
-                  : 'https://www.furaffinity.net$href';
-              foundUnfav = true;
-            }
-          }
-
-          if (foundUnfav && !foundFav) {
+      final links =
+          await _profileScrapsService.fetchPostFavoriteLinks(uniqueNumber);
+      if (links != null) {
+        if (links.hasAnyUrl) {
+          if (links.hasFavUrl) _favUrls[uniqueNumber] = links.favUrl;
+          if (links.hasUnfavUrl) _unfavUrls[uniqueNumber] = links.unfavUrl;
+          if (links.hasUnfavUrl && !links.hasFavUrl) {
             _favoritedImages.add(uniqueNumber);
           }
-          if (foundFav && !foundUnfav) {
+          if (links.hasFavUrl && !links.hasUnfavUrl) {
             _favoritedImages.remove(uniqueNumber);
           }
         }
@@ -388,11 +242,9 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (ctx) => OpenPost(
-              imageUrl: imageUrl,
-              uniqueNumber: uniqueNumber,
-            ),
+          OpenPost.route(
+            imageUrl: imageUrl,
+            uniqueNumber: uniqueNumber,
           ),
         );
       },

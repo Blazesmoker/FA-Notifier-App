@@ -23,6 +23,7 @@ List<Map<String, dynamic>> _parseFaThumbnailHtml(String html) {
       'rating': data['rating'],
       'title': data['title'],
       'author': data['author'],
+      'authorProfileUrl': data['authorProfileUrl'],
       'postUrl': data['postUrl'],
     });
   }

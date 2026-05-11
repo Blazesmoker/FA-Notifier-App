@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
-import 'package:FANotifier/features/notifications/presentation/NotificationNavigationProvider.dart';
+import 'package:FANotifier/features/notifications/data/NotificationNavigationProvider.dart';
 import 'package:FANotifier/features/settings/data/timezone_provider.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
 import 'package:FANotifier/core/cache/CacheMonitorService.dart';
@@ -35,7 +35,7 @@ import 'package:FANotifier/core/utils/utils.dart';
 import 'package:FANotifier/features/notes/data/message_storage.dart';
 import 'package:FANotifier/features/home/presentation/home_screen.dart';
 import 'package:FANotifier/app/app_theme.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_settings_provider.dart';
+import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
 import 'package:FANotifier/features/settings/data/thumbnail_display_settings_provider.dart';
 import 'package:FANotifier/shared/fa/fa_service.dart';
 import 'package:provider/provider.dart';

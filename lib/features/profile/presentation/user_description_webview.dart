@@ -1,18 +1,16 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as html_parser;
 import 'package:url_launcher/url_launcher_string.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/features/profile/data/user_description_parser.dart';
+import 'package:FANotifier/features/profile/data/user_description_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
+import 'package:FANotifier/features/profile/domain/profile_section.dart';
 
 enum UserDescriptionWebViewPauseReason { route, visibility }
 
@@ -45,12 +43,14 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
         accountName: 'flutter_secure_storage_service',
         accessibility: KeychainAccessibility.first_unlock),
   );
+  late final UserDescriptionService _userDescriptionService =
+      UserDescriptionService(secureStorage: _secureStorage);
   late Future<String> _userDescriptionFuture;
   InAppWebViewController? _controller;
   final Set<UserDescriptionWebViewPauseReason> _pauseReasons =
       <UserDescriptionWebViewPauseReason>{};
   double _webViewHeight = 50.0;
-  bool _isWebViewVisible = true;
+  bool _mountWebView = true;
   bool _webViewLoaded = false;
 
   // Store the cleaned HTML so we search it for full links.
@@ -68,30 +68,13 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
 
   @override
   void dispose() {
+    _controller = null;
     widget.onDispose?.call();
     super.dispose();
   }
 
   @override
   bool get wantKeepAlive => true;
-
-  void hideWebView() {
-    if (!_isWebViewVisible) {
-      return;
-    }
-    setState(() {
-      _isWebViewVisible = false;
-    });
-  }
-
-  void showWebView() {
-    if (_isWebViewVisible) {
-      return;
-    }
-    setState(() {
-      _isWebViewVisible = true;
-    });
-  }
 
   Future<void> pauseWebView({
     UserDescriptionWebViewPauseReason reason =
@@ -100,7 +83,18 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     if (!_pauseReasons.add(reason)) {
       return;
     }
-    if (_pauseReasons.length > 1) {
+    if (_pauseReasons.contains(UserDescriptionWebViewPauseReason.route)) {
+      if (!mounted) {
+        _mountWebView = false;
+        _controller = null;
+        return;
+      }
+      if (_mountWebView) {
+        setState(() {
+          _mountWebView = false;
+        });
+      }
+      _controller = null;
       return;
     }
     final controller = _controller;
@@ -123,7 +117,22 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     if (!_pauseReasons.remove(reason)) {
       return;
     }
-    if (_pauseReasons.isNotEmpty) {
+    final shouldMount =
+        !_pauseReasons.contains(UserDescriptionWebViewPauseReason.route);
+    if (!shouldMount) {
+      return;
+    }
+    if (!_mountWebView) {
+      if (!mounted) {
+        _mountWebView = true;
+        return;
+      }
+      setState(() {
+        _mountWebView = true;
+      });
+      return;
+    }
+    if (_pauseReasons.contains(UserDescriptionWebViewPauseReason.visibility)) {
       return;
     }
     final controller = _controller;
@@ -140,107 +149,19 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   }
 
   Future<String> _processInitialHtml(String html) async {
-    final doc = html_parser.parse(html);
-
-    doc
-        .querySelectorAll(
-          'script, .footerAds, #ddmenu, .mobile-navigation, '
-          '.mobile-notification-bar, #header, .userpage-layout-left-col, '
-          '.userpage-layout-right-col, #footer, .online-stats, .news-block',
-        )
-        .forEach((e) => e.remove());
-
-    final userDescElem = doc.querySelector('section.userpage-layout-profile') ??
-        doc.querySelector('td.ldot') ??
-        doc.body;
-
-    if (userDescElem == null) {
-      return '<p>No user profile found.</p>';
-    }
-
-    String extractedHtml;
-    if (userDescElem.localName == 'section') {
-      extractedHtml = userDescElem.outerHtml.trim();
-    } else if (userDescElem.localName == 'td') {
-      String classicHtml = userDescElem.innerHtml;
-      const headerMarker = '<b>Artist Profile:</b><br>';
-      final splitIndex = classicHtml.indexOf(headerMarker);
-      if (splitIndex != -1) {
-        extractedHtml =
-            classicHtml.substring(splitIndex + headerMarker.length).trim();
-      } else {
-        extractedHtml = classicHtml.trim();
-      }
-    } else {
-      extractedHtml = userDescElem.outerHtml.trim();
-    }
-
+    final extractedHtml = extractUserDescriptionHtml(
+      html,
+      allowBodyFallback: true,
+    );
     _userDescriptionHtml = extractedHtml;
     return extractedHtml;
   }
 
   /// Fetches and cleans the HTML content for the user description.
   Future<String> _fetchCleanHTML() async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-    if (cookieA == null || cookieB == null) {
-      throw Exception('User not logged in or missing cookies.');
-    }
-
-    final url = 'https://www.furaffinity.net/user/${widget.sanitizedUsername}/';
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-          'a=$cookieA; b=$cookieB',
-        ),
-        'User-Agent': FAHttp.userAgent,
-      },
+    final extractedHtml = await _userDescriptionService.fetchCleanHtml(
+      widget.sanitizedUsername,
     );
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to fetch user page: ${response.statusCode}');
-    }
-
-    final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-    final doc = html_parser.parse(decodedBody);
-
-    // Remove unwanted elements
-    doc
-        .querySelectorAll(
-          'script, .footerAds, #ddmenu, .mobile-navigation, '
-          '.mobile-notification-bar, #header, .userpage-layout-left-col, '
-          '.userpage-layout-right-col, #footer, .online-stats, .news-block',
-        )
-        .forEach((e) => e.remove());
-
-    final userDescElem = doc.querySelector('section.userpage-layout-profile') ??
-        doc.querySelector('td.ldot');
-
-    if (userDescElem == null) {
-      return '<p>No user profile found.</p>';
-    }
-
-    String extractedHtml;
-    if (userDescElem.localName == 'section') {
-      // Modern markup: use the entire section element.
-      extractedHtml = userDescElem.outerHtml.trim();
-    } else if (userDescElem.localName == 'td') {
-      // Classic markup: remove the header portion (User Title, Registered Since, etc.)
-      String classicHtml = userDescElem.innerHtml;
-      const headerMarker = '<b>Artist Profile:</b><br>';
-      final splitIndex = classicHtml.indexOf(headerMarker);
-      if (splitIndex != -1) {
-        extractedHtml =
-            classicHtml.substring(splitIndex + headerMarker.length).trim();
-      } else {
-        extractedHtml = classicHtml.trim();
-      }
-    } else {
-      extractedHtml = userDescElem.outerHtml.trim();
-    }
-
     _userDescriptionHtml = extractedHtml;
     return extractedHtml;
   }
@@ -372,22 +293,13 @@ user-select: none !important;
       {String? htmlSource}) {
     final String? source = htmlSource ?? _userDescriptionHtml;
     if (source == null) return null;
-
-    final document = html_parser.parse(source);
-    for (var anchor in document.querySelectorAll('a.auto_link_shortened')) {
-      if (anchor.text.trim() == truncatedUrl) {
-        return anchor.attributes['title'] ?? anchor.attributes['href'];
-      }
-    }
-    return null;
+    return findFullAutoShortenedLink(source, truncatedUrl);
   }
 
   /// Returns plain text by stripping HTML tags from the cleaned HTML.
   Future<String?> getPlainText() async {
     if (_userDescriptionHtml == null) return null;
-    // Parse the HTML and return only the text content.
-    final document = html_parser.parse(_userDescriptionHtml!);
-    return document.body?.text.trim();
+    return plainTextFromHtml(_userDescriptionHtml!);
   }
 
   /// Processes a FurAffinity URL.
@@ -486,11 +398,9 @@ user-select: none !important;
       final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => OpenPost(
-            uniqueNumber: submissionId,
-            imageUrl: '',
-          ),
+        OpenPost.route(
+          uniqueNumber: submissionId,
+          imageUrl: '',
         ),
       );
       return;
@@ -531,15 +441,17 @@ user-select: none !important;
 
         _userDescriptionHtml ??= cleanHtml;
 
-        if (!_isWebViewVisible) {
-          return const SizedBox.shrink();
+        if (!_mountWebView) {
+          return SizedBox(height: _webViewHeight);
         }
 
         return Padding(
           padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
-          child: SizedBox(
-            height: _webViewHeight,
-            child: InAppWebView(
+          child: RepaintBoundary(
+            child: ExcludeSemantics(
+              child: SizedBox(
+                height: _webViewHeight,
+                child: InAppWebView(
               initialData: InAppWebViewInitialData(
                 data: _injectFACSS(cleanHtml),
                 baseUrl: WebUri('https://www.furaffinity.net'),
@@ -624,6 +536,8 @@ user-select: none !important;
               onConsoleMessage: (controller, consoleMessage) {
                 debugPrint('WebView Console: ${consoleMessage.message}');
               },
+                ),
+              ),
             ),
           ),
         );
@@ -641,6 +555,15 @@ class UserDescriptionWebViewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final androidBottomInset = Platform.isAndroid
+        ? [
+            mediaQuery.viewPadding.bottom,
+            mediaQuery.padding.bottom,
+            mediaQuery.systemGestureInsets.bottom,
+          ].reduce((value, element) => value > element ? value : element)
+        : 0.0;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Select Text'),
@@ -651,11 +574,14 @@ class UserDescriptionWebViewScreen extends StatelessWidget {
           },
         ),
       ),
-      body: UserDescriptionWebView(
-        sanitizedUsername: sanitizedUsername,
-        initialHtml: initialHtml,
-        forceHybridComposition: true,
-        enableTextSelection: true,
+      body: Padding(
+        padding: EdgeInsets.only(bottom: androidBottomInset),
+        child: UserDescriptionWebView(
+          sanitizedUsername: sanitizedUsername,
+          initialHtml: initialHtml,
+          forceHybridComposition: true,
+          enableTextSelection: true,
+        ),
       ),
     );
   }

@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter_html/flutter_html.dart' as html;
 
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/features/submissions/data/post_comment_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 
@@ -57,7 +55,8 @@ class _ReplyScreenState extends State<ReplyScreen> {
     }
 
     try {
-      final success = await submitCommentOrReply(
+      final success = await submitSubmissionReply(
+        secureStorage: _secureStorage,
         message: replyText,
         commentId: replyId,
         submissionId: widget.uniqueNumber,
@@ -92,53 +91,6 @@ class _ReplyScreenState extends State<ReplyScreen> {
   Future<void> _onRequestClose() async {
     final confirmed = await ConfirmCloseDialog.show(context);
     if (confirmed && mounted) Navigator.pop(context);
-  }
-
-  Future<bool> submitCommentOrReply({
-    required String message,
-    String? submissionId,
-    String? commentId,
-    required bool isClassic,
-  }) async {
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    if (cookieA == null || cookieB == null) return false;
-
-    String postUrl;
-    Map<String, String> body;
-
-    if (isClassic) {
-      postUrl = 'https://www.furaffinity.net/view/$submissionId/';
-      body = {
-        'action': 'replyto',
-        'replyto': commentId ?? '',
-        'reply': message,
-        'submit': 'Post Comment',
-      };
-    } else {
-      postUrl = 'https://www.furaffinity.net/replyto/submission/$commentId/';
-      body = {
-        'reply': message,
-        'send': 'Submit Comment',
-        'comment': commentId ?? '',
-        'name': '',
-      };
-    }
-
-    final response = await http.post(
-      Uri.parse(postUrl),
-      headers: {
-        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-          'a=$cookieA; b=$cookieB',
-        ),
-        'User-Agent': FAHttp.userAgent,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body,
-    );
-
-    return response.statusCode == 302 ||
-        response.body.contains('Your comment has been posted');
   }
 
   @override

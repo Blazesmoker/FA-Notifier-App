@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:html/parser.dart';
-import 'package:http/http.dart' as http;
 import 'dart:async';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_html/flutter_html.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/features/profile/data/profile_journals_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 
@@ -25,35 +22,20 @@ class ProfileJournalsState extends State<ProfileJournals> {
   bool hasMore = true;
   int _fetchGeneration = 0;
 
-  bool _sfwEnabled = true;
-
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accountName: 'flutter_secure_storage_service',
-      accessibility: KeychainAccessibility.first_unlock,
+  final ProfileJournalsService _profileJournalsService =
+      ProfileJournalsService(
+    secureStorage: const FlutterSecureStorage(
+      iOptions: IOSOptions(
+        accountName: 'flutter_secure_storage_service',
+        accessibility: KeychainAccessibility.first_unlock,
+      ),
     ),
   );
 
   @override
   void initState() {
     super.initState();
-    _initialize();
-  }
-
-  Future<void> _initialize() async {
-    await _loadSfwEnabled();
-    if (mounted) {
-      await _fetchJournals(currentPage);
-    }
-  }
-
-  Future<void> _loadSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    final enabled = prefs.getBool('sfwEnabled') ?? true;
-    if (!mounted) return;
-    setState(() {
-      _sfwEnabled = enabled;
-    });
+    _fetchJournals(currentPage);
   }
 
   @override
@@ -69,7 +51,6 @@ class ProfileJournalsState extends State<ProfileJournals> {
       hasMore = true;
       isLoading = false;
     });
-    await _loadSfwEnabled();
     await _fetchJournals(currentPage);
   }
 
@@ -90,35 +71,6 @@ class ProfileJournalsState extends State<ProfileJournals> {
     );
   }
 
-  Future<String> _getAllCookies() async {
-    List<String> cookieNames = [
-      'a',
-      'b',
-      'cc',
-      'cf_clearance',
-      'folder',
-      'nodesc',
-      'sz',
-    ];
-
-    List<String> cookies = [];
-
-    for (var name in cookieNames) {
-      String storageKey = 'fa_cookie_$name';
-      String? value = await _secureStorage.read(key: storageKey);
-      if (value != null && value.isNotEmpty) {
-        cookies.add('$name=$value');
-      }
-    }
-
-    if (_sfwEnabled) {
-      cookies.add('sfw=1');
-    }
-
-    String cookieHeader = cookies.join('; ');
-    return cookieHeader;
-  }
-
   Future<void> _fetchJournals(int pageNumber) async {
     if (isLoading || !hasMore) {
       return;
@@ -128,13 +80,17 @@ class ProfileJournalsState extends State<ProfileJournals> {
       isLoading = true;
     });
     try {
-      final newJournals = await fetchJournals(pageNumber);
+      final page = await _profileJournalsService.fetchJournalsPage(
+        username: widget.username,
+        pageNumber: pageNumber,
+      );
       if (!mounted || fetchGeneration != _fetchGeneration) {
         return;
       }
 
       setState(() {
-        journals.addAll(newJournals);
+        journals.addAll(page.journals);
+        hasMore = page.hasMore;
         isLoading = false;
         currentPage = pageNumber + 1;
       });
@@ -148,118 +104,6 @@ class ProfileJournalsState extends State<ProfileJournals> {
       debugPrint('ProfileJournals: Error fetching journals from page $pageNumber: $e');
       debugPrint('Stack trace: $stackTrace');
     }
-  }
-
-  Future<List<Map<String, dynamic>>> fetchJournals(int pageNumber) async {
-    String cookieHeader = await _getAllCookies();
-
-    String url;
-    if (pageNumber == 1) {
-      url = 'https://www.furaffinity.net/journals/${widget.username}/';
-    } else {
-      url = 'https://www.furaffinity.net/journals/${widget.username}/$pageNumber/';
-    }
-
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Cookie': cookieHeader,
-        'User-Agent': FAHttp.userAgent,
-        'Referer': 'https://www.furaffinity.net',
-      },
-    );
-
-    if (response.statusCode == 200) {
-      return await parseHtmlJournals(response.body);
-    } else {
-      debugPrint('Response body: ${response.body}');
-      throw Exception('ProfileJournals: Failed to load journals: ${response.statusCode}');
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> parseHtmlJournals(String html) async {
-    var document = parse(html);
-    var journalElements =
-    document.querySelectorAll('section[id^="jid:"], table[id^="jid:"]');
-
-    var buttonElements = document.querySelectorAll('a.button.standard, a.button.older');
-    hasMore = false;
-    for (var button in buttonElements) {
-      if (button.text.trim().toLowerCase() == 'older') {
-        hasMore = true;
-        break;
-      }
-    }
-
-    List<Map<String, dynamic>> journalMetadata = [];
-
-    for (var element in journalElements) {
-      String? sectionId = element.attributes['id'];
-      String? uniqueNumber = sectionId?.replaceFirst('jid:', '');
-      String? journalId = uniqueNumber;
-
-      String? title =
-      element.querySelector('div.section-header > h2')?.text.trim();
-      if (title == null || title.isEmpty) {
-        title = element.querySelector('td.cat a')?.text.trim();
-      }
-
-      String? datePosted = element
-          .querySelector(
-          'div.section-header > span.font-small > strong > span.popup_date')
-          ?.attributes['title'];
-      if (datePosted == null || datePosted.isEmpty) {
-        datePosted = element.querySelector('span.popup_date')?.attributes['title'];
-      }
-
-      String? contentHtml = element
-          .querySelector(
-          'div.section-body > div.journal-body.user-submitted-links')
-          ?.innerHtml
-          .trim();
-      if (contentHtml == null || contentHtml.isEmpty) {
-        contentHtml =
-            element.querySelector('td.addpad div.no_overflow')?.innerHtml.trim();
-      }
-
-      String? commentsLink = element
-          .querySelector('div.section-footer a[href^="/journal/"]')
-          ?.attributes['href'];
-      String? commentsText = element
-          .querySelector(
-          'div.section-footer a[href^="/journal/"] > span.font-large')
-          ?.text
-          .trim();
-      if (commentsLink == null || commentsText == null || commentsText.isEmpty) {
-        var commentAnchor =
-        element.querySelector('td[align="right"] a[href^="/journal/"]');
-        if (commentAnchor != null) {
-          commentsLink = commentAnchor.attributes['href'];
-          final regex = RegExp(r'Comments\s*\((\d+)\)');
-          final match = regex.firstMatch(commentAnchor.text);
-          commentsText = match != null ? match.group(1) : '0';
-        }
-      }
-      int commentsCount = int.tryParse(commentsText ?? '0') ?? 0;
-
-      if (uniqueNumber != null &&
-          journalId != null &&
-          title != null &&
-          datePosted != null &&
-          contentHtml != null) {
-        journalMetadata.add({
-          'journalId': journalId,
-          'uniqueNumber': uniqueNumber,
-          'title': title,
-          'datePosted': datePosted,
-          'contentHtml': contentHtml,
-          'commentsLink': commentsLink,
-          'commentsCount': commentsCount,
-        });
-      }
-    }
-
-    return journalMetadata;
   }
 
   @override

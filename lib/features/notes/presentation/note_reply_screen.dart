@@ -1,20 +1,13 @@
-import 'dart:io';
-import 'package:dio/dio.dart';
-import 'package:cookie_jar/cookie_jar.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
-import 'package:html/parser.dart' as html_parser;
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
-import 'package:FANotifier/core/utils/utils.dart';
+import 'package:FANotifier/features/notes/data/note_reply_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
 
 class NoteReplyScreen extends StatefulWidget {
   final String subject;
@@ -44,13 +37,13 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   bool _useWebView = false;
   bool _isClassicTheme = false;
 
-  late Dio _dio;
-  final CookieJar _cookieJar = CookieJar();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     iOptions: IOSOptions( 
         accountName: 'flutter_secure_storage_service',
         accessibility: KeychainAccessibility.first_unlock),
   );
+  late final NoteReplyService _noteReplyService =
+      NoteReplyService(secureStorage: _secureStorage);
 
   String recipient = 'Loading...';
   bool _isMessageDetailsLoading = true;
@@ -65,7 +58,6 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeDio();
     _fetchMessageDetails();
   }
 
@@ -76,108 +68,23 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
   @override
   void dispose() {
+    _noteReplyService.close();
     _replyController.dispose();
     super.dispose();
   }
 
-  void _initializeDio() {
-    _dio = Dio();
-    _dio.interceptors.add(CookieManager(_cookieJar));
-    _dio.options.headers['User-Agent'] = FAHttp.userAgent;
-    _dio.options.followRedirects = false;
-    _dio.options.validateStatus = (status) =>
-    status != null && status >= 200 && status < 400;
-  }
-
-  Future<void> _loadCookies() async {
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    final cookies = <Cookie>[];
-    if (cookieA != null) cookies.add(Cookie('a', cookieA));
-    if (cookieB != null) cookies.add(Cookie('b', cookieB));
-
-    final uri = Uri.parse('https://www.furaffinity.net');
-    _cookieJar.saveFromResponse(
-      uri,
-      await FaCookieHelper.addCfClearanceCookie(cookies),
-    );
-  }
-
   Future<void> _fetchMessageDetails() async {
     try {
-      await _loadCookies();
-      final response = await _dio.get(
-        'https://www.furaffinity.net${widget.messageLink}',
-        options: Options(
-          responseType: ResponseType.plain,
-          headers: {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          },
-        ),
+      final details = await _noteReplyService.fetchReplyContext(
+        widget.messageLink,
       );
 
-      if (response.statusCode == 200) {
-        final doc = html_parser.parse(response.data);
-
-        _isClassicTheme = doc.querySelector(
-            'body[data-static-path="/themes/classic"][id="pageid-messagecenter-pms-view"]') !=
-            null;
-
-        if (_isClassicTheme) {
-          final classicSpan = doc.querySelector('span[style*="color: #999999"]');
-          if (classicSpan != null) {
-            final userNameAnchors = classicSpan.querySelectorAll(
-                'a.c-usernameBlock__userName.js-userName-block');
-            if (userNameAnchors.isNotEmpty) {
-              final senderAnchor = userNameAnchors.first;
-              final href = senderAnchor.attributes['href'] ?? '';
-              final parts = href.split('/');
-              if (parts.length >= 3) {
-                recipient = parts[2];
-              }
-            }
-
-            if (recipient == 'Loading...') {
-              final displayNameAnchors = classicSpan.querySelectorAll(
-                  'a.c-usernameBlock__displayName.js-displayName-block');
-              if (displayNameAnchors.isNotEmpty) {
-                final senderAnchor = displayNameAnchors.first;
-                final href = senderAnchor.attributes['href'] ?? '';
-                final parts = href.split('/');
-                if (parts.length >= 3) {
-                  recipient = parts[2];
-                }
-              }
-            }
-          }
-          if (recipient == 'Loading...') {
-            recipient = 'UnknownRecipient';
-          }
-        } else {
-          recipient = (doc
-              .querySelector('.message-center-note-information .addresses a:last-child')
-              ?.text
-              .trim() ??
-              'Unknown recipient')
-              .replaceFirst(RegExp(r'^.'), '');
-
-          if (recipient == 'Loading...') {
-            recipient = 'UnknownRecipient';
-          }
-        }
-
-        if (mounted) {
-          setState(() {
-            _isMessageDetailsLoading = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            errorMessage = 'Failed to fetch details: status ${response.statusCode}';
-            _isMessageDetailsLoading = false;
-          });
-        }
+      if (mounted) {
+        setState(() {
+          recipient = details.recipient;
+          _isClassicTheme = details.isClassicTheme;
+          _isMessageDetailsLoading = false;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -370,88 +277,20 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     });
 
     try {
-      await _loadCookies();
-      final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-      final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-      if (cookieA == null || cookieB == null) {
-        throw Exception('Not logged in or missing cookies.');
-      }
-
-      String msgId;
-      int pageNo;
-      if (widget.messageLink.contains('/viewmessage/')) {
-        final match = RegExp(r'/viewmessage/(\d+)/').firstMatch(widget.messageLink);
-        if (match != null) {
-          msgId = match.group(1)!;
-          pageNo = 1;
-        } else {
-          throw Exception('Invalid message ID from link: ${widget.messageLink}');
-        }
-      } else {
-        pageNo = extractPageNumber(widget.messageLink);
-        msgId = extractMessageId(widget.messageLink);
-        if (msgId.isEmpty) {
-          throw Exception('Invalid message ID from link: ${widget.messageLink}');
-        }
-      }
-
-      final getUrl = 'https://www.furaffinity.net/msg/pms/$pageNo/$msgId/#message';
-      final getResp = await _dio.get(
-        getUrl,
-        options: Options(
-          headers: {
-            'Referer': getUrl,
-            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-              'a=$cookieA; b=$cookieB',
-            ),
-          },
-          followRedirects: false,
-        ),
+      final result = await _noteReplyService.sendModernReply(
+        messageLink: widget.messageLink,
+        recipient: recipient,
+        subject: widget.subject,
+        replyText: replyText,
+        originalContent: widget.originalContent,
       );
 
-      if (getResp.statusCode == 302) {
-        throw Exception("GET request was redirected (auth issue?)");
-      }
-
-      final doc = html_parser.parse(getResp.data);
-      final keyInput = doc.querySelector('form#note-form input[name="key"]');
-      final keyValue = keyInput?.attributes['value'] ?? '';
-      if (keyValue.isEmpty) {
-        throw Exception("Failed to find the 'key' hidden field in the note form.");
-      }
-
-      final formData = {
-        'key': keyValue,
-        'to': recipient,
-        'subject': widget.subject,
-        'message': '$replyText\n\n—————————\n${widget.originalContent}',
-      };
-      final encodedFormData = Uri(queryParameters: formData).query;
-      const sendMessageUrl = 'https://www.furaffinity.net/msg/send/';
-
-      final postResp = await _dio.post(
-        sendMessageUrl,
-        data: encodedFormData,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Origin': 'https://www.furaffinity.net',
-            'Referer': getUrl,
-            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-              'a=$cookieA; b=$cookieB',
-            ),
-          },
-          followRedirects: false,
-        ),
-      );
-
-      if (postResp.statusCode == 302) {
+      if (result.success) {
         if (mounted) {
-          // Just pop back with true result, MessageDetailScreen will show the snackbar
           Navigator.pop(context, true);
         }
       } else {
-        errorMessage = 'Failed to send reply: ${postResp.statusCode}';
+        errorMessage = result.errorMessage ?? 'Failed to send reply.';
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

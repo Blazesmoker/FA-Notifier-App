@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as html_parser;
 import 'package:flutter_html/flutter_html.dart' as html;
 
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 
@@ -71,7 +68,8 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
     setState(() => _isSending = true);
 
     try {
-      final success = await _submitJournalReply(
+      final success = await submitJournalReplyToComment(
+        secureStorage: _secureStorage,
         message: replyText,
         submissionId: widget.submissionId,
         commentId: widget.commentId,
@@ -100,63 +98,6 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
   Future<void> _onRequestClose() async {
     final confirmed = await ConfirmCloseDialog.show(context);
     if (confirmed && mounted) Navigator.pop(context);
-  }
-
-  Future<bool> _submitJournalReply({
-    required String message,
-    required String submissionId,
-    required String commentId,
-  }) async {
-    String sanitized = commentId
-        .replaceFirst('#cid:', '')
-        .replaceFirst('cid:', '')
-        .trim();
-
-    if (!RegExp(r'^\d+$').hasMatch(sanitized)) {
-      throw Exception('Invalid comment ID.');
-    }
-
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-    if (cookieA == null || cookieB == null) {
-      throw Exception('Not authenticated.');
-    }
-
-    final postUrl = 'https://www.furaffinity.net/journal/$submissionId/';
-
-    final resp = await http.post(
-      Uri.parse(postUrl),
-      headers: {
-        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-          'a=$cookieA; b=$cookieB',
-        ),
-        'User-Agent': FAHttp.userAgent,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Referer': '$postUrl#cid:$sanitized',
-      },
-      body: {
-        'action': 'replyto',
-        'replyto': sanitized,
-        'reply': message,
-        'submit': 'Post Comment',
-      },
-    );
-
-    if (resp.statusCode == 302) return true;
-    if (resp.statusCode == 200 &&
-        resp.body.contains('Your comment has been posted')) {
-      return true;
-    }
-
-    if (resp.statusCode == 200) {
-      final doc = html_parser.parse(resp.body);
-      throw Exception(
-        doc.querySelector('.error_message_class')?.text ?? 'Unknown error',
-      );
-    }
-
-    return false;
   }
 
 

@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher_string.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:FANotifier/features/profile/domain/profile_section.dart';
 
 /// Centralized FA link handler.
 Future<void> handleFALink(
@@ -103,17 +104,15 @@ Future<void> handleFALink(
 
   // Submission/view
   final RegExp viewRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$');
+      r'^(?:https?://(?:www\.)?(?:furaffinity|fxfuraffinity)\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$');
   final matchView = viewRegex.firstMatch(urlToMatch);
   if (matchView != null) {
     final submissionId = matchView.group(1)!;
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => OpenPost(
-          uniqueNumber: submissionId,
-          imageUrl: '',
-        ),
+      OpenPost.route(
+        uniqueNumber: submissionId,
+        imageUrl: '',
       ),
     );
     return;

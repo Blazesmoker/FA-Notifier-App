@@ -2,36 +2,18 @@
 
 import 'dart:async';
 import 'dart:collection';
-import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as html_parser;
-import 'package:html/dom.dart' as htmlDom;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/features/profile/data/profile_gallery_service.dart';
+import 'package:FANotifier/features/profile/domain/fa_folder.dart';
 import 'package:FANotifier/features/submissions/data/favorite_gallery_service.dart';
-import 'package:FANotifier/shared/fa/fa_thumbnail_parser.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation_optimized.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-
-/// Data class to store a folder's name and URL.
-class FaFolder {
-  final String name;
-  final String url;
-  FaFolder({required this.name, required this.url});
-}
-
-class _ParseResult {
-  final List<Map<String, dynamic>> posts;
-  final String? nextPageUrl;
-  _ParseResult({required this.posts, this.nextPageUrl});
-}
 
 /// Callback used to report the list of folders to a parent widget.
 typedef FoldersCallback = void Function(List<FaFolder>);
@@ -57,6 +39,8 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
     accessibility: KeychainAccessibility.first_unlock));
+  late final ProfileGalleryService _profileGalleryService =
+      ProfileGalleryService(secureStorage: _secureStorage);
 
   final List<Map<String, dynamic>> _images = [];
   bool _isLoading = false;
@@ -150,11 +134,14 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
     setState(() => _isLoading = true);
 
     try {
-      final result = await _fetchImages(_nextPageUrl!);
+      final result = await _profileGalleryService.fetchGalleryPage(
+        url: _nextPageUrl!,
+        selectedFolderUrl: widget.selectedFolderUrl,
+      );
       if (_isDisposed) return;
 
-      final startIndex = _images.length;
       _images.addAll(result.posts);
+      widget.onFoldersParsed(result.folders);
 
       // Pre-cache thumbnail images
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -188,7 +175,7 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
       final index = _submissionQueue.removeFirst();
       _activeFetches++;
       final postUrl = _images[index]['postUrl'] as String;
-      _fetchSubmissionData(postUrl).then((data) {
+      _profileGalleryService.fetchSubmissionData(postUrl).then((data) {
         if (_isDisposed) return;
         setState(() {
           _images[index]['hqUrl'] = data.hqUrl;
@@ -206,240 +193,6 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
         _processSubmissionQueue();
       });
     }
-  }
-
-
-  Future<String> _getSfwCookieValue() async {
-    final prefs = await SharedPreferences.getInstance();
-    final sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
-    return sfwEnabled ? '1' : '0';
-  }
-
-
-  Future<String> _buildCookieHeader() async {
-    final sfwValue = await _getSfwCookieValue();
-    final keys = ['a', 'b', 'cc', 'cf_clearance', 'folder', 'nodesc', 'sz'];
-    final parts = <String>[];
-    for (final k in keys) {
-      final val = await _secureStorage.read(key: 'fa_cookie_$k');
-      if (val != null && val.isNotEmpty) {
-        parts.add('$k=$val');
-      }
-    }
-    parts.add('sfw=$sfwValue');
-    return parts.join('; ');
-  }
-
-
-  Future<_ParseResult> _fetchImages(String url) async {
-    debugPrint("Fetching URL: $url");
-    final cookieHeader = await _buildCookieHeader();
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Cookie': cookieHeader,
-        'User-Agent': FAHttp.userAgent,
-        'Referer': 'https://www.furaffinity.net',
-      },
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load images: ${response.statusCode}');
-    }
-
-    final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-    final parseRes = _parseHtml(decodedBody, url);
-
-    for (var p in parseRes.posts) {
-      p['hqUrl'] = null;
-      p['isFav'] = false;
-      p['initialIsFav'] = null;
-      p['favUrl'] = '';
-      p['unfavUrl'] = '';
-      p['detailFetchQueued'] = false;
-    }
-
-    return parseRes;
-  }
-
-  _ParseResult _parseHtml(String html, String currentUrl) {
-    final doc = html_parser.parse(html);
-    final figures = FaThumbnailParser.selectThumbnailFigures(doc);
-
-    // Determine next page URL.
-    String? nextPageUrl;
-    for (var form in doc.querySelectorAll('form')) {
-      var button = form.querySelector('button[type="submit"]');
-      if (button != null && button.text.trim().toLowerCase() == 'next') {
-        final action = form.attributes['action'];
-        if (action != null && action.isNotEmpty) {
-          final nextUri = Uri.parse(currentUrl).resolve(action);
-          nextPageUrl = nextUri.toString();
-          break;
-        }
-      }
-    }
-
-    final posts = <Map<String, dynamic>>[];
-    for (final fig in figures) {
-      final data = FaThumbnailParser.extract(fig);
-      if (data == null) continue;
-      posts.add({
-        'postUrl': data['postUrl'],
-        'uniqueNumber': data['uniqueNumber'],
-        'thumbnailUrl': data['thumbnailUrl'],
-        'width': data['width'],
-        'height': data['height'],
-        'rating': data['rating'],
-        'title': data['title'],
-        'author': data['author'],
-        'initialIsFav': null,
-      });
-    }
-
-    // Parses folders from the page.
-    _parseFolders(doc);
-
-    return _ParseResult(posts: posts, nextPageUrl: nextPageUrl);
-  }
-
-  String _parseUniqueNumber(String postUrl) {
-    final uri = Uri.parse(postUrl);
-    if (uri.pathSegments.length >= 2 && uri.pathSegments[0] == 'view') {
-      return uri.pathSegments[1];
-    }
-    return '';
-  }
-
-  void _parseFolders(htmlDom.Document doc) {
-    final folderDiv = doc.querySelector('div.folder-list');
-    final List<FaFolder> folders = [];
-    if (folderDiv != null) {
-      final ulElements = folderDiv.querySelectorAll('ul');
-      for (var ul in ulElements) {
-        final liElements = ul.querySelectorAll('li');
-        for (var li in liElements) {
-          var aElem = li.querySelector('a.dotted');
-          if (aElem != null) {
-            final href = aElem.attributes['href'] ?? '';
-            final title = aElem.text.trim();
-            final fullUrl =
-            'https://www.furaffinity.net$href'.replaceAll(RegExp(r'/$'), '');
-            folders.add(FaFolder(name: title, url: fullUrl));
-          } else {
-            var strongElem = li.querySelector('strong');
-            if (strongElem != null) {
-              final title = strongElem.text.trim();
-              final url = (widget.selectedFolderUrl ?? '').replaceAll(RegExp(r'/$'), '');
-              folders.add(FaFolder(name: title, url: url));
-            }
-          }
-        }
-      }
-    }
-    widget.onFoldersParsed(folders);
-  }
-
-  /// Fetch submission details (HQ image URL and favorite state).
-  Future<_SubmissionData> _fetchSubmissionData(String postUrl) async {
-    final absolute = Uri.parse('https://www.furaffinity.net').resolve(postUrl).toString();
-
-    final cookieHeader = await _buildCookieHeader();
-    final resp = await http.get(
-      Uri.parse(absolute),
-      headers: {
-        'Cookie': cookieHeader,
-        'User-Agent': FAHttp.userAgent,
-        'Referer': 'https://www.furaffinity.net',
-      },
-    );
-    if (resp.statusCode != 200) {
-      throw Exception('Submission page fetch failed: ${resp.statusCode}');
-    }
-
-    final doc = html_parser.parse(utf8.decode(resp.bodyBytes));
-
-    // 1) Get HQ image URL.
-    String hqUrl = '';
-    final subArea = doc.querySelector('div.submission-area.submission-image');
-    if (subArea != null) {
-      final img = subArea.querySelector('img#submissionImg');
-      if (img != null) {
-        final fullview = img.attributes['data-fullview-src'];
-        if (fullview != null && fullview.isNotEmpty) {
-          hqUrl = fullview.startsWith('//') ? 'https:$fullview' : fullview;
-        } else {
-          final src = img.attributes['src'];
-          if (src != null && src.isNotEmpty) {
-            hqUrl = src.startsWith('//') ? 'https:$src' : src;
-          }
-        }
-      }
-    }
-    // Fallback for classic style
-    if (hqUrl.isEmpty) {
-      final img = doc.querySelector('img#submissionImg');
-      if (img != null) {
-        final fullview = img.attributes['data-fullview-src'];
-        if (fullview != null && fullview.isNotEmpty) {
-          hqUrl = fullview.startsWith('//') ? 'https:$fullview' : fullview;
-        } else {
-          final src = img.attributes['src'];
-          if (src != null && src.isNotEmpty) {
-            hqUrl = src.startsWith('//') ? 'https:$src' : src;
-          }
-        }
-      }
-    }
-
-    // 2) Get Fav/unfav information.
-    bool isFav = false;
-    String favUrl = '';
-    String unfavUrl = '';
-    final favDiv = doc.querySelector('div.fav');
-    if (favDiv != null) {
-      for (var aTag in favDiv.querySelectorAll('a')) {
-        final href = aTag.attributes['href'] ?? '';
-        final absoluteHref = href.startsWith('http')
-            ? href
-            : 'https://www.furaffinity.net$href';
-        if (href.contains('/fav/')) {
-          favUrl = absoluteHref;
-        } else if (href.contains('/unfav/')) {
-          unfavUrl = absoluteHref;
-        }
-      }
-      if (unfavUrl.isNotEmpty && favUrl.isEmpty) {
-        isFav = true;
-      }
-    }
-    // Fallback for classic layout: search all links for fav/unfav.
-    if (favUrl.isEmpty && unfavUrl.isEmpty) {
-      final allLinks = doc.querySelectorAll('a');
-      for (var aTag in allLinks) {
-        final href = aTag.attributes['href'] ?? '';
-        final text = aTag.text.trim().toLowerCase();
-        if (href.contains('/fav/') && text.contains('add')) {
-          favUrl = href.startsWith('http')
-              ? href
-              : 'https://www.furaffinity.net$href';
-        } else if (href.contains('/unfav/') && text.contains('remove')) {
-          unfavUrl = href.startsWith('http')
-              ? href
-              : 'https://www.furaffinity.net$href';
-        }
-      }
-      if (unfavUrl.isNotEmpty && favUrl.isEmpty) {
-        isFav = true;
-      }
-    }
-
-    return _SubmissionData(
-      hqUrl: hqUrl,
-      isFav: isFav,
-      favUrl: favUrl,
-      unfavUrl: unfavUrl,
-    );
   }
 
 
@@ -486,7 +239,7 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
     final postUrl = _images[idx]['postUrl'] as String;
     try {
-      final data = await _fetchSubmissionData(postUrl);
+      final data = await _profileGalleryService.fetchSubmissionData(postUrl);
       if (_isDisposed) return;
       setState(() {
         _images[idx]['isFav'] = data.isFav;
@@ -589,11 +342,10 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
                     .resolve(item['postUrl']);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => OpenPost(
-                      imageUrl: hqUrl != null && hqUrl.isNotEmpty ? hqUrl : thumbUrl,
-                      uniqueNumber: item['uniqueNumber'] as String,
-                    ),
+                  OpenPost.route(
+                    imageUrl:
+                        hqUrl != null && hqUrl.isNotEmpty ? hqUrl : thumbUrl,
+                    uniqueNumber: item['uniqueNumber'] as String,
                   ),
                 );
               },
@@ -603,19 +355,6 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
       ),
     );
   }
-}
-
-class _SubmissionData {
-  final String hqUrl;
-  final bool isFav;
-  final String favUrl;
-  final String unfavUrl;
-  _SubmissionData({
-    required this.hqUrl,
-    required this.isFav,
-    required this.favUrl,
-    required this.unfavUrl,
-  });
 }
 
 class _FavImageTile extends StatelessWidget {

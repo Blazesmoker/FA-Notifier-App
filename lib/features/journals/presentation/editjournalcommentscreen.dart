@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:html/parser.dart' as html_parser;
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_edit_comment_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
@@ -30,58 +27,38 @@ class _EditJournalCommentScreenState extends State<EditJournalCommentScreen> {
   final FlutterSecureStorage _secureStorage = FlutterSecureStorage(iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
     accessibility: KeychainAccessibility.first_unlock));
-  late http.Client _client;
+  late FaEditCommentService _editCommentService;
 
   @override
   void initState() {
     super.initState();
     _controller.text = widget.comment['text'];
-    _client = http.Client();
+    _editCommentService = FaEditCommentService();
     _loadCookies().then((_) => _loadEditForm());
   }
 
   @override
   void dispose() {
-    _client.close();
+    _editCommentService.close();
     _controller.dispose();
     super.dispose();
   }
   Future<void> _loadEditForm() async {
     setState(() => _isLoading = true);
 
-    try {
-      final response = await _client.get(
-        Uri.parse(widget.editLink),
-        headers: {
-          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-            'a=$cookieA; b=$cookieB',
-          ),
-          'User-Agent': FAHttp.userAgent,
-          'Referer': widget.editLink,
-        },
-      );
+    final result = await _editCommentService.loadEditCommentText(
+      editLink: widget.editLink,
+      cookieA: cookieA,
+      cookieB: cookieB,
+    );
 
-      if (response.statusCode != 200) {
-        _showMessage('Failed to load edit page', isError: true);
-        return;
-      }
-
-      final document = html_parser.parse(response.body);
-
-
-      final textarea = document.querySelector('textarea[name="message"]');
-
-      if (textarea == null) {
-        _showMessage('BBCode textarea not found', isError: true);
-        return;
-      }
-
-      _controller.text = textarea.text;
-    } catch (e) {
-      _showMessage('Error loading edit form: $e', isError: true);
-    } finally {
-      setState(() => _isLoading = false);
+    if (result.errorMessage != null) {
+      _showMessage(result.errorMessage!, isError: true);
+    } else if (result.textarea != null) {
+      _controller.text = result.textarea!;
     }
+
+    setState(() => _isLoading = false);
   }
 
 
@@ -103,92 +80,25 @@ class _EditJournalCommentScreenState extends State<EditJournalCommentScreen> {
 
     final updatedText = _controller.text;
 
-    try {
-      final getResponse = await _client.get(
-        Uri.parse(widget.editLink),
-        headers: {
-          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-            'a=$cookieA; b=$cookieB',
-          ),
-          'User-Agent': FAHttp.userAgent,
-          'Referer': widget.editLink,
-        },
-      );
+    final result = await _editCommentService.submitEditComment(
+      editLink: widget.editLink,
+      cookieA: cookieA,
+      cookieB: cookieB,
+      updatedText: updatedText,
+      requireFValue: false,
+      includeFValue: false,
+      logFormDebug: true,
+    );
 
-      if (getResponse.statusCode != 200) {
-        _showMessage("Failed to load edit page. Status code: ${getResponse.statusCode}", isError: true);
-        setState(() => _isLoading = false);
-        return;
-      }
-
-
-      final document = html_parser.parse(getResponse.body);
-      final form = document.querySelector('form#edit_comment_form');
-
-      if (form == null) {
-        _showMessage("Edit form not found on the page.", isError: true);
-        setState(() => _isLoading = false);
-        return;
-      }
-
-
-
-
-
-      String? action = form.attributes['action'];
-      String? commentId = form.querySelector('input[name="comment_id"]')?.attributes['value'];
-      String? csrfKey = form.querySelector('input[name="key"]')?.attributes['value'];
-
-
-      debugPrint('TEST action: $action');
-      debugPrint('TEST comment_id: $commentId');
-      debugPrint('TEST key: $csrfKey');
-
-
-      if (action == null || commentId == null || csrfKey == null) {
-        _showMessage("Required form fields are missing.", isError: true);
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      // Full URL for the POST request
-      Uri postUri = action.startsWith('http')
-          ? Uri.parse(action)
-          : Uri.parse('https://www.furaffinity.net$action');
-
-      // Submit the POST request with all form data
-      final postResponse = await _client.post(
-        postUri,
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-            'a=$cookieA; b=$cookieB',
-          ),
-          'User-Agent': FAHttp.userAgent,
-          'Referer': widget.editLink,
-        },
-        body: {
-          'action': 'edit-comment',
-          'comment_id': commentId,
-          'key': csrfKey,
-
-          'message': updatedText,
-          'mysubmit': 'Save',
-        },
-      );
-
-      if (postResponse.statusCode == 302) {
-        widget.onUpdateComment();
-        _showMessage("Comment successfully updated!", isError: false);
-        Navigator.pop(context);
-      } else {
-        _showMessage("Failed to update comment. Status code: ${postResponse.statusCode}", isError: true);
-      }
-    } catch (error) {
-      _showMessage("An error occurred: $error", isError: true);
-    } finally {
-      setState(() => _isLoading = false);
+    if (result.success) {
+      widget.onUpdateComment();
+      _showMessage("Comment successfully updated!", isError: false);
+      Navigator.pop(context);
+    } else if (result.errorMessage != null) {
+      _showMessage(result.errorMessage!, isError: true);
     }
+
+    setState(() => _isLoading = false);
   }
 
   void _showMessage(String message, {bool isError = false}) {

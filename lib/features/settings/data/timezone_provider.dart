@@ -4,43 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
-
-// Mapping from FA Timezone Names to IANA Timezones
-final Map<String, String> faTimezoneToIana = {
-  "International Date Line West": "Etc/GMT+12",
-  "Samoa Standard Time": "Pacific/Pago_Pago",
-  "Hawaiian Standard Time": "Pacific/Honolulu",
-  "Alaskan Standard Time": "America/Anchorage",
-  "Pacific Standard Time": "America/Los_Angeles",
-  "Mountain Standard Time": "America/Denver",
-  "Central Standard Time": "America/Chicago",
-  "Eastern Standard Time": "America/New_York",
-  "Caracas Standard Time": "America/Caracas",
-  "Atlantic Standard Time": "America/Halifax",
-  "Newfoundland Standard Time": "America/St_Johns",
-  "Greenland Standard Time": "America/Godthab",
-  "Mid-Atlantic Standard Time": "Etc/GMT-2",
-  "Cape Verde Standard Time": "Atlantic/Cape_Verde",
-  "Greenwich Mean Time": "Etc/GMT",
-  "W. Europe Standard Time": "Europe/Berlin",
-  "E. Europe Standard Time": "Europe/Minsk",
-  "Russian Standard Time": "Europe/Moscow",
-  "Iran Standard Time": "Asia/Tehran",
-  "Arabian Standard Time": "Asia/Riyadh",
-  "Afghanistan Standard Time": "Asia/Kabul",
-  "West Asia Standard Time": "Asia/Tashkent",
-  "India Standard Time": "Asia/Kolkata",
-  "Nepal Standard Time": "Asia/Kathmandu",
-  "Central Asia Standard Time": "Asia/Almaty",
-  "Myanmar Standard Time": "Asia/Yangon",
-  "North Asia Standard Time": "Asia/Krasnoyarsk",
-  "North Asia East Standard Time": "Asia/Irkutsk",
-  "Tokyo Standard Time": "Asia/Tokyo",
-  "Cen. Australia Standard Time": "Australia/Adelaide",
-  "West Pacific Standard Time": "Pacific/Port_Moresby",
-  "Central Pacific Standard Time": "Pacific/Guadalcanal",
-  "New Zealand Standard Time": "Pacific/Auckland",
-};
+import 'package:FANotifier/shared/fa/fa_timezone_to_iana.dart';
 
 class TimezoneProvider with ChangeNotifier {
   String _userTimezoneIanaName = 'Etc/UTC';

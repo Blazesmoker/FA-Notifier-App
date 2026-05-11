@@ -676,8 +676,6 @@ class FANotificationService with ChangeNotifier {
                 fullDate = timeSpan.attributes['title'] ?? date;
                 timeSpan.remove();
               }
-              // Modern msg/others doesn't reliably include the shout body.
-              // Keep the body empty; we'll enrich from /user/<me>/ when Shouts tab is opened.
               final lower = li.text.toLowerCase();
               content = lower.contains('shout has been removed')
                   ? 'Shout has been removed from your page.'

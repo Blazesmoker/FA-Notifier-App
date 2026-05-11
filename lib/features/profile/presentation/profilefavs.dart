@@ -1,24 +1,13 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart';
-import 'package:FANotifier/shared/fa/fa_thumbnail_parser.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/features/profile/data/profile_favorites_service.dart';
+import 'package:FANotifier/features/profile/data/profile_image_row_layout.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 import 'package:FANotifier/features/submissions/data/favorite_service.dart';
 import 'package:FANotifier/shared/widgets/heart_animation.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
-
-/// A helper class for paginated parsing results.
-class _ParseResult {
-  final List<Map<String, dynamic>> posts;
-  final String? nextPageUrl;
-  _ParseResult({required this.posts, this.nextPageUrl});
-}
 
 class ProfileFavsSliver extends StatefulWidget {
   final String username;
@@ -41,9 +30,15 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
 
   final List<Map<String, dynamic>> _normalImagesQueue = [];
 
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock));
+  final ProfileFavoritesService _profileFavoritesService =
+      ProfileFavoritesService(
+    secureStorage: const FlutterSecureStorage(
+      iOptions: IOSOptions(
+        accountName: 'flutter_secure_storage_service',
+        accessibility: KeychainAccessibility.first_unlock,
+      ),
+    ),
+  );
 
 
   final Set<String> _favoritedImages = {};
@@ -60,53 +55,21 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
   }
 
 
-  Future<String> _getSfwCookieValue() async {
-    final prefs = await SharedPreferences.getInstance();
-    final sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
-    return sfwEnabled ? '1' : '0';
-  }
-
-
-  Future<String> _getAllCookies() async {
-    final cookieNames = ['a', 'b', 'cc', 'cf_clearance', 'folder', 'nodesc', 'sz', 'sfw'];
-    final cookies = <String>[];
-    for (final name in cookieNames) {
-      String? cookieValue;
-      if (name == 'sfw') {
-        cookieValue = await _getSfwCookieValue();
-      } else {
-        cookieValue = await _secureStorage.read(key: 'fa_cookie_$name');
-      }
-      if (cookieValue != null && cookieValue.isNotEmpty) {
-        cookies.add('$name=$cookieValue');
-      }
-    }
-    return cookies.join('; ');
-  }
-
   /// Fetches a page of favorite images.
   Future<void> _fetchImages() async {
     if (_isLoading || _nextPageUrl == null) return;
     setState(() => _isLoading = true);
 
     try {
-      final cookieHeader = await _getAllCookies();
-      final response = await http.get(
-        Uri.parse(_nextPageUrl!),
-        headers: {
-          'Cookie': cookieHeader,
-          'User-Agent': FAHttp.userAgent,
-          'Referer': 'https://www.furaffinity.net',
-        },
-      );
-      if (response.statusCode != 200) {
-        throw Exception("Failed to load favorites: ${response.statusCode}");
-      }
-      final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-      final parseResult = _parseFavsHtml(decodedBody, _nextPageUrl!);
+      final parseResult =
+          await _profileFavoritesService.fetchFavoritesPage(_nextPageUrl!);
       setState(() {
         _images.addAll(parseResult.posts);
-        _processImagesIntoRows(parseResult.posts);
+        appendProfileImagesIntoRows(
+          newImages: parseResult.posts,
+          imageRows: _imageRows,
+          normalImagesQueue: _normalImagesQueue,
+        );
         _preloadImagesImmediately(parseResult.posts);
         _nextPageUrl = parseResult.nextPageUrl;
         _hasMore = parseResult.nextPageUrl != null;
@@ -116,73 +79,6 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
       setState(() => _isLoading = false);
       debugPrint("Error fetching favorites: $e");
     }
-  }
-
-  /// Parses the favorites HTML to extract image metadata and the next page URL.
-  _ParseResult _parseFavsHtml(String html, String currentUrl) {
-    final document = parse(html);
-    final figures = FaThumbnailParser.selectThumbnailFigures(document);
-
-
-    String? nextPageUrl;
-    for (var form in document.querySelectorAll('form')) {
-      final button = form.querySelector('button[type="submit"]');
-      if (button != null && button.text.trim().toLowerCase() == 'next') {
-        final action = form.attributes['action'];
-        if (action != null && action.isNotEmpty) {
-          final nextUri = Uri.parse(currentUrl).resolve(action);
-          nextPageUrl = nextUri.toString();
-          break;
-        }
-      }
-    }
-
-    final posts = <Map<String, dynamic>>[];
-    for (final fig in figures) {
-      final data = FaThumbnailParser.extract(fig);
-      if (data == null) continue;
-      posts.add({
-        'url': data['thumbnailUrl'],
-        'width': data['width'],
-        'height': data['height'],
-        'uniqueNumber': data['uniqueNumber'],
-        'postUrl': data['postUrl'],
-        'rating': data['rating'],
-        'title': data['title'],
-        'author': data['author'],
-      });
-    }
-    return _ParseResult(posts: posts, nextPageUrl: nextPageUrl);
-  }
-
-  /// Arranges new images into rows based on their aspect ratio.
-  void _processImagesIntoRows(List<Map<String, dynamic>> newImages) {
-    for (var image in newImages) {
-      if (_isWideImage(image)) {
-        if (_normalImagesQueue.isNotEmpty) {
-          _imageRows.add([_normalImagesQueue.removeAt(0), image]);
-        } else {
-          _imageRows.add([image]);
-        }
-      } else {
-        _normalImagesQueue.add(image);
-      }
-    }
-    while (_normalImagesQueue.length >= 2) {
-      _imageRows.add([
-        _normalImagesQueue.removeAt(0),
-        _normalImagesQueue.removeAt(0),
-      ]);
-    }
-    if (_normalImagesQueue.isNotEmpty) {
-      _imageRows.add([_normalImagesQueue.removeAt(0)]);
-    }
-  }
-
-  bool _isWideImage(Map<String, dynamic> image) {
-    final w = image['width'] as double;
-    final h = image['height'] as double;
-    return (w / h) > 1.5;
   }
 
   /// Preload some images to improve scrolling smoothness.
@@ -196,41 +92,17 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
 
   /// Fetch the /fav/ or /unfav/ links for a given post.
   Future<void> _fetchPostDetails(String uniqueNumber) async {
-    final postUrl = 'https://www.furaffinity.net/view/$uniqueNumber/';
     try {
-      final cookieHeader = await _getAllCookies();
-      final response = await http.get(
-        Uri.parse(postUrl),
-        headers: {
-          'Cookie': cookieHeader,
-          'User-Agent': FAHttp.userAgent,
-        },
-      );
-      if (response.statusCode == 200) {
-        final doc = parse(response.body);
-        final favDiv = doc.querySelector('div.fav');
-        if (favDiv != null) {
-          final anchors = favDiv.querySelectorAll('a');
-          bool foundFav = false;
-          bool foundUnfav = false;
-          for (var aTag in anchors) {
-            final href = aTag.attributes['href'] ?? '';
-            if (href.contains('/fav/')) {
-              _favUrls[uniqueNumber] = href.startsWith('http')
-                  ? href
-                  : 'https://www.furaffinity.net$href';
-              foundFav = true;
-            } else if (href.contains('/unfav/')) {
-              _unfavUrls[uniqueNumber] = href.startsWith('http')
-                  ? href
-                  : 'https://www.furaffinity.net$href';
-              foundUnfav = true;
-            }
-          }
-          if (foundUnfav && !foundFav) {
+      final links =
+          await _profileFavoritesService.fetchPostFavoriteLinks(uniqueNumber);
+      if (links != null) {
+        if (links.hasAnyUrl) {
+          if (links.hasFavUrl) _favUrls[uniqueNumber] = links.favUrl;
+          if (links.hasUnfavUrl) _unfavUrls[uniqueNumber] = links.unfavUrl;
+          if (links.hasUnfavUrl && !links.hasFavUrl) {
             _favoritedImages.add(uniqueNumber);
           }
-          if (foundFav && !foundUnfav) {
+          if (links.hasFavUrl && !links.hasUnfavUrl) {
             _favoritedImages.remove(uniqueNumber);
           }
         }
@@ -362,11 +234,9 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (ctx) => OpenPost(
-              imageUrl: imageUrl,
-              uniqueNumber: uniqueNumber,
-            ),
+          OpenPost.route(
+            imageUrl: imageUrl,
+            uniqueNumber: uniqueNumber,
           ),
         );
       },

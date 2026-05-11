@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
 import 'package:FANotifier/main.dart';
-import 'package:FANotifier/features/notifications/presentation/NotificationNavigationProvider.dart';
+import 'package:FANotifier/features/notifications/data/NotificationNavigationProvider.dart';
 import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:FANotifier/features/notifications/data/notification_refresh_service.dart';
 import 'package:FANotifier/core/logging/app_logging.dart';

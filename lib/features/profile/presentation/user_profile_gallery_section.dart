@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:FANotifier/features/profile/domain/fa_folder.dart';
 import 'package:FANotifier/features/profile/presentation/profilegallery.dart';
 
 class UserProfileGallerySection extends StatelessWidget {

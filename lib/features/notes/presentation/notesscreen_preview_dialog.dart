@@ -1,17 +1,10 @@
-import 'dart:io';
-
-import 'package:cookie_jar/cookie_jar.dart';
-import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:html/parser.dart' as html_parser;
 
+import 'package:FANotifier/features/notes/data/note_message_service.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
 
 /// Dialog content for previewing a note/message.
@@ -38,8 +31,8 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
       accessibility: KeychainAccessibility.first_unlock,
     ),
   );
-  late Dio _dio;
-  final CookieJar _cookieJar = CookieJar();
+  late final NoteMessageService _noteMessageService =
+      NoteMessageService(secureStorage: _secureStorage);
 
   bool isLoading = true;
   String errorMessage = '';
@@ -59,188 +52,39 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
   @override
   void initState() {
     super.initState();
-    _initializeDio();
     _fetchMessageDetails();
   }
 
-  void _initializeDio() {
-    _dio = Dio();
-    _dio.interceptors.add(CookieManager(_cookieJar));
-    _dio.options.headers['User-Agent'] = FAHttp.userAgent;
-    _dio.options.followRedirects = true;
-    _dio.options.validateStatus = (status) {
-      return status != null && status >= 200 && status < 400;
-    };
-  }
-
-  Future<void> _loadCookies() async {
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    final cookies = <Cookie>[];
-    if (cookieA != null) cookies.add(Cookie('a', cookieA));
-    if (cookieB != null) cookies.add(Cookie('b', cookieB));
-    cookies.add(Cookie('folder', widget.folder));
-    final uri = Uri.parse('https://www.furaffinity.net');
-    _cookieJar.saveFromResponse(
-      uri,
-      await FaCookieHelper.addCfClearanceCookie(cookies),
-    );
+  @override
+  void dispose() {
+    _noteMessageService.close();
+    super.dispose();
   }
 
   Future<void> _fetchMessageDetails() async {
     try {
-      await _loadCookies();
-      final response = await _dio.get(
-        'https://www.furaffinity.net${widget.message.link}',
-        options: Options(
-          responseType: ResponseType.plain,
-          headers: {
-            'Accept':
-                'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            HttpHeaders.connectionHeader: 'close',
-          },
-        ),
+      final result = await _noteMessageService.fetchMessageDetails(
+        messageLink: widget.message.link,
+        folder: widget.folder,
+        closeConnection: true,
       );
 
-      if (response.statusCode == 200) {
-        final decodedBody = response.data;
-        final document = html_parser.parse(decodedBody);
-
-        _isClassic = document.querySelector(
-              'body[data-static-path="/themes/classic"][id="pageid-messagecenter-pms-view"]',
-            ) !=
-            null;
-
-        // Extract message ID based on the page style.
-        if (_isClassic) {
-          final match = RegExp(r'/viewmessage/(\d+)/').firstMatch(widget.message.link);
-          if (match != null) {
-            messageId = match.group(1);
-            pageNumber = 1;
-          } else {
-            throw Exception("Message ID could not be extracted from classic URL.");
-          }
-        } else {
-          final match = RegExp(r'/msg/pms/(\d+)/(\d+)/').firstMatch(widget.message.link);
-          if (match != null) {
-            pageNumber = int.parse(match.group(1)!);
-            messageId = match.group(2);
-          } else {
-            throw Exception("Message ID could not be extracted from modern URL.");
-          }
-        }
-
-        if (messageId == null || messageId!.isEmpty) {
-          throw Exception("Message ID could not be extracted.");
-        }
-
-        document
-            .querySelectorAll('.noteWarningMessage.noteWarningMessage--scam')
-            .forEach((e) => e.remove());
-
-        String? tempSenderLink = document
-                .querySelector('.message-center-note-information .addresses a')
-                ?.attributes['href'] ??
-            document
-                .querySelector('div.message-center-note-information.addresses a')
-                ?.attributes['href'];
+      final details = result.details;
+      if (details != null) {
 
         setState(() {
-          subject = document.querySelector('#message h2')?.text.trim() ??
-              document.querySelector('td.cat font b')?.text.trim() ??
-              'No subject';
-
-          sender = document
-                  .querySelector('.message-center-note-information .addresses a')
-                  ?.text
-                  .trim() ??
-              document
-                  .querySelector(
-                      'a.c-usernameBlock__displayName.js-displayName-block span.js-displayName')
-                  ?.text
-                  .trim() ??
-              'Unknown sender';
-
-          if (_isClassic) {
-            final classicRecipientBlocks =
-                document.querySelectorAll('span[style*="color: #999999"] .c-usernameBlock');
-            if (classicRecipientBlocks.length > 1) {
-              recipient = classicRecipientBlocks[1]
-                      .querySelector('span.js-displayName')
-                      ?.text
-                      .trim() ??
-                  'Unknown recipient';
-            } else {
-              recipient = 'Unknown recipient';
-            }
-          } else {
-            final addresses = document
-                .querySelectorAll('.message-center-note-information .addresses .c-usernameBlock');
-            if (addresses.length > 1) {
-              recipient = addresses[1]
-                      .querySelector('.c-usernameBlock__displayName')
-                      ?.text
-                      .trim() ??
-                  'Unknown recipient';
-            } else {
-              recipient = 'Unknown recipient';
-            }
-          }
-
-          sentDate = document.querySelector('.popup_date')?.attributes['title'] ?? 'Unknown date';
-          avatarUrl =
-              document.querySelector('.message-center-note-information.avatar img')?.attributes['src'] ??
-                  '';
-
-          if (tempSenderLink != null && tempSenderLink.isNotEmpty) {
-            senderLink = tempSenderLink;
-            senderUsername = Uri.parse(tempSenderLink).pathSegments.length >= 2
-                ? Uri.parse(tempSenderLink).pathSegments[1]
-                : 'Unknown';
-          } else {
-            senderUsername = 'Unknown';
-          }
-
-          final modernElem = document.querySelector('.section-body .user-submitted-links');
-          final classicElem = document.querySelector('td.noteContent.alt1');
-
-          String? modernHtml;
-          String? classicHtml;
-          if (modernElem != null) {
-            modernElem.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam').forEach((e) => e.remove());
-            modernHtml = modernElem.innerHtml;
-          }
-          if (classicElem != null) {
-            classicElem.querySelectorAll('.noteWarningMessage.noteWarningMessage--scam').forEach((e) => e.remove());
-            classicElem.querySelector('span[style*="color: #999999"]')?.remove();
-            classicHtml = classicElem.innerHtml;
-          }
-
-          final rawHtml = modernHtml ?? classicHtml;
-          if (rawHtml == null || rawHtml.isEmpty) {
-            messageContent = 'No content';
-            messageContentHtml = '';
-          } else {
-            final innerDoc = html_parser.parse(rawHtml);
-            innerDoc.querySelectorAll('a.auto_link_shortened').forEach((anchor) {
-              final fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
-              if (fullLink != null) {
-                anchor.innerHtml = fullLink;
-              }
-            });
-            final updatedText = innerDoc.body?.text.trim() ?? '';
-            messageContent = updatedText.isNotEmpty ? updatedText : 'No content';
-            String fixedHtml = innerDoc.body?.innerHtml ?? rawHtml;
-            fixedHtml = fixedHtml.replaceAllMapped(
-              RegExp(r'src="(//[^"]+)"|href="(//[^"]+)"'),
-              (m) {
-                final url = m.group(1) ?? m.group(2);
-                return url != null ? m[0]!.replaceFirst('//', 'https://') : m[0]!;
-              },
-            );
-            messageContentHtml = fixedHtml;
-          }
-
+          _isClassic = details.isClassic;
+          messageId = details.messageId;
+          pageNumber = details.pageNumber;
+          subject = details.subject;
+          sender = details.sender;
+          recipient = details.recipient;
+          sentDate = details.sentDate;
+          avatarUrl = details.avatarUrl;
+          messageContent = details.messageContent;
+          messageContentHtml = details.messageContentHtml;
+          senderLink = details.senderLink;
+          senderUsername = details.senderUsername;
           isLoading = false;
         });
 
@@ -249,7 +93,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
         }
       } else {
         setState(() {
-          errorMessage = 'Failed to fetch message: ${response.statusCode}';
+          errorMessage = 'Failed to fetch message: ${result.statusCode}';
           isLoading = false;
         });
       }

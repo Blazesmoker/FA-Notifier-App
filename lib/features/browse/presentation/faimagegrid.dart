@@ -3,10 +3,12 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:html/parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:FANotifier/features/browse/data/browse_image_parser.dart';
+import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:FANotifier/features/submissions/data/favorite_service.dart';
 import 'package:FANotifier/shared/fa/fa_thumbnail_processing.dart';
 import 'package:FANotifier/core/logging/app_logging.dart';
@@ -16,6 +18,8 @@ import 'package:FANotifier/shared/widgets/heart_animation.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
 import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
+
+import '../../auth/domain/cloudflare_check_result.dart';
 
 class FAImageGrid extends StatefulWidget {
   final Map<String, String> selectedFilters;
@@ -231,11 +235,11 @@ class FAImageGridState extends State<FAImageGrid> {
         statusCode: resp.statusCode,
       );
       if (isChallenge) {
-        throw _CloudflareChallengeException(initialUrl: currentUri.toString());
+          throw CloudflareChallengeException(initialUrl: currentUri.toString());
       }
 
       if (resp.statusCode == 200) {
-        final newImages = await parseHtml(resp.body);
+        final newImages = await parseBrowseImageHtml(resp.body);
         await _appendImages(
           newImages,
           previousMaxScrollExtent: previousMaxScrollExtent,
@@ -245,7 +249,7 @@ class FAImageGridState extends State<FAImageGrid> {
         throw Exception(
             'FAImageGrid: HTTP ${resp.statusCode} fetching images.');
       }
-    } on _CloudflareChallengeException catch (e) {
+    } on CloudflareChallengeException catch (e) {
       kDebugPrint('Cloudflare challenge detected while fetching browse images.');
       if (mounted) {
         setState(() {
@@ -274,7 +278,7 @@ class FAImageGridState extends State<FAImageGrid> {
 
       final recoveredHtml = result?.pageHtml;
       if (recoveredHtml != null && recoveredHtml.isNotEmpty) {
-        final recoveredImages = await parseHtml(recoveredHtml);
+        final recoveredImages = await parseBrowseImageHtml(recoveredHtml);
         await _appendImages(
           recoveredImages,
           previousMaxScrollExtent: previousMaxScrollExtent,
@@ -474,15 +478,6 @@ class FAImageGridState extends State<FAImageGrid> {
     return widget.selectedFilters[filterName] ?? '1';
   }
 
-  /// Parses the browse page HTML for the thumbnail images
-  Future<List<Map<String, dynamic>>> parseHtml(String html) async {
-    final imageMetadata = await parseFaThumbnailHtml(html);
-    kDebugPrint(
-      '[Browse] HTML parser found ${imageMetadata.length} usable thumbnails.',
-    );
-    return imageMetadata;
-  }
-
   /// Fetch post details (like /fav/ or /unfav/ links) for [uniqueNumber].
   /// Also updates _favoritedImages if the post page indicates it's already faved.
   Future<void> _fetchPostDetails(String uniqueNumber) async {
@@ -499,34 +494,14 @@ class FAImageGridState extends State<FAImageGrid> {
         },
       );
       if (response.statusCode == 200) {
-        final doc = parse(response.body);
-        final favDiv = doc.querySelector('div.fav');
-        if (favDiv != null) {
-          final anchors = favDiv.querySelectorAll('a');
-          bool foundFav = false;
-          bool foundUnfav = false;
-
-          for (var aTag in anchors) {
-            final href = aTag.attributes['href'] ?? '';
-            if (href.contains('/fav/')) {
-              _favUrls[uniqueNumber] = href.startsWith('http')
-                  ? href
-                  : 'https://www.furaffinity.net$href';
-              foundFav = true;
-            } else if (href.contains('/unfav/')) {
-              _unfavUrls[uniqueNumber] = href.startsWith('http')
-                  ? href
-                  : 'https://www.furaffinity.net$href';
-              foundUnfav = true;
-            }
-          }
-
-          // If only an unfav link is present, user is already faved
-          if (foundUnfav && !foundFav) {
+        final links = parseSubmissionFavoriteLinksFromHtml(response.body);
+        if (links.hasAnyUrl) {
+          if (links.hasFavUrl) _favUrls[uniqueNumber] = links.favUrl;
+          if (links.hasUnfavUrl) _unfavUrls[uniqueNumber] = links.unfavUrl;
+          if (links.hasUnfavUrl && !links.hasFavUrl) {
             _favoritedImages.add(uniqueNumber);
           }
-          // If only a fav link is present, user is not yet faved
-          if (foundFav && !foundUnfav) {
+          if (links.hasFavUrl && !links.hasUnfavUrl) {
             _favoritedImages.remove(uniqueNumber);
           }
         }
@@ -707,12 +682,10 @@ class FAImageGridState extends State<FAImageGrid> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => OpenPost(
-                      imageUrl: image['url'],
-                      uniqueNumber: image['uniqueNumber'],
-                      skipInitialWatchCheck: true,
-                    ),
+                  OpenPost.route(
+                    imageUrl: image['url'],
+                    uniqueNumber: image['uniqueNumber'],
+                    skipInitialWatchCheck: true,
                   ),
                 );
               },
@@ -760,12 +733,10 @@ class FAImageGridState extends State<FAImageGrid> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => OpenPost(
-                      imageUrl: left['url'],
-                      uniqueNumber: left['uniqueNumber'],
-                      skipInitialWatchCheck: true,
-                    ),
+                  OpenPost.route(
+                    imageUrl: left['url'],
+                    uniqueNumber: left['uniqueNumber'],
+                    skipInitialWatchCheck: true,
                   ),
                 );
               },
@@ -781,12 +752,10 @@ class FAImageGridState extends State<FAImageGrid> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => OpenPost(
-                      imageUrl: right['url'],
-                      uniqueNumber: right['uniqueNumber'],
-                      skipInitialWatchCheck: true,
-                    ),
+                  OpenPost.route(
+                    imageUrl: right['url'],
+                    uniqueNumber: right['uniqueNumber'],
+                    skipInitialWatchCheck: true,
                   ),
                 );
               },
@@ -796,12 +765,6 @@ class FAImageGridState extends State<FAImageGrid> {
       },
     );
   }
-}
-
-class _CloudflareChallengeException implements Exception {
-  final String? initialUrl;
-
-  const _CloudflareChallengeException({this.initialUrl});
 }
 
 class _FavImageTile extends StatefulWidget {
@@ -849,6 +812,7 @@ class _FavImageTileState extends State<_FavImageTile> {
     final String? rating = widget.image['rating'] as String?;
     final String? title = widget.image['title'] as String?;
     final String? author = widget.image['author'] as String?;
+    final String? authorProfileUrl = widget.image['authorProfileUrl'] as String?;
 
     return GestureDetector(
       onTap: widget.onTap,
@@ -902,6 +866,7 @@ class _FavImageTileState extends State<_FavImageTile> {
             maxWidth: widget.width,
             title: title,
             author: author,
+            authorProfileUrl: authorProfileUrl,
           ),
         ],
       ),

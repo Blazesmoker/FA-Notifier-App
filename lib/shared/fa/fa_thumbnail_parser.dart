@@ -6,6 +6,7 @@ import 'package:html/dom.dart' as dom;
 /// - rating: "general" | "mature" | "adult" | null
 /// - title: submission title (from `<figcaption>`)
 /// - author: display name (from `<figcaption>`) with fallback to username class
+/// - authorProfileUrl: author profile link from href (normalized to path/full url)
 /// - postUrl, uniqueNumber, thumbnailUrl, width, height
 ///
 /// This is intentionally shared across screens to avoid per-screen parsers.
@@ -58,6 +59,19 @@ class FaThumbnailParser {
     }
   }
 
+  static String? extractAuthorProfileUrl(dom.Element figure) {
+    final a = figure.querySelector('figcaption a[href^="/user/"]') ??
+        figure.querySelector('figcaption p a[href^="/user/"]') ??
+        figure.querySelector('a[href^="/user/"]');
+    final href = a?.attributes['href']?.trim();
+    if (href == null || href.isEmpty) return null;
+    if (href.startsWith('http://') || href.startsWith('https://')) {
+      return href;
+    }
+    if (href.startsWith('/')) return href;
+    return '/$href';
+  }
+
   static String? extractPostUrl(dom.Element figure) {
     final a = figure.querySelector('a[href*="/view/"]');
     final href = a?.attributes['href']?.trim();
@@ -100,6 +114,7 @@ class FaThumbnailParser {
   /// - rating (String? "general"|"mature"|"adult")
   /// - title (String?)
   /// - author (String?)
+  /// - authorProfileUrl (String?)
   static Map<String, dynamic>? extract(dom.Element figure) {
     final postUrl = extractPostUrl(figure);
     final thumbUrl = extractThumbnailUrl(figure);
@@ -119,6 +134,7 @@ class FaThumbnailParser {
       'rating': extractRating(figure),
       'title': extractTitle(figure),
       'author': extractAuthor(figure),
+      'authorProfileUrl': extractAuthorProfileUrl(figure),
     };
   }
 }

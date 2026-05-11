@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:html/dom.dart' as dom;
@@ -25,10 +26,12 @@ import 'package:FANotifier/shared/fa/parsing_utils.dart';
 import 'package:FANotifier/core/utils/html_tags_debug.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:FANotifier/features/submissions/data/post_comment_service.dart';
 import 'package:FANotifier/features/submissions/presentation/SubmissionDescriptionWebview.dart';
 import 'package:FANotifier/features/submissions/presentation/add_post_comment_screen.dart';
 import 'package:FANotifier/features/profile/presentation/avatardownloadscreen.dart';
 import 'package:FANotifier/features/submissions/data/openpost_api_service.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
 import 'package:FANotifier/features/submissions/presentation/edit_submission_screen.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
@@ -38,43 +41,69 @@ import 'package:FANotifier/features/notes/presentation/new_message.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost_comments.dart';
+import 'package:FANotifier/features/profile/domain/profile_section.dart';
+import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.dart';
 
-// Mapping from FA Timezone Names to IANA Timezones
-final Map<String, String> faTimezoneToIana = {
-  "International Date Line West": "Etc/GMT+12",
-  "Samoa Standard Time": "Pacific/Pago_Pago",
-  "Hawaiian Standard Time": "Pacific/Honolulu",
-  "Alaskan Standard Time": "America/Anchorage",
-  "Pacific Standard Time": "America/Los_Angeles",
-  "Mountain Standard Time": "America/Denver",
-  "Central Standard Time": "America/Chicago",
-  "Eastern Standard Time": "America/New_York",
-  "Caracas Standard Time": "America/Caracas",
-  "Atlantic Standard Time": "America/Halifax",
-  "Newfoundland Standard Time": "America/St_Johns",
-  "Greenland Standard Time": "America/Godthab",
-  "Mid-Atlantic Standard Time": "Etc/GMT-2",
-  "Cape Verde Standard Time": "Atlantic/Cape_Verde",
-  "Greenwich Mean Time": "Etc/GMT",
-  "W. Europe Standard Time": "Europe/Berlin",
-  "E. Europe Standard Time": "Europe/Minsk",
-  "Russian Standard Time": "Europe/Moscow",
-  "Iran Standard Time": "Asia/Tehran",
-  "Arabian Standard Time": "Asia/Riyadh",
-  "Afghanistan Standard Time": "Asia/Kabul",
-  "West Asia Standard Time": "Asia/Tashkent",
-  "India Standard Time": "Asia/Kolkata",
-  "Nepal Standard Time": "Asia/Kathmandu",
-  "Central Asia Standard Time": "Asia/Almaty",
-  "Myanmar Standard Time": "Asia/Yangon",
-  "North Asia Standard Time": "Asia/Krasnoyarsk",
-  "North Asia East Standard Time": "Asia/Irkutsk",
-  "Tokyo Standard Time": "Asia/Tokyo",
-  "Cen. Australia Standard Time": "Australia/Adelaide",
-  "West Pacific Standard Time": "Pacific/Port_Moresby",
-  "Central Pacific Standard Time": "Pacific/Guadalcanal",
-  "New Zealand Standard Time": "Pacific/Auckland",
-};
+class _TransparentOpenPostPageRoute<T> extends PageRoute<T> {
+  _TransparentOpenPostPageRoute({
+    required this.builder,
+    super.settings,
+    super.requestFocus,
+    this.maintainState = true,
+    this.routeTransitionDuration = const Duration(milliseconds: 280),
+    this.routeReverseTransitionDuration = const Duration(milliseconds: 280),
+  });
+
+  final WidgetBuilder builder;
+  @override
+  final bool maintainState;
+  final Duration routeTransitionDuration;
+  final Duration routeReverseTransitionDuration;
+
+  @override
+  bool get opaque => false;
+
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  String? get barrierLabel => null;
+
+  @override
+  Duration get transitionDuration => routeTransitionDuration;
+
+  @override
+  Duration get reverseTransitionDuration => routeReverseTransitionDuration;
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    return builder(context);
+  }
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return SlideTransition(
+      position: animation.drive(
+        Tween<Offset>(
+          begin: const Offset(1.0, 0.0),
+          end: Offset.zero,
+        ).chain(
+          CurveTween(curve: Curves.easeOutCubic),
+        ),
+      ),
+      child: child,
+    );
+  }
+}
 
 class OpenPost extends StatefulWidget {
   final String imageUrl;
@@ -88,12 +117,35 @@ class OpenPost extends StatefulWidget {
     Key? key,
   }) : super(key: key);
 
+  static Route<T> route<T>({
+    required String imageUrl,
+    required String uniqueNumber,
+    bool skipInitialWatchCheck = false,
+    RouteSettings? settings,
+  }) {
+    final builder = (BuildContext context) => OpenPost(
+          imageUrl: imageUrl,
+          uniqueNumber: uniqueNumber,
+          skipInitialWatchCheck: skipInitialWatchCheck,
+        );
+
+    if (Platform.isAndroid || Platform.isIOS) {
+      return _TransparentOpenPostPageRoute<T>(
+        settings: settings,
+        builder: builder,
+      );
+    }
+
+    return MaterialPageRoute<T>(settings: settings, builder: builder);
+  }
+
   @override
   _OpenPostState createState() => _OpenPostState();
 }
 
 class _OpenPostState extends State<OpenPost>
-    with RouteAware, WidgetsBindingObserver {
+    with RouteAware, WidgetsBindingObserver, TickerProviderStateMixin
+    implements DetachableWebViewRouteOwner {
   bool _showFullPublicationDate = false;
   String? profileImageUrl;
   String? username;
@@ -156,7 +208,8 @@ class _OpenPostState extends State<OpenPost>
   String? _blockKey;
   String? _unblockKey;
   bool _isClassicUserPage = false;
-  bool _isWebViewVisible = true;
+  bool _isPostWebViewDetached = false;
+  bool _suppressNextRouteDetach = false;
   double? imageWidth;
   double? imageHeight;
   bool isLoading = true;
@@ -176,10 +229,27 @@ class _OpenPostState extends State<OpenPost>
   Offset? _selectionClearPointerDownPosition;
   DateTime? _selectionClearPointerDownTime;
   bool _selectionClearPointerMoved = false;
+  static const double _edgeBackSwipeDetectorWidth = 25.0;
+  static const double _edgeBackSwipeTriggerWidth = 62.0;
+  static const double _edgeBackSwipeMinDistance = 72.0;
+  static const double _edgeBackSwipeMinVelocity = 700.0;
+  late final ValueNotifier<double> _backSwipeOffsetNotifier =
+      ValueNotifier<double>(0.0);
+  late final AnimationController _backSwipeAnimationController;
+  Animation<double>? _backSwipeOffsetAnimation;
+  bool _popAfterBackSwipeAnimation = false;
+  bool _isDraggingBackFromEdge = false;
+  bool _didTemporarilyRestorePreviousForSwipe = false;
+  double _backDragStartX = 0.0;
+  double _backDragDistance = 0.0;
+
+  double get _backSwipeOffset => _backSwipeOffsetNotifier.value;
+  set _backSwipeOffset(double value) => _backSwipeOffsetNotifier.value = value;
 
   @override
   void initState() {
     super.initState();
+    DetachableWebViewRouteRegistry.register(this);
     WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_onScroll);
     _commentController.addListener(_onCommentDraftChanged);
@@ -188,6 +258,9 @@ class _OpenPostState extends State<OpenPost>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateKeyboardInset();
     });
+    _backSwipeAnimationController = AnimationController(vsync: this)
+      ..addListener(_onBackSwipeAnimationTick)
+      ..addStatusListener(_onBackSwipeAnimationStatusChanged);
 
     Future.wait([
       _loadSfwEnabled(),
@@ -211,7 +284,10 @@ class _OpenPostState extends State<OpenPost>
 
   @override
   void dispose() {
+    DetachableWebViewRouteRegistry.unregister(this);
     routeObserver.unsubscribe(this);
+    _backSwipeAnimationController.dispose();
+    _backSwipeOffsetNotifier.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _commentController.removeListener(_onCommentDraftChanged);
     _commentController.dispose();
@@ -230,15 +306,43 @@ class _OpenPostState extends State<OpenPost>
   @override
   void didPushNext() {
     _dismissCommentComposerFocus();
+    if (_suppressNextRouteDetach) {
+      return;
+    }
+    _setRouteWebViewDetached(true);
   }
 
   @override
   void didPopNext() {
+    _setRouteWebViewDetached(false);
     _armCommentComposerFocusGuard();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_commentFocusNode.hasFocus) return;
       _commentFocusNode.unfocus();
     });
+  }
+
+  @override
+  bool get routeWebViewDetached => _isPostWebViewDetached;
+
+  @override
+  void setRouteWebViewDetached(bool detached) {
+    _setRouteWebViewDetached(detached);
+  }
+
+  void _setRouteWebViewDetached(bool detached) {
+    if (_isPostWebViewDetached == detached) {
+      return;
+    }
+    _isPostWebViewDetached = detached;
+    if (detached) {
+      _submissionWebViewKey.currentState?.detachWebView();
+    } else {
+      _submissionWebViewKey.currentState?.restoreWebView();
+    }
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   List<String> iconBeforeUrls = [];
@@ -1649,6 +1753,7 @@ class _OpenPostState extends State<OpenPost>
 
   void _showInfoDialog() {
     _dismissCommentComposerFocus();
+    _suppressNextRouteDetach = true;
     showDialog(
       context: context,
       builder: (context) {
@@ -1658,9 +1763,15 @@ class _OpenPostState extends State<OpenPost>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (category != null || type != null)
+                if (category != null)
                   Text(
-                    'Category: ${category ?? 'N/A'} / ${type ?? 'N/A'}',
+                    'Category: $category',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                if (category != null) const SizedBox(height: 8),
+                if (type != null)
+                  Text(
+                    'Sub-Category: $type',
                     style: const TextStyle(fontSize: 16),
                   ),
                 const SizedBox(height: 8),
@@ -1698,7 +1809,9 @@ class _OpenPostState extends State<OpenPost>
           ],
         );
       },
-    );
+    ).whenComplete(() {
+      _suppressNextRouteDetach = false;
+    });
   }
 
   void _parsePublicationTime(String rawTime) {
@@ -2249,11 +2362,9 @@ class _OpenPostState extends State<OpenPost>
       final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => OpenPost(
-            uniqueNumber: submissionId,
-            imageUrl: '',
-          ),
+        OpenPost.route(
+          uniqueNumber: submissionId,
+          imageUrl: '',
         ),
       );
       return;
@@ -2265,6 +2376,7 @@ class _OpenPostState extends State<OpenPost>
 
   void _showEditDialog() {
     _dismissCommentComposerFocus();
+    _suppressNextRouteDetach = true;
     showDialog(
       context: context,
       builder: (context) {
@@ -2275,6 +2387,7 @@ class _OpenPostState extends State<OpenPost>
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
+                _suppressNextRouteDetach = false;
                 _openSubmissionEdit('info');
               },
               child: const Text('Edit Submission Info'),
@@ -2282,6 +2395,7 @@ class _OpenPostState extends State<OpenPost>
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
+                _suppressNextRouteDetach = false;
                 _openSubmissionEdit('file');
               },
               child: const Text('Update Source File'),
@@ -2289,7 +2403,9 @@ class _OpenPostState extends State<OpenPost>
           ],
         );
       },
-    );
+    ).whenComplete(() {
+      _suppressNextRouteDetach = false;
+    });
   }
 
   void _openSubmissionEdit(String type) {
@@ -2352,18 +2468,23 @@ class _OpenPostState extends State<OpenPost>
     return shouldClose ?? false;
   }
 
-  Future<void> _closePost() async {
+  Future<bool> _closePost({
+    bool resetBackSwipeOffset = true,
+  }) async {
     final canClose = await _confirmClosePostIfNeeded();
-    if (!canClose || !mounted) return;
+    if (!canClose || !mounted) return false;
 
-    setState(() {
-      _isWebViewVisible = false;
-    });
+    _setRouteWebViewDetached(true);
+    if (resetBackSwipeOffset) {
+      _resetEdgeBackSwipe();
+    }
 
-    Future.delayed(const Duration(milliseconds: 5), () {
-      if (!mounted) return;
-      Navigator.pop(context);
-    });
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    if (!mounted) {
+      return false;
+    }
+    Navigator.pop(context);
+    return true;
   }
 
   Future<void> _sendFavoriteRequest(bool shouldFavorite) async {
@@ -2432,17 +2553,278 @@ class _OpenPostState extends State<OpenPost>
     return newLikeState;
   }
 
+  void _onBackSwipeAnimationTick() {
+    final animation = _backSwipeOffsetAnimation;
+    if (animation == null) {
+      return;
+    }
+    _backSwipeOffset = animation.value;
+  }
+
+  void _onBackSwipeAnimationStatusChanged(AnimationStatus status) {
+    if (status != AnimationStatus.completed) {
+      return;
+    }
+
+    final shouldPop = _popAfterBackSwipeAnimation;
+    _backSwipeOffsetAnimation = null;
+    _popAfterBackSwipeAnimation = false;
+
+    if (shouldPop) {
+      _finishBackSwipeClose();
+    }
+  }
+
+  Future<void> _finishBackSwipeClose() async {
+    final didPop = await _closePost(resetBackSwipeOffset: false);
+    if (!didPop && mounted) {
+      _detachPreviousRouteWebViewAfterCanceledSwipe();
+      _animateBackSwipeTo(
+        0.0,
+        duration: const Duration(milliseconds: 180),
+      );
+    }
+  }
+
+  Duration _backSwipeCloseDuration(
+    double screenWidth,
+    double velocity,
+  ) {
+    final remaining = max(0.0, screenWidth - _backSwipeOffset);
+    if (remaining <= 0.0) {
+      return Duration.zero;
+    }
+
+    if (velocity > 0.0) {
+      final milliseconds = ((remaining / velocity) * 1000)
+          .round()
+          .clamp(90, 240);
+      return Duration(milliseconds: milliseconds);
+    }
+
+    final distanceFactor = (remaining / screenWidth).clamp(0.2, 1.0);
+    return Duration(milliseconds: (220 * distanceFactor).round());
+  }
+
+  Duration _backSwipeResetDuration(double screenWidth) {
+    if (screenWidth <= 0.0) {
+      return const Duration(milliseconds: 180);
+    }
+
+    final distanceFactor = (_backSwipeOffset / screenWidth).clamp(0.15, 1.0);
+    return Duration(milliseconds: (180 * distanceFactor).round());
+  }
+
+  void _animateBackSwipeTo(
+    double target, {
+    required Duration duration,
+    Curve curve = Curves.easeOutCubic,
+    bool popWhenDone = false,
+  }) {
+    _backSwipeAnimationController.stop();
+    _backSwipeAnimationController.duration = duration;
+    _backSwipeOffsetAnimation = Tween<double>(
+      begin: _backSwipeOffset,
+      end: target,
+    ).animate(
+      CurvedAnimation(
+        parent: _backSwipeAnimationController,
+        curve: curve,
+      ),
+    );
+    _popAfterBackSwipeAnimation = popWhenDone;
+    _backSwipeAnimationController.forward(from: 0.0);
+  }
+
+  void _handleEdgeBackSwipePointerDown(PointerDownEvent event) {
+    if (!(Platform.isAndroid || Platform.isIOS)) {
+      return;
+    }
+    if (event.position.dx <= _edgeBackSwipeTriggerWidth) {
+      _restorePreviousRouteWebViewForSwipe();
+    }
+  }
+
+  void _handleEdgeBackSwipePointerUp(PointerEvent event) {
+    if (!_isDraggingBackFromEdge && _backSwipeOffset == 0.0) {
+      _detachPreviousRouteWebViewAfterCanceledSwipe();
+    }
+  }
+
+  void _handleEdgeBackSwipeStart(DragStartDetails details) {
+    if (!(Platform.isAndroid || Platform.isIOS)) {
+      return;
+    }
+
+    if (details.globalPosition.dx <= _edgeBackSwipeTriggerWidth) {
+      _backSwipeAnimationController.stop();
+      _backSwipeOffsetAnimation = null;
+      _popAfterBackSwipeAnimation = false;
+      _isDraggingBackFromEdge = true;
+      _restorePreviousRouteWebViewForSwipe();
+      _backDragStartX = details.globalPosition.dx - _backSwipeOffset;
+      _backDragDistance = _backSwipeOffset;
+    }
+  }
+
+  void _handleEdgeBackSwipeUpdate(DragUpdateDetails details) {
+    if (!_isDraggingBackFromEdge) {
+      return;
+    }
+
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final distance = (details.globalPosition.dx - _backDragStartX)
+        .clamp(0.0, screenWidth)
+        .toDouble();
+    _backDragDistance = distance;
+    _backSwipeOffset = distance;
+  }
+
+  void _handleEdgeBackSwipeEnd(DragEndDetails details) {
+    if (!_isDraggingBackFromEdge) {
+      return;
+    }
+
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final closeDistanceThreshold =
+        max(_edgeBackSwipeMinDistance, screenWidth * 0.25);
+    final shouldClose =
+        _backDragDistance >= closeDistanceThreshold ||
+        details.velocity.pixelsPerSecond.dx >= _edgeBackSwipeMinVelocity;
+
+    _isDraggingBackFromEdge = false;
+    _backDragStartX = 0.0;
+    _backDragDistance = 0.0;
+
+    if (shouldClose) {
+      _didTemporarilyRestorePreviousForSwipe = false;
+      _animateBackSwipeTo(
+        screenWidth,
+        duration: _backSwipeCloseDuration(
+          screenWidth,
+          details.velocity.pixelsPerSecond.dx,
+        ),
+        popWhenDone: true,
+      );
+    } else {
+      _detachPreviousRouteWebViewAfterCanceledSwipe();
+      _animateBackSwipeTo(
+        0.0,
+        duration: _backSwipeResetDuration(screenWidth),
+      );
+    }
+  }
+
+  void _resetEdgeBackSwipe() {
+    _isDraggingBackFromEdge = false;
+    _backDragStartX = 0.0;
+    _backDragDistance = 0.0;
+    _backSwipeAnimationController.stop();
+    _backSwipeOffsetAnimation = null;
+    _popAfterBackSwipeAnimation = false;
+    _backSwipeOffset = 0.0;
+    _detachPreviousRouteWebViewAfterCanceledSwipe();
+  }
+
+  void _restorePreviousRouteWebViewForSwipe() {
+    if (_didTemporarilyRestorePreviousForSwipe) {
+      return;
+    }
+    final previous = DetachableWebViewRouteRegistry.previousOf(this);
+    if (previous == null) {
+      return;
+    }
+    previous.setRouteWebViewDetached(false);
+    _didTemporarilyRestorePreviousForSwipe = true;
+  }
+
+  void _detachPreviousRouteWebViewAfterCanceledSwipe() {
+    if (!_didTemporarilyRestorePreviousForSwipe) {
+      return;
+    }
+    final previous = DetachableWebViewRouteRegistry.previousOf(this);
+    if (previous != null) {
+      previous.setRouteWebViewDetached(true);
+    }
+    _didTemporarilyRestorePreviousForSwipe = false;
+  }
+
+  Widget _buildEdgeBackSwipeOverlay() {
+    if (!(Platform.isAndroid || Platform.isIOS)) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned(
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: _edgeBackSwipeDetectorWidth,
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _handleEdgeBackSwipePointerDown,
+        onPointerUp: _handleEdgeBackSwipePointerUp,
+        onPointerCancel: _handleEdgeBackSwipePointerUp,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragStart: _handleEdgeBackSwipeStart,
+          onHorizontalDragUpdate: _handleEdgeBackSwipeUpdate,
+          onHorizontalDragEnd: _handleEdgeBackSwipeEnd,
+          onHorizontalDragCancel: _resetEdgeBackSwipe,
+          child: Container(color: Colors.transparent),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEdgeBackSwipeTransition({required Widget child}) {
+    if (!(Platform.isAndroid || Platform.isIOS)) {
+      return child;
+    }
+
+    return ValueListenableBuilder<double>(
+      valueListenable: _backSwipeOffsetNotifier,
+      child: child,
+      builder: (context, offset, swipeChild) {
+        final screenWidth = MediaQuery.sizeOf(context).width;
+        final progress = screenWidth > 0.0
+            ? (offset / screenWidth).clamp(0.0, 1.0).toDouble()
+            : 0.0;
+
+        return Transform.translate(
+          offset: Offset(offset, 0.0),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              boxShadow: offset > 0.0
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: 0.24 * (1.0 - (progress * 0.5)),
+                        ),
+                        blurRadius: 24.0,
+                        offset: const Offset(-6.0, 0.0),
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: swipeChild,
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool showLoadingIndicator = !_detailsLoaded || !_webViewLoaded;
     final double viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        systemNavigationBarColor: Colors.black,
-        systemNavigationBarIconBrightness: Brightness.light,
-        statusBarColor: Color(0xFF111111),
-        statusBarIconBrightness: Brightness.light,
-      ),
+    return ExcludeSemantics(
+        child: AnnotatedRegion<SystemUiOverlayStyle>(
+          value: const SystemUiOverlayStyle(
+            systemNavigationBarColor: Colors.black,
+            systemNavigationBarIconBrightness: Brightness.light,
+            statusBarColor: Color(0xFF111111),
+            statusBarIconBrightness: Brightness.light,
+          ),
       child: ValueListenableBuilder<bool>(
         valueListenable: _commentDraftHasText,
         builder: (context, hasDraft, child) {
@@ -2456,15 +2838,20 @@ class _OpenPostState extends State<OpenPost>
             child: child!,
           );
         },
-        child: Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(
+        child: TickerMode(
+          enabled: !_isPostWebViewDetached,
+          child: _buildEdgeBackSwipeTransition(
+            child: Scaffold(
+              backgroundColor: Colors.black,
+              appBar: AppBar(
             backgroundColor: Colors.black,
             scrolledUnderElevation: 0,
             title: const Text("Post"),
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
-              onPressed: _closePost,
+              onPressed: () {
+                _closePost();
+              },
             ),
             actions: [
               Builder(
@@ -2532,11 +2919,14 @@ class _OpenPostState extends State<OpenPost>
                         Offset.zero & overlay.size,
                       );
 
+                      _suppressNextRouteDetach = true;
                       final selected = await showMenu<String>(
                         context: context,
                         position: position,
                         items: menuItems,
-                      );
+                      ).whenComplete(() {
+                        _suppressNextRouteDetach = false;
+                      });
 
                       switch (selected) {
                         case 'report':
@@ -2980,8 +3370,7 @@ class _OpenPostState extends State<OpenPost>
                                 color: Color(0xFF111111),
                                 thickness: 3.0,
                               ),
-                              if (_isWebViewVisible &&
-                                  submissionDescription != null)
+                              if (submissionDescription != null)
                                 Padding(
                                   padding: const EdgeInsets.only(
                                       right: 16.0, left: 16.0, top: 16.0),
@@ -2998,6 +3387,7 @@ class _OpenPostState extends State<OpenPost>
                                             const Size(40, 40),
                                         Offset.zero & overlay.size,
                                       );
+                                      _suppressNextRouteDetach = true;
                                       final selected = await showMenu<String>(
                                         context: context,
                                         position: position,
@@ -3011,7 +3401,9 @@ class _OpenPostState extends State<OpenPost>
                                             child: Text('Select Text'),
                                           ),
                                         ],
-                                      );
+                                      ).whenComplete(() {
+                                        _suppressNextRouteDetach = false;
+                                      });
                                       if (selected == 'copy') {
                                         String? plainText =
                                             await _submissionWebViewKey
@@ -3042,12 +3434,12 @@ class _OpenPostState extends State<OpenPost>
                                       }
                                     },
                                     child: SubmissionDescriptionWebView(
-                                      key: ValueKey(
-                                          submissionDescription.hashCode),
+                                      key: _submissionWebViewKey,
                                       submissionId: widget.uniqueNumber,
                                       initialHtml: submissionDescription,
                                       enableTextSelection: false,
                                       forceHybridComposition: false,
+                                      routeDetached: _isPostWebViewDetached,
                                       onHeightChanged: (double height) {
                                         if (!_webViewLoaded) {
                                           Future.delayed(
@@ -3343,6 +3735,7 @@ class _OpenPostState extends State<OpenPost>
                       ),
                     ),
                   ),
+                _buildEdgeBackSwipeOverlay(),
               ],
             ),
           ),
@@ -3564,8 +3957,11 @@ class _OpenPostState extends State<OpenPost>
                     ),
                   ),
                 ),
+            ),
+          ),
         ),
       ),
+        ),
     );
   }
 

@@ -1,46 +1,24 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as html_parser;
-import 'package:html/dom.dart' as html_dom;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/features/submissions/data/favorite_service.dart';
-import 'package:FANotifier/shared/fa/fa_thumbnail_parser.dart';
+import 'package:FANotifier/features/submissions/data/submission_detail_parser.dart';
+import 'package:FANotifier/features/submissions/data/submissions_listing_parser.dart';
+import 'package:FANotifier/features/submissions/domain/submission_fetch_models.dart';
+import 'package:FANotifier/features/submissions/domain/submission_image_group.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation_optimized.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
+import 'package:FANotifier/features/submissions/presentation/submission_list_item.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
-
-/// Data model that represents a group of images posted on the same date.
-class DateImageGroup {
-  final String dateLabel;
-  final List<Map<String, dynamic>> images;
-  DateImageGroup({required this.dateLabel, required this.images});
-}
-
-
-class _ListItem {
-  final bool isHeader;
-  final String? dateLabel;
-  final List<Map<String, dynamic>>? rowImages;
-  final bool showDividerAfterGroup;
-
-  _ListItem.header(this.dateLabel, {required this.showDividerAfterGroup})
-      : isHeader = true,
-        rowImages = null;
-
-  _ListItem.row(this.rowImages, {required this.showDividerAfterGroup})
-      : isHeader = false,
-        dateLabel = null;
-}
 
 class SubmissionsScreen extends StatefulWidget {
   const SubmissionsScreen({Key? key}) : super(key: key);
@@ -60,7 +38,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   final List<DateImageGroup> _dateGroups = [];
   final List<Map<String, dynamic>> _flatSubmissionsList = [];
   /// Combined list for the ListView
-  final List<_ListItem> _listItems = [];
+  final List<SubmissionListItem> _listItems = [];
   /// Scroll controller for pagination
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
@@ -77,7 +55,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   bool _selectionMode = false;
   final Set<String> _selectedSubmissions = {};
   /// Concurrency management for fetching HQ/fav data
-  final Queue<_SubmissionQueueItem> _submissionQueue = Queue();
+  final Queue<SubmissionQueueItem> _submissionQueue = Queue();
   static const int _maxConcurrentFetches = 5;
   int _activeFetches = 0;
   // Debounce for favorites
@@ -234,57 +212,25 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   }
 
   void _parseListing(String html) {
-    final doc = html_parser.parse(html);
+    final parsed = parseSubmissionsListing(html);
+    _isClassicStyle = parsed.isClassicStyle;
+    _baseSubmissionsUrl ??= parsed.baseSubmissionsUrl;
+    _dateGroups.addAll(parsed.dateGroups);
 
+    _rebuildListItemsFromDateGroups();
 
-    _isClassicStyle =
-        doc.body?.attributes['data-static-path']?.contains('/themes/classic') ?? false;
+    _hasMore = parsed.nextPageUrl != null;
+    _nextPageUrl = parsed.nextPageUrl;
+  }
 
-    // Extract base URL for deletion actions
-    if (_baseSubmissionsUrl == null) {
-      final form = doc.querySelector('form#messages-form');
-      if (form != null) {
-        final action = form.attributes['action'] ?? '';
-        if (action.isNotEmpty) {
-          _baseSubmissionsUrl = action.startsWith('http')
-              ? action
-              : 'https://www.furaffinity.net$action';
-        }
-      }
-    }
-
-
-    final dateDivs = doc.querySelectorAll('.notifications-by-date');
-    for (int i = 0; i < dateDivs.length; i++) {
-      final dateDiv = dateDivs[i];
-      final heading = dateDiv.querySelector('h3.date-divider') ?? dateDiv.querySelector('h4.date-divider');
-      if (heading == null) continue;
-      final dateLabel = heading.text.trim();
-
-
-      final figures = dateDiv.querySelectorAll('figure.t-image');
-      if (figures.isEmpty) continue;
-
-      final images = <Map<String, dynamic>>[];
-      for (final fig in figures) {
-        final map = _extractListingData(fig);
-        if (map != null) {
-          images.add(map);
-        }
-      }
-      if (images.isNotEmpty) {
-        _dateGroups.add(DateImageGroup(dateLabel: dateLabel, images: images));
-      }
-    }
-
-    // Build the list
+  void _rebuildListItemsFromDateGroups() {
     _flatSubmissionsList.clear();
     _listItems.clear();
     bool isLastGroup(int groupIndex) => groupIndex == _dateGroups.length - 1;
     int flatIndexCounter = 0;
     for (int g = 0; g < _dateGroups.length; g++) {
       final group = _dateGroups[g];
-      _listItems.add(_ListItem.header(
+      _listItems.add(SubmissionListItem.header(
         group.dateLabel,
         showDividerAfterGroup: !isLastGroup(g),
       ));
@@ -296,68 +242,12 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
           _flatSubmissionsList.add(img);
         }
         final isLastRowInThisGroup = (r == imageRows.length - 1);
-        _listItems.add(_ListItem.row(
+        _listItems.add(SubmissionListItem.row(
           row,
           showDividerAfterGroup: isLastRowInThisGroup && !isLastGroup(g),
         ));
       }
     }
-
-    final next = _extractNextPageUrl(doc);
-    _hasMore = (next != null);
-    _nextPageUrl = next;
-  }
-
-  Map<String, dynamic>? _extractListingData(html_dom.Element fig) {
-    final data = FaThumbnailParser.extract(fig);
-    if (data == null) return null;
-
-    return {
-      'postUrl': data['postUrl'],
-      'uniqueNumber': data['uniqueNumber'],
-      'thumbnailUrl': data['thumbnailUrl'],
-      'width': data['width'],
-      'height': data['height'],
-      'rating': data['rating'],
-      'title': data['title'],
-      'author': data['author'],
-      'hqUrl': null,
-      'isFav': false,
-      'initialIsFav': false,
-      'favUrl': '',
-      'unfavUrl': '',
-      'detailFetchQueued': false,
-    };
-  }
-
-  String? _extractNextPageUrl(html_dom.Document doc) {
-    // Modern
-    final nextButton = doc.querySelector('a.button.standard.more:not(.prev)');
-    if (nextButton != null) {
-      final href = nextButton.attributes['href'] ?? '';
-      if (href.isNotEmpty) {
-        return href.startsWith('http')
-            ? href
-            : 'https://www.furaffinity.net$href';
-      }
-    }
-    // In classic: .button.standard.more-half
-    final moreHalfList = doc.querySelectorAll('a.button.standard.more-half');
-    html_dom.Element? nextLink;
-    try {
-      nextLink = moreHalfList.firstWhere((el) => !el.classes.contains('prev'));
-    } catch (_) {
-      nextLink = null;
-    }
-    if (nextLink != null) {
-      final href = nextLink.attributes['href'] ?? '';
-      if (href.isNotEmpty) {
-        return href.startsWith('http')
-            ? href
-            : 'https://www.furaffinity.net$href';
-      }
-    }
-    return null;
   }
 
   List<List<Map<String, dynamic>>> _splitImagesIntoRows(List<Map<String, dynamic>> images) {
@@ -526,30 +416,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
             group.images.removeWhere((img) => _selectedSubmissions.contains(img['uniqueNumber']));
           }
           _dateGroups.removeWhere((g) => g.images.isEmpty);
-          _flatSubmissionsList.clear();
-          _listItems.clear();
-          int flatIndexCounter = 0;
-          for (int g = 0; g < _dateGroups.length; g++) {
-            final group = _dateGroups[g];
-            final isLast = (g == _dateGroups.length - 1);
-            _listItems.add(_ListItem.header(
-              group.dateLabel,
-              showDividerAfterGroup: !isLast,
-            ));
-            final imageRows = _splitImagesIntoRows(group.images);
-            for (int r = 0; r < imageRows.length; r++) {
-              final row = imageRows[r];
-              for (final img in row) {
-                img['flatIndex'] = flatIndexCounter++;
-                _flatSubmissionsList.add(img);
-              }
-              final isLastRowOfGroup = (r == imageRows.length - 1);
-              _listItems.add(_ListItem.row(
-                row,
-                showDividerAfterGroup: isLastRowOfGroup && !isLast,
-              ));
-            }
-          }
+          _rebuildListItemsFromDateGroups();
         });
         debugPrint('[Submissions] Successfully deleted selected from UI.');
       } else {
@@ -570,7 +437,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       if (item['detailFetchQueued'] == true || item['detailFetchInProgress'] == true) return;
       debugPrint('[Submissions] Visibility => queue HQ for item #$flatListIndex / ${item['postUrl']}');
       item['detailFetchQueued'] = true;
-      _submissionQueue.add(_SubmissionQueueItem(
+      _submissionQueue.add(SubmissionQueueItem(
         indexInFlatList: flatListIndex,
         postUrl: item['postUrl'],
       ));
@@ -626,7 +493,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   }
 
   /// Fetch submission detail data, supporting both modern and classic style pages.
-  Future<_SubmissionData> _fetchSubmissionData(String postUrl) async {
+  Future<SubmissionData> _fetchSubmissionData(String postUrl) async {
     final absoluteUrl = postUrl.startsWith('http')
         ? postUrl
         : 'https://www.furaffinity.net$postUrl';
@@ -647,105 +514,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       throw Exception('Submission detail fetch failed: ${resp.statusCode}');
     }
 
-    // Decode the response using bodyBytes to handle non-ASCII characters.
-    final doc = html_parser.parse(utf8.decode(resp.bodyBytes));
-
-    final isClassic = doc.body?.attributes['data-static-path']?.contains('/themes/classic') ?? false;
-
-    /// 1) Extract the high-quality image URL
-    String? hqUrl;
-    if (isClassic) {
-      // Try to find the image with id 'submissionImg'
-      final img = doc.querySelector('img#submissionImg');
-      if (img != null) {
-        final fullview = img.attributes['data-fullview-src'];
-        if (fullview != null && fullview.isNotEmpty) {
-          hqUrl = fullview.startsWith('//') ? 'https:$fullview' : fullview;
-        } else {
-          final src = img.attributes['src'] ?? '';
-          if (src.isNotEmpty) {
-            hqUrl = src.startsWith('//') ? 'https:$src' : src;
-          }
-        }
-      }
-    }
-    else {
-      // Modern style: <div class="submission-area submission-image"> with an <img id="submissionImg">
-      final subArea = doc.querySelector('div.submission-area.submission-image');
-      if (subArea != null) {
-        final img = subArea.querySelector('img#submissionImg');
-        if (img != null) {
-          final fullview = img.attributes['data-fullview-src'];
-          if (fullview != null && fullview.isNotEmpty) {
-            hqUrl = fullview.startsWith('//') ? 'https:$fullview' : fullview;
-          } else {
-            final src = img.attributes['src'] ?? '';
-            if (src.isNotEmpty) {
-              hqUrl = src.startsWith('//') ? 'https:$src' : src;
-            }
-          }
-        }
-      }
-    }
-    hqUrl ??= ''; // fallback
-
-    /// 2) Extract the favorite/unfavorite URLs
-    bool isFav = false;
-    String favUrl = '';
-    String unfavUrl = '';
-
-    if (!isClassic) {
-      // Modern
-      final favDiv = doc.querySelector('div.fav');
-      if (favDiv != null) {
-        for (var aTag in favDiv.querySelectorAll('a')) {
-          final href = aTag.attributes['href'] ?? '';
-          final absoluteHref = href.startsWith('http')
-              ? href
-              : 'https://www.furaffinity.net$href';
-          if (href.contains('/fav/')) {
-            favUrl = absoluteHref;
-          } else if (href.contains('/unfav/')) {
-            unfavUrl = absoluteHref;
-          }
-        }
-        // If we have an unfav link but no fav link => the user has it faved
-        if (unfavUrl.isNotEmpty && favUrl.isEmpty) {
-          isFav = true;
-        }
-      }
-    } else {
-      // Classic
-      final favLinks = doc.querySelectorAll('a[href*="/fav/"]');
-      final unfavLinks = doc.querySelectorAll('a[href*="/unfav/"]');
-
-      if (favLinks.isNotEmpty) {
-        var raw = favLinks.first.attributes['href'] ?? '';
-        if (!raw.startsWith('http') && raw.isNotEmpty) {
-          raw = 'https://www.furaffinity.net$raw';
-        }
-        favUrl = raw;
-      }
-
-      if (unfavLinks.isNotEmpty) {
-        var raw = unfavLinks.first.attributes['href'] ?? '';
-        if (!raw.startsWith('http') && raw.isNotEmpty) {
-          raw = 'https://www.furaffinity.net$raw';
-        }
-        unfavUrl = raw;
-      }
-      if (unfavUrl.isNotEmpty && favUrl.isEmpty) {
-        // Means they have already faved it
-        isFav = true;
-      }
-    }
-
-    return _SubmissionData(
-      hqUrl: hqUrl,
-      isFav: isFav,
-      favUrl: favUrl,
-      unfavUrl: unfavUrl,
-    );
+    return parseSubmissionDetailData(resp.bodyBytes);
   }
 
   Widget _buildRefreshableBody() {
@@ -1011,13 +780,12 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   void _openSubmission(Map<String, dynamic> item) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (ctx) => OpenPost(
-          imageUrl: (item['hqUrl'] != null && (item['hqUrl'] as String).isNotEmpty)
-              ? item['hqUrl'] as String
-              : item['thumbnailUrl'] as String,
-          uniqueNumber: item['uniqueNumber'] as String,
-        ),
+      OpenPost.route(
+        imageUrl:
+            (item['hqUrl'] != null && (item['hqUrl'] as String).isNotEmpty)
+                ? item['hqUrl'] as String
+                : item['thumbnailUrl'] as String,
+        uniqueNumber: item['uniqueNumber'] as String,
       ),
     );
   }
@@ -1076,28 +844,6 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   }
 }
 
-class _SubmissionData {
-  final String hqUrl;
-  final bool isFav;
-  final String favUrl;
-  final String unfavUrl;
-  _SubmissionData({
-    required this.hqUrl,
-    required this.isFav,
-    required this.favUrl,
-    required this.unfavUrl,
-  });
-}
-
-class _SubmissionQueueItem {
-  final int indexInFlatList;
-  final String postUrl;
-  _SubmissionQueueItem({
-    required this.indexInFlatList,
-    required this.postUrl,
-  });
-}
-
 class _FavImageTile extends StatelessWidget {
   final Map<String, dynamic> item;
   final double width;
@@ -1134,6 +880,7 @@ class _FavImageTile extends StatelessWidget {
     final String? rating = item['rating'] as String?;
     final String? title = item['title'] as String?;
     final String? author = item['author'] as String?;
+    final String? authorProfileUrl = item['authorProfileUrl'] as String?;
 
     return VisibilityDetector(
       key: Key('visible-$uniqueNumber'),
@@ -1223,6 +970,7 @@ class _FavImageTile extends StatelessWidget {
                 maxWidth: width,
                 title: title,
                 author: author,
+                authorProfileUrl: authorProfileUrl,
               ),
             ],
           ),

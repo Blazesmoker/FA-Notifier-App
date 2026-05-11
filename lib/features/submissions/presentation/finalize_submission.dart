@@ -6,9 +6,9 @@ import 'package:dio/dio.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:html/parser.dart' as html_parser;
-import 'package:html/dom.dart' as dom;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:FANotifier/features/submissions/data/finalize_submission_parser.dart';
+import 'package:FANotifier/features/submissions/domain/submission_form_option.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 
@@ -138,28 +138,6 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
     }
   }
 
-  /// Parses the submission key from the HTML document.
-  String _parseSubmissionKey(dom.Document document) {
-    final formElement = document.querySelector('form#myform');
-
-    if (formElement == null) {
-      throw Exception('Finalize Submission form (id="myform") not found.');
-    }
-
-    final keyElement = formElement.querySelector('input[name="key"]');
-
-    if (keyElement != null) {
-      String parsedKey = keyElement.attributes['value'] ?? '';
-      if (parsedKey.isEmpty) {
-        throw Exception('Finalize Submission key value is empty.');
-      }
-      debugPrint("Parsed Finalize Submission Key: $parsedKey");
-      return parsedKey;
-    } else {
-      throw Exception('Finalize Submission key input not found within the form.');
-    }
-  }
-
   Future<void> _saveToFile(String fileName, String content) async {
     try {
       final directory = await Directory.systemTemp.createTemp('request_logs');
@@ -194,58 +172,16 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
       }
 
       if (response.statusCode == 200 || response.statusCode == 302) {
-        dom.Document document = html_parser.parse(response.data);
-
-
-        if (document.querySelector('form[name="login"]') != null) {
-          throw Exception('Not authenticated. Please check your login status.');
-        }
-
-
-        String submissionKey = _parseSubmissionKey(document);
+        final parsed = parseFinalizeSubmissionOptions(response.data as String);
+        final submissionKey = parsed.submissionKey;
         setState(() {
           _submissionKeyUpload = submissionKey;
         });
         debugPrint("Finalized Submission Key: $_submissionKeyUpload");
-        // Parse Category
-        _categoryOptions = _parseSelectOptions(document, 'cat');
-
-        // Remove 'All' from specific groups if present
-        _removeDefaultAllFromGroup(_categoryOptions, ['Visual Art']);
-
-        // Inserting own 'All' at the top
-        _categoryOptions.insert(
-          0,
-          OptionGroup(
-            label: '',
-            options: [
-              Option(label: 'All', value: '1', isDefault: true),
-            ],
-          ),
-        );
-
-        // Parse Theme
-        _themeOptions = _parseSelectOptions(document, 'atype');
-
-        // Remove 'All' from specific groups if present
-        _removeDefaultAllFromGroup(_themeOptions, ['General Things']);
-
-        // Inserting own 'All' at the top
-        _themeOptions.insert(
-          0,
-          OptionGroup(
-            label: '',
-            options: [
-              Option(label: 'All', value: '1', isDefault: true),
-            ],
-          ),
-        );
-
-        // Parse Species
-        _speciesOptions = _parseSelectOptions(document, 'species');
-
-        // Parse Gender
-        _genderOptions = _parseSelectOptions(document, 'gender');
+        _categoryOptions = parsed.categoryOptions;
+        _themeOptions = parsed.themeOptions;
+        _speciesOptions = parsed.speciesOptions;
+        _genderOptions = parsed.genderOptions;
 
         setState(() {
           _isLoadingOptions = false;
@@ -261,60 +197,6 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
       });
       debugPrint("Error in _fetchOptions: $e");
     }
-  }
-
-  /// Removes the first 'All' option from specified groups if it exists.
-  void _removeDefaultAllFromGroup(List<OptionGroup> groups, List<String> targetGroupLabels) {
-    for (var group in groups) {
-      if (targetGroupLabels.contains(group.label)) {
-        if (group.options.isNotEmpty && group.options[0].label.toLowerCase() == 'all') {
-          group.options.removeAt(0);
-          debugPrint("Removed 'All' from group: ${group.label}");
-        }
-      }
-    }
-  }
-
-  /// Parses a <select> element by its name and returns a list of OptionGroups.
-  List<OptionGroup> _parseSelectOptions(dom.Document document, String selectName) {
-    List<OptionGroup> optionGroups = [];
-    dom.Element? selectElement = document.querySelector('select[name="$selectName"]');
-
-    if (selectElement == null) {
-      debugPrint('Select element with name="$selectName" not found.');
-      return optionGroups;
-    }
-
-
-    List<Option> directOptions = selectElement.children
-        .where((element) => element.localName == 'option')
-        .map((option) {
-      return Option(
-        label: option.text.trim(),
-        value: option.attributes['value'] ?? '',
-        isDefault: option.attributes.containsKey('selected'),
-      );
-    }).toList();
-
-    if (directOptions.isNotEmpty) {
-      optionGroups.add(OptionGroup(label: '', options: directOptions));
-    }
-
-
-    List<dom.Element> optgroups = selectElement.querySelectorAll('optgroup');
-    for (var optgroup in optgroups) {
-      String groupLabel = optgroup.attributes['label'] ?? '';
-      List<Option> options = optgroup.querySelectorAll('option').map((option) {
-        return Option(
-          label: option.text.trim(),
-          value: option.attributes['value'] ?? '',
-          isDefault: option.attributes.containsKey('selected'),
-        );
-      }).toList();
-      optionGroups.add(OptionGroup(label: groupLabel, options: options));
-    }
-
-    return optionGroups;
   }
 
   /// Handles the finalization of the submission.
@@ -453,12 +335,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
   /// Extracts an error message from the response body.
 
   String _extractErrorMessage(String responseBody) {
-    dom.Document document = html_parser.parse(responseBody);
-    final errorElements = document.querySelectorAll('.error, .error-message, .alert-danger');
-    if (errorElements.isNotEmpty) {
-      return errorElements.map((e) => e.text.trim()).join(' ');
-    }
-    return 'Unknown error occurred.';
+    return parseFinalizeSubmissionErrorMessage(responseBody);
   }
 
 
@@ -828,19 +705,4 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
       ),
     );
   }
-}
-
-class OptionGroup {
-  final String label;
-  final List<Option> options;
-
-  OptionGroup({required this.label, required this.options});
-}
-
-class Option {
-  final String label;
-  final String value;
-  final bool isDefault;
-
-  Option({required this.label, required this.value, this.isDefault = false});
 }

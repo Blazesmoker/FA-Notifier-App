@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_settings_provider.dart';
+import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
 import 'package:FANotifier/features/notifications/data/notification_service.dart';
 
 class NotificationsSettingsScreen extends StatefulWidget {

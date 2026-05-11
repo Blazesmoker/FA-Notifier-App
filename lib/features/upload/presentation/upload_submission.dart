@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/shared/widgets/tags_and_codes_webview_widget.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 import 'package:FANotifier/features/upload/data/submission_template_store.dart';
+import 'package:FANotifier/features/upload/domain/submission_template.dart';
 import 'package:FANotifier/features/upload/presentation/submission_templates_screen.dart';
 
 class UploadSubmissionScreen extends StatefulWidget {
@@ -368,11 +369,9 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
 
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => OpenPost(
-              imageUrl: '',
-              uniqueNumber: _submissionId.toString(),
-            ),
+          OpenPost.route(
+            imageUrl: '',
+            uniqueNumber: _submissionId.toString(),
           ),
         ).then((_) {
           if (!mounted) return;

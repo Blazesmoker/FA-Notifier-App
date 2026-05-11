@@ -3,10 +3,13 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:FANotifier/features/search/data/search_image_parser.dart';
+import 'package:FANotifier/features/search/data/search_query_builder.dart';
+import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:FANotifier/features/submissions/data/favorite_service.dart';
 import 'package:FANotifier/shared/fa/fa_thumbnail_processing.dart';
 import 'package:FANotifier/core/logging/app_logging.dart';
@@ -16,6 +19,8 @@ import 'package:FANotifier/shared/widgets/heart_animation.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
 import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
+
+import '../../auth/domain/cloudflare_check_result.dart';
 
 class FASearchImage extends StatefulWidget {
   final Map<String, String> selectedFilters;
@@ -153,47 +158,6 @@ class FASearchImageState extends State<FASearchImage> {
     return cookies.join('; ');
   }
 
-  Uri _buildSearchUri(int pageNumber) {
-    final filters = widget.selectedFilters;
-    final baseQ = widget.searchQuery.trim();
-
-    final genderQ = _buildGenderQuery(
-      filters,
-      useOr: (filters['mode'] ?? 'extended') == 'any',
-    );
-
-    final needsExtended = genderQ.contains('|') || genderQ.contains('"');
-    final q = [baseQ, genderQ].where((s) => s.isNotEmpty).join(' ').trim();
-
-    final queryParams = {
-      'page': pageNumber.toString(),
-      'q': q,
-      'order-by': filters['order-by'] ?? 'relevancy',
-      'order-direction': filters['order-direction'] ?? 'desc',
-      'range': filters['range'] ?? '5years',
-      'mode': needsExtended ? 'extended' : (filters['mode'] ?? 'extended'),
-      'rating-general': filters['rating-general'] ?? '1',
-      'rating-mature': filters['rating-mature'] ?? '1',
-      'rating-adult': filters['rating-adult'] ?? '1',
-      'type-art': filters['type-art'] ?? '1',
-      'type-music': filters['type-music'] ?? '1',
-      'type-flash': filters['type-flash'] ?? '1',
-      'type-story': filters['type-story'] ?? '1',
-      'type-photo': filters['type-photo'] ?? '1',
-      'type-poetry': filters['type-poetry'] ?? '1',
-      'perpage': filters['perpage'] ?? '72',
-    };
-
-    if (filters['range'] == 'manual') {
-      queryParams['range_from'] = filters['range_from'] ?? '';
-      queryParams['range_to'] = filters['range_to'] ?? '';
-    }
-
-    return Uri.https('www.furaffinity.net', '/search/', queryParams);
-  }
-
-  // Background WebView-based fetching has been removed.
-
   Future<void> _appendImages(
     List<Map<String, dynamic>> newImages, {
     required double previousMaxScrollExtent,
@@ -277,7 +241,7 @@ class FASearchImageState extends State<FASearchImage> {
         newImages,
         previousMaxScrollExtent: previousMaxScrollExtent,
       );
-    } on _CloudflareChallengeException catch (e) {
+    } on CloudflareChallengeException catch (e) {
       kDebugPrint('Cloudflare challenge detected while fetching search images.');
       if (mounted) {
         setState(() {
@@ -307,7 +271,7 @@ class FASearchImageState extends State<FASearchImage> {
 
       final recoveredHtml = result?.pageHtml;
       if (recoveredHtml != null && recoveredHtml.isNotEmpty) {
-        final recoveredImages = await parseHtml(recoveredHtml);
+        final recoveredImages = await parseSearchImageHtml(recoveredHtml);
         await _appendImages(
           recoveredImages,
           previousMaxScrollExtent: previousMaxScrollExtent,
@@ -354,29 +318,13 @@ class FASearchImageState extends State<FASearchImage> {
     }
   }
 
-  String _buildGenderQuery(Map<String, String> f, {required bool useOr}) {
-    const map = {
-      'male': 'male',
-      'female': 'female',
-      'trans_male': '"trans male"',
-      'trans_female': '"trans female"',
-      'intersex': 'intersex',
-      'non_binary': '"non binary"',
-    };
-
-    final selected = <String>[];
-    map.forEach((k, term) {
-      if (f['gender-$k'] == '1') selected.add(term);
-    });
-    if (selected.isEmpty) return '';
-
-    final glue = useOr ? ' | ' : ' ';
-    return selected.join(glue);
-  }
-
   Future<List<Map<String, dynamic>>> fetchImagesWithFilters(
       int pageNumber, String cookieHeader) async {
-    final uri = _buildSearchUri(pageNumber);
+    final uri = buildFaSearchUri(
+      pageNumber: pageNumber,
+      selectedFilters: widget.selectedFilters,
+      searchQuery: widget.searchQuery,
+    );
 
     final response = await FAHttp.get(
       uri,
@@ -402,22 +350,14 @@ class FASearchImageState extends State<FASearchImage> {
       statusCode: response.statusCode,
     );
     if (isChallenge) {
-      throw _CloudflareChallengeException(initialUrl: uri.toString());
+          throw CloudflareChallengeException(initialUrl: uri.toString());
     }
 
     if (response.statusCode == 200) {
-      return await parseHtml(response.body);
+      return await parseSearchImageHtml(response.body);
     } else {
       throw Exception('Failed to load images: ${response.statusCode}');
     }
-  }
-
-  Future<List<Map<String, dynamic>>> parseHtml(String html) async {
-    final imageMetadata = await parseFaThumbnailHtml(html);
-    kDebugPrint(
-      '[Search] HTML parser found ${imageMetadata.length} usable thumbnails.',
-    );
-    return imageMetadata;
   }
 
   void _scrollListener() {
@@ -592,38 +532,15 @@ class FASearchImageState extends State<FASearchImage> {
 
       if (response.statusCode != 200) return null;
 
-      final doc = html_parser.parse(response.body);
+      final links = parseSubmissionFavoriteLinksFromHtml(response.body);
 
-      String? favUrl;
-      String? unfavUrl;
-
-      final favDiv = doc.querySelector('div.fav');
-      if (favDiv != null) {
-        final favLinks = favDiv.querySelectorAll('a');
-        for (var aTag in favLinks) {
-          final href = aTag.attributes['href'];
-          if (href == null) continue;
-
-          if (href.contains('/fav/')) {
-            favUrl = href.startsWith('http')
-                ? href
-                : 'https://www.furaffinity.net$href';
-          } else if (href.contains('/unfav/')) {
-            unfavUrl = href.startsWith('http')
-                ? href
-                : 'https://www.furaffinity.net$href';
-          }
-        }
-      }
-
-      if ((favUrl == null || favUrl.isEmpty) &&
-          (unfavUrl == null || unfavUrl.isEmpty)) {
+      if (!links.hasAnyUrl) {
         debugPrint('DEBUG: No fav/unfav URLs found for post: $postUrl');
       }
 
       return {
-        'favUrl': favUrl ?? '',
-        'unfavUrl': unfavUrl ?? '',
+        'favUrl': links.favUrl,
+        'unfavUrl': links.unfavUrl,
       };
     } catch (e) {
       debugPrint('Error fetching post details for $postUrl: $e');
@@ -779,12 +696,10 @@ class FASearchImageState extends State<FASearchImage> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => OpenPost(
-                      imageUrl: image['url'],
-                      uniqueNumber: image['uniqueNumber'],
-                      skipInitialWatchCheck: true,
-                    ),
+                  OpenPost.route(
+                    imageUrl: image['url'],
+                    uniqueNumber: image['uniqueNumber'],
+                    skipInitialWatchCheck: true,
                   ),
                 );
               },
@@ -829,12 +744,10 @@ class FASearchImageState extends State<FASearchImage> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => OpenPost(
-                      imageUrl: left['url'],
-                      uniqueNumber: left['uniqueNumber'],
-                      skipInitialWatchCheck: true,
-                    ),
+                  OpenPost.route(
+                    imageUrl: left['url'],
+                    uniqueNumber: left['uniqueNumber'],
+                    skipInitialWatchCheck: true,
                   ),
                 );
               },
@@ -850,12 +763,10 @@ class FASearchImageState extends State<FASearchImage> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => OpenPost(
-                      imageUrl: right['url'],
-                      uniqueNumber: right['uniqueNumber'],
-                      skipInitialWatchCheck: true,
-                    ),
+                  OpenPost.route(
+                    imageUrl: right['url'],
+                    uniqueNumber: right['uniqueNumber'],
+                    skipInitialWatchCheck: true,
                   ),
                 );
               },
@@ -865,12 +776,6 @@ class FASearchImageState extends State<FASearchImage> {
       },
     );
   }
-}
-
-class _CloudflareChallengeException implements Exception {
-  final String? initialUrl;
-
-  const _CloudflareChallengeException({this.initialUrl});
 }
 
 class _FavSearchTile extends StatefulWidget {
@@ -918,6 +823,8 @@ class _FavSearchTileState extends State<_FavSearchTile> {
     final String? rating = widget.item['rating'] as String?;
     final String? title = widget.item['title'] as String?;
     final String? author = widget.item['author'] as String?;
+    final String? authorProfileUrl =
+        widget.item['authorProfileUrl'] as String?;
 
     return GestureDetector(
       onTap: widget.onTap,
@@ -971,6 +878,7 @@ class _FavSearchTileState extends State<_FavSearchTile> {
             maxWidth: widget.width,
             title: title,
             author: author,
+            authorProfileUrl: authorProfileUrl,
           ),
         ],
       ),

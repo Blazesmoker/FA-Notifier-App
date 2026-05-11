@@ -3,20 +3,9 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:io';
 
+import 'package:FANotifier/features/auth/domain/cloudflare_check_result.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
-
-class CloudflareCheckResult {
-  final bool passed;
-  final String? pageHtml;
-  final String? finalUrl;
-
-  const CloudflareCheckResult({
-    required this.passed,
-    this.pageHtml,
-    this.finalUrl,
-  });
-}
 
 class CloudflareCheckScreen extends StatefulWidget {
   final String initialUrl;
@@ -89,7 +78,6 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
       }
     }
 
-    // Keep last known cf_clearance if current WebView cookie list omits it.
     if ((latestCf == null || latestCf.isEmpty) &&
         existingCf != null &&
         existingCf.isNotEmpty) {
@@ -251,6 +239,12 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
     if (mounted) {
       Navigator.of(context).pop(const CloudflareCheckResult(passed: true));
     }
+  }
+
+  @override
+  void dispose() {
+    _controller = null;
+    super.dispose();
   }
 
   @override

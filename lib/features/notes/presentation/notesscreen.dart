@@ -1,8 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:cookie_jar/cookie_jar.dart';
-import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -13,9 +10,8 @@ import 'package:FANotifier/features/notes/presentation/message_detail_screen.dar
 import 'package:FANotifier/features/notes/domain/message_model.dart';
 import 'package:FANotifier/features/notes/presentation/new_message.dart';
 import 'package:FANotifier/features/notifications/data/notification_service.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/features/notes/data/message_storage.dart';
+import 'package:FANotifier/features/notes/data/note_unread_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
 import 'package:FANotifier/features/notes/data/notesscreen_api_service.dart';
@@ -50,6 +46,8 @@ class NotesScreenState extends State<NotesScreen>
   );
 
   late final NotesApiService _notesApi;
+  late final NoteUnreadService _noteUnreadService =
+      NoteUnreadService(secureStorage: _secureStorage);
   late final TabController _tabController;
 
   Timer? _refreshTimer;
@@ -599,69 +597,7 @@ class NotesScreenState extends State<NotesScreen>
   }
 
   Future<void> _markAsUnreadWithoutRefetch(Message msg) async {
-    final String msgId = msg.id;
-    if (msgId.isEmpty) return;
-
-    int pageNum;
-    if (msg.link.contains('/viewmessage/')) {
-      pageNum = 1;
-    } else {
-      final match = RegExp(r'/msg/pms/(\d+)/(\d+)/').firstMatch(msg.link);
-      if (match != null) {
-        pageNum = int.parse(match.group(1)!);
-      } else {
-        pageNum = 1;
-      }
-    }
-
-    try {
-      final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-      final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-      if (cookieA == null || cookieB == null) return;
-
-      final dio = Dio();
-      final cookieJar = CookieJar();
-      dio.interceptors.add(CookieManager(cookieJar));
-      cookieJar.saveFromResponse(
-        Uri.parse('https://www.furaffinity.net'),
-        await FaCookieHelper.addCfClearanceCookie(
-          [Cookie('a', cookieA), Cookie('b', cookieB)],
-        ),
-      );
-
-      final Map<String, dynamic> formData = {
-        'manage_notes': '1',
-        'items[]': msgId,
-        'move_to': 'unread',
-      };
-
-      final response = await dio.post(
-        'https://www.furaffinity.net/msg/pms/$pageNum/$msgId/',
-        data: formData,
-        options: Options(
-          headers: {
-            'User-Agent': FAHttp.userAgent,
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Referer': 'https://www.furaffinity.net/msg/pms/$pageNum/$msgId/',
-            'Origin': 'https://www.furaffinity.net',
-            'Accept':
-            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8',
-            HttpHeaders.connectionHeader: 'close',
-            'Cache-Control': 'max-age=0',
-            'DNT': '1',
-            'Upgrade-Insecure-Requests': '1',
-          },
-          followRedirects: false,
-          validateStatus: (s) =>
-          s != null && ((s >= 200 && s < 400) || s == 302),
-        ),
-      );
-
-      if (response.statusCode != 302 && response.statusCode != 200) {
-        throw Exception('Failed to mark as unread: ${response.statusCode}');
-      }
-    } catch (_) {}
+    await _noteUnreadService.markAsUnreadWithoutRefetch(msg);
   }
 
   void _openNewMessage() {
@@ -766,11 +702,6 @@ class NotesScreenState extends State<NotesScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Track whether Notes is actually visible (selected) in HomeScreen's IndexedStack.
-    // This prevents RouteAware callbacks from triggering network requests while hidden.
-    //
-    // Note: visibility_detector is already used elsewhere in the app.
-    // We keep periodic fetch behavior unchanged per request.
     return VisibilityDetector(
       key: const Key('notes_screen_visibility'),
       onVisibilityChanged: (info) {

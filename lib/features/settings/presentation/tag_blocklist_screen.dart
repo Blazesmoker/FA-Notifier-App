@@ -1,86 +1,9 @@
-import 'dart:convert';
-
+import 'package:FANotifier/features/settings/data/tag_blocklist_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:html/dom.dart' as dom;
-import 'package:http/http.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/shared/fa/network.dart';
-import 'package:FANotifier/shared/fa/parsing_utils.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
-
-class TagBlocklistParseResult {
-  const TagBlocklistParseResult({
-    required this.blockedTags,
-    required this.total,
-    required this.nonce,
-  });
-
-  final List<String> blockedTags;
-  final int? total;
-  final String? nonce;
-}
-
-class TagBlocklistApiService {
-  static TagBlocklistParseResult parse(dom.Document document, String rawHtml) {
-    dom.Element? tagSection;
-    for (final section in document.querySelectorAll('section')) {
-      final h2 = section.querySelector('.section-header h2') ?? section.querySelector('h2');
-      if (h2 == null) continue;
-      if (h2.text.trim().toLowerCase() == 'tag block list') {
-        tagSection = section;
-        break;
-      }
-    }
-    tagSection ??= document.querySelector('section');
-
-    // Nonce (required for add/remove).
-    String? nonce = document.querySelector('body')?.attributes['data-tag-blocklist-nonce']?.trim();
-    if (nonce == null || nonce.isEmpty) {
-      nonce = RegExp(r'data-tag-blocklist-nonce\s*=\s*"([^"]+)"', caseSensitive: false)
-          .firstMatch(rawHtml)
-          ?.group(1)
-          ?.trim();
-    }
-
-    // Blocked tags can be provided both in the control markup (data-tag-name) and on <body>.
-    final blocked = <String>{};
-
-    final bodyRaw = document.querySelector('body')?.attributes['data-tag-blocklist'] ?? '';
-    if (bodyRaw.trim().isNotEmpty) {
-      blocked.addAll(
-        bodyRaw
-            .trim()
-            .split(RegExp(r'\s+'))
-            .where((t) => t.trim().isNotEmpty)
-            .map((t) => t.trim().toLowerCase()),
-      );
-    }
-
-    final scope = tagSection ?? document;
-    for (final el in scope.querySelectorAll('a.tag-block.remove-tag[data-tag-name]')) {
-      final name = el.attributes['data-tag-name']?.trim().toLowerCase();
-      if (name != null && name.isNotEmpty) blocked.add(name);
-    }
-
-    int? total;
-    final totalText = scope.querySelector('#tag-blocklist-total')?.text.trim();
-    if (totalText != null && totalText.isNotEmpty) {
-      total = int.tryParse(totalText);
-    }
-
-    final blockedTags = blocked.toList()..sort();
-
-    return TagBlocklistParseResult(
-      blockedTags: blockedTags,
-      total: total,
-      nonce: (nonce != null && nonce.isNotEmpty) ? nonce : null,
-    );
-  }
-}
 
 class TagBlocklistScreen extends StatefulWidget {
   const TagBlocklistScreen({super.key});
@@ -90,9 +13,6 @@ class TagBlocklistScreen extends StatefulWidget {
 }
 
 class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
-  static const _profileUrl = 'https://www.furaffinity.net/controls/profile/';
-  static const _routeUrl = 'https://www.furaffinity.net/route/tag_blocking';
-
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     iOptions: IOSOptions(
       accountName: 'flutter_secure_storage_service',
@@ -134,43 +54,13 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
     });
   }
 
-  String _decodeBody(Response response) {
-    try {
-      return utf8.decode(response.bodyBytes, allowMalformed: true);
-    } catch (_) {
-      return latin1.decode(response.bodyBytes, allowInvalid: true);
-    }
-  }
-
-  Future<Response> _getWithCookie(String url) async {
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    if (cookieA == null || cookieB == null) {
-      throw Exception('Not logged in.');
-    }
-
-    final sfwValue = _sfwEnabled ? '1' : '0';
-    return httpClient.get(
-      Uri.parse(url),
-      headers: <String, String>{
-        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-          'a=$cookieA; b=$cookieB; sfw=$sfwValue',
-        ),
-        'User-Agent': FAHttp.userAgent,
-      },
-    );
-  }
-
   Future<void> _fetchBlocklist() async {
     setState(() => _loading = true);
     try {
-      final resp = await _getWithCookie(_profileUrl);
-      if (resp.statusCode != 200) {
-        throw Exception('Failed to load profile controls: ${resp.statusCode}');
-      }
-      final decoded = _decodeBody(resp);
-      final doc = await parseHtml(decoded);
-      final parsed = TagBlocklistApiService.parse(doc, decoded);
+      final parsed = await fetchTagBlocklist(
+        secureStorage: _secureStorage,
+        sfwEnabled: _sfwEnabled,
+      );
 
       if (!mounted) return;
       setState(() {
@@ -194,38 +84,17 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
   }
 
   Future<void> _sendTagBlocklistRequest(String tagName, {required bool shouldBlock}) async {
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    final sfwValue = _sfwEnabled ? '1' : '0';
-
-    if (cookieA == null || cookieB == null) {
-      throw Exception('Not logged in.');
-    }
     if (_nonce == null || _nonce!.isEmpty) {
       throw Exception('Missing tag blocklist nonce.');
     }
 
-    final response = await httpClient.post(
-      Uri.parse(_routeUrl),
-      headers: <String, String>{
-        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-          'a=$cookieA; b=$cookieB; sfw=$sfwValue',
-        ),
-        'User-Agent': FAHttp.userAgent,
-        'Referer': _profileUrl,
-        'Origin': 'https://www.furaffinity.net',
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: <String, String>{
-        'action': shouldBlock ? 'add-tag' : 'remove-tag',
-        'key': _nonce!,
-        'tag_name': tagName,
-      },
+    await sendTagBlocklistRequest(
+      secureStorage: _secureStorage,
+      sfwEnabled: _sfwEnabled,
+      nonce: _nonce!,
+      tagName: tagName,
+      shouldBlock: shouldBlock,
     );
-
-    if (response.statusCode != 200) {
-      throw Exception('Tag blocklist request failed: ${response.statusCode}');
-    }
   }
 
   Future<void> _removeTag(String tagName) async {

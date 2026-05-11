@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as html_parser;
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/features/browse/data/browse_filter_options_service.dart';
 import 'package:FANotifier/shared/utils/content_rating_filters.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
@@ -72,62 +70,12 @@ class _FiltersScreenState extends State<FiltersScreen> {
     setState(() {
       _isLoadingFilters = true;
     });
-    try {
-      debugPrint('Fetching all filters...');
-      final response = await http.get(
-        Uri.parse('https://www.furaffinity.net/browse/'),
-        headers: {'User-Agent': FAHttp.userAgent},
-      );
-      if (response.statusCode == 200) {
-        var document = html_parser.parse(response.body);
-        Map<String, List<Map<String, String>>> loadedFilterOptions = {};
-        List<String> filterNames = ['cat', 'atype', 'species', 'gender'];
-        for (String filterName in filterNames) {
-          var selectElement =
-              document.querySelector('select[name="$filterName"]');
-          if (selectElement != null) {
-            var options = selectElement.querySelectorAll('option').map((e) {
-              String label = e.text.trim();
-              String value = e.attributes['value'] ?? '';
-              return {'label': label, 'value': value};
-            }).toList();
-            loadedFilterOptions[filterName] = options;
-            debugPrint('$filterName: ${options.length} options fetched.');
-          } else {
-            debugPrint('Select element for "$filterName" not found.');
-            loadedFilterOptions[filterName] = [];
-          }
-        }
-        setState(() {
-          _filterOptions = loadedFilterOptions;
-          _updateCurrentFilters();
-          _isLoadingFilters = false;
-        });
-      } else {
-        debugPrint(
-            'Failed to fetch filters. Status code: ${response.statusCode}');
-        setState(() {
-          _filterOptions = {
-            'cat': [],
-            'atype': [],
-            'species': [],
-            'gender': [],
-          };
-          _isLoadingFilters = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error fetching filter data: $e');
-      setState(() {
-        _filterOptions = {
-          'cat': [],
-          'atype': [],
-          'species': [],
-          'gender': [],
-        };
-        _isLoadingFilters = false;
-      });
-    }
+    final loadedFilterOptions = await fetchBrowseFilterOptions();
+    setState(() {
+      _filterOptions = loadedFilterOptions;
+      _updateCurrentFilters();
+      _isLoadingFilters = false;
+    });
   }
 
   void _updateCurrentFilters() {

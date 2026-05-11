@@ -1,17 +1,13 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_switch/flutter_switch.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+import 'package:FANotifier/features/drawer/data/app_update_service.dart';
 import 'package:FANotifier/features/profile/domain/user_profile.dart';
 import 'package:FANotifier/features/notifications/domain/notifications.dart';
 import 'package:FANotifier/features/search/presentation/find_source_screen.dart';
-import 'package:FANotifier/features/journals/presentation/openjournal.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 import 'package:FANotifier/features/settings/presentation/settings_screen.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
@@ -22,8 +18,8 @@ import 'package:FANotifier/shared/widgets/StarBurstAnimation.dart';
 import 'package:FANotifier/features/notifications/presentation/notification_badge.dart';
 import 'dart:async';
 import 'package:FANotifier/app/app_theme.dart';
+import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:provider/provider.dart';
-import 'package:http/http.dart' as http;
 
 class HomeDrawer extends StatefulWidget {
   const HomeDrawer({
@@ -104,43 +100,14 @@ class _HomeDrawerState extends State<HomeDrawer> {
   }
 
   Future<void> _checkForUpdate() async {
-    try {
-      final info = await PackageInfo.fromPlatform();
-      final current = info.version.trim(); // "1.2.4"
-      debugPrint('Current app version: $current');
+    final updateInfo = await fetchLatestAppUpdateInfo();
+    if (!mounted || updateInfo == null) return;
 
-      final uri = Uri.parse(
-        'https://api.github.com/repos/Blazesmoker/FA-Notifier-App/releases/latest',
-      );
-      final resp = await http.get(
-        uri,
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'FA-Notifier/UpdateCheck',
-        },
-      );
-      debugPrint('GitHub API status: ${resp.statusCode}');
-
-      if (resp.statusCode == 200) {
-        final data = jsonDecode(resp.body) as Map<String, dynamic>;
-        final tagName = data['tag_name'] as String;
-        final ghVer = tagName.startsWith('v') ? tagName.substring(1) : tagName;
-
-        if (!mounted) return;
-        setState(() {
-          _currentAppVersion = current;
-          _latestGithubVersion = ghVer;
-          _updateAvailable = ghVer != current;
-        });
-
-        debugPrint('Remote version: $ghVer; show update = $_updateAvailable');
-      } else {
-        // optional: handle rate-limit or error
-        debugPrint('Failed to fetch release: ${resp.body}');
-      }
-    } catch (e, st) {
-      debugPrint('_checkForUpdate error: $e\n$st');
-    }
+    setState(() {
+      _currentAppVersion = updateInfo.currentVersion;
+      _latestGithubVersion = updateInfo.latestVersion;
+      _updateAvailable = updateInfo.updateAvailable;
+    });
   }
 
   void _onFaNotificationServiceChanged() {
@@ -432,124 +399,15 @@ class _HomeDrawerState extends State<HomeDrawer> {
   Future<void> _handleFALink(BuildContext context, String url) async {
     try {
       String cleanUrl = url.trim();
-
-      // Add protocol if missing
       if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
         cleanUrl = 'https://$cleanUrl';
       }
-
       debugPrint('Processing URL: $cleanUrl');
-
-      final Uri uri = Uri.parse(cleanUrl);
-      String urlToMatch = uri.toString();
-
-      if (urlToMatch.endsWith('/')) {
-        urlToMatch = urlToMatch.substring(0, urlToMatch.length - 1);
-      }
-
-      debugPrint('URL to match: $urlToMatch');
-
       if (!context.mounted) {
         debugPrint('Context not mounted, cannot navigate');
         return;
       }
-
-      // 1. Gallery Folder Link:
-      final RegExp galleryFolderRegex = RegExp(
-        r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
-      );
-      final Match? galleryMatch = galleryFolderRegex.firstMatch(urlToMatch);
-      if (galleryMatch != null) {
-        debugPrint('Matched gallery folder link');
-        final String tappedUsername = galleryMatch.group(1)!;
-        final String folderNumber = galleryMatch.group(2)!;
-        final String folderName = galleryMatch.group(3)!;
-        final String folderUrl =
-            'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
-
-        Navigator.push(
-          context,
-          UserProfileScreen.route(
-            nickname: tappedUsername,
-            initialSection: ProfileSection.Gallery,
-            initialFolderUrl: folderUrl,
-            initialFolderName: folderName,
-          ),
-        );
-        return;
-      }
-
-      // 2. User Link:
-      final RegExp userRegex = RegExp(
-        r'^https?://(?:www\.)?furaffinity\.net/user/([a-zA-Z0-9\-_.~]+)/?$',
-      );
-      final Match? userMatch = userRegex.firstMatch(urlToMatch);
-      if (userMatch != null) {
-        debugPrint('Matched user link');
-        final String tappedUsername = userMatch.group(1)!;
-        debugPrint('Navigating to user: $tappedUsername');
-
-        await Navigator.push(
-          context,
-          UserProfileScreen.route(nickname: tappedUsername),
-        );
-        return;
-      }
-
-      // 3. Journal Link:
-      final RegExp journalRegex = RegExp(
-        r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
-      );
-
-      if (journalRegex.hasMatch(urlToMatch)) {
-        final Match match = journalRegex.firstMatch(urlToMatch)!;
-        final String? username = match.group(1);
-        final String? journalId = match.group(2);
-
-        if (username != null) {
-          // Matched: /journals/username/
-          Navigator.push(
-            context,
-            UserProfileScreen.route(
-              nickname: username,
-              initialSection: ProfileSection.Journals,
-            ),
-          );
-        } else if (journalId != null) {
-          // Matched: /journal/12345/
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => OpenJournal(uniqueNumber: journalId),
-            ),
-          );
-        }
-
-        return;
-      }
-
-      // 4. Submission/View Link:
-      final RegExp viewRegex = RegExp(
-        r'^https?://(?:www\.)?(?:furaffinity|fxfuraffinity)\.net/view/(\d+)(?:/.*)?(?:#.*)?$',
-      );
-      final Match? viewMatch = viewRegex.firstMatch(urlToMatch);
-      if (viewMatch != null) {
-        debugPrint('Matched submission link');
-        final String submissionId = viewMatch.group(1)!;
-
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                OpenPost(uniqueNumber: submissionId, imageUrl: ''),
-          ),
-        );
-        return;
-      }
-
-      // 5. Fallback: open externally
-      debugPrint('No pattern matched, opening externally: $cleanUrl');
-      await launchUrlString(cleanUrl, mode: LaunchMode.externalApplication);
+      await handleFALink(context, cleanUrl);
     } catch (e) {
       debugPrint('Error handling FA link: $e');
       if (context.mounted) {

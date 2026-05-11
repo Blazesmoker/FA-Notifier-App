@@ -9,12 +9,13 @@ import 'package:FANotifier/shared/fa/network.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/journals/presentation/add_journal_dynamic_comment_screen.dart';
+import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
 import 'package:FANotifier/features/journals/presentation/create_journal.dart';
 import 'package:FANotifier/features/journals/presentation/editjournalcommentscreen.dart';
 import 'package:FANotifier/features/journals/presentation/journal_reply_screen.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal_comments.dart';
+import 'package:FANotifier/features/journals/domain/journal_not_found_exception.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
@@ -22,43 +23,6 @@ import 'package:FANotifier/features/journals/data/openjournal_api_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:FANotifier/main.dart';
-
-// Mapping from FA Timezone Names to IANA Timezones
-final Map<String, String> faTimezoneToIana = {
-  "International Date Line West": "Etc/GMT+12",
-  "Samoa Standard Time": "Pacific/Pago_Pago",
-  "Hawaiian Standard Time": "Pacific/Honolulu",
-  "Alaskan Standard Time": "America/Anchorage",
-  "Pacific Standard Time": "America/Los_Angeles",
-  "Mountain Standard Time": "America/Denver",
-  "Central Standard Time": "America/Chicago",
-  "Eastern Standard Time": "America/New_York",
-  "Caracas Standard Time": "America/Caracas",
-  "Atlantic Standard Time": "America/Halifax",
-  "Newfoundland Standard Time": "America/St_Johns",
-  "Greenland Standard Time": "America/Godthab",
-  "Mid-Atlantic Standard Time": "Etc/GMT-2",
-  "Cape Verde Standard Time": "Atlantic/Cape_Verde",
-  "Greenwich Mean Time": "Etc/GMT",
-  "W. Europe Standard Time": "Europe/Berlin",
-  "E. Europe Standard Time": "Europe/Minsk",
-  "Russian Standard Time": "Europe/Moscow",
-  "Iran Standard Time": "Asia/Tehran",
-  "Arabian Standard Time": "Asia/Riyadh",
-  "Afghanistan Standard Time": "Asia/Kabul",
-  "West Asia Standard Time": "Asia/Tashkent",
-  "India Standard Time": "Asia/Kolkata",
-  "Nepal Standard Time": "Asia/Kathmandu",
-  "Central Asia Standard Time": "Asia/Almaty",
-  "Myanmar Standard Time": "Asia/Yangon",
-  "North Asia Standard Time": "Asia/Krasnoyarsk",
-  "North Asia East Standard Time": "Asia/Irkutsk",
-  "Tokyo Standard Time": "Asia/Tokyo",
-  "Cen. Australia Standard Time": "Australia/Adelaide",
-  "West Pacific Standard Time": "Pacific/Port_Moresby",
-  "Central Pacific Standard Time": "Pacific/Guadalcanal",
-  "New Zealand Standard Time": "Pacific/Auckland",
-};
 
 class OpenJournal extends StatefulWidget {
   final String uniqueNumber;
@@ -1999,9 +1963,4 @@ class _OpenJournalState extends State<OpenJournal>
     }
     return document.outerHtml;
   }
-}
-
-class JournalNotFoundException implements Exception {
-  @override
-  String toString() => 'Journal not found';
 }

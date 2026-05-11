@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 
@@ -39,7 +37,8 @@ class _AddCommentScreenState extends State<AddJournalCommentScreen> {
     });
 
     try {
-      bool success = await submitCommentOrReply(
+      bool success = await submitJournalCommentOrReply(
+        secureStorage: _secureStorage,
         message: commentText,
         journalId: widget.uniqueNumber,
       );
@@ -96,64 +95,6 @@ class _AddCommentScreenState extends State<AddJournalCommentScreen> {
     _commentController.dispose();
     super.dispose();
   }
-
-  Future<bool> submitCommentOrReply({
-    required String message,
-    required String journalId,
-    String? replyToId,
-  }) async {
-
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-
-    if (cookieA == null || cookieB == null) {
-      debugPrint('Error: Authentication cookies are missing.');
-      return false;
-    }
-
-    String postUrl = 'https://www.furaffinity.net/journal/$journalId/';
-
-    Map<String, String> body = {
-      'action': 'reply',
-      'replyto': replyToId ?? '',
-      'reply': message,
-      'submit': 'Post Comment',
-    };
-
-    final response = await http.post(
-      Uri.parse(postUrl),
-      headers: {
-        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-          'a=$cookieA; b=$cookieB',
-        ),
-        'User-Agent': FAHttp.userAgent,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Accept-Language': 'en-US,en;q=0.5',
-      },
-      body: body,
-    );
-
-
-    debugPrint('Status Code: ${response.statusCode}');
-
-
-
-    if (response.statusCode == 302) {
-
-      return true;
-    } else if (response.statusCode == 200 && response.body.contains('Your comment has been posted')) {
-      return true;
-    } else {
-      debugPrint('Failed to post comment. Response status: ${response.statusCode}');
-      return false;
-    }
-  }
-
-
-
 
   @override
   Widget build(BuildContext context) {

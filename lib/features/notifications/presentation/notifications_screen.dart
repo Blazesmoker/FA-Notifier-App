@@ -9,7 +9,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/features/notifications/data/fa_activities_polling_service.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_settings_provider.dart';
+import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
 import 'package:FANotifier/shared/utils/specialTextSpanBuilder.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -775,11 +775,9 @@ class NotificationSectionWidget extends StatelessWidget {
                                       if (item.submissionId != null) {
                                         Navigator.push(
                                           context,
-                                          MaterialPageRoute(
-                                            builder: (context) => OpenPost(
-                                                uniqueNumber:
-                                                    item.submissionId!,
-                                                imageUrl: ''),
+                                          OpenPost.route(
+                                            uniqueNumber: item.submissionId!,
+                                            imageUrl: '',
                                           ),
                                         );
                                       }
@@ -920,12 +918,10 @@ class NotificationSectionWidget extends StatelessWidget {
                                                       .group(1)!;
                                                   Navigator.push(
                                                     context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) =>
-                                                          OpenPost(
-                                                              uniqueNumber:
-                                                                  submissionId,
-                                                              imageUrl: ''),
+                                                    OpenPost.route(
+                                                      uniqueNumber:
+                                                          submissionId,
+                                                      imageUrl: '',
                                                     ),
                                                   );
                                                 }
@@ -991,12 +987,10 @@ class NotificationSectionWidget extends StatelessWidget {
                                               if (item.submissionId != null) {
                                                 Navigator.push(
                                                   context,
-                                                  MaterialPageRoute(
-                                                    builder: (context) =>
-                                                        OpenPost(
-                                                            uniqueNumber: item
-                                                                .submissionId!,
-                                                            imageUrl: ''),
+                                                  OpenPost.route(
+                                                    uniqueNumber:
+                                                        item.submissionId!,
+                                                    imageUrl: '',
                                                   ),
                                                 );
                                               }

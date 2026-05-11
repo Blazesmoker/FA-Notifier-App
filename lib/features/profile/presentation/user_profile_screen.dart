@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math';
 import 'package:FANotifier/features/profile/presentation/user_description_webview.dart';
-import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +14,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/main.dart';
+import 'package:FANotifier/features/profile/domain/fa_folder.dart';
+import 'package:FANotifier/features/profile/domain/profile_section.dart';
 import 'package:FANotifier/features/profile/domain/shout.dart';
 import 'package:FANotifier/features/profile/domain/user_link.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -28,6 +29,7 @@ import 'package:FANotifier/features/profile/presentation/profilegallery.dart';
 import 'package:FANotifier/features/profile/presentation/post_shout.dart';
 import 'package:FANotifier/features/profile/presentation/profilejournals.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
+import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.dart';
 import 'package:FANotifier/features/profile/data/user_profile_api_service.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_sliver_helpers.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_favorites_section.dart';
@@ -36,8 +38,8 @@ import 'package:FANotifier/features/profile/presentation/user_profile_home_secti
 import 'package:FANotifier/features/profile/presentation/user_profile_journals_section.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_scraps_section.dart';
 
-class _AndroidUserProfilePageRoute<T> extends PageRoute<T> {
-  _AndroidUserProfilePageRoute({
+class _TransparentUserProfilePageRoute<T> extends PageRoute<T> {
+  _TransparentUserProfilePageRoute({
     required this.builder,
     super.settings,
     super.requestFocus,
@@ -102,24 +104,6 @@ class _AndroidUserProfilePageRoute<T> extends PageRoute<T> {
   }
 }
 
-class _InstantCupertinoUserProfilePageRoute<T> extends CupertinoPageRoute<T> {
-  _InstantCupertinoUserProfilePageRoute({
-    required super.builder,
-    super.settings,
-    super.requestFocus,
-    super.maintainState = true,
-    super.fullscreenDialog,
-    super.allowSnapshotting = true,
-    super.barrierDismissible = false,
-  });
-
-  @override
-  Duration get transitionDuration => Duration.zero;
-
-  @override
-  Duration get reverseTransitionDuration => Duration.zero;
-}
-
 class UserProfileScreen extends StatefulWidget {
   final String nickname;
   final ProfileSection initialSection;
@@ -148,35 +132,24 @@ class UserProfileScreen extends StatefulWidget {
           initialFolderName: initialFolderName,
         );
 
-    if (Platform.isAndroid) {
-      return _AndroidUserProfilePageRoute<T>(
-        settings: settings,
-        builder: builder,
-        routeTransitionDuration:
-            instant ? Duration.zero : const Duration(milliseconds: 280),
-        routeReverseTransitionDuration:
-            instant ? Duration.zero : const Duration(milliseconds: 280),
-      );
-    }
-
-    if (instant) {
-      return _InstantCupertinoUserProfilePageRoute<T>(
-        settings: settings,
-        builder: builder,
-      );
-    }
-
-    return CupertinoPageRoute<T>(settings: settings, builder: builder);
+    return _TransparentUserProfilePageRoute<T>(
+      settings: settings,
+      builder: builder,
+      routeTransitionDuration:
+          instant ? Duration.zero : const Duration(milliseconds: 280),
+      routeReverseTransitionDuration:
+          instant ? Duration.zero : const Duration(milliseconds: 280),
+    );
   }
 
   @override
   UserProfileScreenState createState() => UserProfileScreenState();
 }
 
-enum ProfileSection { Home, Gallery, Scraps, Favs, Journals }
-
 class UserProfileScreenState extends State<UserProfileScreen>
-    with RouteAware, TickerProviderStateMixin {
+    with RouteAware, TickerProviderStateMixin
+    implements DetachableWebViewRouteOwner {
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -192,6 +165,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _scrollController.dispose();
     _backSwipeOffsetNotifier.dispose();
     _showMoveUpFab.dispose();
+    DetachableWebViewRouteRegistry.unregister(this);
     routeObserver.unsubscribe(this);
     super.dispose();
   }
@@ -226,7 +200,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       details.globalPosition & const Size(40, 40),
       Offset.zero & overlay.size,
     );
-    _suppressNextRouteFreeze = true;
+    _suppressNextRouteDetach = true;
     final selected = await showMenu<String>(
       context: context,
       position: position,
@@ -241,7 +215,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         ),
       ],
     ).whenComplete(() {
-      _suppressNextRouteFreeze = false;
+      _suppressNextRouteDetach = false;
     });
     if (selected == 'copy') {
       final plainText = await _webViewKey.currentState?.getPlainText();
@@ -384,10 +358,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
   static const double sliverAppBarMinHeight = kToolbarHeight - 80.0; // 56.0
   static const double collapsibleHeaderMaxHeight = 110.0;
   static const double navigationSliderHeight = 64.0;
-  static const double _androidBackSwipeDetectorWidth = 25.0;
-  static const double _androidBackSwipeTriggerWidth = 62.0;
-  static const double _androidBackSwipeMinDistance = 72.0;
-  static const double _androidBackSwipeMinVelocity = 700.0;
+  static const double _edgeBackSwipeDetectorWidth = 25.0;
+  static const double _edgeBackSwipeTriggerWidth = 62.0;
+  static const double _edgeBackSwipeMinDistance = 72.0;
+  static const double _edgeBackSwipeMinVelocity = 700.0;
 
   late ScrollController _scrollController;
   late final ValueNotifier<bool> _showMoveUpFab = ValueNotifier<bool>(false);
@@ -409,15 +383,14 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   final double _avatarFadeStart = 0.0;
   final double _avatarFadeEnd = 140.0;
-  final double _avatarScaleStart = 0.0;
-  final double _avatarScaleEnd = 140.0;
 
   bool isLoadingMoreShouts = false;
   bool _isShoutSelectionMode = false;
   bool _isDeletingSelectedShouts = false;
   bool _isDraggingBackFromEdge = false;
-  bool _isProfileFrozen = false;
-  bool _suppressNextRouteFreeze = false;
+  bool _isProfileWebViewDetached = false;
+  bool _suppressNextRouteDetach = false;
+  bool _didTemporarilyRestorePreviousForSwipe = false;
   double _backDragStartX = 0.0;
   double _backDragDistance = 0.0;
 
@@ -427,6 +400,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   @override
   void initState() {
     super.initState();
+    DetachableWebViewRouteRegistry.register(this);
 
     _api = UserProfileApiService(_secureStorage);
 
@@ -491,23 +465,31 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   @override
   void didPushNext() {
-    if (_suppressNextRouteFreeze) {
+    if (_suppressNextRouteDetach) {
       return;
     }
-    _setProfileFrozen(true);
+    _setRouteWebViewDetached(true);
   }
 
   @override
   void didPopNext() {
-    _setProfileFrozen(false);
+    _setRouteWebViewDetached(false);
   }
 
-  void _setProfileFrozen(bool isFrozen) {
-    if (_isProfileFrozen == isFrozen) {
+  @override
+  bool get routeWebViewDetached => _isProfileWebViewDetached;
+
+  @override
+  void setRouteWebViewDetached(bool detached) {
+    _setRouteWebViewDetached(detached);
+  }
+
+  void _setRouteWebViewDetached(bool detached) {
+    if (_isProfileWebViewDetached == detached) {
       return;
     }
-    _isProfileFrozen = isFrozen;
-    if (isFrozen) {
+    _isProfileWebViewDetached = detached;
+    if (detached) {
       unawaited(_webViewKey.currentState?.pauseWebView() ?? Future.value());
     } else {
       unawaited(_webViewKey.currentState?.resumeWebView() ?? Future.value());
@@ -546,9 +528,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
   Future<bool> _attemptCloseProfileScreen({
     bool resetBackSwipeOffset = true,
   }) async {
-    _webViewKey.currentState?.hideWebView();
+    await (_webViewKey.currentState?.pauseWebView() ?? Future.value());
     if (resetBackSwipeOffset) {
-      _resetAndroidBackSwipe();
+      _resetEdgeBackSwipe();
     }
     await Future<void>.delayed(const Duration(milliseconds: 5));
     if (!mounted) {
@@ -644,22 +626,38 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _backSwipeAnimationController.forward(from: 0.0);
   }
 
-  void _handleAndroidBackSwipeStart(DragStartDetails details) {
-    if (!Platform.isAndroid || _isShoutSelectionMode) {
+  void _handleEdgeBackSwipeStart(DragStartDetails details) {
+    if (!(Platform.isAndroid || Platform.isIOS) || _isShoutSelectionMode) {
       return;
     }
 
-    if (details.globalPosition.dx <= _androidBackSwipeTriggerWidth) {
+    if (details.globalPosition.dx <= _edgeBackSwipeTriggerWidth) {
       _backSwipeAnimationController.stop();
       _backSwipeOffsetAnimation = null;
       _popAfterBackSwipeAnimation = false;
       _isDraggingBackFromEdge = true;
+      _restorePreviousRouteWebViewForSwipe();
       _backDragStartX = details.globalPosition.dx - _backSwipeOffset;
       _backDragDistance = _backSwipeOffset;
     }
   }
 
-  void _handleAndroidBackSwipeUpdate(DragUpdateDetails details) {
+  void _handleEdgeBackSwipePointerDown(PointerDownEvent event) {
+    if (!(Platform.isAndroid || Platform.isIOS) || _isShoutSelectionMode) {
+      return;
+    }
+    if (event.position.dx <= _edgeBackSwipeTriggerWidth) {
+      _restorePreviousRouteWebViewForSwipe();
+    }
+  }
+
+  void _handleEdgeBackSwipePointerUp(PointerEvent event) {
+    if (!_isDraggingBackFromEdge && _backSwipeOffset == 0.0) {
+      _detachPreviousRouteWebViewAfterCanceledSwipe();
+    }
+  }
+
+  void _handleEdgeBackSwipeUpdate(DragUpdateDetails details) {
     if (!_isDraggingBackFromEdge) {
       return;
     }
@@ -672,23 +670,24 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _backSwipeOffset = distance;
   }
 
-  void _handleAndroidBackSwipeEnd(DragEndDetails details) {
+  void _handleEdgeBackSwipeEnd(DragEndDetails details) {
     if (!_isDraggingBackFromEdge) {
       return;
     }
 
     final screenWidth = MediaQuery.sizeOf(context).width;
     final closeDistanceThreshold =
-        max(_androidBackSwipeMinDistance, screenWidth * 0.25);
+        max(_edgeBackSwipeMinDistance, screenWidth * 0.25);
     final shouldClose =
         _backDragDistance >= closeDistanceThreshold ||
-        details.velocity.pixelsPerSecond.dx >= _androidBackSwipeMinVelocity;
+        details.velocity.pixelsPerSecond.dx >= _edgeBackSwipeMinVelocity;
 
     _isDraggingBackFromEdge = false;
     _backDragStartX = 0.0;
     _backDragDistance = 0.0;
 
     if (shouldClose) {
+      _didTemporarilyRestorePreviousForSwipe = false;
       _animateBackSwipeTo(
         screenWidth,
         duration: _backSwipeCloseDuration(
@@ -698,6 +697,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         popWhenDone: true,
       );
     } else {
+      _detachPreviousRouteWebViewAfterCanceledSwipe();
       _animateBackSwipeTo(
         0.0,
         duration: _backSwipeResetDuration(screenWidth),
@@ -705,7 +705,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     }
   }
 
-  void _resetAndroidBackSwipe() {
+  void _resetEdgeBackSwipe() {
     _isDraggingBackFromEdge = false;
     _backDragStartX = 0.0;
     _backDragDistance = 0.0;
@@ -713,10 +713,34 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _backSwipeOffsetAnimation = null;
     _popAfterBackSwipeAnimation = false;
     _backSwipeOffset = 0.0;
+    _detachPreviousRouteWebViewAfterCanceledSwipe();
   }
 
-  Widget _buildAndroidBackSwipeOverlay() {
-    if (!Platform.isAndroid) {
+  void _restorePreviousRouteWebViewForSwipe() {
+    if (_didTemporarilyRestorePreviousForSwipe) {
+      return;
+    }
+    final previous = DetachableWebViewRouteRegistry.previousOf(this);
+    if (previous == null) {
+      return;
+    }
+    previous.setRouteWebViewDetached(false);
+    _didTemporarilyRestorePreviousForSwipe = true;
+  }
+
+  void _detachPreviousRouteWebViewAfterCanceledSwipe() {
+    if (!_didTemporarilyRestorePreviousForSwipe) {
+      return;
+    }
+    final previous = DetachableWebViewRouteRegistry.previousOf(this);
+    if (previous != null) {
+      previous.setRouteWebViewDetached(true);
+    }
+    _didTemporarilyRestorePreviousForSwipe = false;
+  }
+
+  Widget _buildEdgeBackSwipeOverlay() {
+    if (!(Platform.isAndroid || Platform.isIOS)) {
       return const SizedBox.shrink();
     }
 
@@ -724,20 +748,26 @@ class UserProfileScreenState extends State<UserProfileScreen>
       left: 0,
       top: 0,
       bottom: 0,
-      width: _androidBackSwipeDetectorWidth,
-      child: GestureDetector(
+      width: _edgeBackSwipeDetectorWidth,
+      child: Listener(
         behavior: HitTestBehavior.translucent,
-        onHorizontalDragStart: _handleAndroidBackSwipeStart,
-        onHorizontalDragUpdate: _handleAndroidBackSwipeUpdate,
-        onHorizontalDragEnd: _handleAndroidBackSwipeEnd,
-        onHorizontalDragCancel: _resetAndroidBackSwipe,
-        child: Container(color: Colors.transparent),
+        onPointerDown: _handleEdgeBackSwipePointerDown,
+        onPointerUp: _handleEdgeBackSwipePointerUp,
+        onPointerCancel: _handleEdgeBackSwipePointerUp,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragStart: _handleEdgeBackSwipeStart,
+          onHorizontalDragUpdate: _handleEdgeBackSwipeUpdate,
+          onHorizontalDragEnd: _handleEdgeBackSwipeEnd,
+          onHorizontalDragCancel: _resetEdgeBackSwipe,
+          child: Container(color: Colors.transparent),
+        ),
       ),
     );
   }
 
-  Widget _buildAndroidBackSwipeTransition({required Widget child}) {
-    if (!Platform.isAndroid) {
+  Widget _buildEdgeBackSwipeTransition({required Widget child}) {
+    if (!(Platform.isAndroid || Platform.isIOS)) {
       return child;
     }
 
@@ -1306,11 +1336,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
       final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => OpenPost(
-            uniqueNumber: submissionId,
-            imageUrl: '',
-          ),
+        OpenPost.route(
+          uniqueNumber: submissionId,
+          imageUrl: '',
         ),
       );
       return;
@@ -1457,41 +1485,33 @@ class UserProfileScreenState extends State<UserProfileScreen>
     return AnimatedBuilder(
       animation: _scrollController,
       builder: (context, child) {
-        double offset =
+        final avatarChild = child ?? const SizedBox.shrink();
+        final double offset =
             _scrollController.hasClients ? _scrollController.offset : 0.0;
-
-        double newOpacity;
-        if (offset <= _avatarFadeStart) {
-          newOpacity = 1.0;
-        } else if (offset >= _avatarFadeEnd) {
-          newOpacity = 0.0;
-        } else {
-          newOpacity = 1.0 -
-              ((offset - _avatarFadeStart) /
-                  (_avatarFadeEnd - _avatarFadeStart));
-        }
-
-        double newScale;
-        if (offset <= _avatarScaleStart) {
-          newScale = 1.0;
-        } else if (offset >= _avatarScaleEnd) {
-          newScale = 0.2;
-        } else {
-          double scaleFraction = (offset - _avatarScaleStart) /
-              (_avatarScaleEnd - _avatarScaleStart);
-          newScale = 1.0 - (0.8 * scaleFraction);
-        }
+        final double progress =
+            ((offset - _avatarFadeStart) / (_avatarFadeEnd - _avatarFadeStart))
+                .clamp(0.0, 1.0)
+                .toDouble();
 
         return Positioned(
           bottom: -avatarSize / 1.5,
           left: avatarLeft,
-          child: Transform.scale(
-            scale: newScale.clamp(0.2, 1.0),
-            child: Opacity(
-              opacity: newOpacity.clamp(0.0, 1.0),
-              child: child,
-            ),
-          ),
+          child: progress <= 0.0
+              ? avatarChild
+              : progress >= 1.0
+                  ? Visibility(
+                      visible: false,
+                      maintainState: true,
+                      maintainAnimation: true,
+                      child: avatarChild,
+                    )
+                  : Transform.scale(
+                      scale: 1.0 - (0.8 * progress),
+                      child: Opacity(
+                        opacity: 1.0 - progress,
+                        child: avatarChild,
+                      ),
+                    ),
         );
       },
       child: RepaintBoundary(
@@ -1747,25 +1767,26 @@ class UserProfileScreenState extends State<UserProfileScreen>
         _isShoutSelectionMode &&
         _selectedShoutCount > 0;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        systemNavigationBarColor: Color(0xCC000000),
-        systemNavigationBarIconBrightness: Brightness.light,
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-      ),
+    return ExcludeSemantics(
+        child: AnnotatedRegion<SystemUiOverlayStyle>(
+          value: const SystemUiOverlayStyle(
+            systemNavigationBarColor: Color(0xCC000000),
+            systemNavigationBarIconBrightness: Brightness.light,
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.light,
+          ),
       child: PopScope(
-        canPop: !(Platform.isAndroid && _isShoutSelectionMode),
+        canPop: !_isShoutSelectionMode,
         onPopInvokedWithResult: (didPop, result) {
-          if (!didPop && Platform.isAndroid && _isShoutSelectionMode) {
+          if (!didPop && _isShoutSelectionMode) {
             _toggleShoutSelectionMode();
           }
         },
         child: DefaultTabController(
           length: ProfileSection.values.length,
           child: TickerMode(
-            enabled: !_isProfileFrozen,
-            child: _buildAndroidBackSwipeTransition(
+            enabled: !_isProfileWebViewDetached,
+            child: _buildEdgeBackSwipeTransition(
               child: Scaffold(
               backgroundColor: Colors.black,
               body: SafeArea(
@@ -1930,11 +1951,14 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                         ),
                                       ];
 
+                                      _suppressNextRouteDetach = true;
                                       final selected = await showMenu<String>(
                                         context: context,
                                         position: position,
                                         items: menuItems,
-                                      );
+                                      ).whenComplete(() {
+                                        _suppressNextRouteDetach = false;
+                                      });
 
                                       switch (selected) {
                                         case 'report':
@@ -1959,17 +1983,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
                             ],
                             flexibleSpace: LayoutBuilder(
                               builder: (context, constraints) {
-                                final double expandedHeight =
-                                    sliverAppBarExpandedHeight;
-                                final double scrollRange =
-                                    expandedHeight - kToolbarHeight;
-                                double shrinkOffset =
-                                    _scrollController.hasClients
-                                        ? _scrollController.offset
-                                            .clamp(0.0, scrollRange)
-                                        : 0.0;
-                                double alignmentX = -1.0;
-
                                 return Stack(
                                   clipBehavior: Clip.none,
                                   children: [
@@ -2336,7 +2349,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                         ),
                       ),
                     ),
-                  _buildAndroidBackSwipeOverlay(),
+                  _buildEdgeBackSwipeOverlay(),
                   Positioned(
                     left: 16.0,
                     bottom: 16.0,
@@ -2425,13 +2438,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
           ),
         ),
       ),
+        ),
     );
   }
 
   Widget _buildLazySection(ProfileSection section) {
     if (!_lazyLoadedSections.contains(section)) {
-      // Keep a scrollable child so NestedScrollView/TabBarView behave consistently,
-      // but don't build the real section yet (prevents initState fetches).
       return CustomScrollView(
         slivers: [
           SliverFillRemaining(
@@ -2462,6 +2474,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   void _showEditProfileDialog() {
+    _suppressNextRouteDetach = true;
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -2574,7 +2587,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
           ],
         );
       },
-    );
+    ).whenComplete(() {
+      _suppressNextRouteDetach = false;
+    });
   }
 
   Widget _buildHomeSection() {
@@ -2597,11 +2612,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
       onOpenPost: (context, imageUrl, uniqueNumber) {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => OpenPost(
-              imageUrl: imageUrl,
-              uniqueNumber: uniqueNumber,
-            ),
+          OpenPost.route(
+            imageUrl: imageUrl,
+            uniqueNumber: uniqueNumber,
           ),
         );
       },

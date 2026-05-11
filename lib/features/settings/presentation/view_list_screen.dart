@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:html/parser.dart';
+import 'package:FANotifier/features/settings/data/watchlist_user_service.dart';
 import 'package:FANotifier/features/profile/domain/user_link.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
 
 class ViewListScreen extends StatefulWidget {
   final String title;
@@ -92,11 +90,6 @@ class _ViewListScreenState extends State<ViewListScreen> {
         .toList();
   }
 
-  String _buildPageUrl(int page) {
-    final route = widget.title == 'Recent Watchers' ? 'to' : 'by';
-    return 'https://www.furaffinity.net/watchlist/$route/${widget.sanitizedUsername}?page=$page';
-  }
-
   String _formatDuration(Duration duration) {
     final totalSeconds = duration.inSeconds;
     final minutes = totalSeconds ~/ 60;
@@ -112,60 +105,35 @@ class _ViewListScreenState extends State<ViewListScreen> {
     required int page,
     required String cookieHeader,
   }) async {
-    for (int attempt = 1; attempt <= _maxRetries; attempt++) {
-      if (attempt > 1 && mounted) {
+    final parsedUsers = await fetchWatchlistUsersPage(
+      title: widget.title,
+      sanitizedUsername: widget.sanitizedUsername,
+      page: page,
+      cookieHeader: cookieHeader,
+      maxRetries: _maxRetries,
+      retryDelay: _retryDelay,
+      onRetry: (message) {
+        if (!mounted) return;
         setState(() {
-          retryMessage = 'Retrying page $page ($attempt/$_maxRetries)...';
+          retryMessage = message;
         });
-      }
+      },
+    );
 
-      try {
-        final response = await http.get(
-          Uri.parse(_buildPageUrl(page)),
-          headers: {
-            'Cookie': cookieHeader,
-            'User-Agent': FAHttp.userAgent,
-          },
-        );
+    if (parsedUsers == null) {
+      return null;
+    }
 
-        if (response.statusCode == 200) {
-          final document = parse(response.body);
-          final elements = document.querySelectorAll(
-            '.watch-list-items a[href*="/user/"]',
-          );
+    final pageUsers = <UserLink>[];
+    for (final user in parsedUsers) {
+      final key = user.cleanUsername.toLowerCase();
 
-          final List<UserLink> pageUsers = [];
-          for (final element in elements) {
-            final href = element.attributes['href'];
-            final rawUsername = element.text.trim();
-
-            if (href == null || href.isEmpty || rawUsername.isEmpty) {
-              continue;
-            }
-
-            final profileUrl = href.startsWith('http')
-                ? href
-                : 'https://www.furaffinity.net$href';
-            final user = UserLink(rawUsername: rawUsername, url: profileUrl);
-            final key = user.cleanUsername.toLowerCase();
-
-            if (_seenUsernames.add(key)) {
-              pageUsers.add(user);
-            }
-          }
-
-          return pageUsers;
-        }
-      } catch (_) {
-        // Retries are handled below.
-      }
-
-      if (attempt < _maxRetries) {
-        await Future.delayed(_retryDelay);
+      if (_seenUsernames.add(key)) {
+        pageUsers.add(user);
       }
     }
 
-    return null;
+    return pageUsers;
   }
 
   Future<void> _fetchAllUsers() async {

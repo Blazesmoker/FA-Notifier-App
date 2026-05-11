@@ -1,20 +1,17 @@
-import 'dart:convert';
 import 'dart:io';
-import 'package:html/dom.dart' as dom;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as html_parser;
 import 'package:url_launcher/url_launcher_string.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/features/submissions/data/submission_description_parser.dart';
+import 'package:FANotifier/features/submissions/data/submission_description_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
+import 'package:FANotifier/features/profile/domain/profile_section.dart';
 
 class SubmissionDescriptionWebView extends StatefulWidget {
   final String submissionId;
@@ -23,6 +20,7 @@ class SubmissionDescriptionWebView extends StatefulWidget {
   final bool forceHybridComposition;
   final bool enableTextSelection;
   final void Function(double height)? onHeightChanged;
+  final bool routeDetached;
 
   const SubmissionDescriptionWebView({
     required this.submissionId,
@@ -31,6 +29,7 @@ class SubmissionDescriptionWebView extends StatefulWidget {
     this.forceHybridComposition = false,
     this.enableTextSelection = false,
     this.onHeightChanged,
+    this.routeDetached = false,
     Key? key,
   }) : super(key: key);
 
@@ -49,14 +48,19 @@ class SubmissionDescriptionWebViewState
         accountName: 'flutter_secure_storage_service',
         accessibility: KeychainAccessibility.first_unlock),
   );
+  late final SubmissionDescriptionService _submissionDescriptionService =
+      SubmissionDescriptionService(secureStorage: _secureStorage);
   late Future<String> _submissionDescriptionFuture;
+  InAppWebViewController? _controller;
   double _webViewHeight = 50.0;
+  bool _mountWebView = true;
 
   String? _submissionDescriptionHtml;
 
   @override
   void initState() {
     super.initState();
+    _mountWebView = !widget.routeDetached;
     if (widget.initialHtml != null) {
       _submissionDescriptionFuture = _processInitialHtml(widget.initialHtml!);
     } else {
@@ -65,7 +69,29 @@ class SubmissionDescriptionWebViewState
   }
 
   @override
+  void didUpdateWidget(covariant SubmissionDescriptionWebView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.submissionId != widget.submissionId ||
+        oldWidget.initialHtml != widget.initialHtml) {
+      _controller = null;
+      if (widget.initialHtml != null) {
+        _submissionDescriptionFuture = _processInitialHtml(widget.initialHtml!);
+      } else {
+        _submissionDescriptionFuture = _fetchCleanHTML();
+      }
+    }
+    final shouldMount = !widget.routeDetached;
+    if (_mountWebView != shouldMount) {
+      _mountWebView = shouldMount;
+      if (!shouldMount) {
+        _controller = null;
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    _controller = null;
     if (widget.onDispose != null) {
       widget.onDispose!();
     }
@@ -75,95 +101,50 @@ class SubmissionDescriptionWebViewState
   @override
   bool get wantKeepAlive => true;
 
-  void _fixPrefixedLinks(dom.Element root) {
-    for (final a in root.querySelectorAll('a[href]')) {
-      final href = a.attributes['href']!;
-      if (href.startsWith('/https://') || href.startsWith('/http://')) {
-        a.attributes['href'] = href.substring(1); // trim the first "/"
-      }
+  void detachWebView() {
+    if (!_mountWebView) {
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _mountWebView = false;
+      });
+    } else {
+      _mountWebView = false;
+    }
+    _controller = null;
+  }
+
+  void restoreWebView() {
+    if (_mountWebView) {
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _mountWebView = true;
+      });
+    } else {
+      _mountWebView = true;
     }
   }
 
   Future<String> _processInitialHtml(String html) async {
-    final doc = html_parser.parse(html);
-    doc
-        .querySelectorAll(
-          'script, .footerAds, #ddmenu, .mobile-navigation, '
-          '.mobile-notification-bar, #header, .online-stats, .news-block, '
-          '.submission-sidebar, .leaderboardAd, .footerAds, .online-stats',
-        )
-        .forEach((e) => e.remove());
-
-    var submissionDesc = doc.querySelector(
-      '.submission-description-text.user-submitted-links, '
-      '.submission-description.user-submitted-links, '
-      '.submission-description, '
-      'td.alt1[width="70%"][valign="top"][align="left"][style*="padding:8px"]',
+    final descriptionHtml = extractSubmissionDescriptionHtml(
+      html,
+      allowBodyFallback: true,
     );
-
-    submissionDesc ??= doc.body;
-
-    if (submissionDesc == null) {
-      return '<p>No submission description found.</p>';
-    }
-
-    _fixPrefixedLinks(submissionDesc);
-
-    final cleanHtml = _injectFACSS(submissionDesc.outerHtml);
+    final cleanHtml = _injectFACSS(descriptionHtml);
     _submissionDescriptionHtml = cleanHtml;
     return cleanHtml;
   }
 
   /// Fetches and cleans the HTML content for the submission description.
   Future<String> _fetchCleanHTML() async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-    if (cookieA == null || cookieB == null) {
-      throw Exception('User not logged in or missing cookies.');
-    }
-
-    final url = 'https://www.furaffinity.net/view/${widget.submissionId}/';
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-          'a=$cookieA; b=$cookieB',
-        ),
-        'User-Agent': FAHttp.userAgent,
-      },
+    final descriptionHtml =
+        await _submissionDescriptionService.fetchDescriptionHtml(
+      widget.submissionId,
     );
-
-    if (response.statusCode != 200) {
-      throw Exception(
-          'Failed to fetch submission page: ${response.statusCode}');
-    }
-
-    final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-    final doc = html_parser.parse(decodedBody);
-
-    // Remove unwanted elements
-    doc
-        .querySelectorAll(
-          'script, .footerAds, #ddmenu, .mobile-navigation, '
-          '.mobile-notification-bar, #header, .online-stats, .news-block, '
-          '.submission-sidebar, .leaderboardAd, .footerAds, .online-stats',
-        )
-        .forEach((e) => e.remove());
-
-    final submissionDesc = doc.querySelector(
-        '.submission-description-text.user-submitted-links, '
-        '.submission-description.user-submitted-links, '
-        '.submission-description, '
-        'td.alt1[width="70%"][valign="top"][align="left"][style*="padding:8px"]');
-
-    if (submissionDesc == null) {
-      // Fallback if not found.
-      return '<p>No submission description found.</p>';
-    }
-
-    // Inject CSS
-    final cleanHtml = _injectFACSS(submissionDesc.outerHtml);
+    final cleanHtml = _injectFACSS(descriptionHtml);
     _submissionDescriptionHtml = cleanHtml;
     return cleanHtml;
   }
@@ -309,16 +290,7 @@ user-select: none !important;
       {String? htmlSource}) {
     final String? source = htmlSource ?? _submissionDescriptionHtml;
     if (source == null) return truncatedUrl;
-
-    final document = html_parser.parse(source);
-    for (var anchor in document.querySelectorAll('a.auto_link_shortened')) {
-      if (anchor.text.trim() == truncatedUrl) {
-        return anchor.attributes['title'] ??
-            anchor.attributes['href'] ??
-            truncatedUrl;
-      }
-    }
-    return truncatedUrl;
+    return findFullSubmissionAutoShortenedLink(source, truncatedUrl);
   }
 
   Future<void> _handleFALink(BuildContext context, String url,
@@ -417,11 +389,9 @@ user-select: none !important;
       final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => OpenPost(
-            uniqueNumber: submissionId,
-            imageUrl: '',
-          ),
+        OpenPost.route(
+          uniqueNumber: submissionId,
+          imageUrl: '',
         ),
       );
       return;
@@ -433,8 +403,7 @@ user-select: none !important;
 
   Future<String?> getPlainText() async {
     if (_submissionDescriptionHtml == null) return null;
-    final document = html_parser.parse(_submissionDescriptionHtml!);
-    return document.body?.text.trim();
+    return plainTextFromSubmissionHtml(_submissionDescriptionHtml!);
   }
 
   @override
@@ -463,11 +432,17 @@ user-select: none !important;
         final cleanHtml = snapshot.data ?? '';
         _submissionDescriptionHtml ??= cleanHtml;
 
+        if (!_mountWebView) {
+          return SizedBox(height: _webViewHeight);
+        }
+
         return Padding(
           padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
-          child: SizedBox(
-            height: _webViewHeight,
-            child: InAppWebView(
+          child: RepaintBoundary(
+            child: ExcludeSemantics(
+              child: SizedBox(
+                height: _webViewHeight,
+                child: InAppWebView(
               initialData: InAppWebViewInitialData(
                 data: _injectFACSS(cleanHtml),
                 baseUrl: WebUri('https://www.furaffinity.net'),
@@ -486,6 +461,9 @@ user-select: none !important;
                 // loadWithOverviewMode: true,
                 useHybridComposition: widget.forceHybridComposition,
               ),
+              onWebViewCreated: (controller) {
+                _controller = controller;
+              },
               onCreateWindow: (controller, createWindowReq) async {
                 final url = createWindowReq.request.url?.toString() ?? '';
                 if (url.isNotEmpty) {
@@ -549,6 +527,8 @@ user-select: none !important;
               onConsoleMessage: (controller, consoleMessage) {
                 debugPrint('WebView Console: ${consoleMessage.message}');
               },
+                ),
+              ),
             ),
           ),
         );
@@ -566,6 +546,15 @@ class SubmissionDescriptionWebViewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final androidBottomInset = Platform.isAndroid
+        ? [
+            mediaQuery.viewPadding.bottom,
+            mediaQuery.padding.bottom,
+            mediaQuery.systemGestureInsets.bottom,
+          ].reduce((value, element) => value > element ? value : element)
+        : 0.0;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Select Text'),
@@ -574,11 +563,14 @@ class SubmissionDescriptionWebViewScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: SubmissionDescriptionWebView(
-        submissionId: submissionId,
-        initialHtml: initialHtml,
-        forceHybridComposition: true,
-        enableTextSelection: true,
+      body: Padding(
+        padding: EdgeInsets.only(bottom: androidBottomInset),
+        child: SubmissionDescriptionWebView(
+          submissionId: submissionId,
+          initialHtml: initialHtml,
+          forceHybridComposition: true,
+          enableTextSelection: true,
+        ),
       ),
     );
   }

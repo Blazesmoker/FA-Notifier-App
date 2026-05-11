@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'package:FANotifier/features/upload/data/submission_template_store.dart';
+import 'package:FANotifier/features/upload/domain/submission_template.dart';
 
 class SubmissionTemplatesScreen extends StatefulWidget {
   final SubmissionTemplateStore store;
