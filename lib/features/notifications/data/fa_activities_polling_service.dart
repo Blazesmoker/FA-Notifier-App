@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
+import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:FANotifier/features/notifications/data/activities_notification_state.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
 import 'package:FANotifier/features/notifications/data/notification_refresh_service.dart';
@@ -177,6 +178,10 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       final activitiesStateStore = ActivitiesNotificationStateStore();
       final ActivitiesDiff diff = await activitiesStateStore
           .diffAndUpdateLastSeen(currentCounts: currentCounts);
+
+      if (diff.increasedBy.notes > 0) {
+        NotesRefreshService().triggerRefresh();
+      }
 
       final NotificationCounts enabledIncreases = NotificationCounts(
         submissions: submissionsEnabled ? diff.increasedBy.submissions : 0,

@@ -442,16 +442,24 @@ user-select: none !important;
         _userDescriptionHtml ??= cleanHtml;
 
         if (!_mountWebView) {
-          return SizedBox(height: _webViewHeight);
+          return ColoredBox(
+            color: Colors.black,
+            child: SizedBox(
+              height: _webViewHeight,
+              width: double.infinity,
+            ),
+          );
         }
 
         return Padding(
           padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
           child: RepaintBoundary(
             child: ExcludeSemantics(
-              child: SizedBox(
-                height: _webViewHeight,
-                child: InAppWebView(
+              child: ColoredBox(
+                color: Colors.black,
+                child: SizedBox(
+                  height: _webViewHeight,
+                  child: InAppWebView(
               initialData: InAppWebViewInitialData(
                 data: _injectFACSS(cleanHtml),
                 baseUrl: WebUri('https://www.furaffinity.net'),
@@ -467,6 +475,7 @@ user-select: none !important;
                 horizontalScrollBarEnabled: false,
                 supportMultipleWindows: true,
                 useHybridComposition: widget.forceHybridComposition,
+                transparentBackground: Platform.isIOS,
               ),
               onWebViewCreated: (controller) {
                 _controller = controller;
@@ -536,6 +545,7 @@ user-select: none !important;
               onConsoleMessage: (controller, consoleMessage) {
                 debugPrint('WebView Console: ${consoleMessage.message}');
               },
+                  ),
                 ),
               ),
             ),

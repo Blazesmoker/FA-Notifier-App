@@ -228,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (isLoggedIn) {
       await _setCookiesFromPrefs();
-      _startActivitiesPolling(triggerImmediate: false);
+      _startActivitiesPolling(triggerImmediate: true);
 
       setState(() {
         isCheckingLoginStatus = false;

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -50,11 +49,9 @@ class NotesScreenState extends State<NotesScreen>
       NoteUnreadService(secureStorage: _secureStorage);
   late final TabController _tabController;
 
-  Timer? _refreshTimer;
   StreamSubscription<void>? _notesRefreshSub;
   bool _isVisibleInHomeStack = false;
   AppLifecycleState? _lastLifecycleState;
-  bool _iosForegroundTimerSuspended = false;
 
   bool isLoadingInbox = true;
   bool isLoadingMoreInbox = false;
@@ -118,15 +115,25 @@ class NotesScreenState extends State<NotesScreen>
       }
     });
 
-    _notesRefreshSub = NotesRefreshService().stream.listen((_) {
-      if (!mounted) return;
-      _currentInboxPage = 1;
-      _currentSentPage = 1;
-      _hasMoreInbox = true;
-      _hasMoreSent = true;
-      _fetchInbox(page: 1, clearOld: false);
-      _fetchSent(page: 1, clearOld: false);
+    final notesRefreshService = NotesRefreshService();
+    _notesRefreshSub = notesRefreshService.stream.listen((_) {
+      _refreshFromSignal();
     });
+    if (notesRefreshService.takePendingRefresh()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _refreshFromSignal();
+      });
+    }
+  }
+
+  void _refreshFromSignal() {
+    if (!mounted) return;
+    _currentInboxPage = 1;
+    _currentSentPage = 1;
+    _hasMoreInbox = true;
+    _hasMoreSent = true;
+    _fetchInbox(page: 1, clearOld: false);
+    _fetchSent(page: 1, clearOld: false);
   }
 
   void _onTabChanged() {
@@ -249,7 +256,6 @@ class NotesScreenState extends State<NotesScreen>
 
     _tabController.dispose();
 
-    _refreshTimer?.cancel();
     _inboxScrollController.dispose();
     _sentScrollController.dispose();
     _notesRefreshSub?.cancel();
@@ -297,24 +303,7 @@ class NotesScreenState extends State<NotesScreen>
     final prev = _lastLifecycleState;
     _lastLifecycleState = state;
 
-    if (Platform.isIOS &&
-        (state == AppLifecycleState.inactive ||
-            state == AppLifecycleState.paused)) {
-      _refreshTimer?.cancel();
-      _refreshTimer = null;
-      _iosForegroundTimerSuspended = true;
-      return;
-    }
-
     if (state == AppLifecycleState.resumed && mounted && !_isDialogOpen) {
-      if (Platform.isIOS && _iosForegroundTimerSuspended) {
-        if (prev == AppLifecycleState.inactive) {
-          _iosForegroundTimerSuspended = false;
-          _startPeriodicFetch();
-          return;
-        }
-        _iosForegroundTimerSuspended = false;
-      }
       // Android notification shade can cause inactive -> resumed.
       // Don't treat that as a real resume that should refetch.
       if (prev == AppLifecycleState.inactive) {
@@ -331,8 +320,6 @@ class NotesScreenState extends State<NotesScreen>
         _hasMoreSent = true;
         _fetchInbox(page: 1, clearOld: false);
         _fetchSent(page: 1, clearOld: false);
-
-        _startPeriodicFetch();
       });
     }
   }
@@ -386,16 +373,6 @@ class NotesScreenState extends State<NotesScreen>
 
     _fetchInbox(page: 1);
     _fetchSent(page: 1);
-    _startPeriodicFetch();
-  }
-
-  void _startPeriodicFetch() {
-    _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 200), (_) {
-      if (mounted && !_isDialogOpen) {
-        _fetchInboxTwoPagesOnly();
-      }
-    });
   }
 
   Future<void> _fetchInboxTwoPagesOnly() async {
@@ -563,18 +540,30 @@ class NotesScreenState extends State<NotesScreen>
             fetchedInbox.indexWhere((m) => m.id == previousTopId);
       }
 
-      final Set<String> eligibleIds = {};
-      if (anchorIndex > 0) {
-        for (var i = 0; i < anchorIndex; i++) {
-          eligibleIds.add(fetchedInbox[i].id);
+      final Set<String>? eligibleIds;
+      if (previousTopId == null) {
+        eligibleIds = null;
+      } else {
+        final nextEligibleIds = <String>{};
+        if (anchorIndex > 0) {
+          for (var i = 0; i < anchorIndex; i++) {
+            nextEligibleIds.add(fetchedInbox[i].id);
+          }
         }
+        eligibleIds = nextEligibleIds;
       }
 
-      final newUnread = eligibleIds.isEmpty
-          ? <Message>[]
-          : unreadNotShown
-              .where((m) => eligibleIds.contains(m.id))
-              .toList();
+      final List<Message> newUnread;
+      if (eligibleIds == null) {
+        newUnread = unreadNotShown;
+      } else if (eligibleIds.isEmpty) {
+        newUnread = <Message>[];
+      } else {
+        final nonNullEligibleIds = eligibleIds;
+        newUnread = unreadNotShown
+            .where((m) => nonNullEligibleIds.contains(m.id))
+            .toList();
+      }
 
       for (var msg in newUnread) {
         try {
