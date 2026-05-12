@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
@@ -12,7 +13,7 @@ import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
 
-enum UserDescriptionWebViewPauseReason { route, visibility }
+enum UserDescriptionWebViewPauseReason { route, visibility, scrolling }
 
 class UserDescriptionWebView extends StatefulWidget {
   final String sanitizedUsername;
@@ -20,6 +21,7 @@ class UserDescriptionWebView extends StatefulWidget {
   final VoidCallback? onDispose;
   final bool forceHybridComposition;
   final bool enableTextSelection;
+  final bool enableScrollPerformancePause;
   final ValueChanged<bool>? onWebViewLoaded;
 
   const UserDescriptionWebView({
@@ -28,6 +30,7 @@ class UserDescriptionWebView extends StatefulWidget {
     this.initialHtml,
     this.onDispose,
     this.enableTextSelection = false,
+    this.enableScrollPerformancePause = true,
     this.forceHybridComposition = false,
     this.onWebViewLoaded,
   }) : super(key: key);
@@ -49,6 +52,10 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   InAppWebViewController? _controller;
   final Set<UserDescriptionWebViewPauseReason> _pauseReasons =
       <UserDescriptionWebViewPauseReason>{};
+  static const Duration _scrollWebViewResumeDelay =
+      Duration(milliseconds: 50);
+  Timer? _scrollWebViewResumeTimer;
+  bool _isPausedForScroll = false;
   double _webViewHeight = 50.0;
   bool _mountWebView = true;
   bool _webViewLoaded = false;
@@ -68,6 +75,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
 
   @override
   void dispose() {
+    _scrollWebViewResumeTimer?.cancel();
     _controller = null;
     widget.onDispose?.call();
     super.dispose();
@@ -104,6 +112,8 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     try {
       if (Platform.isAndroid) {
         await controller.pause();
+      } else if (Platform.isIOS) {
+        await controller.pauseTimers();
       }
     } catch (e) {
       debugPrint('Failed to pause profile WebView: $e');
@@ -132,7 +142,8 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
       });
       return;
     }
-    if (_pauseReasons.contains(UserDescriptionWebViewPauseReason.visibility)) {
+    if (_pauseReasons.contains(UserDescriptionWebViewPauseReason.visibility) ||
+        _pauseReasons.contains(UserDescriptionWebViewPauseReason.scrolling)) {
       return;
     }
     final controller = _controller;
@@ -142,10 +153,35 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     try {
       if (Platform.isAndroid) {
         await controller.resume();
+      } else if (Platform.isIOS) {
+        await controller.resumeTimers();
       }
     } catch (e) {
       debugPrint('Failed to resume profile WebView: $e');
     }
+  }
+
+  void _pauseWebViewDuringScroll() {
+    if (!widget.enableScrollPerformancePause) {
+      return;
+    }
+    if (!_isPausedForScroll) {
+      _isPausedForScroll = true;
+      unawaited(
+        pauseWebView(
+          reason: UserDescriptionWebViewPauseReason.scrolling,
+        ),
+      );
+    }
+    _scrollWebViewResumeTimer?.cancel();
+    _scrollWebViewResumeTimer = Timer(_scrollWebViewResumeDelay, () {
+      _isPausedForScroll = false;
+      unawaited(
+        resumeWebView(
+          reason: UserDescriptionWebViewPauseReason.scrolling,
+        ),
+      );
+    });
   }
 
   Future<String> _processInitialHtml(String html) async {
@@ -504,6 +540,9 @@ user-select: none !important;
                   widget.onWebViewLoaded?.call(true);
                 });
               },
+              onScrollChanged: (controller, x, y) {
+                _pauseWebViewDuringScroll();
+              },
               shouldOverrideUrlLoading: (controller, navAction) async {
                 final url = navAction.request.url.toString();
 
@@ -591,6 +630,7 @@ class UserDescriptionWebViewScreen extends StatelessWidget {
           initialHtml: initialHtml,
           forceHybridComposition: true,
           enableTextSelection: true,
+          enableScrollPerformancePause: false,
         ),
       ),
     );

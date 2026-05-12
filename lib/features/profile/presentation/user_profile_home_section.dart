@@ -18,6 +18,7 @@ class UserProfileHomeSection extends StatelessWidget {
     required this.webViewKey,
     required this.sanitizedUsername,
     required this.onDescriptionLongPressStart,
+    required this.enableScrollPerformancePause,
     required this.onWebViewLoaded,
     required this.featuredImageUrl,
     required this.featuredImageTitle,
@@ -55,6 +56,7 @@ class UserProfileHomeSection extends StatelessWidget {
   final GlobalKey<UserDescriptionWebViewState> webViewKey;
   final String sanitizedUsername;
   final GestureLongPressStartCallback onDescriptionLongPressStart;
+  final bool enableScrollPerformancePause;
   final ValueChanged<bool> onWebViewLoaded;
 
   final String? featuredImageUrl;
@@ -125,6 +127,7 @@ class UserProfileHomeSection extends StatelessWidget {
                 initialHtml: userDescription,
                 forceHybridComposition: false,
                 enableTextSelection: false,
+                enableScrollPerformancePause: enableScrollPerformancePause,
                 onWebViewLoaded: onWebViewLoaded,
               ),
             ),

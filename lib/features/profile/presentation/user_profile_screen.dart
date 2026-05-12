@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 import 'package:FANotifier/features/profile/presentation/user_description_webview.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
@@ -161,9 +162,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
   @override
   void dispose() {
     _tabSettleTimer?.cancel();
+    _scrollWebViewResumeTimer?.cancel();
+    SchedulerBinding.instance.removeTimingsCallback(_handleFrameTimings);
     _backSwipeAnimationController.dispose();
     _tabController.dispose();
-    _scrollController.removeListener(_onScrollForMoveUpFab);
+    _scrollController.removeListener(_onProfileScroll);
     _scrollController.dispose();
     _backSwipeOffsetNotifier.dispose();
     _showMoveUpFab.dispose();
@@ -385,7 +388,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
   late TabController _tabController;
 
   static const Duration _tabSettleDelay = Duration(milliseconds: 100);
+  static const Duration _scrollWebViewResumeDelay =
+      Duration(milliseconds: 50);
   Timer? _tabSettleTimer;
+  Timer? _scrollWebViewResumeTimer;
   final Set<ProfileSection> _lazyLoadedSections = <ProfileSection>{};
 
   int _previousIndex = 0;
@@ -399,6 +405,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
   bool _isProfileWebViewDetached = false;
   bool _suppressNextRouteDetach = false;
   bool _didTemporarilyRestorePreviousForSwipe = false;
+  bool _isWebViewPausedForScroll = false;
+  bool _enableScrollWebViewPause = false;
+  int _frameTimingCount = 0;
+  int _frameTimingTotalMicros = 0;
   bool _shouldShowProfileAvatarBorder = false;
   String? _profileAvatarTransparencyCheckedUrl;
   int _profileAvatarTransparencyCheckGeneration = 0;
@@ -414,6 +424,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     DetachableWebViewRouteRegistry.register(this);
 
     _api = UserProfileApiService(_secureStorage);
+    SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
 
     if (widget.initialFolderUrl != null &&
         widget.initialFolderUrl!.isNotEmpty) {
@@ -427,7 +438,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _loadSfwEnabled();
 
     _scrollController = ScrollController();
-    _scrollController.addListener(_onScrollForMoveUpFab);
+    _scrollController.addListener(_onProfileScroll);
 
     _tabController = TabController(
       length: ProfileSection.values.length,
@@ -520,6 +531,77 @@ class UserProfileScreenState extends State<UserProfileScreen>
       setState(() {
         _lazyLoadedSections.add(section);
       });
+    });
+  }
+
+  void _onProfileScroll() {
+    _pauseWebViewDuringScroll();
+    _onScrollForMoveUpFab();
+  }
+
+  bool _handleProfileScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification ||
+        notification is ScrollUpdateNotification ||
+        notification is OverscrollNotification) {
+      _pauseWebViewDuringScroll();
+    }
+    return false;
+  }
+
+  void _handleFrameTimings(List<FrameTiming> timings) {
+    if (_enableScrollWebViewPause) {
+      return;
+    }
+    for (final timing in timings) {
+      _frameTimingCount++;
+      _frameTimingTotalMicros += timing.totalSpan.inMicroseconds;
+    }
+    if (_frameTimingCount < 30) {
+      return;
+    }
+    final double averageFrameMicros =
+        _frameTimingTotalMicros / _frameTimingCount;
+    if (averageFrameMicros > Duration.microsecondsPerSecond / 60) {
+      if (mounted) {
+        setState(() {
+          _enableScrollWebViewPause = true;
+        });
+      } else {
+        _enableScrollWebViewPause = true;
+      }
+    }
+    _frameTimingCount = 0;
+    _frameTimingTotalMicros = 0;
+  }
+
+  void _pauseWebViewDuringScroll() {
+    if (!_enableScrollWebViewPause) {
+      return;
+    }
+    final state = _webViewKey.currentState;
+    if (state == null) {
+      return;
+    }
+    if (!_isWebViewPausedForScroll) {
+      _isWebViewPausedForScroll = true;
+      unawaited(
+        state.pauseWebView(
+          reason: UserDescriptionWebViewPauseReason.scrolling,
+        ),
+      );
+    }
+    _scrollWebViewResumeTimer?.cancel();
+    _scrollWebViewResumeTimer = Timer(_scrollWebViewResumeDelay, () {
+      final currentState = _webViewKey.currentState;
+      _isWebViewPausedForScroll = false;
+      if (currentState == null) {
+        return;
+      }
+      unawaited(
+        currentState.resumeWebView(
+          reason: UserDescriptionWebViewPauseReason.scrolling,
+        ),
+      );
     });
   }
 
@@ -1914,7 +1996,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
                   GestureDetector(
                     behavior: HitTestBehavior.translucent,
                     onTap: () => _clearProfileNameSelection(),
-                    child: NestedScrollView(
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: _handleProfileScrollNotification,
+                      child: NestedScrollView(
                         controller: _scrollController,
                         headerSliverBuilder: (context, innerBoxIsScrolled) => [
                           SliverAppBar(
@@ -2101,6 +2185,19 @@ class UserProfileScreenState extends State<UserProfileScreen>
                             ],
                             flexibleSpace: LayoutBuilder(
                               builder: (context, constraints) {
+                                final Widget staticBannerLayers =
+                                    Positioned.fill(
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      buildAnimatedBanner(constraints),
+                                      ColoredBox(
+                                        color: Colors.black.withOpacity(0.15),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
                                 return AnimatedBuilder(
                                   animation: _scrollController,
                                   child: buildAvatarImage(),
@@ -2120,14 +2217,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                       clipBehavior: Clip.none,
                                       children: [
                                         if (avatarBehindBanner) avatar,
-                                        Positioned.fill(
-                                          child:
-                                              buildAnimatedBanner(constraints),
-                                        ),
-                                        Container(
-                                          color:
-                                              Colors.black.withOpacity(0.15),
-                                        ),
+                                        staticBannerLayers,
                                         if (!avatarBehindBanner) avatar,
                                       ],
                                     );
@@ -2476,6 +2566,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                           }).toList(),
                         ),
                       ),
+                    ),
                   ),
                   if (showLoadingIndicator)
                     Container(
@@ -2737,6 +2828,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       webViewKey: _webViewKey,
       sanitizedUsername: sanitizedUsername,
       onDescriptionLongPressStart: _handleDescriptionLongPress,
+      enableScrollPerformancePause: _enableScrollWebViewPause,
       onWebViewLoaded: (loaded) {
         Future.delayed(Duration(milliseconds: 25), () {
           setState(() {

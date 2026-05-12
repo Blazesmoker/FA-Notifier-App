@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
+import 'package:flutter/scheduler.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:FANotifier/features/notes/presentation/reply_screen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -210,6 +211,9 @@ class _OpenPostState extends State<OpenPost>
   bool _isClassicUserPage = false;
   bool _isPostWebViewDetached = false;
   bool _suppressNextRouteDetach = false;
+  bool _enableScrollWebViewPause = false;
+  int _frameTimingCount = 0;
+  int _frameTimingTotalMicros = 0;
   double? imageWidth;
   double? imageHeight;
   bool isLoading = true;
@@ -251,6 +255,7 @@ class _OpenPostState extends State<OpenPost>
     super.initState();
     DetachableWebViewRouteRegistry.register(this);
     WidgetsBinding.instance.addObserver(this);
+    SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
     _scrollController.addListener(_onScroll);
     _commentController.addListener(_onCommentDraftChanged);
     _commentFocusNode.addListener(_syncCommentComposerExpansion);
@@ -286,6 +291,7 @@ class _OpenPostState extends State<OpenPost>
   void dispose() {
     DetachableWebViewRouteRegistry.unregister(this);
     routeObserver.unsubscribe(this);
+    SchedulerBinding.instance.removeTimingsCallback(_handleFrameTimings);
     _backSwipeAnimationController.dispose();
     _backSwipeOffsetNotifier.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -358,10 +364,57 @@ class _OpenPostState extends State<OpenPost>
   }
 
   void _onScroll() {
+    _pauseWebViewDuringScroll();
     if (!_scrollController.hasClients) return;
     final shouldShow = _scrollController.offset > 350;
     if (shouldShow == _showScrollToTopNotifier.value) return;
     _showScrollToTopNotifier.value = shouldShow;
+  }
+
+  bool _handlePostScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification ||
+        notification is ScrollUpdateNotification ||
+        notification is OverscrollNotification) {
+      _pauseWebViewDuringScroll();
+    }
+    return false;
+  }
+
+  void _handleFrameTimings(List<FrameTiming> timings) {
+    if (_enableScrollWebViewPause) {
+      return;
+    }
+    for (final timing in timings) {
+      _frameTimingCount++;
+      _frameTimingTotalMicros += timing.totalSpan.inMicroseconds;
+    }
+    if (_frameTimingCount < 30) {
+      return;
+    }
+    final double averageFrameMicros =
+        _frameTimingTotalMicros / _frameTimingCount;
+    if (averageFrameMicros > Duration.microsecondsPerSecond / 60) {
+      if (mounted) {
+        setState(() {
+          _enableScrollWebViewPause = true;
+        });
+      } else {
+        _enableScrollWebViewPause = true;
+      }
+    }
+    _frameTimingCount = 0;
+    _frameTimingTotalMicros = 0;
+  }
+
+  void _pauseWebViewDuringScroll() {
+    if (!_enableScrollWebViewPause) {
+      return;
+    }
+    final state = _submissionWebViewKey.currentState;
+    if (state == null) {
+      return;
+    }
+    state.pauseWebViewDuringScroll();
   }
 
   Object _commentSelectionId(Map<String, dynamic> comment, int index) {
@@ -2976,7 +3029,9 @@ class _OpenPostState extends State<OpenPost>
             child: Stack(
               children: [
                 RepaintBoundary(
-                  child: RefreshIndicator(
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: _handlePostScrollNotification,
+                    child: RefreshIndicator(
                     onRefresh: () async {
                       await _fetchPostDetails();
                     },
@@ -3440,6 +3495,8 @@ class _OpenPostState extends State<OpenPost>
                                       enableTextSelection: false,
                                       forceHybridComposition: false,
                                       routeDetached: _isPostWebViewDetached,
+                                      enableScrollPerformancePause:
+                                          _enableScrollWebViewPause,
                                       onHeightChanged: (double height) {
                                         if (!_webViewLoaded) {
                                           Future.delayed(
@@ -3706,6 +3763,7 @@ class _OpenPostState extends State<OpenPost>
                           ),
                         ),
                       ],
+                    ),
                     ),
                   ),
                 ),

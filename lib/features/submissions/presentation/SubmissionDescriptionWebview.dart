@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -19,6 +20,7 @@ class SubmissionDescriptionWebView extends StatefulWidget {
   final VoidCallback? onDispose;
   final bool forceHybridComposition;
   final bool enableTextSelection;
+  final bool enableScrollPerformancePause;
   final void Function(double height)? onHeightChanged;
   final bool routeDetached;
 
@@ -28,6 +30,7 @@ class SubmissionDescriptionWebView extends StatefulWidget {
     this.onDispose,
     this.forceHybridComposition = false,
     this.enableTextSelection = false,
+    this.enableScrollPerformancePause = true,
     this.onHeightChanged,
     this.routeDetached = false,
     Key? key,
@@ -53,6 +56,10 @@ class SubmissionDescriptionWebViewState
   late Future<String> _submissionDescriptionFuture;
   InAppWebViewController? _controller;
   double _webViewHeight = 50.0;
+  static const Duration _scrollWebViewResumeDelay =
+      Duration(milliseconds: 50);
+  Timer? _scrollWebViewResumeTimer;
+  bool _isPausedForScroll = false;
   bool _mountWebView = true;
 
   String? _submissionDescriptionHtml;
@@ -91,6 +98,7 @@ class SubmissionDescriptionWebViewState
 
   @override
   void dispose() {
+    _scrollWebViewResumeTimer?.cancel();
     _controller = null;
     if (widget.onDispose != null) {
       widget.onDispose!();
@@ -126,6 +134,53 @@ class SubmissionDescriptionWebViewState
     } else {
       _mountWebView = true;
     }
+  }
+
+  Future<void> _pauseWebView() async {
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
+    try {
+      if (Platform.isAndroid) {
+        await controller.pause();
+      } else if (Platform.isIOS) {
+        await controller.pauseTimers();
+      }
+    } catch (e) {
+      debugPrint('Failed to pause submission WebView: $e');
+    }
+  }
+
+  Future<void> _resumeWebView() async {
+    final controller = _controller;
+    if (controller == null || !_mountWebView || widget.routeDetached) {
+      return;
+    }
+    try {
+      if (Platform.isAndroid) {
+        await controller.resume();
+      } else if (Platform.isIOS) {
+        await controller.resumeTimers();
+      }
+    } catch (e) {
+      debugPrint('Failed to resume submission WebView: $e');
+    }
+  }
+
+  void pauseWebViewDuringScroll() {
+    if (!widget.enableScrollPerformancePause) {
+      return;
+    }
+    if (!_isPausedForScroll) {
+      _isPausedForScroll = true;
+      unawaited(_pauseWebView());
+    }
+    _scrollWebViewResumeTimer?.cancel();
+    _scrollWebViewResumeTimer = Timer(_scrollWebViewResumeDelay, () {
+      _isPausedForScroll = false;
+      unawaited(_resumeWebView());
+    });
   }
 
   Future<String> _processInitialHtml(String html) async {
@@ -496,6 +551,9 @@ user-select: none !important;
                   }
                 });
               },
+              onScrollChanged: (controller, x, y) {
+                pauseWebViewDuringScroll();
+              },
               shouldOverrideUrlLoading: (controller, navAction) async {
                 final url = navAction.request.url.toString();
                 if (Platform.isAndroid) {
@@ -580,6 +638,7 @@ class SubmissionDescriptionWebViewScreen extends StatelessWidget {
           initialHtml: initialHtml,
           forceHybridComposition: true,
           enableTextSelection: true,
+          enableScrollPerformancePause: false,
         ),
       ),
     );
