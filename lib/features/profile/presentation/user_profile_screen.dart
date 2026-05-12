@@ -2,6 +2,8 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:FANotifier/features/profile/presentation/user_description_webview.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -397,6 +399,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
   bool _isProfileWebViewDetached = false;
   bool _suppressNextRouteDetach = false;
   bool _didTemporarilyRestorePreviousForSwipe = false;
+  bool _shouldShowProfileAvatarBorder = false;
+  String? _profileAvatarTransparencyCheckedUrl;
+  int _profileAvatarTransparencyCheckGeneration = 0;
   double _backDragStartX = 0.0;
   double _backDragDistance = 0.0;
 
@@ -1374,6 +1379,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         _webViewLoaded = shouldShowDescription ? _webViewLoaded : true;
         isLoading = false;
       });
+      _updateProfileAvatarTransparency(parsed.profileImageUrl);
 
       debugPrint("Block/Unblock Link: $blockLink / $unblockLink");
       debugPrint("Watch/Unwatch Link: $watchLink / $unwatchLink");
@@ -1508,51 +1514,159 @@ class UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
+  void _updateProfileAvatarTransparency(String? imageUrl) {
+    final String? trimmedUrl = imageUrl?.trim();
+    final int generation = ++_profileAvatarTransparencyCheckGeneration;
+    if (trimmedUrl == null || trimmedUrl.isEmpty) {
+      _profileAvatarTransparencyCheckedUrl = null;
+      if (!_shouldShowProfileAvatarBorder && mounted) {
+        setState(() {
+          _shouldShowProfileAvatarBorder = true;
+        });
+      }
+      return;
+    }
+    if (_profileAvatarTransparencyCheckedUrl == trimmedUrl) {
+      return;
+    }
+    _profileAvatarTransparencyCheckedUrl = trimmedUrl;
+    if (_shouldShowProfileAvatarBorder && mounted) {
+      setState(() {
+        _shouldShowProfileAvatarBorder = false;
+      });
+    }
+
+    final ImageStream stream =
+        NetworkImage(trimmedUrl).resolve(const ImageConfiguration());
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (ImageInfo imageInfo, bool synchronousCall) async {
+        stream.removeListener(listener);
+        final bool hasTransparentEdge =
+            await _imageHasTransparentEdge(imageInfo.image);
+        if (!mounted ||
+            generation != _profileAvatarTransparencyCheckGeneration ||
+            _profileAvatarTransparencyCheckedUrl != trimmedUrl) {
+          return;
+        }
+        final bool shouldShowBorder = !hasTransparentEdge;
+        if (_shouldShowProfileAvatarBorder != shouldShowBorder) {
+          setState(() {
+            _shouldShowProfileAvatarBorder = shouldShowBorder;
+          });
+        }
+      },
+      onError: (Object error, StackTrace? stackTrace) {
+        stream.removeListener(listener);
+        if (!mounted ||
+            generation != _profileAvatarTransparencyCheckGeneration ||
+            _profileAvatarTransparencyCheckedUrl != trimmedUrl) {
+          return;
+        }
+        if (!_shouldShowProfileAvatarBorder) {
+          setState(() {
+            _shouldShowProfileAvatarBorder = true;
+          });
+        }
+      },
+    );
+    stream.addListener(listener);
+  }
+
+  Future<bool> _imageHasTransparentEdge(ui.Image image) async {
+    final ByteData? bytes =
+        await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (bytes == null || image.width <= 0 || image.height <= 0) {
+      return false;
+    }
+
+    bool isTransparentAt(int x, int y) {
+      final int alphaIndex = ((y * image.width + x) * 4) + 3;
+      return bytes.getUint8(alphaIndex) < 255;
+    }
+
+    for (int x = 0; x < image.width; x++) {
+      if (isTransparentAt(x, 0) ||
+          isTransparentAt(x, image.height - 1)) {
+        return true;
+      }
+    }
+    for (int y = 0; y < image.height; y++) {
+      if (isTransparentAt(0, y) ||
+          isTransparentAt(image.width - 1, y)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   Widget buildAvatarImage() {
+    final double outerAvatarSize =
+        _profileAvatarSize + (_profileAvatarBorderWidth * 2.0);
+    final Widget avatarImage =
+        profileImageUrl == null || profileImageUrl!.isEmpty
+            ? Image.asset(
+                'assets/images/defaultpic.gif',
+                width: _profileAvatarSize,
+                height: _profileAvatarSize,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+              )
+            : Image.network(
+                profileImageUrl!,
+                width: _profileAvatarSize,
+                height: _profileAvatarSize,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.low,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return SizedBox(
+                    width: _profileAvatarSize / 2,
+                    height: _profileAvatarSize / 2,
+                    child: const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2.0),
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return Image.asset(
+                    'assets/images/defaultpic.gif',
+                    width: _profileAvatarSize,
+                    height: _profileAvatarSize,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                  );
+                },
+              );
+
     return RepaintBoundary(
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: const Color(0xFF111111),
-            width: _profileAvatarBorderWidth,
-          ),
-        ),
-        child: GestureDetector(
-          onTap: () {},
-          child: profileImageUrl == null || profileImageUrl!.isEmpty
-              ? Image.asset(
-                  'assets/images/defaultpic.gif',
-                  width: _profileAvatarSize,
-                  height: _profileAvatarSize,
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                )
-              : Image.network(
-                  profileImageUrl!,
-                  width: _profileAvatarSize,
-                  height: _profileAvatarSize,
-                  fit: BoxFit.cover,
-                  filterQuality: FilterQuality.low,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return SizedBox(
-                      width: _profileAvatarSize / 2,
-                      height: _profileAvatarSize / 2,
-                      child: const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2.0),
+      child: GestureDetector(
+        onTap: () {},
+        child: SizedBox(
+          width: outerAvatarSize,
+          height: outerAvatarSize,
+          child: Stack(
+            children: [
+              Positioned(
+                left: _profileAvatarBorderWidth,
+                top: _profileAvatarBorderWidth,
+                child: avatarImage,
+              ),
+              if (_shouldShowProfileAvatarBorder)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: const Color(0xFF111111),
+                          width: _profileAvatarBorderWidth,
+                        ),
                       ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Image.asset(
-                      'assets/images/defaultpic.gif',
-                      width: _profileAvatarSize,
-                      height: _profileAvatarSize,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
-                    );
-                  },
+                    ),
+                  ),
                 ),
+            ],
+          ),
         ),
       ),
     );
