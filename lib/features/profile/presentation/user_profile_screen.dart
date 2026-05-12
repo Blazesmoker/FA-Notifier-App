@@ -358,6 +358,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
   static const double sliverAppBarMinHeight = kToolbarHeight - 80.0; // 56.0
   static const double collapsibleHeaderMaxHeight = 110.0;
   static const double navigationSliderHeight = 64.0;
+  static const double _profileAvatarLeft = 16.0;
+  static const double _profileAvatarSize = 90.0;
+  static const double _profileAvatarBorderWidth = 2.0;
+
+  static const double _profileAvatarMinScale = 0.53;
+  static const double _profileAvatarScrollDownDistance = 16.0;
+  static const double _profileAvatarScrollDownEnd = 64.0;
+  static const double _profileAvatarBehindBannerStart = 63.0;
+
   static const double _edgeBackSwipeDetectorWidth = 25.0;
   static const double _edgeBackSwipeTriggerWidth = 62.0;
   static const double _edgeBackSwipeMinDistance = 72.0;
@@ -380,9 +389,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
   int _previousIndex = 0;
 
   late Future<String> _userDescriptionFuture;
-
-  final double _avatarFadeStart = 0.0;
-  final double _avatarFadeEnd = 140.0;
 
   bool isLoadingMoreShouts = false;
   bool _isShoutSelectionMode = false;
@@ -1478,63 +1484,60 @@ class UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
-  Widget buildAnimatedAvatar() {
-    const double avatarLeft = 16.0;
-    const double avatarSize = 90.0;
+  Widget buildAnimatedAvatar(double offset, Widget avatarChild) {
+    final double scaleProgress =
+        (offset / _profileAvatarScrollDownEnd).clamp(0.0, 1.0).toDouble();
+    final double scale =
+        1.0 - ((1.0 - _profileAvatarMinScale) * scaleProgress);
+    final double scrollPastShrink =
+        max(0.0, offset - _profileAvatarScrollDownEnd);
+    final double translateY =
+        (_profileAvatarScrollDownDistance * scaleProgress) - scrollPastShrink;
 
-    return AnimatedBuilder(
-      animation: _scrollController,
-      builder: (context, child) {
-        final avatarChild = child ?? const SizedBox.shrink();
-        final double offset =
-            _scrollController.hasClients ? _scrollController.offset : 0.0;
-        final double progress =
-            ((offset - _avatarFadeStart) / (_avatarFadeEnd - _avatarFadeStart))
-                .clamp(0.0, 1.0)
-                .toDouble();
+    return Positioned(
+      key: const ValueKey<String>('profileAvatar'),
+      bottom: -_profileAvatarSize / 1.5 - _profileAvatarBorderWidth,
+      left: _profileAvatarLeft - _profileAvatarBorderWidth,
+      child: Transform.translate(
+        offset: Offset(0.0, translateY),
+        child: Transform.scale(
+          scale: scale,
+          child: avatarChild,
+        ),
+      ),
+    );
+  }
 
-        return Positioned(
-          bottom: -avatarSize / 1.5,
-          left: avatarLeft,
-          child: progress <= 0.0
-              ? avatarChild
-              : progress >= 1.0
-                  ? Visibility(
-                      visible: false,
-                      maintainState: true,
-                      maintainAnimation: true,
-                      child: avatarChild,
-                    )
-                  : Transform.scale(
-                      scale: 1.0 - (0.8 * progress),
-                      child: Opacity(
-                        opacity: 1.0 - progress,
-                        child: avatarChild,
-                      ),
-                    ),
-        );
-      },
-      child: RepaintBoundary(
+  Widget buildAvatarImage() {
+    return RepaintBoundary(
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: const Color(0xFF111111),
+            width: _profileAvatarBorderWidth,
+          ),
+        ),
         child: GestureDetector(
           onTap: () {},
           child: profileImageUrl == null || profileImageUrl!.isEmpty
               ? Image.asset(
                   'assets/images/defaultpic.gif',
-                  width: avatarSize,
-                  height: avatarSize,
+                  width: _profileAvatarSize,
+                  height: _profileAvatarSize,
                   fit: BoxFit.cover,
+                  gaplessPlayback: true,
                 )
               : Image.network(
                   profileImageUrl!,
-                  width: avatarSize,
-                  height: avatarSize,
+                  width: _profileAvatarSize,
+                  height: _profileAvatarSize,
                   fit: BoxFit.cover,
                   filterQuality: FilterQuality.low,
                   loadingBuilder: (context, child, loadingProgress) {
                     if (loadingProgress == null) return child;
                     return SizedBox(
-                      width: avatarSize / 2,
-                      height: avatarSize / 2,
+                      width: _profileAvatarSize / 2,
+                      height: _profileAvatarSize / 2,
                       child: const Center(
                         child: CircularProgressIndicator(strokeWidth: 2.0),
                       ),
@@ -1543,9 +1546,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
                   errorBuilder: (context, error, stackTrace) {
                     return Image.asset(
                       'assets/images/defaultpic.gif',
-                      width: avatarSize,
-                      height: avatarSize,
+                      width: _profileAvatarSize,
+                      height: _profileAvatarSize,
                       fit: BoxFit.cover,
+                      gaplessPlayback: true,
                     );
                   },
                 ),
@@ -1983,17 +1987,37 @@ class UserProfileScreenState extends State<UserProfileScreen>
                             ],
                             flexibleSpace: LayoutBuilder(
                               builder: (context, constraints) {
-                                return Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    Positioned.fill(
-                                      child: buildAnimatedBanner(constraints),
-                                    ),
-                                    Container(
-                                      color: Colors.black.withOpacity(0.15),
-                                    ),
-                                    buildAnimatedAvatar(),
-                                  ],
+                                return AnimatedBuilder(
+                                  animation: _scrollController,
+                                  child: buildAvatarImage(),
+                                  builder: (context, child) {
+                                    final double offset =
+                                        _scrollController.hasClients
+                                            ? _scrollController.offset
+                                            : 0.0;
+                                    final Widget avatar = buildAnimatedAvatar(
+                                      offset,
+                                      child ?? const SizedBox.shrink(),
+                                    );
+                                    final bool avatarBehindBanner = offset >=
+                                        _profileAvatarBehindBannerStart;
+
+                                    return Stack(
+                                      clipBehavior: Clip.none,
+                                      children: [
+                                        if (avatarBehindBanner) avatar,
+                                        Positioned.fill(
+                                          child:
+                                              buildAnimatedBanner(constraints),
+                                        ),
+                                        Container(
+                                          color:
+                                              Colors.black.withOpacity(0.15),
+                                        ),
+                                        if (!avatarBehindBanner) avatar,
+                                      ],
+                                    );
+                                  },
                                 );
                               },
                             ),
