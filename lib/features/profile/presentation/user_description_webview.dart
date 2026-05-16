@@ -112,8 +112,6 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     try {
       if (Platform.isAndroid) {
         await controller.pause();
-      } else if (Platform.isIOS) {
-        await controller.pauseTimers();
       }
     } catch (e) {
       debugPrint('Failed to pause profile WebView: $e');
@@ -153,8 +151,6 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     try {
       if (Platform.isAndroid) {
         await controller.resume();
-      } else if (Platform.isIOS) {
-        await controller.resumeTimers();
       }
     } catch (e) {
       debugPrint('Failed to resume profile WebView: $e');
