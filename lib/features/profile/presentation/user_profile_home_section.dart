@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:visibility_detector/visibility_detector.dart';
@@ -97,6 +99,7 @@ class UserProfileHomeSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
+      physics: Platform.isIOS ? const ClampingScrollPhysics() : null,
       padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 8.0),
       children: [
         if (hasRealUserProfile &&
@@ -128,6 +131,7 @@ class UserProfileHomeSection extends StatelessWidget {
                 forceHybridComposition: false,
                 enableTextSelection: false,
                 enableScrollPerformancePause: enableScrollPerformancePause,
+                disableIosScrolling: true,
                 onWebViewLoaded: onWebViewLoaded,
               ),
             ),

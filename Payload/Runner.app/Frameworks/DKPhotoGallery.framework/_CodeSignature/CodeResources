@@ -6,7 +6,7 @@
 	<dict>
 		<key>DKPhotoGallery.bundle/Assets.car</key>
 		<data>
-		tQ3zQMJWqQTQOkziAnM9pDoC8PI=
+		+lzlIHT9mKH/2SuacdadRXAShZQ=
 		</data>
 		<key>DKPhotoGallery.bundle/Base.lproj/DKPhotoGallery.strings</key>
 		<dict>
@@ -19,7 +19,7 @@
 		</dict>
 		<key>DKPhotoGallery.bundle/Info.plist</key>
 		<data>
-		1rFZL1t/dW2kZjTX3desVteQVsQ=
+		b+FkJD9atLCZlKIsS48zrXwFogc=
 		</data>
 		<key>DKPhotoGallery.bundle/PrivacyInfo.xcprivacy</key>
 		<data>
@@ -45,7 +45,7 @@
 		</dict>
 		<key>Info.plist</key>
 		<data>
-		XXJf8OHB+OpwgR6uRHV8jQ6iwp8=
+		sNOs4P1ypZJQ/7uOfWrzR6TRBSs=
 		</data>
 	</dict>
 	<key>files2</key>
@@ -54,11 +54,11 @@
 		<dict>
 			<key>hash</key>
 			<data>
-			tQ3zQMJWqQTQOkziAnM9pDoC8PI=
+			+lzlIHT9mKH/2SuacdadRXAShZQ=
 			</data>
 			<key>hash2</key>
 			<data>
-			6BYVJEx1L97qj08zroo+rtXl4rM3uAkseJWINtYJSzc=
+			AvqciG1+ASCYHhLznOECfWSfDNercfjT6uV6OB4IBPw=
 			</data>
 		</dict>
 		<key>DKPhotoGallery.bundle/Base.lproj/DKPhotoGallery.strings</key>
@@ -78,11 +78,11 @@
 		<dict>
 			<key>hash</key>
 			<data>
-			1rFZL1t/dW2kZjTX3desVteQVsQ=
+			b+FkJD9atLCZlKIsS48zrXwFogc=
 			</data>
 			<key>hash2</key>
 			<data>
-			KdCOiBdie7ItXjS7oy2CVY/NHOYdGFGJZje0C3ejTg0=
+			M+JZC8+erm1PFnah9xv9/PqzH6r/wpMe/Kii+Q+lYrk=
 			</data>
 		</dict>
 		<key>DKPhotoGallery.bundle/PrivacyInfo.xcprivacy</key>

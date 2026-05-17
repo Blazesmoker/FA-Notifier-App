@@ -2000,6 +2000,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
                       onNotification: _handleProfileScrollNotification,
                       child: NestedScrollView(
                         controller: _scrollController,
+                        physics: Platform.isIOS
+                            ? const ClampingScrollPhysics()
+                            : null,
                         headerSliverBuilder: (context, innerBoxIsScrolled) => [
                           SliverAppBar(
                             centerTitle: false,

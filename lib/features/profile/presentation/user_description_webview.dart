@@ -22,6 +22,7 @@ class UserDescriptionWebView extends StatefulWidget {
   final bool forceHybridComposition;
   final bool enableTextSelection;
   final bool enableScrollPerformancePause;
+  final bool disableIosScrolling;
   final ValueChanged<bool>? onWebViewLoaded;
 
   const UserDescriptionWebView({
@@ -31,6 +32,7 @@ class UserDescriptionWebView extends StatefulWidget {
     this.onDispose,
     this.enableTextSelection = false,
     this.enableScrollPerformancePause = true,
+    this.disableIosScrolling = false,
     this.forceHybridComposition = false,
     this.onWebViewLoaded,
   }) : super(key: key);
@@ -492,95 +494,101 @@ user-select: none !important;
                 child: SizedBox(
                   height: _webViewHeight,
                   child: InAppWebView(
-              initialData: InAppWebViewInitialData(
-                data: _injectFACSS(cleanHtml),
-                baseUrl: WebUri('https://www.furaffinity.net'),
-                encoding: 'utf-8',
-                mimeType: 'text/html',
-              ),
-              initialSettings: InAppWebViewSettings(
-                javaScriptEnabled: true,
-                useShouldOverrideUrlLoading: true,
-                disableVerticalScroll: false,
-                disableHorizontalScroll: false,
-                verticalScrollBarEnabled: false,
-                horizontalScrollBarEnabled: false,
-                supportMultipleWindows: true,
-                useHybridComposition: widget.forceHybridComposition,
-                transparentBackground: Platform.isIOS,
-                disallowOverScroll: Platform.isIOS,
-              ),
-              onWebViewCreated: (controller) {
-                _controller = controller;
-                if (Platform.isAndroid && _pauseReasons.isNotEmpty) {
-                  controller.pause();
-                }
-              },
-              onCreateWindow: (controller, createWindowReq) async {
-                final url = createWindowReq.request.url?.toString() ?? '';
-                if (url.isNotEmpty) {
-                  await _handleFALink(context, url);
-                }
-                return true;
-              },
-              onLoadStop: (controller, url) async {
-                String heightString = await controller.evaluateJavascript(
-                  source: "document.body.scrollHeight.toString()",
-                );
-                double height = double.tryParse(heightString) ?? 300.0;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  setState(() {
-                    _webViewHeight = height;
-                    _webViewLoaded = true;
-                  });
-                  widget.onWebViewLoaded?.call(true);
-                });
-              },
-              onScrollChanged: (controller, x, y) {
-                _pauseWebViewDuringScroll();
-              },
-              shouldOverrideUrlLoading: (controller, navAction) async {
-                final url = navAction.request.url.toString();
+                    initialData: InAppWebViewInitialData(
+                      data: _injectFACSS(cleanHtml),
+                      baseUrl: WebUri('https://www.furaffinity.net'),
+                      encoding: 'utf-8',
+                      mimeType: 'text/html',
+                    ),
+                    initialSettings: InAppWebViewSettings(
+                      javaScriptEnabled: true,
+                      useShouldOverrideUrlLoading: true,
+                      disableVerticalScroll:
+                          widget.disableIosScrolling && Platform.isIOS,
+                      disableHorizontalScroll:
+                          widget.disableIosScrolling && Platform.isIOS,
+                      verticalScrollBarEnabled: false,
+                      horizontalScrollBarEnabled: false,
+                      supportMultipleWindows: true,
+                      useHybridComposition: widget.forceHybridComposition,
+                      transparentBackground: Platform.isIOS,
+                      disallowOverScroll: Platform.isIOS,
+                    ),
+                    onWebViewCreated: (controller) {
+                      _controller = controller;
+                      if (Platform.isAndroid && _pauseReasons.isNotEmpty) {
+                        controller.pause();
+                      }
+                    },
+                    onCreateWindow: (controller, createWindowReq) async {
+                      final url =
+                          createWindowReq.request.url?.toString() ?? '';
+                      if (url.isNotEmpty) {
+                        await _handleFALink(context, url);
+                      }
+                      return true;
+                    },
+                    onLoadStop: (controller, url) async {
+                      String heightString =
+                          await controller.evaluateJavascript(
+                        source: "document.body.scrollHeight.toString()",
+                      );
+                      double height = double.tryParse(heightString) ?? 300.0;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        setState(() {
+                          _webViewHeight = height;
+                          _webViewLoaded = true;
+                        });
+                        widget.onWebViewLoaded?.call(true);
+                      });
+                    },
+                    onScrollChanged: (controller, x, y) {
+                      _pauseWebViewDuringScroll();
+                    },
+                    shouldOverrideUrlLoading: (controller, navAction) async {
+                      final url = navAction.request.url.toString();
 
-                if (Platform.isAndroid) {
-                  if (navAction.isForMainFrame) {
-                    await _handleFALink(context, url);
-                    return NavigationActionPolicy.CANCEL;
-                  }
-                  return NavigationActionPolicy.ALLOW;
-                } else if (Platform.isIOS) {
-                  if (navAction.navigationType ==
-                      NavigationType.LINK_ACTIVATED) {
-                    if (url == "https://www.furaffinity.net/") {
+                      if (Platform.isAndroid) {
+                        if (navAction.isForMainFrame) {
+                          await _handleFALink(context, url);
+                          return NavigationActionPolicy.CANCEL;
+                        }
+                        return NavigationActionPolicy.ALLOW;
+                      } else if (Platform.isIOS) {
+                        if (navAction.navigationType ==
+                            NavigationType.LINK_ACTIVATED) {
+                          if (url == "https://www.furaffinity.net/") {
+                            return NavigationActionPolicy.ALLOW;
+                          }
+                          await _handleFALink(context, url);
+                          return NavigationActionPolicy.CANCEL;
+                        }
+                        return NavigationActionPolicy.ALLOW;
+                      }
                       return NavigationActionPolicy.ALLOW;
-                    }
-                    await _handleFALink(context, url);
-                    return NavigationActionPolicy.CANCEL;
-                  }
-                  return NavigationActionPolicy.ALLOW;
-                }
-                return NavigationActionPolicy.ALLOW;
-              },
-              onLoadError: (controller, url, code, message) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Failed to load content: $message'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              },
-              onLoadHttpError: (controller, url, statusCode, description) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('HTTP Error $statusCode: $description'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              },
-              onConsoleMessage: (controller, consoleMessage) {
-                debugPrint('WebView Console: ${consoleMessage.message}');
-              },
+                    },
+                    onLoadError: (controller, url, code, message) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Failed to load content: $message'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    },
+                    onLoadHttpError:
+                        (controller, url, statusCode, description) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content:
+                              Text('HTTP Error $statusCode: $description'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    },
+                    onConsoleMessage: (controller, consoleMessage) {
+                      debugPrint('WebView Console: ${consoleMessage.message}');
+                    },
                   ),
                 ),
               ),
