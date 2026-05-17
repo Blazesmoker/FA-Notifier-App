@@ -508,6 +508,7 @@ user-select: none !important;
                 supportMultipleWindows: true,
                 useHybridComposition: widget.forceHybridComposition,
                 transparentBackground: Platform.isIOS,
+                disallowOverScroll: Platform.isIOS,
               ),
               onWebViewCreated: (controller) {
                 _controller = controller;
