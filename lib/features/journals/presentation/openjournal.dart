@@ -2,20 +2,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:html/parser.dart' as html_parser;
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:FANotifier/shared/fa/network.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:FANotifier/features/journals/data/journal_action_service.dart';
 import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
+import 'package:FANotifier/features/journals/data/journal_link_parser.dart';
 import 'package:FANotifier/features/journals/presentation/create_journal.dart';
 import 'package:FANotifier/features/journals/presentation/editjournalcommentscreen.dart';
 import 'package:FANotifier/features/journals/presentation/journal_reply_screen.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal_comments.dart';
 import 'package:FANotifier/features/journals/domain/journal_not_found_exception.dart';
+import 'package:FANotifier/features/journals/domain/journal_publication_time_parser.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
@@ -54,6 +53,7 @@ class _OpenJournalState extends State<OpenJournal>
         accessibility: KeychainAccessibility.first_unlock),
   );
   late final OpenJournalApiService _api;
+  late final JournalActionService _journalActionService;
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _commentFocusNode = FocusNode();
   bool _commentComposerFocusRequestedByUser = false;
@@ -103,8 +103,7 @@ class _OpenJournalState extends State<OpenJournal>
   String? deleteLink;
   bool _isDeleting = false;
   bool _deleteLinkMatchesCurrentId(String link) {
-    final m = RegExp(r'/controls/deletejournal/(\d+)/').firstMatch(link);
-    return m != null && m.group(1) == widget.uniqueNumber;
+    return isDeleteJournalLinkForId(link, widget.uniqueNumber);
   }
 
   // Additional post info
@@ -139,6 +138,9 @@ class _OpenJournalState extends State<OpenJournal>
       _updateKeyboardInset();
     });
     _api = OpenJournalApiService(_secureStorage);
+    _journalActionService = JournalActionService(
+      secureStorage: _secureStorage,
+    );
     // Only fetch the journal itself on open.
     // Extra "helper" fetches (user-page links, delete key) are done *on-demand*
     // when the user taps the relevant action, to avoid spammy requests.
@@ -305,13 +307,7 @@ class _OpenJournalState extends State<OpenJournal>
 
   /// Dedicated helper to recover full link from a truncated comment HTML.
   String? _getFullLinkFromCommentHtml(String commentHtml, String truncatedUrl) {
-    final document = html_parser.parse(commentHtml);
-    for (var anchor in document.querySelectorAll('a.auto_link_shortened')) {
-      if (anchor.text.trim() == truncatedUrl) {
-        return anchor.attributes['title'] ?? anchor.attributes['href'];
-      }
-    }
-    return null;
+    return findFullShortenedJournalLink(commentHtml, truncatedUrl);
   }
 
   /// Helper for full submission description HTML.
@@ -319,15 +315,7 @@ class _OpenJournalState extends State<OpenJournal>
       {String? htmlSource}) {
     final String? source = htmlSource ?? submissionDescription;
     if (source == null) return truncatedUrl;
-    final document = html_parser.parse(source);
-    for (var anchor in document.querySelectorAll('a.auto_link_shortened')) {
-      if (anchor.text.trim() == truncatedUrl) {
-        return anchor.attributes['title'] ??
-            anchor.attributes['href'] ??
-            truncatedUrl;
-      }
-    }
-    return truncatedUrl;
+    return findFullShortenedJournalLink(source, truncatedUrl) ?? truncatedUrl;
   }
 
   Future<void> _fetchPostDetailsNew() async {
@@ -522,14 +510,6 @@ class _OpenJournalState extends State<OpenJournal>
     setState(() => _isDeleting = true);
 
     try {
-      final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-      final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-      if (cookieA == null || cookieB == null) {
-        showAppSnackBar(context, 'Please log in to perform this action.',
-            backgroundColor: Colors.red);
-        return;
-      }
-
       final previousDeleteLink = deleteLink;
       await _fetchDeleteLinkFallback();
       deleteLink ??= previousDeleteLink;
@@ -540,21 +520,19 @@ class _OpenJournalState extends State<OpenJournal>
         return;
       }
 
-      final uri = Uri.parse(deleteLink!);
-      final resp = await httpClient.get(
-        uri,
-        headers: {
-          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-            'a=$cookieA; b=$cookieB',
-          ),
-          'User-Agent': FAHttp.userAgent,
-          'Referer': 'https://www.furaffinity.net/journal/${widget.uniqueNumber}/',
-        },
+      final statusCode = await _journalActionService.deleteJournal(
+        deleteLink: deleteLink!,
+        journalId: widget.uniqueNumber,
       );
+      if (statusCode == null) {
+        showAppSnackBar(context, 'Please log in to perform this action.',
+            backgroundColor: Colors.red);
+        return;
+      }
 
-      if (resp.statusCode < 200 || resp.statusCode >= 400) {
+      if (statusCode < 200 || statusCode >= 400) {
         if (!mounted) return;
-        showAppSnackBar(context, 'Delete failed (HTTP ${resp.statusCode}).',
+        showAppSnackBar(context, 'Delete failed (HTTP $statusCode).',
             backgroundColor: Colors.red);
         return;
       }
@@ -586,45 +564,12 @@ class _OpenJournalState extends State<OpenJournal>
 
   void _parsePublicationTime(String rawTime) {
     try {
-      final trimmed = rawTime.trim();
-      if (trimmed.isEmpty) return;
-      final lower = trimmed.toLowerCase();
-      // Skip relative strings like "a week ago", "4 months ago", "a year ago".
-      if (lower.contains('ago')) {
-        return;
-      }
-      // Skip anything without a digit; these aren't absolute dates.
-      if (!RegExp(r'\d').hasMatch(trimmed)) {
-        return;
-      }
-
-      final formats = [
-        DateFormat("MMMM d, yyyy h:mm:ss a"),
-        DateFormat("MMMM d, yyyy hh:mm:ss a"),
-        DateFormat("MMMM d, yyyy h:mm a"),
-        DateFormat("MMMM d, yyyy hh:mm a"),
-        DateFormat("MMM d, yyyy h:mm a"),
-        DateFormat("MMM d, yyyy hh:mm a"),
-        DateFormat("MMM d yyyy h:mm a"),
-        DateFormat("yyyy-MM-dd HH:mm:ss"),
-      ];
-
-      DateTime? parsed;
-
-      for (final fmt in formats) {
-        try {
-          parsed = fmt.parse(trimmed, true);
-          break;
-        } catch (_) {}
-      }
-
-      parsed ??= DateTime.tryParse(trimmed);
-
+      final parsed = parseJournalPublicationTime(
+        rawTime,
+        applyDstCorrection: isDstCorrectionApplied,
+      );
       if (parsed != null) {
-        if (isDstCorrectionApplied) {
-          parsed = parsed.subtract(const Duration(hours: 1));
-        }
-        publicationTime = parsed.toUtc();
+        publicationTime = parsed;
       }
     } catch (e, stackTrace) {
       debugPrint("Error parsing publication time: $e");
@@ -643,25 +588,15 @@ class _OpenJournalState extends State<OpenJournal>
 
   Future<void> _sendWatchUnwatchRequest(String urlPath,
       {required bool shouldWatch}) async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    if (cookieA == null || cookieB == null) {
-      showAppSnackBar(context, 'Please log in to perform this action.',
-          backgroundColor: Colors.red);
-      return;
-    }
-    final fullUrl = 'https://www.furaffinity.net$urlPath';
     try {
-      final response = await httpClient.get(
-        Uri.parse(fullUrl),
-        headers: {
-          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-            'a=$cookieA; b=$cookieB',
-          ),
-          'User-Agent': FAHttp.userAgent,
-        },
-      );
-      if (response.statusCode == 200) {
+      final statusCode =
+          await _journalActionService.sendWatchRequest(urlPath);
+      if (statusCode == null) {
+        showAppSnackBar(context, 'Please log in to perform this action.',
+            backgroundColor: Colors.red);
+        return;
+      }
+      if (statusCode == 200) {
         await _fetchUserPageLinksNew();
         showAppSnackBar(context,
             '${shouldWatch ? 'Now watching $username' : 'Stopped watching $username'}',
@@ -701,25 +636,16 @@ class _OpenJournalState extends State<OpenJournal>
     );
     if (shouldHide == true) {
       try {
-        String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-        String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-        if (cookieA == null || cookieB == null) return;
-        final response = await httpClient.get(
-          Uri.parse(hideLink),
-          headers: {
-            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-              'a=$cookieA; b=$cookieB',
-            ),
-            'User-Agent': FAHttp.userAgent,
-          },
-        );
-        if (response.statusCode == 200) {
+        final statusCode =
+            await _journalActionService.updateCommentVisibility(hideLink);
+        if (statusCode == null) return;
+        if (statusCode == 200) {
           showAppSnackBar(context, "Comment successfully hidden!",
               backgroundColor: Colors.green);
           await _fetchPostDetailsNew();
         } else {
           debugPrint(
-              'Failed to hide comment. Status code: ${response.statusCode}');
+              'Failed to hide comment. Status code: $statusCode');
         }
       } catch (e) {
         debugPrint('Error hiding comment: $e');
@@ -749,25 +675,16 @@ class _OpenJournalState extends State<OpenJournal>
     );
     if (shouldUnhide == true) {
       try {
-        String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-        String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-        if (cookieA == null || cookieB == null) return;
-        final response = await httpClient.get(
-          Uri.parse(unhideLink),
-          headers: {
-            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-              'a=$cookieA; b=$cookieB',
-            ),
-            'User-Agent': FAHttp.userAgent,
-          },
-        );
-        if (response.statusCode == 200) {
+        final statusCode =
+            await _journalActionService.updateCommentVisibility(unhideLink);
+        if (statusCode == null) return;
+        if (statusCode == 200) {
           showAppSnackBar(context, "Comment successfully un-hidden!",
               backgroundColor: Colors.green);
           await _fetchPostDetailsNew();
         } else {
           debugPrint(
-              'Failed to unhide comment. Status code: ${response.statusCode}');
+              'Failed to unhide comment. Status code: $statusCode');
         }
       } catch (e) {
         debugPrint('Error un-hiding comment: $e');
@@ -1952,15 +1869,6 @@ class _OpenJournalState extends State<OpenJournal>
   }
 
   String fixTruncatedLinks(String htmlContent) {
-    var document = html_parser.parse(htmlContent);
-    for (var anchor in document.querySelectorAll('a.auto_link_shortened')) {
-      if (anchor.text.contains(".....")) {
-        String? fullLink = anchor.attributes['title'];
-        if (fullLink != null && fullLink.isNotEmpty) {
-          anchor.text = fullLink;
-        }
-      }
-    }
-    return document.outerHtml;
+    return replaceTruncatedJournalLinks(htmlContent);
   }
 }

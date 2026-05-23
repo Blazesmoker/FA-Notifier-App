@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:FANotifier/features/notes/data/note_reply_service.dart';
+import 'package:FANotifier/features/notes/data/note_reply_webview_cookie_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -44,6 +45,8 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   );
   late final NoteReplyService _noteReplyService =
       NoteReplyService(secureStorage: _secureStorage);
+  late final NoteReplyWebViewCookieService _webViewCookieService =
+      NoteReplyWebViewCookieService(secureStorage: _secureStorage);
 
   String recipient = 'Loading...';
   bool _isMessageDetailsLoading = true;
@@ -97,10 +100,9 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   }
 
   Future<void> _initializeWebView() async {
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    final hasCookies = await _webViewCookieService.setAuthCookies();
 
-    if (cookieA == null || cookieB == null) {
+    if (!hasCookies) {
       if (mounted) {
         setState(() {
           errorMessage = 'Not logged in or missing cookies.';
@@ -170,24 +172,6 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       ..setUserAgent(
         'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
       );
-
-    final cookieManager = WebViewCookieManager();
-    await cookieManager.setCookie(
-      WebViewCookie(
-        name: 'a',
-        value: cookieA,
-        domain: '.furaffinity.net',
-        path: '/',
-      ),
-    );
-    await cookieManager.setCookie(
-      WebViewCookie(
-        name: 'b',
-        value: cookieB,
-        domain: '.furaffinity.net',
-        path: '/',
-      ),
-    );
 
     await controller.loadRequest(Uri.parse(webViewUrl));
 

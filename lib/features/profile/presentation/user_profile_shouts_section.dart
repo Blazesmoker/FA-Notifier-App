@@ -1,8 +1,8 @@
 import 'package:FANotifier/features/profile/domain/shout.dart';
+import 'package:FANotifier/features/profile/data/shout_text_parser.dart';
 import 'package:FANotifier/features/profile/presentation/shout_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:html/parser.dart' as html_parser;
 
 class UserProfileShoutsSection extends StatelessWidget {
   final List<Shout> shouts;
@@ -180,7 +180,7 @@ class UserProfileShoutsSection extends StatelessWidget {
                         onLongPress: isSelectionMode
                             ? () => onToggleShoutSelection(shout)
                             : () async {
-                          final plainText = html_parser.parse(shout.text).body?.text ?? shout.text;
+                          final plainText = plainTextFromShoutHtml(shout.text);
                           final action = await showDialog<String>(
                             context: context,
                             builder: (context) {

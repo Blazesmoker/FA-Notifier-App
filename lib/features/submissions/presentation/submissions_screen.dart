@@ -1,19 +1,15 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/features/submissions/data/favorite_service.dart';
-import 'package:FANotifier/features/submissions/data/submission_detail_parser.dart';
-import 'package:FANotifier/features/submissions/data/submissions_listing_parser.dart';
+import 'package:FANotifier/features/submissions/data/submissions_service.dart';
 import 'package:FANotifier/features/submissions/domain/submission_fetch_models.dart';
 import 'package:FANotifier/features/submissions/domain/submission_image_group.dart';
+import 'package:FANotifier/features/submissions/domain/submissions_listing_parse_result.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation_optimized.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
@@ -33,6 +29,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     accountName: 'flutter_secure_storage_service',
     accessibility: KeychainAccessibility.first_unlock));
   final FavoriteService _favoriteService = FavoriteService();
+  late final SubmissionsService _submissionsService;
 
   /// All submissions grouped by date
   final List<DateImageGroup> _dateGroups = [];
@@ -74,6 +71,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   @override
   void initState() {
     super.initState();
+    _submissionsService = SubmissionsService(secureStorage: _secureStorage);
     _scrollController.addListener(_scrollListenerForPagination);
     _loadSfwEnabled().then((_) => _refreshSubmissions());
 
@@ -159,36 +157,18 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     });
 
     try {
-      String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-      String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-      if (cookieA == null || cookieB == null) {
+      if (!await _submissionsService.hasAuthCookies()) {
         debugPrint('[Submissions] Missing FA cookies, abort fetch.');
         setState(() { _isLoading = false; _isError = true; _errorMessage = 'Not logged in'; });
         return;
       }
-      var cookieHeader = 'a=$cookieA; b=$cookieB';
-      if (_sfwEnabled) cookieHeader += '; sfw=1';
-      cookieHeader =
-          await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader);
 
-      final url = _nextPageUrl ??
-          _baseSubmissionsUrl ??
-          'https://www.furaffinity.net/msg/submissions/';
-      debugPrint('[Submissions] GET $url');
-
-      final resp = await FAHttp.get(
-        Uri.parse(url),
-        headers: {
-          HttpHeaders.cookieHeader: cookieHeader,
-          'User-Agent': FAHttp.userAgent,
-        },
+      final parsed = await _submissionsService.fetchListing(
+        nextPageUrl: _nextPageUrl,
+        baseSubmissionsUrl: _baseSubmissionsUrl,
+        sfwEnabled: _sfwEnabled,
       );
-
-      if (resp.statusCode != 200) {
-        throw HttpException('HTTP ${resp.statusCode}');
-      }
-
-      _parseListing(resp.body);
+      _applyListing(parsed);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         for (var item in _flatSubmissionsList) {
@@ -211,8 +191,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     }
   }
 
-  void _parseListing(String html) {
-    final parsed = parseSubmissionsListing(html);
+  void _applyListing(SubmissionsListingParseResult parsed) {
     _isClassicStyle = parsed.isClassicStyle;
     _baseSubmissionsUrl ??= parsed.baseSubmissionsUrl;
     _dateGroups.addAll(parsed.dateGroups);
@@ -280,17 +259,6 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     return (w / h) > 1.5;
   }
 
-  Future<String> _getAuthCookies() async {
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a') ?? '';
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b') ?? '';
-    if (cookieA.isEmpty || cookieB.isEmpty) {
-      return '';
-    }
-    return FaCookieHelper.appendCfClearanceToCookieHeader(
-      'a=$cookieA; b=$cookieB',
-    );
-  }
-
   Future<void> _onNukePressed() async {
     final confirmNuke = await showDialog<bool>(
       context: context,
@@ -329,15 +297,10 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     if (confirmNuke != true) return;
 
     try {
-      final cookieHeader = await _getAuthCookies();
-      if (cookieHeader.isEmpty) return;
-
-      final url = _baseSubmissionsUrl ?? 'https://www.furaffinity.net/msg/submissions/new/';
-      final resp = await http.post(Uri.parse(url), headers: {
-        'Cookie': cookieHeader,
-        'User-Agent': FAHttp.userAgent,
-      }, body: {'messagecenter-action': 'nuke_notifications'});
-      if (resp.statusCode == 302) {
+      final success = await _submissionsService.nukeSubmissions(
+        baseSubmissionsUrl: _baseSubmissionsUrl,
+      );
+      if (success) {
         setState(() {
           _dateGroups.clear();
           _flatSubmissionsList.clear();
@@ -346,7 +309,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
         });
         debugPrint('[Submissions] Nuke success => cleared UI');
       } else {
-        debugPrint('[Submissions] Nuke failed => ${resp.statusCode}');
+        debugPrint('[Submissions] Nuke failed');
       }
     } catch (e) {
       debugPrint('[Submissions] Nuke error => $e');
@@ -392,25 +355,17 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
 
   Future<void> _deleteSelectedSubmissions() async {
     try {
-      final cookieHeader = await _getAuthCookies();
-      if (cookieHeader.isEmpty) {
+      if (!await _submissionsService.hasAuthCookies()) {
         debugPrint('[Submissions] Missing cookies, cannot delete.');
         return;
       }
-      final body = <String, String>{'messagecenter-action': 'remove_checked'};
-      int idx = 0;
-      for (final id in _selectedSubmissions) {
-        body['submissions[$idx]'] = id;
-        idx++;
-      }
-      final deleteUrl = _baseSubmissionsUrl ?? 'https://www.furaffinity.net/msg/submissions/new/';
-      final resp = await http.post(Uri.parse(deleteUrl), headers: {
-        'Cookie': cookieHeader,
-        'User-Agent': FAHttp.userAgent,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      }, body: body);
 
-      if (resp.statusCode == 302) {
+      final success = await _submissionsService.deleteSubmissions(
+        baseSubmissionsUrl: _baseSubmissionsUrl,
+        submissionIds: _selectedSubmissions,
+      );
+
+      if (success) {
         setState(() {
           for (final group in _dateGroups) {
             group.images.removeWhere((img) => _selectedSubmissions.contains(img['uniqueNumber']));
@@ -420,7 +375,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
         });
         debugPrint('[Submissions] Successfully deleted selected from UI.');
       } else {
-        debugPrint('[Submissions] Deletion request failed => ${resp.statusCode}');
+        debugPrint('[Submissions] Deletion request failed');
       }
     } catch (e) {
       debugPrint('[Submissions] Error deleting => $e');
@@ -464,7 +419,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
         item['detailFetchInProgress'] = true;
       }
 
-      _fetchSubmissionData(postUrl).then((data) {
+      _submissionsService.fetchSubmissionData(postUrl).then((data) {
         debugPrint('[Submissions] Fetched detail => $postUrl');
         if (!mounted) return;
         setState(() {
@@ -490,31 +445,6 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
         _startNextFetches();
       });
     }
-  }
-
-  /// Fetch submission detail data, supporting both modern and classic style pages.
-  Future<SubmissionData> _fetchSubmissionData(String postUrl) async {
-    final absoluteUrl = postUrl.startsWith('http')
-        ? postUrl
-        : 'https://www.furaffinity.net$postUrl';
-    debugPrint('[Submissions] HQ fetch: $absoluteUrl');
-
-    final cookieHeader = await _getAuthCookies();
-    final resp = await FAHttp.get(
-      Uri.parse(absoluteUrl),
-      headers: {
-        HttpHeaders.cookieHeader: cookieHeader,
-          'User-Agent': FAHttp.userAgent,
-        'Referer': 'https://www.furaffinity.net',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      },
-    );
-
-    if (resp.statusCode != 200) {
-      throw Exception('Submission detail fetch failed: ${resp.statusCode}');
-    }
-
-    return parseSubmissionDetailData(resp.bodyBytes);
   }
 
   Widget _buildRefreshableBody() {
@@ -830,7 +760,9 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
 
   Future<void> _refreshLinksAfterPost(Map<String, dynamic> item) async {
     try {
-      final newData = await _fetchSubmissionData(item['postUrl']);
+      final newData = await _submissionsService.fetchSubmissionData(
+        item['postUrl'],
+      );
       if (!mounted) return;
       setState(() {
         item['isFav'] = newData.isFav;

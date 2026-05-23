@@ -1,19 +1,15 @@
 // lib/fasearchimage.dart
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/features/search/data/search_image_parser.dart';
-import 'package:FANotifier/features/search/data/search_query_builder.dart';
-import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/features/search/data/search_image_service.dart';
 import 'package:FANotifier/shared/fa/cloudflare_challenge_exception.dart';
+import 'package:FANotifier/features/submissions/data/submission_favorite_details_service.dart';
 import 'package:FANotifier/features/submissions/data/favorite_service.dart';
 import 'package:FANotifier/shared/fa/fa_thumbnail_processing.dart';
 import 'package:FANotifier/core/logging/app_logging.dart';
-import 'package:FANotifier/shared/utils/content_rating_filters.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
@@ -54,6 +50,9 @@ class FASearchImageState extends State<FASearchImage> {
     ),
   );
   final FavoriteService _favoriteService = FavoriteService();
+  late final SearchImageService _searchImageService;
+  final SubmissionFavoriteDetailsService _favoriteDetailsService =
+      const SubmissionFavoriteDetailsService();
 
   final Set<String> _favoritedImages = {};
   final Map<String, String> _favUrls = {};
@@ -72,6 +71,7 @@ class FASearchImageState extends State<FASearchImage> {
   @override
   void initState() {
     super.initState();
+    _searchImageService = SearchImageService(secureStorage: _secureStorage);
     _sfwLoadFuture = _loadSfwEnabled();
     _fetchImages(currentPage);
     _scrollController.addListener(_scrollListener);
@@ -133,29 +133,10 @@ class FASearchImageState extends State<FASearchImage> {
 
   Future<String> _getAllCookies() async {
     await _sfwLoadFuture;
-    final cookieNames = [
-      'a',
-      'b',
-      'cc',
-      'cf_clearance',
-      'folder',
-      'nodesc',
-      'sz'
-    ];
-    final cookies = <String>[];
-
-    for (var name in cookieNames) {
-      final storageKey = 'fa_cookie_$name';
-      final value = await _secureStorage.read(key: storageKey);
-      if (value != null && value.isNotEmpty) {
-        cookies.add('$name=$value');
-      }
-    }
-
-    cookies.add(
-      'sfw=${ContentRatingFilters.effectiveSfwCookieValue(globalSfwEnabled: _sfwEnabled, filters: widget.selectedFilters)}',
+    return _searchImageService.buildCookieHeader(
+      selectedFilters: widget.selectedFilters,
+      sfwEnabled: _sfwEnabled,
     );
-    return cookies.join('; ');
   }
 
   Future<void> _appendImages(
@@ -233,9 +214,11 @@ class FASearchImageState extends State<FASearchImage> {
         _isNextPageFetchQueued = false;
       }
 
-      final newImages = await fetchImagesWithFilters(
-        pageNumber,
-        await _getAllCookies(),
+      final newImages = await _searchImageService.fetchImages(
+        pageNumber: pageNumber,
+        selectedFilters: widget.selectedFilters,
+        searchQuery: widget.searchQuery,
+        cookieHeader: await _getAllCookies(),
       );
       await _appendImages(
         newImages,
@@ -315,48 +298,6 @@ class FASearchImageState extends State<FASearchImage> {
       );
     } finally {
       _isHandlingCloudflareChallenge = false;
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> fetchImagesWithFilters(
-      int pageNumber, String cookieHeader) async {
-    final uri = buildFaSearchUri(
-      pageNumber: pageNumber,
-      selectedFilters: widget.selectedFilters,
-      searchQuery: widget.searchQuery,
-    );
-
-    final response = await FAHttp.get(
-      uri,
-      headers: {
-        HttpHeaders.cookieHeader:
-            await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
-        'User-Agent': FAHttp.userAgent,
-        'Referer': 'https://www.furaffinity.net/search/',
-        'Accept':
-            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-      },
-    );
-
-    final refreshedCf = FaCookieHelper.extractCfClearanceFromSetCookieHeader(
-      response.headers['set-cookie'],
-    );
-    if (refreshedCf != null && refreshedCf.isNotEmpty) {
-      await FaCookieHelper.writeCfClearance(refreshedCf);
-    }
-
-    final isChallenge = FaCookieHelper.isCloudflareChallengePage(
-      body: response.body,
-      statusCode: response.statusCode,
-    );
-    if (isChallenge) {
-          throw CloudflareChallengeException(initialUrl: uri.toString());
-    }
-
-    if (response.statusCode == 200) {
-      return await parseSearchImageHtml(response.body);
-    } else {
-      throw Exception('Failed to load images: ${response.statusCode}');
     }
   }
 
@@ -514,38 +455,16 @@ class FASearchImageState extends State<FASearchImage> {
   }
 
   Future<Map<String, String>?> _fetchPostDetails(String postUrl) async {
-    final absolute = postUrl.startsWith('http')
-        ? postUrl
-        : 'https://www.furaffinity.net$postUrl';
-    final cookie = await _getAllCookies();
-    if (cookie.isEmpty) return null;
+    final links = await _favoriteDetailsService.fetchLinksForPostUrl(
+      postUrl: postUrl,
+      cookieHeaderProvider: _getAllCookies,
+    );
+    if (links == null) return null;
 
-    try {
-      final response = await FAHttp.get(
-        Uri.parse(absolute),
-        headers: {
-          HttpHeaders.cookieHeader:
-              await FaCookieHelper.appendCfClearanceToCookieHeader(cookie),
-          'User-Agent': FAHttp.userAgent,
-        },
-      );
-
-      if (response.statusCode != 200) return null;
-
-      final links = parseSubmissionFavoriteLinksFromHtml(response.body);
-
-      if (!links.hasAnyUrl) {
-        debugPrint('DEBUG: No fav/unfav URLs found for post: $postUrl');
-      }
-
-      return {
-        'favUrl': links.favUrl,
-        'unfavUrl': links.unfavUrl,
-      };
-    } catch (e) {
-      debugPrint('Error fetching post details for $postUrl: $e');
-      return null;
-    }
+    return {
+      'favUrl': links.favUrl,
+      'unfavUrl': links.unfavUrl,
+    };
   }
 
   Future<void> _toggleFavorite(String uniqueNumber, bool wantFavorite) async {

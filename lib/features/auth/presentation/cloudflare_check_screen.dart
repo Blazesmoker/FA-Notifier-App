@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'dart:io';
 
+import 'package:FANotifier/features/auth/data/cloudflare_http_access_verifier.dart';
 import 'package:FANotifier/features/auth/domain/cloudflare_check_result.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
@@ -24,6 +24,7 @@ class CloudflareCheckScreen extends StatefulWidget {
 class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
   InAppWebViewController? _controller;
   bool _didComplete = false;
+  late final CloudflareHttpAccessVerifier _httpAccessVerifier;
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     iOptions: IOSOptions(
@@ -31,6 +32,13 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
       accessibility: KeychainAccessibility.first_unlock,
     ),
   );
+
+  @override
+  void initState() {
+    super.initState();
+    _httpAccessVerifier =
+        CloudflareHttpAccessVerifier(secureStorage: _secureStorage);
+  }
 
   Future<void> _setCookiesFromSecureStorage() async {
     final cookieKeys = <String>[
@@ -108,79 +116,11 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
     }
   }
 
-  Future<String> _getCookieHeader() async {
-    const cookieKeys = <String>[
-      'a',
-      'b',
-      'cc',
-      'cf_clearance',
-      'folder',
-      'nodesc',
-      'sz',
-      'sfw',
-    ];
-
-    final cookies = <String>[];
-    for (final key in cookieKeys) {
-      final value = await _secureStorage.read(key: 'fa_cookie_$key');
-      if (value != null && value.isNotEmpty) {
-        cookies.add('$key=$value');
-      }
-    }
-    return cookies.join('; ');
-  }
-
   Future<bool> _verifyHttpAccess(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return false;
-
-    for (var attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) {
-        await Future.delayed(Duration(milliseconds: 250 * attempt));
-        await _saveCookiesToSecureStorage();
-      }
-
-      final cookieHeader = await FaCookieHelper.appendCfClearanceToCookieHeader(
-        await _getCookieHeader(),
-      );
-      try {
-        final response = await FAHttp.get(
-          uri,
-          headers: {
-            if (cookieHeader.isNotEmpty) HttpHeaders.cookieHeader: cookieHeader,
-            'User-Agent': FAHttp.userAgent,
-            'Referer': 'https://www.furaffinity.net/',
-            'Accept':
-                'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          },
-        );
-
-        final refreshedCf = FaCookieHelper.extractCfClearanceFromSetCookieHeader(
-          response.headers['set-cookie'],
-        );
-        if (refreshedCf != null && refreshedCf.isNotEmpty) {
-          await FaCookieHelper.writeCfClearance(refreshedCf);
-        }
-
-        final isChallenge = FaCookieHelper.isCloudflareChallengePage(
-          body: response.body,
-          statusCode: response.statusCode,
-        );
-        debugPrint(
-          '[Cloudflare] HTTP verification attempt ${attempt + 1} for $url => '
-          'status=${response.statusCode}, challenge=$isChallenge',
-        );
-        if (!isChallenge) {
-          return true;
-        }
-      } catch (e) {
-        debugPrint(
-          '[Cloudflare] HTTP verification attempt ${attempt + 1} failed: $e',
-        );
-      }
-    }
-
-    return false;
+    return _httpAccessVerifier.verify(
+      url: url,
+      beforeRetryAttempt: _saveCookiesToSecureStorage,
+    );
   }
 
   Future<void> _completeIfChallengePassed({String? urlOverride}) async {

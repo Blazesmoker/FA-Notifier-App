@@ -4,7 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:FANotifier/shared/fa/fa_webview_cookie_service.dart';
 
 class EditSubmissionScreen extends StatefulWidget {
   final String initialUrl;
@@ -25,6 +25,7 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
       accessibility: KeychainAccessibility.first_unlock,
     ),
   );
+  late final FAWebViewCookieService _webViewCookieService;
 
   InAppWebViewController? _webViewController;
   final GlobalKey webViewKey = GlobalKey();
@@ -32,35 +33,12 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
   bool get _isUpdateSubmissionScreen =>
       widget.initialUrl.contains('changesubmission');
 
-  Future<String> _getSfwCookieValue() async {
-    final prefs = await SharedPreferences.getInstance();
-    return (prefs.getBool('sfwEnabled') ?? true) ? '1' : '0';
-  }
-
-  Future<void> _setCookies() async {
-    final cookieManager = CookieManager.instance();
-    final cookieKeys = ['a', 'b', 'cc', 'cf_clearance', 'folder', 'nodesc', 'sz', 'sfw'];
-
-    for (final key in cookieKeys) {
-      String value;
-      if (key == 'sfw') {
-        value = await _getSfwCookieValue();
-      } else {
-        value = await _secureStorage.read(key: 'fa_cookie_$key') ?? '';
-      }
-
-      if (value.isNotEmpty) {
-        await cookieManager.setCookie(
-          url: WebUri('https://www.furaffinity.net'),
-          name: key,
-          value: value,
-          domain: '.furaffinity.net',
-          path: '/',
-          isSecure: true,
-          isHttpOnly: true,
-        );
-      }
-    }
+  @override
+  void initState() {
+    super.initState();
+    _webViewCookieService = FAWebViewCookieService(
+      secureStorage: _secureStorage,
+    );
   }
 
   Future<void> _injectCustomCssAndJs() async {
@@ -203,7 +181,7 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
           contextMenu: _buildContextMenu(),
           onWebViewCreated: (controller) async {
             _webViewController = controller;
-            await _setCookies();
+            await _webViewCookieService.setCookies();
           },
           onLoadStart: (controller, uri) async {
             await _injectCustomCssAndJs();

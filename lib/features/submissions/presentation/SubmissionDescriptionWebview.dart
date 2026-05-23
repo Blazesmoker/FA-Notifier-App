@@ -3,16 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 import 'package:FANotifier/features/submissions/data/submission_description_parser.dart';
 import 'package:FANotifier/features/submissions/data/submission_description_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/journals/presentation/openjournal.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
-import 'package:FANotifier/features/profile/domain/profile_section.dart';
 
 class SubmissionDescriptionWebView extends StatefulWidget {
   final String submissionId;
@@ -346,114 +341,6 @@ user-select: none !important;
     final String? source = htmlSource ?? _submissionDescriptionHtml;
     if (source == null) return truncatedUrl;
     return findFullSubmissionAutoShortenedLink(source, truncatedUrl);
-  }
-
-  Future<void> _handleFALink(BuildContext context, String url,
-      {String? htmlSource}) async {
-    String fullUrlToMatch = url;
-    debugPrint("full URL: $fullUrlToMatch");
-    if (url.contains('.....')) {
-      final recoveredLink =
-          _getFullLinkFromFetchedHtml(url, htmlSource: htmlSource);
-      fullUrlToMatch = recoveredLink;
-      debugPrint("Recovered full URL: $fullUrlToMatch");
-    }
-
-    final Uri uri = Uri.parse(fullUrlToMatch);
-    final String urlToMatch = uri.toString();
-
-    // Gallery Folder Regex
-    final RegExp galleryFolderRegex = RegExp(
-      r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
-    );
-    if (galleryFolderRegex.hasMatch(urlToMatch)) {
-      final match = galleryFolderRegex.firstMatch(urlToMatch)!;
-      final String tappedUsername = match.group(1)!;
-      final String folderNumber = match.group(2)!;
-      final String folderName = match.group(3)!;
-      final String folderUrl =
-          'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
-
-      debugPrint('Tapped username: $tappedUsername');
-      debugPrint('Folder number: $folderNumber');
-      debugPrint('Folder name: $folderName');
-      debugPrint('Folder URL: $folderUrl');
-
-      Navigator.push(
-        context,
-        UserProfileScreen.route(
-          nickname: tappedUsername,
-          initialSection: ProfileSection.Gallery,
-          initialFolderUrl: folderUrl,
-          initialFolderName: folderName,
-        ),
-      );
-      return;
-    }
-
-    // User Regex (uses the same username pattern)
-    final RegExp userRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$',
-    );
-    if (userRegex.hasMatch(urlToMatch)) {
-      final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        UserProfileScreen.route(nickname: tappedUsername),
-      );
-      return;
-    }
-
-    // Journal Regex (matches /journal/12345)
-    final RegExp journalRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
-    );
-
-    if (journalRegex.hasMatch(urlToMatch)) {
-      final Match match = journalRegex.firstMatch(urlToMatch)!;
-      final String? username = match.group(1);
-      final String? journalId = match.group(2);
-
-      if (username != null) {
-        // Matched: /journals/username/
-        Navigator.push(
-          context,
-          UserProfileScreen.route(
-            nickname: username,
-            initialSection: ProfileSection.Journals,
-          ),
-        );
-      } else if (journalId != null) {
-        // Matched: /journal/12345/
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OpenJournal(uniqueNumber: journalId),
-          ),
-        );
-      }
-
-      return;
-    }
-
-    // View Regex (matches /view/12345)
-    final RegExp viewRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$',
-    );
-    if (viewRegex.hasMatch(urlToMatch)) {
-      final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        OpenPost.route(
-          uniqueNumber: submissionId,
-          imageUrl: '',
-        ),
-      );
-      return;
-    }
-
-    // Fallback: Launch the link externally
-    await launchUrlString(fullUrlToMatch, mode: LaunchMode.externalApplication);
   }
 
   Future<String?> getPlainText() async {

@@ -4,7 +4,6 @@ import 'package:FANotifier/features/profile/domain/user_link.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 
 class ViewListScreen extends StatefulWidget {
   final String title;
@@ -137,10 +136,9 @@ class _ViewListScreenState extends State<ViewListScreen> {
   }
 
   Future<void> _fetchAllUsers() async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    final cookieHeader = await buildWatchlistCookieHeader(_secureStorage);
 
-    if (cookieA == null || cookieB == null) {
+    if (cookieHeader.isEmpty) {
       setState(() {
         errorMessage = 'No cookies found. User might not be logged in.';
         isLoading = false;
@@ -158,9 +156,6 @@ class _ViewListScreenState extends State<ViewListScreen> {
     }
 
     final totalPages = _estimatedTotalPages;
-    final cookieHeader = await FaCookieHelper.appendCfClearanceToCookieHeader(
-      'a=$cookieA; b=$cookieB',
-    );
 
     for (int currentPage = 1; currentPage <= totalPages; currentPage++) {
       if (!mounted || loadedUsersCount >= _expectedUserCount) {

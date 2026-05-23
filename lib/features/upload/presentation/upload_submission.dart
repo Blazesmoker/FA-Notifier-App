@@ -10,12 +10,12 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/shared/widgets/tags_and_codes_webview_widget.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 import 'package:FANotifier/features/upload/data/submission_template_store.dart';
 import 'package:FANotifier/features/upload/domain/submission_template.dart';
 import 'package:FANotifier/features/upload/presentation/submission_templates_screen.dart';
+import 'package:FANotifier/shared/fa/fa_webview_cookie_service.dart';
 
 class UploadSubmissionScreen extends StatefulWidget {
   const UploadSubmissionScreen({Key? key}) : super(key: key);
@@ -35,6 +35,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   );
 
   final SubmissionTemplateStore _templateStore = SubmissionTemplateStore();
+  late final FAWebViewCookieService _webViewCookieService;
 
   final String initialUrl = 'https://www.furaffinity.net/submit/';
   final String finalizeUrl = 'https://www.furaffinity.net/submit/finalize/';
@@ -153,6 +154,9 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   @override
   void initState() {
     super.initState();
+    _webViewCookieService = FAWebViewCookieService(
+      secureStorage: _secureStorage,
+    );
     _requestPermissions();
 
     _toolsMenuController = AnimationController(
@@ -183,38 +187,6 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
         Permission.storage,
         Permission.photos,
       ].request();
-    }
-  }
-
-  Future<String> _getSfwCookieValue() async {
-    final prefs = await SharedPreferences.getInstance();
-    final sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
-    return sfwEnabled ? '1' : '0';
-  }
-
-  Future<void> _setCookies() async {
-    final cookieManager = CookieManager.instance();
-    final cookieKeys = ['a', 'b', 'cc', 'cf_clearance', 'folder', 'nodesc', 'sz', 'sfw'];
-
-    for (final key in cookieKeys) {
-      String value;
-      if (key == 'sfw') {
-        value = await _getSfwCookieValue();
-      } else {
-        value = await _secureStorage.read(key: 'fa_cookie_$key') ?? '';
-      }
-
-      if (value.isNotEmpty) {
-        await cookieManager.setCookie(
-          url: WebUri('https://www.furaffinity.net'),
-          name: key,
-          value: value,
-          domain: '.furaffinity.net',
-          path: '/',
-          isSecure: true,
-          isHttpOnly: true,
-        );
-      }
     }
   }
 
@@ -1357,7 +1329,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       contextMenu: _buildContextMenu(),
       onWebViewCreated: (controller) async {
         _webViewController = controller;
-        await _setCookies();
+        await _webViewCookieService.setCookies();
 
         controller.addJavaScriptHandler(
           handlerName: 'selectFile',

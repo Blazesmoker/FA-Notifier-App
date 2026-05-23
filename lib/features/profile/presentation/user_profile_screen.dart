@@ -21,6 +21,7 @@ import 'package:FANotifier/features/profile/domain/fa_folder.dart';
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
 import 'package:FANotifier/features/profile/domain/shout.dart';
 import 'package:FANotifier/features/profile/domain/user_link.dart';
+import 'package:FANotifier/shared/fa/fa_webview_cookie_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_styles.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_components.dart';
@@ -186,6 +187,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         accessibility: KeychainAccessibility.first_unlock),
   );
   late final UserProfileApiService _api;
+  late final FAWebViewCookieService _webViewCookieService;
 
   bool _sfwEnabled = true;
 
@@ -424,6 +426,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
     DetachableWebViewRouteRegistry.register(this);
 
     _api = UserProfileApiService(_secureStorage);
+    _webViewCookieService = FAWebViewCookieService(
+      secureStorage: _secureStorage,
+    );
     SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
 
     if (widget.initialFolderUrl != null &&
@@ -931,34 +936,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _setupWebviewCookies() async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    String? cfClearance =
-        await _secureStorage.read(key: 'fa_cookie_cf_clearance');
-
-    if (cookieA != null && cookieB != null) {
-      final cookieManager = CookieManager.instance();
-
-      await cookieManager.setCookie(
-        url: WebUri('https://www.furaffinity.net'),
-        name: 'a',
-        value: cookieA,
-      );
-
-      await cookieManager.setCookie(
-        url: WebUri('https://www.furaffinity.net'),
-        name: 'b',
-        value: cookieB,
-      );
-
-      if (cfClearance != null && cfClearance.isNotEmpty) {
-        await cookieManager.setCookie(
-          url: WebUri('https://www.furaffinity.net'),
-          name: 'cf_clearance',
-          value: cfClearance,
-        );
-      }
-    }
+    await _webViewCookieService.setCookies();
   }
 
   Future<void> _sendWatchUnwatchRequest(String urlPath,

@@ -1,18 +1,15 @@
 // lib/fa_image_grid.dart
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/features/browse/data/browse_image_parser.dart';
-import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/features/browse/data/browse_image_service.dart';
 import 'package:FANotifier/shared/fa/cloudflare_challenge_exception.dart';
+import 'package:FANotifier/features/submissions/data/submission_favorite_details_service.dart';
 import 'package:FANotifier/features/submissions/data/favorite_service.dart';
 import 'package:FANotifier/shared/fa/fa_thumbnail_processing.dart';
 import 'package:FANotifier/core/logging/app_logging.dart';
-import 'package:FANotifier/shared/utils/content_rating_filters.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
@@ -61,6 +58,9 @@ class FAImageGridState extends State<FAImageGrid> {
   final Set<String> _favoritedImages = {};
   final Map<String, String> _favUrls = {};
   final Map<String, String> _unfavUrls = {};
+  late final BrowseImageService _browseImageService;
+  final SubmissionFavoriteDetailsService _favoriteDetailsService =
+      const SubmissionFavoriteDetailsService();
   final FavoriteService _favoriteService = FavoriteService();
 
   bool _sfwEnabled = true;
@@ -73,6 +73,7 @@ class FAImageGridState extends State<FAImageGrid> {
   @override
   void initState() {
     super.initState();
+    _browseImageService = BrowseImageService(secureStorage: _secureStorage);
     _sfwLoadFuture = _loadSfwEnabled();
     _fetchImages(currentPage);
     _scrollController.addListener(_scrollListener);
@@ -177,78 +178,16 @@ class FAImageGridState extends State<FAImageGrid> {
         _isNextPageFetchQueued = false;
       }
 
-      final cookieHeader = await _getAllCookies();
-      final uri = Uri.parse('https://www.furaffinity.net/browse/$pageNumber');
-      Uri currentUri = uri;
-
-      final headers = {
-        HttpHeaders.cookieHeader:
-            await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
-        'User-Agent': FAHttp.userAgent,
-        'Referer': 'https://www.furaffinity.net/browse/',
-        'Content-Type': 'application/x-www-form-urlencoded',
-      };
-
-      final body = {
-        'cat': getFilterValue('Category'),
-        'atype': getFilterValue('Type'),
-        'species': getFilterValue('Species'),
-        'gender': getFilterValue('Gender'),
-        'rating_general': getFilterValue('rating-general'),
-        'rating_mature': getFilterValue('rating-mature'),
-        'rating_adult': getFilterValue('rating-adult'),
-        'perpage': '72',
-        'btn': 'Next',
-      };
-
-      var resp = await FAHttp.post(uri, headers: headers, body: body);
-
-      if (resp.isRedirect ||
-          (resp.statusCode >= 300 && resp.statusCode < 400)) {
-        final loc = resp.headers['location'];
-        if (loc == null || loc.isEmpty) {
-          throw Exception('Redirect without Location header');
-        }
-        final redirectUri = uri.resolve(loc);
-        currentUri = redirectUri;
-        resp = await FAHttp.get(
-          redirectUri,
-          headers: {
-            HttpHeaders.cookieHeader:
-                await FaCookieHelper.appendCfClearanceToCookieHeader(
-                    cookieHeader),
-            'User-Agent': FAHttp.userAgent,
-            'Referer': uri.toString(),
-          },
-        );
-      }
-
-      final refreshedCf = FaCookieHelper.extractCfClearanceFromSetCookieHeader(
-        resp.headers['set-cookie'],
+      await _sfwLoadFuture;
+      final newImages = await _browseImageService.fetchImages(
+        pageNumber: pageNumber,
+        selectedFilters: widget.selectedFilters,
+        sfwEnabled: _sfwEnabled,
       );
-      if (refreshedCf != null && refreshedCf.isNotEmpty) {
-        await FaCookieHelper.writeCfClearance(refreshedCf);
-      }
-
-      final isChallenge = FaCookieHelper.isCloudflareChallengePage(
-        body: resp.body,
-        statusCode: resp.statusCode,
+      await _appendImages(
+        newImages,
+        previousMaxScrollExtent: previousMaxScrollExtent,
       );
-      if (isChallenge) {
-          throw CloudflareChallengeException(initialUrl: currentUri.toString());
-      }
-
-      if (resp.statusCode == 200) {
-        final newImages = await parseBrowseImageHtml(resp.body);
-        await _appendImages(
-          newImages,
-          previousMaxScrollExtent: previousMaxScrollExtent,
-        );
-      } else {
-        setState(() => isLoading = false);
-        throw Exception(
-            'FAImageGrid: HTTP ${resp.statusCode} fetching images.');
-      }
     } on CloudflareChallengeException catch (e) {
       kDebugPrint('Cloudflare challenge detected while fetching browse images.');
       if (mounted) {
@@ -451,63 +390,30 @@ class FAImageGridState extends State<FAImageGrid> {
 
   Future<String> _getAllCookies() async {
     await _sfwLoadFuture;
-    final cookieNames = [
-      'a',
-      'b',
-      'cc',
-      'cf_clearance',
-      'folder',
-      'nodesc',
-      'sz'
-    ];
-    final cookies = <String>[];
-    for (var name in cookieNames) {
-      final storageKey = 'fa_cookie_$name';
-      final value = await _secureStorage.read(key: storageKey);
-      if (value != null && value.isNotEmpty) {
-        cookies.add('$name=$value');
-      }
-    }
-    cookies.add(
-      'sfw=${ContentRatingFilters.effectiveSfwCookieValue(globalSfwEnabled: _sfwEnabled, filters: widget.selectedFilters)}',
+    return _browseImageService.buildCookieHeader(
+      selectedFilters: widget.selectedFilters,
+      sfwEnabled: _sfwEnabled,
     );
-    return cookies.join('; ');
-  }
-
-  String getFilterValue(String filterName) {
-    return widget.selectedFilters[filterName] ?? '1';
   }
 
   /// Fetch post details (like /fav/ or /unfav/ links) for [uniqueNumber].
   /// Also updates _favoritedImages if the post page indicates it's already faved.
   Future<void> _fetchPostDetails(String uniqueNumber) async {
-    final postUrl = 'https://www.furaffinity.net/view/$uniqueNumber/';
-    try {
-      final cookieHeader = await _getAllCookies();
-      final response = await FAHttp.get(
-        Uri.parse(postUrl),
-        headers: {
-          HttpHeaders.cookieHeader:
-              await FaCookieHelper.appendCfClearanceToCookieHeader(
-                  cookieHeader),
-          'User-Agent': FAHttp.userAgent,
-        },
-      );
-      if (response.statusCode == 200) {
-        final links = parseSubmissionFavoriteLinksFromHtml(response.body);
-        if (links.hasAnyUrl) {
-          if (links.hasFavUrl) _favUrls[uniqueNumber] = links.favUrl;
-          if (links.hasUnfavUrl) _unfavUrls[uniqueNumber] = links.unfavUrl;
-          if (links.hasUnfavUrl && !links.hasFavUrl) {
-            _favoritedImages.add(uniqueNumber);
-          }
-          if (links.hasFavUrl && !links.hasUnfavUrl) {
-            _favoritedImages.remove(uniqueNumber);
-          }
-        }
+    final links = await _favoriteDetailsService.fetchLinksForSubmissionId(
+      submissionId: uniqueNumber,
+      cookieHeaderProvider: _getAllCookies,
+    );
+    if (links == null) return;
+
+    if (links.hasAnyUrl) {
+      if (links.hasFavUrl) _favUrls[uniqueNumber] = links.favUrl;
+      if (links.hasUnfavUrl) _unfavUrls[uniqueNumber] = links.unfavUrl;
+      if (links.hasUnfavUrl && !links.hasFavUrl) {
+        _favoritedImages.add(uniqueNumber);
       }
-    } catch (e) {
-      debugPrint('Error fetching post details for $uniqueNumber => $e');
+      if (links.hasFavUrl && !links.hasUnfavUrl) {
+        _favoritedImages.remove(uniqueNumber);
+      }
     }
   }
 

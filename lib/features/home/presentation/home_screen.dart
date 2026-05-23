@@ -9,9 +9,7 @@ import 'package:FANotifier/features/submissions/presentation/submissions_screen.
 import 'package:FANotifier/features/upload/presentation/upload_submission.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/features/notifications/data/fa_activities_polling_service.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:FANotifier/features/notifications/data/notification_refresh_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -24,7 +22,6 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
@@ -35,6 +32,8 @@ import 'package:FANotifier/app/app_theme.dart';
 import 'package:FANotifier/features/profile/domain/user_profile.dart';
 import 'package:FANotifier/features/notifications/domain/notifications.dart';
 import 'package:FANotifier/shared/fa/fa_service.dart';
+import 'package:FANotifier/features/auth/data/startup_cloudflare_check_service.dart';
+import 'package:FANotifier/features/home/data/home_login_html_detector.dart';
 import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
 import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
@@ -92,8 +91,8 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 
   final String loginUrl = 'https://www.furaffinity.net/login';
-  final String postLoginUrl = 'https://www.furaffinity.net/';
   final FaService _faService = FaService();
+  late final StartupCloudflareCheckService _startupCloudflareCheckService;
   Timer? _dataRefreshTimer;
 
   int _unreadCount = 0;
@@ -118,6 +117,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _startupCloudflareCheckService =
+        StartupCloudflareCheckService(secureStorage: _secureStorage);
     _navProvider =
         Provider.of<NotificationNavigationProvider>(context, listen: false);
     _navProvider.addListener(_handleNavProviderChange);
@@ -246,41 +247,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<bool> _runStartupCloudflareCheck() async {
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    final rawCookieHeader =
-        (cookieA != null && cookieB != null) ? 'a=$cookieA; b=$cookieB' : '';
-    final cookieHeader =
-        await FaCookieHelper.appendCfClearanceToCookieHeader(rawCookieHeader);
-    final headers = <String, String>{
-      'User-Agent': FAHttp.userAgent,
-    };
-    if (cookieHeader.isNotEmpty) {
-      headers['Cookie'] = cookieHeader;
-    }
-
-    http.Response response;
-    try {
-      response = await http.get(
-        Uri.parse(postLoginUrl),
-        headers: headers,
-      );
-    } catch (e) {
-      debugPrint('[Cloudflare] Startup check request failed: $e');
-      return true;
-    }
-
-    final refreshedCf = FaCookieHelper.extractCfClearanceFromSetCookieHeader(
-      response.headers['set-cookie'],
-    );
-    if (refreshedCf != null && refreshedCf.isNotEmpty) {
-      await FaCookieHelper.writeCfClearance(refreshedCf);
-    }
-
-    final needsChallenge = FaCookieHelper.isCloudflareChallengePage(
-      body: response.body,
-      statusCode: response.statusCode,
-    );
+    final needsChallenge = await _startupCloudflareCheckService.needsChallenge();
     if (!needsChallenge) {
       return true;
     }
@@ -642,17 +609,7 @@ class _HomeScreenState extends State<HomeScreen> {
       String? html = await _webViewController!
           .evaluateJavascript(source: "document.documentElement.outerHTML;");
 
-      bool isClassicTheme =
-          html != null && html.contains('data-static-path=\"/themes/classic\"');
-
-      bool usernameElementFound = isClassicTheme &&
-          RegExp(r'<(?:a|span) id="my-username"').hasMatch(html);
-
-      bool avatarElementFound = !isClassicTheme &&
-          html != null &&
-          html.contains('loggedin_user_avatar');
-
-      bool elementFound = usernameElementFound || avatarElementFound;
+      final elementFound = hasLoggedInHomeElement(html);
 
       if (elementFound) {
         if (_firstTimeElementFound == null) {

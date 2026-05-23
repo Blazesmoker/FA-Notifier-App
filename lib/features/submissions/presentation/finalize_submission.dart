@@ -1,16 +1,10 @@
 // lib/finalize_submission.dart
 
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
-import 'package:cookie_jar/cookie_jar.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:FANotifier/features/submissions/data/finalize_submission_parser.dart';
+import 'package:FANotifier/features/submissions/data/finalize_submission_service.dart';
+import 'package:FANotifier/features/submissions/domain/finalize_submission_request.dart';
 import 'package:FANotifier/features/submissions/domain/submission_form_option.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
 
 class FinalizeSubmissionScreen extends StatefulWidget {
   final String submissionKey;
@@ -49,11 +43,10 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
   bool _isFinalizing = false;
   String _errorMessage = '';
 
-  final Dio _dio = Dio();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
     accessibility: KeychainAccessibility.first_unlock));
-  final CookieJar _cookieJar = CookieJar();
+  late final FinalizeSubmissionService _finalizeSubmissionService;
 
   // Option Groups
   List<OptionGroup> _categoryOptions = [];
@@ -66,87 +59,10 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeDio();
-    _loadCookies().then((_) {
-      _fetchOptions();
-    });
-  }
-
-  void _initializeDio() {
-    _dio.options.headers['User-Agent'] = FAHttp.userAgent;
-    _dio.options.headers['Accept'] =
-    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8';
-    _dio.options.headers['Accept-Encoding'] = 'gzip, deflate, br, zstd';
-    _dio.options.headers['Accept-Language'] = 'en-US,en;q=0.9';
-    _dio.options.followRedirects = true;
-    _dio.options.validateStatus = (status) {
-      return status != null && (status >= 200 && status < 400);
-    };
-
-
-    _dio.interceptors.add(CookieManager(_cookieJar));
-  }
-
-  Future<void> _loadCookies() async {
-    try {
-
-      String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-      String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-      String? trackingConsent = await _secureStorage.read(key: '_tracking_consent');
-      String? shopifyY = await _secureStorage.read(key: '_shopify_y');
-      String? cc = await _secureStorage.read(key: 'cc');
-      String? n = await _secureStorage.read(key: 'n');
-      String? sz = await _secureStorage.read(key: 'sz');
-      String? folder = await _secureStorage.read(key: 'folder');
-
-
-      final prefs = await SharedPreferences.getInstance();
-      bool sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
-
-      String sfwValue = sfwEnabled ? '1' : '0';
-
-
-      List<Cookie> cookies = [];
-
-      if (cookieA != null) cookies.add(Cookie('a', cookieA));
-      if (cookieB != null) cookies.add(Cookie('b', cookieB));
-      if (trackingConsent != null) cookies.add(Cookie('_tracking_consent', trackingConsent));
-      if (shopifyY != null) cookies.add(Cookie('_shopify_y', shopifyY));
-      if (cc != null) cookies.add(Cookie('cc', cc));
-      if (n != null) cookies.add(Cookie('n', n));
-      if (sz != null) cookies.add(Cookie('sz', sz));
-      if (folder != null) cookies.add(Cookie('folder', folder));
-      cookies.add(Cookie('sfw', sfwValue));
-
-
-      Uri uri = Uri.parse('https://www.furaffinity.net');
-      await _cookieJar.saveFromResponse(
-        uri,
-        await FaCookieHelper.addCfClearanceCookie(cookies),
-      );
-
-      List<Cookie> savedCookies = await _cookieJar.loadForRequest(uri);
-      for (var cookie in savedCookies) {
-        debugPrint("${cookie.name}");
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Error loading cookies: $e';
-        _isLoadingOptions = false;
-      });
-      debugPrint("Error in _loadCookies: $e");
-    }
-  }
-
-  Future<void> _saveToFile(String fileName, String content) async {
-    try {
-      final directory = await Directory.systemTemp.createTemp('request_logs');
-      final file = File('${directory.path}/$fileName');
-      await file.writeAsString(content, mode: FileMode.append);
-      debugPrint('Saved request body to file: ${file.path}');
-    } catch (e) {
-      debugPrint('Error saving to file: $e');
-    }
+    _finalizeSubmissionService = FinalizeSubmissionService(
+      secureStorage: _secureStorage,
+    );
+    _fetchOptions();
   }
 
   /// Fetches and parses options from the Fur Affinity submission finalization page.
@@ -156,40 +72,20 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
     });
 
     try {
-      final response = await _dio.get('https://www.furaffinity.net/submit/finalize/');
+      final parsed = await _finalizeSubmissionService.fetchOptions();
+      final submissionKey = parsed.submissionKey;
+      setState(() {
+        _submissionKeyUpload = submissionKey;
+      });
+      debugPrint("Finalized Submission Key: $_submissionKeyUpload");
+      _categoryOptions = parsed.categoryOptions;
+      _themeOptions = parsed.themeOptions;
+      _speciesOptions = parsed.speciesOptions;
+      _genderOptions = parsed.genderOptions;
 
-      debugPrint("GET /submit/finalize/ Status Code: ${response.statusCode}");
-
-      await _saveToFile(
-        'fetch_options_get.txt',
-        'Request: GET /submit/finalize/\nResponse: ${response.data}\nTimestamp: ${DateTime.now()}\n\n',
-      );
-
-      if (response.data is String && response.data.length > 1000) {
-        debugPrint("Response snippet: ${response.data.substring(0, 1000)}");
-      } else {
-        debugPrint("Response data: ${response.data}");
-      }
-
-      if (response.statusCode == 200 || response.statusCode == 302) {
-        final parsed = parseFinalizeSubmissionOptions(response.data as String);
-        final submissionKey = parsed.submissionKey;
-        setState(() {
-          _submissionKeyUpload = submissionKey;
-        });
-        debugPrint("Finalized Submission Key: $_submissionKeyUpload");
-        _categoryOptions = parsed.categoryOptions;
-        _themeOptions = parsed.themeOptions;
-        _speciesOptions = parsed.speciesOptions;
-        _genderOptions = parsed.genderOptions;
-
-        setState(() {
-          _isLoadingOptions = false;
-        });
-      } else {
-        throw Exception(
-            'Failed to load submission finalization page. Status code: ${response.statusCode}');
-      }
+      setState(() {
+        _isLoadingOptions = false;
+      });
     } catch (e) {
       setState(() {
         _errorMessage = 'Error fetching options: $e';
@@ -219,100 +115,31 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
     });
 
     try {
-      Map<String, dynamic> data = {
-        'key': _submissionKeyUpload,
-        'cat': _category,
-        'atype': _theme,
-        'species': _species,
-        'gender': _gender,
-        'rating': _rating,
-        'title': _title,
-        'message': _description,
-        'keywords': _keywords,
-        'lock_comments': _lockComments ? '1' : '0',
-        'scrap': _putInScraps ? '1' : '0',
-        'create_folder_name': _folderName,
-        'finalize': 'Finalize',
-      };
-
-      debugPrint("Finalizing submission with key: ${data['key']}");
-      debugPrint("Finalizing submission with data: $data");
-
-      await _saveToFile(
-        'finalize_submission_post.txt',
-        'Request Data: $data\nTimestamp: ${DateTime.now()}\n\n',
-      );
-
-      // Send POST request
-      final response = await _dio.post(
-        'https://www.furaffinity.net/submit/finalize/',
-        data: data,
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-          headers: {
-            'Referer': 'https://www.furaffinity.net/submit/finalize/',
-          },
-          followRedirects: false,
-          validateStatus: (status) {
-            return status != null && (status >= 200 && status < 400);
-          },
+      await _finalizeSubmissionService.finalizeSubmission(
+        FinalizeSubmissionRequest(
+          key: _submissionKeyUpload!,
+          category: _category,
+          theme: _theme,
+          species: _species,
+          gender: _gender,
+          rating: _rating,
+          title: _title,
+          description: _description,
+          keywords: _keywords,
+          lockComments: _lockComments,
+          putInScraps: _putInScraps,
+          folderName: _folderName,
         ),
       );
 
-      debugPrint("POST /submit/finalize/ Status Code: ${response.statusCode}");
-      debugPrint("Response Headers: ${response.headers.map}");
-
-
-      String responseBody = '';
-      if (response.data is String) {
-        responseBody = response.data;
-        int chunkSize = 1000;
-        for (int i = 0; i < responseBody.length; i += chunkSize) {
-          int end = (i + chunkSize < responseBody.length)
-              ? i + chunkSize
-              : responseBody.length;
-          debugPrint("Response Body Chunk: ${responseBody.substring(i, end)}");
-        }
-      } else {
-        debugPrint("Response Data: ${response.data}");
-      }
-
-      if (response.statusCode == 302) {
-        String? location = response.headers.value('location');
-        debugPrint("Redirect Location: $location");
-
-        if (location != null && location.contains('?upload-successful')) {
-          // Upload was successful
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Submission uploaded successfully!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
-          Navigator.pop(context);
-        } else {
-          throw Exception('Upload failed: Unexpected redirect location.');
-        }
-      } else if (response.statusCode == 200) {
-        // Parsing the response body to check for success indicators
-        if (responseBody.contains('?upload-successful')) {
-          // Success indicated in the response body
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Submission uploaded successfully!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
-          Navigator.pop(context);
-        } else {
-          String errorMessage = _extractErrorMessage(responseBody);
-          throw Exception('Upload failed: $errorMessage');
-        }
-      } else {
-        throw Exception("Upload failed with status code: ${response.statusCode}");
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Submission uploaded successfully!'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      Navigator.pop(context);
     } catch (e) {
       setState(() {
         _errorMessage = 'Error finalizing submission: $e';
@@ -330,12 +157,6 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
         _isFinalizing = false;
       });
     }
-  }
-
-  /// Extracts an error message from the response body.
-
-  String _extractErrorMessage(String responseBody) {
-    return parseFinalizeSubmissionErrorMessage(responseBody);
   }
 
 

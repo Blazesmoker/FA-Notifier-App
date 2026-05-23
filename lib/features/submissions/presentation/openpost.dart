@@ -28,11 +28,15 @@ import 'package:FANotifier/core/utils/html_tags_debug.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/submissions/data/post_comment_service.dart';
+import 'package:FANotifier/features/submissions/data/openpost_action_service.dart';
+import 'package:FANotifier/features/submissions/data/openpost_image_service.dart';
+import 'package:FANotifier/features/submissions/data/openpost_link_parser.dart';
 import 'package:FANotifier/features/submissions/presentation/SubmissionDescriptionWebview.dart';
 import 'package:FANotifier/features/submissions/presentation/add_post_comment_screen.dart';
 import 'package:FANotifier/features/profile/presentation/avatardownloadscreen.dart';
 import 'package:FANotifier/features/submissions/data/openpost_api_service.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
 import 'package:FANotifier/features/submissions/presentation/edit_submission_screen.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
@@ -165,6 +169,9 @@ class _OpenPostState extends State<OpenPost>
         accountName: 'flutter_secure_storage_service',
         accessibility: KeychainAccessibility.first_unlock),
   );
+  late final OpenPostActionService _openPostActionService;
+  final OpenPostImageService _openPostImageService =
+      const OpenPostImageService();
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _commentFocusNode = FocusNode();
   bool _commentComposerFocusRequestedByUser = false;
@@ -253,6 +260,9 @@ class _OpenPostState extends State<OpenPost>
   @override
   void initState() {
     super.initState();
+    _openPostActionService = OpenPostActionService(
+      secureStorage: _secureStorage,
+    );
     DetachableWebViewRouteRegistry.register(this);
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
@@ -1064,38 +1074,24 @@ class _OpenPostState extends State<OpenPost>
 
   Future<void> _sendTagBlocklistRequest(String tagName,
       {required bool shouldBlock}) async {
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    final sfwValue = _sfwEnabled ? '1' : '0';
-
-    if (cookieA == null || cookieB == null) {
-      throw Exception('Not logged in.');
-    }
     if (tagBlocklistNonce == null || tagBlocklistNonce!.isEmpty) {
       throw Exception('Missing tag blocklist nonce.');
     }
 
-    final url = 'https://www.furaffinity.net/route/tag_blocking';
-    final response = await httpClient.post(
-      Uri.parse(url),
-      headers: <String, String>{
-        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-          'a=$cookieA; b=$cookieB; sfw=$sfwValue',
-        ),
-        'User-Agent': FAHttp.userAgent,
-        'Referer': 'https://www.furaffinity.net/view/${widget.uniqueNumber}/',
-        'Origin': 'https://www.furaffinity.net',
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: <String, String>{
-        'action': shouldBlock ? 'add-tag' : 'remove-tag',
-        'key': tagBlocklistNonce!,
-        'tag_name': tagName,
-      },
+    final statusCode = await _openPostActionService.sendTagBlocklistRequest(
+      tagName: tagName,
+      shouldBlock: shouldBlock,
+      nonce: tagBlocklistNonce!,
+      submissionId: widget.uniqueNumber,
+      sfwEnabled: _sfwEnabled,
     );
 
-    if (response.statusCode != 200) {
-      throw Exception('Tag blocklist request failed: ${response.statusCode}');
+    if (statusCode == null) {
+      throw Exception('Not logged in.');
+    }
+
+    if (statusCode != 200) {
+      throw Exception('Tag blocklist request failed: $statusCode');
     }
   }
 
@@ -1172,37 +1168,25 @@ class _OpenPostState extends State<OpenPost>
 
   Future<void> _sendBlockUnblockPostRequest(String urlPath, String keyValue,
       {required bool shouldBlock}) async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    final sfwValue = _sfwEnabled ? '1' : '0';
-
-    if (cookieA == null || cookieB == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please log in to perform this action.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    final fullUrl = 'https://www.furaffinity.net$urlPath';
-
     try {
-      final response = await httpClient.post(
-        Uri.parse(fullUrl),
-        headers: {
-          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-            'a=$cookieA; b=$cookieB; sfw=$sfwValue',
-          ),
-          'User-Agent': FAHttp.userAgent,
-          'Referer': 'https://www.furaffinity.net/user/$linkUsername/',
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: {'key': keyValue},
+      final statusCode = await _openPostActionService.sendBlockUnblockRequest(
+        urlPath: urlPath,
+        keyValue: keyValue,
+        linkUsername: linkUsername ?? '',
+        sfwEnabled: _sfwEnabled,
       );
 
-      if (response.statusCode == 200 || response.statusCode == 302) {
+      if (statusCode == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please log in to perform this action.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      if (statusCode == 200 || statusCode == 302) {
         await _fetchUserPageLinks();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1233,23 +1217,22 @@ class _OpenPostState extends State<OpenPost>
 
   Future<void> _sendWatchUnwatchRequest(String urlPath,
       {required bool shouldWatch}) async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-    if (cookieA == null || cookieB == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please log in to perform this action.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
     final fullUrl = 'https://www.furaffinity.net$urlPath';
     try {
-      final response = await _getWithSfwCookie(fullUrl);
-      if (response.statusCode == 200) {
+      final statusCode = await _openPostActionService.sendAuthenticatedGet(
+        url: fullUrl,
+        sfwEnabled: _sfwEnabled,
+      );
+      if (statusCode == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please log in to perform this action.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      if (statusCode == 200) {
         await _fetchUserPageLinks();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1322,15 +1305,12 @@ class _OpenPostState extends State<OpenPost>
 
     if (shouldHide == true) {
       try {
-        String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-        String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-        if (cookieA == null || cookieB == null) {
-          return;
-        }
-
-        final response = await _getWithSfwCookie(hideLink);
-        if (response.statusCode == 200) {
+        final statusCode = await _openPostActionService.sendAuthenticatedGet(
+          url: hideLink,
+          sfwEnabled: _sfwEnabled,
+        );
+        if (statusCode == null) return;
+        if (statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text("Comment successfully hidden!"),
@@ -1340,7 +1320,7 @@ class _OpenPostState extends State<OpenPost>
           await _fetchPostDetails();
         } else {
           debugPrint(
-              'Failed to hide comment. Status code: ${response.statusCode}');
+              'Failed to hide comment. Status code: $statusCode');
         }
       } catch (e) {
         debugPrint('Error hiding comment: $e');
@@ -1543,53 +1523,24 @@ class _OpenPostState extends State<OpenPost>
   }
 
   Future<void> _handleDeletePost() async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-    if (cookieA == null || cookieB == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please log in to perform this action.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    final url = 'https://www.furaffinity.net/controls/submissions/';
     try {
-      final response = await httpClient.post(
-        Uri.parse(url),
-        headers: {
-          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-            'a=$cookieA; b=$cookieB',
-          ),
-          'User-Agent': FAHttp.userAgent,
-          'Referer': 'https://www.furaffinity.net/view/${widget.uniqueNumber}/',
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: {
-          'submission_ids[]': widget.uniqueNumber,
-          'delete_submissions_submit': '1',
-        },
+      final result = await _openPostActionService.prepareDeletion(
+        submissionId: widget.uniqueNumber,
       );
 
-      if (response.statusCode == 200) {
-        var document = html_parser.parse(response.body);
+      if (result == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please log in to perform this action.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
 
-        var confirmInput = document.querySelector('button[name="confirm"]');
-        var confirmValue = confirmInput?.attributes['value'];
-        var deleteSubmissionsSubmitInput =
-            document.querySelector('input[name="delete_submissions_submit"]');
-        var deleteSubmissionsSubmitValue =
-            deleteSubmissionsSubmitInput?.attributes['value'];
-        var submissionIdsInput =
-            document.querySelector('input[name="submission_ids[]"]');
-        var submissionIdValue = submissionIdsInput?.attributes['value'];
-
-        if (confirmValue == null ||
-            deleteSubmissionsSubmitValue == null ||
-            submissionIdValue == null) {
+      if (result.statusCode == 200) {
+        final confirmationData = result.confirmationData;
+        if (confirmationData == null) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Failed to prepare deletion.'),
@@ -1599,8 +1550,7 @@ class _OpenPostState extends State<OpenPost>
           return;
         }
 
-        _showDeleteConfirmationDialog(
-            confirmValue, deleteSubmissionsSubmitValue, submissionIdValue);
+        _showDeleteConfirmationDialog(confirmationData);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1621,8 +1571,9 @@ class _OpenPostState extends State<OpenPost>
     }
   }
 
-  void _showDeleteConfirmationDialog(String confirmValue,
-      String deleteSubmissionsSubmitValue, String submissionIdValue) {
+  void _showDeleteConfirmationDialog(
+    OpenPostDeleteConfirmationData confirmationData,
+  ) {
     final TextEditingController passwordController = TextEditingController();
     final FocusNode passwordFocusNode = FocusNode();
 
@@ -1640,8 +1591,7 @@ class _OpenPostState extends State<OpenPost>
 
       TextInput.finishAutofillContext(shouldSave: true);
       Navigator.of(dialogContext).pop();
-      _confirmDeletion(confirmValue, deleteSubmissionsSubmitValue,
-          submissionIdValue, password);
+      _confirmDeletion(confirmationData, password);
     }
 
     showDialog(
@@ -1727,65 +1677,33 @@ class _OpenPostState extends State<OpenPost>
   }
 
   Future<void> _confirmDeletion(
-      String confirmValue,
-      String deleteSubmissionsSubmitValue,
-      String submissionIdValue,
-      String password) async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-    if (cookieA == null || cookieB == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please log in to perform this action.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    final url = 'https://www.furaffinity.net/controls/submissions/';
+    OpenPostDeleteConfirmationData confirmationData,
+    String password,
+  ) async {
     try {
-      final response = await httpClient.post(
-        Uri.parse(url),
-        headers: {
-          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-            'a=$cookieA; b=$cookieB',
-          ),
-          'User-Agent': FAHttp.userAgent,
-          'Referer': 'https://www.furaffinity.net/controls/submissions/',
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: {
-          'delete_submissions_submit': deleteSubmissionsSubmitValue,
-          'submission_ids[]': submissionIdValue,
-          'password': password,
-          'confirm': confirmValue,
-        },
+      final success = await _openPostActionService.confirmDeletion(
+        confirmValue: confirmationData.confirmValue,
+        deleteSubmissionsSubmitValue:
+            confirmationData.deleteSubmissionsSubmitValue,
+        submissionIdValue: confirmationData.submissionIdValue,
+        password: password,
       );
 
-      if (response.statusCode == 302) {
-        var document = html_parser.parse(response.body);
-        String bodyText = document.body?.text.trim() ?? '';
-        if (bodyText.isEmpty ||
-            bodyText
-                .toLowerCase()
-                .contains('there are no submissions to list')) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Submission deleted successfully.'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.of(context).pop();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to delete submission.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+      if (success == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please log in to perform this action.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } else if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Submission deleted successfully.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.of(context).pop();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -2116,12 +2034,12 @@ class _OpenPostState extends State<OpenPost>
 
     if (shouldUnhide == true) {
       try {
-        String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-        String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-        if (cookieA == null || cookieB == null) return;
-
-        final response = await _getWithSfwCookie(unhideLink);
-        if (response.statusCode == 200) {
+        final statusCode = await _openPostActionService.sendAuthenticatedGet(
+          url: unhideLink,
+          sfwEnabled: _sfwEnabled,
+        );
+        if (statusCode == null) return;
+        if (statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text("Comment successfully un-hidden!"),
@@ -2131,7 +2049,7 @@ class _OpenPostState extends State<OpenPost>
           await _fetchPostDetails();
         } else {
           debugPrint(
-              'Failed to unhide comment. Status code: ${response.statusCode}');
+              'Failed to unhide comment. Status code: $statusCode');
         }
       } catch (e) {
         debugPrint('Error un-hiding comment: $e');
@@ -2153,19 +2071,8 @@ class _OpenPostState extends State<OpenPost>
       }
 
       if (isPermissionGranted) {
-        Uint8List bytes;
-
-        // Attempt to download the image from the URL
-        final response = await httpClient.get(
-          Uri.parse(imageUrl),
-          headers: {'User-Agent': FAHttp.userAgent},
-        );
-        if (response.statusCode == 200) {
-          bytes = response.bodyBytes;
-        } else {
-          // If network image download fails, load default image from assets
-          bytes = await _loadDefaultImageBytes();
-        }
+        final bytes = await _openPostImageService.fetchImageBytes(imageUrl) ??
+            await _loadDefaultImageBytes();
 
         // Save image to gallery
         final result = await SaverGallery.saveImage(
@@ -2233,17 +2140,8 @@ class _OpenPostState extends State<OpenPost>
         return;
       }
 
-      Uint8List bytes;
-
-      final response = await httpClient.get(
-        Uri.parse(imageUrl),
-        headers: {'User-Agent': FAHttp.userAgent},
-      );
-      if (response.statusCode == 200) {
-        bytes = response.bodyBytes;
-      } else {
-        bytes = await _loadDefaultImageBytes();
-      }
+      final bytes = await _openPostImageService.fetchImageBytes(imageUrl) ??
+          await _loadDefaultImageBytes();
 
       final tempDir = Directory.systemTemp;
       final tempFile = await File(
@@ -2287,42 +2185,19 @@ class _OpenPostState extends State<OpenPost>
   /// Helper method to recover the full link from truncated FA links
   String? _getFullLinkFromFetchedHtml(String truncatedUrl) {
     if (submissionDescription == null) return null;
-    var document = html_parser.parse(submissionDescription);
-    for (var anchor in document.querySelectorAll('a.auto_link_shortened')) {
-      String? fullLink =
-          anchor.attributes['title'] ?? anchor.attributes['href'];
-      if (fullLink != null && fullLink.isNotEmpty) {
-        return fullLink;
-      }
-    }
-    return null;
+    return findFullShortenedSubmissionLink(
+      submissionDescription!,
+      truncatedUrl,
+    );
   }
 
   String fixTruncatedLinks(String htmlContent) {
-    var document = html_parser.parse(htmlContent);
-    for (var anchor in document.querySelectorAll('a.auto_link_shortened')) {
-      if (anchor.text.contains(".....")) {
-        String? fullLink = anchor.attributes['title'];
-        if (fullLink != null && fullLink.isNotEmpty) {
-          anchor.text = fullLink;
-        }
-      }
-    }
-    return document.outerHtml;
+    return replaceTruncatedSubmissionLinks(htmlContent);
   }
 
   /// Returns the full URL from a truncated comment link.
   String? _getFullLinkFromCommentHtml(String commentHtml, String truncatedUrl) {
-    var document = html_parser.parse(commentHtml);
-    for (var anchor
-        in document.querySelectorAll('a.auto_link.auto_link_shortened')) {
-      String? fullLink =
-          anchor.attributes['title'] ?? anchor.attributes['href'];
-      if (fullLink != null && fullLink.isNotEmpty) {
-        return fullLink;
-      }
-    }
-    return null;
+    return findFullShortenedCommentLink(commentHtml, truncatedUrl);
   }
 
   /// Handles FA links found in comments.
@@ -2541,13 +2416,6 @@ class _OpenPostState extends State<OpenPost>
   }
 
   Future<void> _sendFavoriteRequest(bool shouldFavorite) async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-    if (cookieA == null || cookieB == null) {
-      return;
-    }
-
     String? url;
     if (shouldFavorite) {
       if (favLink != null) {
@@ -2564,11 +2432,15 @@ class _OpenPostState extends State<OpenPost>
     }
 
     try {
-      final response = await _getWithSfwCookie(url);
-      if (response.statusCode == 200) {
+      final statusCode = await _openPostActionService.sendAuthenticatedGet(
+        url: url,
+        sfwEnabled: _sfwEnabled,
+      );
+      if (statusCode == null) return;
+      if (statusCode == 200) {
         await _fetchFavoriteLinks();
       } else {
-        debugPrint('Failed to toggle favorite: ${response.statusCode}');
+        debugPrint('Failed to toggle favorite: $statusCode');
       }
     } catch (e) {
       debugPrint('Error toggling favorite: $e');

@@ -1,17 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 import 'package:FANotifier/features/profile/data/user_description_parser.dart';
 import 'package:FANotifier/features/profile/data/user_description_service.dart';
+import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/journals/presentation/openjournal.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/features/profile/domain/profile_section.dart';
 
 enum UserDescriptionWebViewPauseReason { route, visibility, scrolling }
 
@@ -321,13 +317,13 @@ user-select: none !important;
 
   /// Searches the given [htmlSource] for an <a> tag with class "auto_link_shortened"
   /// whose inner text equals [truncatedUrl]. If found, returns the full URL from its
-  /// title attribute (or from its href if title is missing). If no match is found, returns null.
+  /// title attribute (or from its href if title is missing). If no match is found, returns the original URL.
   /// If [htmlSource] is not provided, it falls back to using the stored _userDescriptionHtml.
-  String? _getFullLinkFromFetchedHtml(String truncatedUrl,
+  String _getFullLinkFromFetchedHtml(String truncatedUrl,
       {String? htmlSource}) {
     final String? source = htmlSource ?? _userDescriptionHtml;
-    if (source == null) return null;
-    return findFullAutoShortenedLink(source, truncatedUrl);
+    if (source == null) return truncatedUrl;
+    return findFullAutoShortenedLink(source, truncatedUrl) ?? truncatedUrl;
   }
 
   /// Returns plain text by stripping HTML tags from the cleaned HTML.
@@ -341,107 +337,12 @@ user-select: none !important;
   /// If no match is found, it opens the URL externally.
   Future<void> _handleFALink(BuildContext context, String url,
       {String? htmlSource}) async {
-    String fullUrlToMatch = url;
-    // If the URL appears truncated (contains "....."), tries to recover the full URL.
-    if (url.contains('.....')) {
-      final recoveredLink =
-          _getFullLinkFromFetchedHtml(url, htmlSource: htmlSource);
-      if (recoveredLink != null) {
-        fullUrlToMatch = recoveredLink;
-        debugPrint("Recovered full URL: $fullUrlToMatch");
-      }
-    }
-
-    final Uri uri = Uri.parse(fullUrlToMatch);
-    final String urlToMatch = uri.toString();
-
-    // 1. Gallery Folder Link
-    final RegExp galleryFolderRegex = RegExp(
-      r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
+    await handleFALink(
+      context,
+      url,
+      htmlSource: htmlSource,
+      getFullUrl: _getFullLinkFromFetchedHtml,
     );
-    if (galleryFolderRegex.hasMatch(urlToMatch)) {
-      final match = galleryFolderRegex.firstMatch(urlToMatch)!;
-      final String tappedUsername = match.group(1)!;
-      final String folderNumber = match.group(2)!;
-      final String folderName = match.group(3)!;
-      final String folderUrl =
-          'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
-
-      Navigator.push(
-        context,
-        UserProfileScreen.route(
-          nickname: tappedUsername,
-          initialSection: ProfileSection.Gallery,
-          initialFolderUrl: folderUrl,
-          initialFolderName: folderName,
-        ),
-      );
-      return;
-    }
-
-    // 2. User Link
-    final RegExp userRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$',
-    );
-    if (userRegex.hasMatch(urlToMatch)) {
-      final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        UserProfileScreen.route(nickname: tappedUsername),
-      );
-      return;
-    }
-
-    // 3. Journal Link
-    final RegExp journalRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
-    );
-
-    if (journalRegex.hasMatch(urlToMatch)) {
-      final Match match = journalRegex.firstMatch(urlToMatch)!;
-      final String? username = match.group(1);
-      final String? journalId = match.group(2);
-
-      if (username != null) {
-        // Matched: /journals/username/
-        Navigator.push(
-          context,
-          UserProfileScreen.route(
-            nickname: username,
-            initialSection: ProfileSection.Journals,
-          ),
-        );
-      } else if (journalId != null) {
-        // Matched: /journal/12345/
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OpenJournal(uniqueNumber: journalId),
-          ),
-        );
-      }
-
-      return;
-    }
-
-    // 4. Submission/View Link
-    final RegExp viewRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$',
-    );
-    if (viewRegex.hasMatch(urlToMatch)) {
-      final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        OpenPost.route(
-          uniqueNumber: submissionId,
-          imageUrl: '',
-        ),
-      );
-      return;
-    }
-
-    // 5. Fallback: open externally
-    await launchUrlString(fullUrlToMatch, mode: LaunchMode.externalApplication);
   }
 
   @override

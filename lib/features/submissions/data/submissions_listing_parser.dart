@@ -2,21 +2,8 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 
 import 'package:FANotifier/features/submissions/domain/submission_image_group.dart';
+import 'package:FANotifier/features/submissions/domain/submissions_listing_parse_result.dart';
 import 'package:FANotifier/shared/fa/fa_thumbnail_parser.dart';
-
-class SubmissionsListingParseResult {
-  final bool isClassicStyle;
-  final String? baseSubmissionsUrl;
-  final List<DateImageGroup> dateGroups;
-  final String? nextPageUrl;
-
-  const SubmissionsListingParseResult({
-    required this.isClassicStyle,
-    required this.baseSubmissionsUrl,
-    required this.dateGroups,
-    required this.nextPageUrl,
-  });
-}
 
 SubmissionsListingParseResult parseSubmissionsListing(String html) {
   final doc = html_parser.parse(html);

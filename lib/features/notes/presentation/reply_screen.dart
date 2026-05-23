@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_html/flutter_html.dart' as html;
 
 import 'package:FANotifier/features/submissions/data/post_comment_service.dart';
+import 'package:FANotifier/features/submissions/domain/submission_comment_reply_target.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 
@@ -35,12 +36,6 @@ class _ReplyScreenState extends State<ReplyScreen> {
     ),
   );
 
-  String? extractClassicCommentId(String input) {
-    final regex = RegExp(r'/replyto/submission/(\d+)/');
-    final match = regex.firstMatch(input);
-    return match != null ? match.group(1) : input;
-  }
-
   void _sendReply() async {
     final replyText = _replyController.text.trim();
     if (replyText.isEmpty) return;
@@ -49,7 +44,9 @@ class _ReplyScreenState extends State<ReplyScreen> {
 
     String? replyId;
     if (widget.isClassic) {
-      replyId = extractClassicCommentId(widget.comment['replyLink'] ?? '');
+      replyId = extractClassicSubmissionCommentReplyId(
+        widget.comment['replyLink'] ?? '',
+      );
     } else {
       replyId = widget.comment['commentId'];
     }
