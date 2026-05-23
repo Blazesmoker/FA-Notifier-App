@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/features/notes/data/note_message_service.dart';
 import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:FANotifier/main.dart';
@@ -25,13 +24,8 @@ class MessageDetailScreen extends StatefulWidget {
 }
 
 class _MessageDetailScreenState extends State<MessageDetailScreen> {
-  final _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock),
-  );
   late final NoteMessageService _noteMessageService =
-      NoteMessageService(secureStorage: _secureStorage);
+      NoteMessageService();
 
   bool isLoading = true;
   String errorMessage = '';

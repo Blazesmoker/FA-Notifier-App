@@ -7,7 +7,6 @@ import 'dart:math';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:FANotifier/shared/widgets/tags_and_codes_webview_widget.dart';
@@ -26,13 +25,6 @@ class UploadSubmissionScreen extends StatefulWidget {
 
 class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with TickerProviderStateMixin {
   static const Color _accent = Color(0xFFE09321);
-
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accountName: 'flutter_secure_storage_service',
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
-  );
 
   final SubmissionTemplateStore _templateStore = SubmissionTemplateStore();
   late final FAWebViewCookieService _webViewCookieService;
@@ -154,9 +146,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   @override
   void initState() {
     super.initState();
-    _webViewCookieService = FAWebViewCookieService(
-      secureStorage: _secureStorage,
-    );
+    _webViewCookieService = const FAWebViewCookieService();
     _requestPermissions();
 
     _toolsMenuController = AnimationController(

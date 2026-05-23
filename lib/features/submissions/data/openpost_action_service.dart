@@ -7,8 +7,14 @@ import 'package:html/parser.dart' as html_parser;
 
 class OpenPostActionService {
   const OpenPostActionService({
-    required FlutterSecureStorage secureStorage,
-  }) : _secureStorage = secureStorage;
+    FlutterSecureStorage? secureStorage,
+  }) : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            );
 
   final FlutterSecureStorage _secureStorage;
 

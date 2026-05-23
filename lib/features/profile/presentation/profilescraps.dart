@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:async';
 import 'package:FANotifier/features/profile/data/profile_image_row_layout.dart';
 import 'package:FANotifier/features/profile/data/profile_scraps_service.dart';
@@ -29,14 +28,7 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   final List<List<Map<String, dynamic>>> _imageRows = [];
   final List<Map<String, dynamic>> _normalImagesQueue = [];
 
-  final ProfileScrapsService _profileScrapsService = ProfileScrapsService(
-    secureStorage: const FlutterSecureStorage(
-      iOptions: IOSOptions(
-        accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock,
-      ),
-    ),
-  );
+  final ProfileScrapsService _profileScrapsService = ProfileScrapsService();
 
   // Favorite functionality
   final Set<String> _favoritedImages = {};

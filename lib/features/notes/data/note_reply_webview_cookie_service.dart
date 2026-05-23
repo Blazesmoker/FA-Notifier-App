@@ -3,8 +3,14 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 class NoteReplyWebViewCookieService {
   const NoteReplyWebViewCookieService({
-    required FlutterSecureStorage secureStorage,
-  }) : _secureStorage = secureStorage;
+    FlutterSecureStorage? secureStorage,
+  }) : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            );
 
   final FlutterSecureStorage _secureStorage;
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/features/submissions/data/post_comment_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
@@ -23,15 +22,10 @@ class AddPostCommentScreen extends StatefulWidget {
 class _AddPostCommentScreenState extends State<AddPostCommentScreen>
     with WidgetsBindingObserver {
   final TextEditingController _commentController = TextEditingController();
+  final PostCommentService _commentService = PostCommentService();
   final ValueNotifier<double> _keyboardInset = ValueNotifier<double>(0);
   final ValueNotifier<double> _navBarInset = ValueNotifier<double>(0);
   bool _isSending = false;
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accountName: 'flutter_secure_storage_service',
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
-  );
 
   @override
   void initState() {
@@ -51,8 +45,7 @@ class _AddPostCommentScreenState extends State<AddPostCommentScreen>
     });
 
     try {
-      final success = await submitPostCommentOrReply(
-        secureStorage: _secureStorage,
+      final success = await _commentService.submitComment(
         message: commentText,
         submissionId: widget.uniqueNumber,
       );

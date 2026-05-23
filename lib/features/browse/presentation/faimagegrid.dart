@@ -1,7 +1,6 @@
 // lib/fa_image_grid.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/features/browse/data/browse_image_parser.dart';
 import 'package:FANotifier/features/browse/data/browse_image_service.dart';
@@ -48,12 +47,6 @@ class FAImageGridState extends State<FAImageGrid> {
 
   final Set<String> imageUrls = <String>{}; // For de-duping
   final ScrollController _scrollController = ScrollController();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accountName: 'flutter_secure_storage_service',
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
-  );
 
   final Set<String> _favoritedImages = {};
   final Map<String, String> _favUrls = {};
@@ -73,7 +66,7 @@ class FAImageGridState extends State<FAImageGrid> {
   @override
   void initState() {
     super.initState();
-    _browseImageService = BrowseImageService(secureStorage: _secureStorage);
+    _browseImageService = BrowseImageService();
     _sfwLoadFuture = _loadSfwEnabled();
     _fetchImages(currentPage);
     _scrollController.addListener(_scrollListener);

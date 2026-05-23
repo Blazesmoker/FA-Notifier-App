@@ -4,7 +4,6 @@ import 'dart:async';
 import 'dart:collection';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:FANotifier/features/profile/data/profile_gallery_service.dart';
@@ -36,11 +35,8 @@ class ProfileGallerySliver extends StatefulWidget {
 }
 
 class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock));
   late final ProfileGalleryService _profileGalleryService =
-      ProfileGalleryService(secureStorage: _secureStorage);
+      ProfileGalleryService();
 
   final List<Map<String, dynamic>> _images = [];
   bool _isLoading = false;
@@ -199,11 +195,9 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
   // Fav toggle logic
 
   void _handleToggleFavorite(int index, bool isFav) async {
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a') ?? '';
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b') ?? '';
-
-    if (cookieA.isEmpty || cookieB.isEmpty) {
+    if (!await _favoriteGalleryService.hasAuthCookies()) {
       debugPrint('[DEBUG] Missing cookies for fav/unfav POST request.');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Authentication cookies missing. Please log in again.')),
       );
@@ -223,8 +217,6 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
       isFav: isFav,
       favUrl: favUrl,
       unfavUrl: unfavUrl,
-      cookieA: cookieA,
-      cookieB: cookieB,
       onPostComplete: (num, finalState) {
         _refreshLinksAfterPost(num);
       },

@@ -5,8 +5,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class JournalActionService {
   const JournalActionService({
-    required FlutterSecureStorage secureStorage,
-  }) : _secureStorage = secureStorage;
+    FlutterSecureStorage? secureStorage,
+  }) : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            );
 
   final FlutterSecureStorage _secureStorage;
 

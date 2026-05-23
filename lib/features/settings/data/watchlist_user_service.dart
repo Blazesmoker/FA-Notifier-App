@@ -18,10 +18,11 @@ String buildWatchlistPageUrl({
 }
 
 Future<String> buildWatchlistCookieHeader(
-  FlutterSecureStorage secureStorage,
+  [FlutterSecureStorage? secureStorage]
 ) async {
-  final cookieA = await secureStorage.read(key: 'fa_cookie_a');
-  final cookieB = await secureStorage.read(key: 'fa_cookie_b');
+  final storage = secureStorage ?? _defaultSecureStorage();
+  final cookieA = await storage.read(key: 'fa_cookie_a');
+  final cookieB = await storage.read(key: 'fa_cookie_b');
 
   if (cookieA == null || cookieB == null) {
     return '';
@@ -72,4 +73,13 @@ Future<List<UserLink>?> fetchWatchlistUsersPage({
   }
 
   return null;
+}
+
+FlutterSecureStorage _defaultSecureStorage() {
+  return const FlutterSecureStorage(
+    iOptions: IOSOptions(
+      accountName: 'flutter_secure_storage_service',
+      accessibility: KeychainAccessibility.first_unlock,
+    ),
+  );
 }

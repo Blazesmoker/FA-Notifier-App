@@ -14,8 +14,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class FinalizeSubmissionService {
   FinalizeSubmissionService({
-    required FlutterSecureStorage secureStorage,
-  })  : _secureStorage = secureStorage,
+    FlutterSecureStorage? secureStorage,
+  })  : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            ),
         _dio = Dio(),
         _cookieJar = CookieJar() {
     _initializeDio();

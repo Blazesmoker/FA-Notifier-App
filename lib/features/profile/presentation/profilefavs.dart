@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/features/profile/data/profile_favorites_service.dart';
 import 'package:FANotifier/features/profile/data/profile_image_row_layout.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -31,14 +30,7 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
   final List<Map<String, dynamic>> _normalImagesQueue = [];
 
   final ProfileFavoritesService _profileFavoritesService =
-      ProfileFavoritesService(
-    secureStorage: const FlutterSecureStorage(
-      iOptions: IOSOptions(
-        accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock,
-      ),
-    ),
-  );
+      ProfileFavoritesService();
 
 
   final Set<String> _favoritedImages = {};

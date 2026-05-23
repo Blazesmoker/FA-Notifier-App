@@ -10,8 +10,15 @@ import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 
 class NoteUnreadService {
-  NoteUnreadService({required FlutterSecureStorage secureStorage})
-      : _secureStorage = secureStorage;
+  NoteUnreadService({
+    FlutterSecureStorage? secureStorage,
+  }) : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            );
 
   final FlutterSecureStorage _secureStorage;
 

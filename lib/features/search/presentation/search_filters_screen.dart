@@ -1,6 +1,6 @@
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:FANotifier/features/search/domain/search_filter_date_range.dart';
 import 'package:FANotifier/shared/utils/content_rating_filters.dart';
 
 class SearchFiltersScreen extends StatefulWidget {
@@ -52,16 +52,8 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
     }
 
     if (currentSearchFilters['range'] == 'manual') {
-      if (currentSearchFilters['range_from'] != null &&
-          currentSearchFilters['range_from']!.isNotEmpty) {
-        fromDate =
-            DateFormat('yyyy-MM-dd').parse(currentSearchFilters['range_from']!);
-      }
-      if (currentSearchFilters['range_to'] != null &&
-          currentSearchFilters['range_to']!.isNotEmpty) {
-        toDate =
-            DateFormat('yyyy-MM-dd').parse(currentSearchFilters['range_to']!);
-      }
+      fromDate = parseSearchFilterDate(currentSearchFilters['range_from']);
+      toDate = parseSearchFilterDate(currentSearchFilters['range_to']);
     }
   }
 
@@ -149,10 +141,8 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
       }
     }
 
-    currentSearchFilters['range_from'] =
-        fromDate != null ? DateFormat('yyyy-MM-dd').format(fromDate!) : '';
-    currentSearchFilters['range_to'] =
-        toDate != null ? DateFormat('yyyy-MM-dd').format(toDate!) : '';
+    currentSearchFilters['range_from'] = formatSearchFilterDate(fromDate);
+    currentSearchFilters['range_to'] = formatSearchFilterDate(toDate);
   }
 
   Widget _buildDateFieldChooser(
@@ -178,9 +168,7 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    date != null
-                        ? DateFormat('dd.MM.yyyy').format(date)
-                        : 'Select Date',
+                    formatSearchFilterDatePickerLabel(date),
                     style: TextStyle(fontSize: 14),
                   ),
                   Icon(Icons.calendar_today, size: 18),
@@ -331,12 +319,12 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
           Row(
             children: [
               Text(
-                'From: ${fromDate != null ? DateFormat('dd.MM.yyyy').format(fromDate!) : 'Not set'}',
+                'From: ${formatSearchFilterDateLabel(fromDate)}',
                 style: TextStyle(fontSize: 14),
               ),
               SizedBox(width: 20),
               Text(
-                'To: ${toDate != null ? DateFormat('dd.MM.yyyy').format(toDate!) : 'Not set'}',
+                'To: ${formatSearchFilterDateLabel(toDate)}',
                 style: TextStyle(fontSize: 14),
               ),
               SizedBox(width: 20),

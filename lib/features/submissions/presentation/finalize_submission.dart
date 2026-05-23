@@ -1,7 +1,6 @@
 // lib/finalize_submission.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/features/submissions/data/finalize_submission_service.dart';
 import 'package:FANotifier/features/submissions/domain/finalize_submission_request.dart';
 import 'package:FANotifier/features/submissions/domain/submission_form_option.dart';
@@ -43,9 +42,6 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
   bool _isFinalizing = false;
   String _errorMessage = '';
 
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock));
   late final FinalizeSubmissionService _finalizeSubmissionService;
 
   // Option Groups
@@ -59,9 +55,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
   @override
   void initState() {
     super.initState();
-    _finalizeSubmissionService = FinalizeSubmissionService(
-      secureStorage: _secureStorage,
-    );
+    _finalizeSubmissionService = FinalizeSubmissionService();
     _fetchOptions();
   }
 

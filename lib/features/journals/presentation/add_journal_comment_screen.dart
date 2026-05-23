@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
@@ -22,10 +21,8 @@ class AddJournalCommentScreen extends StatefulWidget {
 
 class _AddCommentScreenState extends State<AddJournalCommentScreen> {
   final TextEditingController _commentController = TextEditingController();
+  final JournalCommentService _commentService = JournalCommentService();
   bool _isSending = false;
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock));
 
 
   void _sendComment() async {
@@ -37,8 +34,7 @@ class _AddCommentScreenState extends State<AddJournalCommentScreen> {
     });
 
     try {
-      bool success = await submitJournalCommentOrReply(
-        secureStorage: _secureStorage,
+      bool success = await _commentService.submitComment(
         message: commentText,
         journalId: widget.uniqueNumber,
       );

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/shared/fa/fa_edit_comment_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -22,19 +21,14 @@ class EditCommentScreen extends StatefulWidget {
 class _EditCommentScreenState extends State<EditCommentScreen> {
   final TextEditingController _controller = TextEditingController();
   bool _isLoading = false;
-  String? cookieA;
-  String? cookieB;
-  final FlutterSecureStorage _secureStorage = FlutterSecureStorage(iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock));
-  late FaEditCommentService _editCommentService;
+  late AuthenticatedFaEditCommentService _editCommentService;
 
   @override
   void initState() {
     super.initState();
     _controller.text = widget.comment['text'];
-    _editCommentService = FaEditCommentService();
-    _loadCookies().then((_) => _loadEditForm());
+    _editCommentService = AuthenticatedFaEditCommentService();
+    _loadEditForm();
   }
 
   @override
@@ -48,8 +42,6 @@ class _EditCommentScreenState extends State<EditCommentScreen> {
 
     final result = await _editCommentService.loadEditCommentText(
       editLink: widget.editLink,
-      cookieA: cookieA,
-      cookieB: cookieB,
     );
 
     if (result.errorMessage != null) {
@@ -62,28 +54,13 @@ class _EditCommentScreenState extends State<EditCommentScreen> {
   }
 
 
-  Future<void> _loadCookies() async {
-    cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    if (cookieA == null || cookieB == null) {
-      _showMessage("Authentication cookies are missing.", isError: true);
-    }
-  }
-
   Future<void> _submitEdit() async {
-    if (cookieA == null || cookieB == null) {
-      _showMessage("Authentication cookies are missing.", isError: true);
-      return;
-    }
-
     setState(() => _isLoading = true);
 
     final updatedText = _controller.text;
 
     final result = await _editCommentService.submitEditComment(
       editLink: widget.editLink,
-      cookieA: cookieA,
-      cookieB: cookieB,
       updatedText: updatedText,
       requireFValue: true,
       includeFValue: true,

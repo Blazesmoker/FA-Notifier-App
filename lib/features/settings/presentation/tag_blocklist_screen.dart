@@ -1,6 +1,5 @@
 import 'package:FANotifier/features/settings/data/tag_blocklist_service.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -13,13 +12,6 @@ class TagBlocklistScreen extends StatefulWidget {
 }
 
 class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accountName: 'flutter_secure_storage_service',
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
-  );
-
   final TextEditingController _addController = TextEditingController();
   final Set<String> _tagToggleInFlight = <String>{};
 
@@ -58,7 +50,6 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
     setState(() => _loading = true);
     try {
       final parsed = await fetchTagBlocklist(
-        secureStorage: _secureStorage,
         sfwEnabled: _sfwEnabled,
       );
 
@@ -89,7 +80,6 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
     }
 
     await sendTagBlocklistRequest(
-      secureStorage: _secureStorage,
       sfwEnabled: _sfwEnabled,
       nonce: _nonce!,
       tagName: tagName,

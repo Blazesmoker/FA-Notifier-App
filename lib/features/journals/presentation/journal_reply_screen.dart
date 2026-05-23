@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_html/flutter_html.dart' as html;
 
 import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
@@ -37,13 +36,7 @@ class JournalReplyScreen extends StatefulWidget {
 
 class _JournalReplyScreenState extends State<JournalReplyScreen> {
   final TextEditingController _replyController = TextEditingController();
-
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accountName: 'flutter_secure_storage_service',
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
-  );
+  final JournalCommentService _commentService = JournalCommentService();
 
   bool _isSending = false;
 
@@ -68,10 +61,9 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
     setState(() => _isSending = true);
 
     try {
-      final success = await submitJournalReplyToComment(
-        secureStorage: _secureStorage,
+      final success = await _commentService.submitReplyToComment(
         message: replyText,
-        submissionId: widget.submissionId,
+        journalId: widget.submissionId,
         commentId: widget.commentId,
       );
 

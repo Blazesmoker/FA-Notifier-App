@@ -25,8 +25,15 @@ class ProfileGalleryPageData {
 }
 
 class ProfileGalleryService {
-  ProfileGalleryService({required FlutterSecureStorage secureStorage})
-      : _secureStorage = secureStorage;
+  ProfileGalleryService({
+    FlutterSecureStorage? secureStorage,
+  }) : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            );
 
   final FlutterSecureStorage _secureStorage;
 

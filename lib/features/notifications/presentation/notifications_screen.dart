@@ -9,9 +9,12 @@ import 'package:html/dom.dart' as dom;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/features/notifications/data/fa_activities_polling_service.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
+import 'package:FANotifier/features/notifications/data/notification_content_parser.dart';
 import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
+import 'package:FANotifier/features/profile/domain/profile_section.dart';
 import 'package:FANotifier/shared/utils/specialTextSpanBuilder.dart';
+import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
@@ -317,23 +320,6 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
     widget.service.setShoutCheckedById(s.id, val);
   }
 
-  /// Replaces <i class="smilie ..."></i> with bracket placeholders like [smilie-lmao]
-  String _preprocessFAEmojis(String rawHtml) {
-    // Look for e.g. <i class="smilie lmao"></i>
-    // and convert to [smilie-lmao].
-    final exp =
-        RegExp(r'<i\s+class="([^"]+)"[^>]*>(.*?)<\/i>', caseSensitive: false);
-    return rawHtml.replaceAllMapped(exp, (match) {
-      final classAttr = match.group(1) ?? '';
-      if (classAttr.startsWith('smilie ')) {
-        final placeholder = '[${classAttr.replaceAll(' ', '-')} ]';
-        // e.g. 'smilie lmao' -> '[smilie-lmao]'
-        return '[${classAttr.replaceAll(' ', '-')}]';
-      }
-      return match.group(0)!; // fallback to original if doesn't match
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -565,7 +551,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                             ),
                                           // The shout text
                                           ExtendedText(
-                                            _preprocessFAEmojis(s.textContent),
+                                            preprocessFAEmojis(s.textContent),
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
@@ -844,10 +830,9 @@ class NotificationSectionWidget extends StatelessWidget {
                                               ? const Offset(0, 0)
                                               : const Offset(0, 8),
                                           child: Html(
-                                            data: item.content.replaceAll(
-                                                RegExp(r'\btitled\b',
-                                                    caseSensitive: false),
-                                                ''),
+                                            data: stripNotificationTitledWord(
+                                              item.content,
+                                            ),
                                             style: {
                                               "a[href^='/user']": Style(
                                                 textDecoration:
@@ -880,50 +865,93 @@ class NotificationSectionWidget extends StatelessWidget {
                                                 Map<String, String> attributes,
                                                 dom.Element? element) {
                                               if (url != null) {
-                                                final uri = Uri.parse(url);
-                                                RegExp userRegex = RegExp(
-                                                    r'^/user/([^/]+)/?$');
-                                                RegExp journalRegex = RegExp(
-                                                    r'^/journal/(\d+)/.*$');
-                                                RegExp viewRegex =
-                                                    RegExp(r'^/view/(\d+)/.*$');
-                                                String path = uri.path;
-                                                if (userRegex.hasMatch(path)) {
-                                                  final username = userRegex
-                                                      .firstMatch(path)!
-                                                      .group(1)!;
-                                                  Navigator.push(
-                                                    context,
-                                                    UserProfileScreen.route(
-                                                        nickname: username),
-                                                  );
-                                                } else if (journalRegex
-                                                    .hasMatch(path)) {
-                                                  final journalId = journalRegex
-                                                      .firstMatch(path)!
-                                                      .group(1)!;
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) =>
-                                                          OpenJournal(
-                                                              uniqueNumber:
-                                                                  journalId),
-                                                    ),
-                                                  );
-                                                } else if (viewRegex
-                                                    .hasMatch(path)) {
-                                                  final submissionId = viewRegex
-                                                      .firstMatch(path)!
-                                                      .group(1)!;
-                                                  Navigator.push(
-                                                    context,
-                                                    OpenPost.route(
-                                                      uniqueNumber:
-                                                          submissionId,
-                                                      imageUrl: '',
-                                                    ),
-                                                  );
+                                                final target = matchFALink(url);
+                                                switch (target.type) {
+                                                  case FALinkTargetType.gallery:
+                                                    Navigator.push(
+                                                      context,
+                                                      UserProfileScreen.route(
+                                                        nickname:
+                                                            target.username!,
+                                                        initialSection:
+                                                            ProfileSection
+                                                                .Gallery,
+                                                      ),
+                                                    );
+                                                    return;
+                                                  case FALinkTargetType
+                                                        .galleryFolder:
+                                                    final tappedUsername =
+                                                        target.username!;
+                                                    final folderNumber =
+                                                        target.folderNumber!;
+                                                    final folderName =
+                                                        target.folderName!;
+                                                    final folderUrl =
+                                                        'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+                                                    Navigator.push(
+                                                      context,
+                                                      UserProfileScreen.route(
+                                                        nickname:
+                                                            tappedUsername,
+                                                        initialSection:
+                                                            ProfileSection
+                                                                .Gallery,
+                                                        initialFolderUrl:
+                                                            folderUrl,
+                                                        initialFolderName:
+                                                            folderName,
+                                                      ),
+                                                    );
+                                                    return;
+                                                  case FALinkTargetType.user:
+                                                    Navigator.push(
+                                                      context,
+                                                      UserProfileScreen.route(
+                                                        nickname:
+                                                            target.username!,
+                                                      ),
+                                                    );
+                                                    return;
+                                                  case FALinkTargetType
+                                                        .journalUser:
+                                                    Navigator.push(
+                                                      context,
+                                                      UserProfileScreen.route(
+                                                        nickname:
+                                                            target.username!,
+                                                        initialSection:
+                                                            ProfileSection
+                                                                .Journals,
+                                                      ),
+                                                    );
+                                                    return;
+                                                  case FALinkTargetType.journal:
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (context) =>
+                                                            OpenJournal(
+                                                          uniqueNumber:
+                                                              target.journalId!,
+                                                        ),
+                                                      ),
+                                                    );
+                                                    return;
+                                                  case FALinkTargetType
+                                                        .submission:
+                                                    Navigator.push(
+                                                      context,
+                                                      OpenPost.route(
+                                                        uniqueNumber: target
+                                                            .submissionId!,
+                                                        imageUrl: '',
+                                                      ),
+                                                    );
+                                                    return;
+                                                  case FALinkTargetType
+                                                        .external:
+                                                    return;
                                                 }
                                               }
                                             },

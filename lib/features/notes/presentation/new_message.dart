@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/features/notes/data/new_message_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
@@ -13,15 +12,7 @@ class NewMessageScreen extends StatelessWidget {
       : _recipientController = TextEditingController(text: recipient ?? ''),
         super(key: key);
 
-
-  final _newMessageService = NewMessageService(
-    secureStorage: const FlutterSecureStorage(
-      iOptions: IOSOptions(
-        accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock,
-      ),
-    ),
-  );
+  final _newMessageService = NewMessageService();
 
   Future<void> _sendMessage(BuildContext context) async {
     final result = await _newMessageService.sendMessage(

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:FANotifier/main.dart';
 import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
@@ -37,16 +36,9 @@ class NotesScreenState extends State<NotesScreen>
     with RouteAware, WidgetsBindingObserver, SingleTickerProviderStateMixin {
   static const Color _accent = Color(0xFFE09321);
 
-  final _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accountName: 'flutter_secure_storage_service',
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
-  );
-
   late final NotesApiService _notesApi;
   late final NoteUnreadService _noteUnreadService =
-      NoteUnreadService(secureStorage: _secureStorage);
+      NoteUnreadService();
   late final TabController _tabController;
 
   StreamSubscription<void>? _notesRefreshSub;
@@ -90,7 +82,7 @@ class NotesScreenState extends State<NotesScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    _notesApi = NotesApiService(_secureStorage);
+    _notesApi = NotesApiService();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
 

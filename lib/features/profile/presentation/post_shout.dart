@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/features/profile/data/shout_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
@@ -16,9 +15,6 @@ class PostShoutScreen extends StatefulWidget {
 
 class _PostShoutScreenState extends State<PostShoutScreen> {
   final TextEditingController _shoutController = TextEditingController();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock));
   late final ShoutService _shoutService;
 
   int _currentLength = 0;
@@ -29,7 +25,7 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
   @override
   void initState() {
     super.initState();
-    _shoutService = ShoutService(secureStorage: _secureStorage);
+    _shoutService = ShoutService();
     _shoutService.initialize();
     _shoutController.addListener(() {
       // Only update when TEXT changes, not selection

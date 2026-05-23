@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/features/profile/data/user_description_parser.dart';
 import 'package:FANotifier/features/profile/data/user_description_service.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
@@ -39,13 +38,8 @@ class UserDescriptionWebView extends StatefulWidget {
 
 class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     with AutomaticKeepAliveClientMixin<UserDescriptionWebView> {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-        accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock),
-  );
   late final UserDescriptionService _userDescriptionService =
-      UserDescriptionService(secureStorage: _secureStorage);
+      UserDescriptionService();
   late Future<String> _userDescriptionFuture;
   InAppWebViewController? _controller;
   final Set<UserDescriptionWebViewPauseReason> _pauseReasons =

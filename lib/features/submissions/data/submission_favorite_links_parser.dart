@@ -83,3 +83,9 @@ SubmissionFavoriteLinks parseSubmissionFavoriteLinksFromDocument(
 
   return SubmissionFavoriteLinks(favUrl: favUrl, unfavUrl: unfavUrl);
 }
+
+String toRelativeFavoriteUrl(String url) {
+  if (url.isEmpty || !url.startsWith('http')) return url;
+  final uri = Uri.parse(url);
+  return uri.path + (uri.hasQuery ? '?${uri.query}' : '');
+}

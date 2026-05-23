@@ -5,15 +5,12 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter/scheduler.dart';
-import 'package:html/dom.dart' as dom;
 import 'package:FANotifier/features/notes/presentation/reply_screen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart';
 import 'package:FANotifier/shared/fa/network.dart';
-import 'package:html/parser.dart' as html_parser;
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:saver_gallery/saver_gallery.dart';
@@ -24,13 +21,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/app/app_theme.dart';
 import 'package:FANotifier/main.dart';
 import 'package:FANotifier/shared/fa/parsing_utils.dart';
-import 'package:FANotifier/core/utils/html_tags_debug.dart';
+import 'package:FANotifier/shared/fa/fa_username.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/submissions/data/post_comment_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_action_service.dart';
+import 'package:FANotifier/features/submissions/data/openpost_cookie_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_image_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_link_parser.dart';
+import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
+import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
 import 'package:FANotifier/features/submissions/presentation/SubmissionDescriptionWebview.dart';
 import 'package:FANotifier/features/submissions/presentation/add_post_comment_screen.dart';
 import 'package:FANotifier/features/profile/presentation/avatardownloadscreen.dart';
@@ -47,6 +47,7 @@ import 'package:FANotifier/features/profile/presentation/user_profile_screen.dar
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost_comments.dart';
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
+import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
 import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.dart';
 
 class _TransparentOpenPostPageRoute<T> extends PageRoute<T> {
@@ -164,12 +165,10 @@ class _OpenPostState extends State<OpenPost>
   int viewCount = 0;
   int commentsCount = 0;
   List<Map<String, dynamic>> comments = [];
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-        accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock),
-  );
   late final OpenPostActionService _openPostActionService;
+  final OpenPostCookieService _openPostCookieService =
+      const OpenPostCookieService();
+  late final PostCommentService _postCommentService;
   final OpenPostImageService _openPostImageService =
       const OpenPostImageService();
   final TextEditingController _commentController = TextEditingController();
@@ -260,9 +259,8 @@ class _OpenPostState extends State<OpenPost>
   @override
   void initState() {
     super.initState();
-    _openPostActionService = OpenPostActionService(
-      secureStorage: _secureStorage,
-    );
+    _openPostActionService = const OpenPostActionService();
+    _postCommentService = PostCommentService();
     DetachableWebViewRouteRegistry.register(this);
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
@@ -549,17 +547,11 @@ class _OpenPostState extends State<OpenPost>
     Map<String, String>? additionalHeaders,
     bool skipSfw = false,
   }) async {
-    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-    String cookieHeader = '';
-    if (cookieA != null && cookieB != null) {
-      cookieHeader = 'a=$cookieA; b=$cookieB';
-    }
-
-    if (!skipSfw && _sfwEnabled && !_nsfwAllowed) {
-      cookieHeader += '; sfw=1';
-    }
+    final cookieHeader = await _openPostCookieService.buildCookieHeader(
+      sfwEnabled: _sfwEnabled,
+      nsfwAllowed: _nsfwAllowed,
+      skipSfw: skipSfw,
+    );
 
     debugPrint('Cookie header being sent: $cookieHeader');
 
@@ -577,80 +569,38 @@ class _OpenPostState extends State<OpenPost>
     final ct = (response.headers['content-type'] ?? '').toLowerCase();
     if (response.statusCode == 200 &&
         (ct.contains('text/html') || ct.contains('application/xhtml'))) {
-      String decodedBody;
-      try {
-        decodedBody = utf8.decode(response.bodyBytes);
-      } on FormatException {
-        try {
-          decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-        } catch (_) {
-          decodedBody = latin1.decode(response.bodyBytes, allowInvalid: true);
-        }
-      }
+      final decodedBody = decodeOpenPostResponseBody(response.bodyBytes);
 
-      final document = html_parser.parse(decodedBody);
-
-      final allSections = document.querySelectorAll('section');
-      for (var section in allSections) {
-        final header = section.querySelector('.section-header h2') ??
-            section.querySelector('h2');
-        final body = section.querySelector('.section-body');
-
-        if (header != null && body != null) {
-          final headerText = header.text.toLowerCase().trim();
-          final bodyText = body.text.toLowerCase().trim();
-
-          if (headerText.contains('system error') &&
-              bodyText.contains('not in our database')) {
-            debugPrint('DETECTED: Submission not found error');
-            throw Exception("Submission not found in database");
-          }
-        }
+      if (hasSubmissionNotFoundError(decodedBody)) {
+        debugPrint('DETECTED: Submission not found error');
+        throw Exception("Submission not found in database");
       }
 
       if (!skipSfw) {
-        final noticeSection = document.querySelector('section.notice-message');
+        if (hasMatureContentWarning(decodedBody) && !_nsfwAllowed) {
+          debugPrint(
+              'DETECTED: Mature/Adult content warning - showing dialog');
 
-        if (noticeSection != null) {
-          final noticeText = noticeSection.text.toLowerCase().trim();
+          final userAgreed = await _showNSFWConfirmationDialog();
+          debugPrint('User response: $userAgreed');
 
-          final isMatureWarning =
-              (noticeText.contains('mature') || noticeText.contains('adult')) &&
-                  (noticeText.contains('rated') ||
-                      noticeText.contains('content')) &&
-                  (noticeText.contains('account settings') ||
-                      noticeText.contains('log in') ||
-                      noticeText.contains('enable'));
-
-          if (isMatureWarning && !_nsfwAllowed) {
-            debugPrint(
-                'DETECTED: Mature/Adult content warning - showing dialog');
-
-            final userAgreed = await _showNSFWConfirmationDialog();
-            debugPrint('User response: $userAgreed');
-
-            if (userAgreed) {
-              setState(() => _nsfwAllowed = true);
-              debugPrint('Retrying request with NSFW allowed');
-              final retryResponse = await _getWithSfwCookie(
-                url,
-                additionalHeaders: additionalHeaders,
-                skipSfw: true,
-              );
-              debugPrint('Retry response status: ${retryResponse.statusCode}');
-              return retryResponse;
-            } else {
-              debugPrint('User declined NSFW content');
-              throw Exception("User declined to view NSFW content.");
-            }
+          if (userAgreed) {
+            setState(() => _nsfwAllowed = true);
+            debugPrint('Retrying request with NSFW allowed');
+            final retryResponse = await _getWithSfwCookie(
+              url,
+              additionalHeaders: additionalHeaders,
+              skipSfw: true,
+            );
+            debugPrint('Retry response status: ${retryResponse.statusCode}');
+            return retryResponse;
+          } else {
+            debugPrint('User declined NSFW content');
+            throw Exception("User declined to view NSFW content.");
           }
         }
 
-        final body = document.querySelector('body');
-        final isOldMatureError =
-            body?.attributes['id'] == 'pageid-matureimage-error';
-
-        if (isOldMatureError && !_nsfwAllowed) {
+        if (hasOldMatureImageError(decodedBody) && !_nsfwAllowed) {
           debugPrint('DETECTED: Old style mature error - showing dialog');
           final userAgreed = await _showNSFWConfirmationDialog();
           if (userAgreed) {
@@ -722,72 +672,19 @@ class _OpenPostState extends State<OpenPost>
       }
       final document = await compute(parseHtml, decodedBody);
 
-      final isClassic = document
-              .querySelector('body')
-              ?.attributes['data-static-path']
-              ?.contains('themes/classic') ??
-          false;
-
-      dom.Element? watchLinkElement;
-      dom.Element? unwatchLinkElement;
-      dom.Element? blockLinkElement;
-      dom.Element? unblockLinkElement;
-      String? blockKey;
-      String? unblockKey;
-
-      if (!isClassic) {
-        watchLinkElement =
-            logQuery(document, 'a.button.standard.go[href^="/watch/"]');
-        unwatchLinkElement =
-            logQuery(document, 'a.button.standard.stop[href^="/unwatch/"]');
-        blockLinkElement =
-            logQuery(document, 'a.button.standard.stop[href^="/block/"]');
-        unblockLinkElement =
-            logQuery(document, 'a.button.standard.stop[href^="/unblock/"]');
-
-        watchLinkElement ??= logQuery(document, 'a.cat[href^="/watch/"]');
-        unwatchLinkElement ??= logQuery(document, 'a.cat[href^="/unwatch/"]');
-        blockLinkElement ??= logQuery(document, 'a.cat[href^="/block/"]');
-        unblockLinkElement ??= logQuery(document, 'a.cat[href^="/unblock/"]');
-      } else {
-        watchLinkElement = logQuery(document, 'b > a[href^="/watch/"]');
-        unwatchLinkElement = logQuery(document, 'b > a[href^="/unwatch/"]');
-
-        final blockForm = document.querySelector('form[action^="/block/"]');
-        if (blockForm != null) {
-          final blockButton = blockForm.querySelector('button');
-          if (blockButton != null &&
-              blockButton.text.trim().contains('+Block')) {
-            blockLinkElement = dom.Element.tag('a');
-            blockLinkElement.attributes['href'] =
-                blockForm.attributes['action']!;
-            blockKey = blockButton.attributes['value'];
-          }
-        }
-        final unblockForm = document.querySelector('form[action^="/unblock/"]');
-        if (unblockForm != null) {
-          final unblockButton = unblockForm.querySelector('button');
-          if (unblockButton != null &&
-              unblockButton.text.trim().contains('-Unblock')) {
-            unblockLinkElement = dom.Element.tag('a');
-            unblockLinkElement.attributes['href'] =
-                unblockForm.attributes['action']!;
-            unblockKey = unblockButton.attributes['value'];
-          }
-        }
-      }
+      final actions = parseOpenPostUserPageActions(document);
 
       setState(() {
-        watchLink = watchLinkElement?.attributes['href'];
-        unwatchLink = unwatchLinkElement?.attributes['href'];
-        blockLink = blockLinkElement?.attributes['href'];
-        unblockLink = unblockLinkElement?.attributes['href'];
-        _blockKey = blockKey;
-        _unblockKey = unblockKey;
-        _isClassicUserPage = isClassic;
+        watchLink = actions.watchLink;
+        unwatchLink = actions.unwatchLink;
+        blockLink = actions.blockLink;
+        unblockLink = actions.unblockLink;
+        _blockKey = actions.blockKey;
+        _unblockKey = actions.unblockKey;
+        _isClassicUserPage = actions.isClassic;
 
-        isWatching = (unwatchLinkElement != null);
-        isBlocked = (unblockLinkElement != null);
+        isWatching = actions.isWatching;
+        isBlocked = actions.isBlocked;
       });
     } else {
       debugPrint('Failed to fetch user page links: ${response.statusCode}');
@@ -1329,11 +1226,7 @@ class _OpenPostState extends State<OpenPost>
   }
 
   Future<void> _fetchFavoriteLinks() async {
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-
-    // If not logged in, skip
-    if (cookieA == null || cookieB == null) {
+    if (!await _openPostCookieService.hasAuthCookies()) {
       return;
     }
 
@@ -1348,23 +1241,18 @@ class _OpenPostState extends State<OpenPost>
         decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
       }
       final document = await compute(parseHtml, decodedBody);
-
-      // Modern (beta) style
-      var favLinkElement = logQuery(document, '.favorite-nav a[href^="/fav/"]');
-      var unfavLinkElement =
-          logQuery(document, '.favorite-nav a[href^="/unfav/"]');
-
-      // Classic fallback
-      if (favLinkElement == null) {
-        favLinkElement = logQuery(document, 'a[href^="/fav/"].button');
-      }
-      if (unfavLinkElement == null) {
-        unfavLinkElement = logQuery(document, 'a[href^="/unfav/"].button');
-      }
+      final favoriteLinks = parseSubmissionFavoriteLinksFromDocument(
+        document,
+        includeClassicFallback: true,
+      );
 
       setState(() {
-        favLink = favLinkElement?.attributes['href'];
-        unfavLink = unfavLinkElement?.attributes['href'];
+        favLink = favoriteLinks.hasFavUrl
+            ? toRelativeFavoriteUrl(favoriteLinks.favUrl)
+            : null;
+        unfavLink = favoriteLinks.hasUnfavUrl
+            ? toRelativeFavoriteUrl(favoriteLinks.unfavUrl)
+            : null;
         isFavorited = (unfavLink != null);
       });
     } else {
@@ -1375,9 +1263,7 @@ class _OpenPostState extends State<OpenPost>
   Future<void> _fetchPostDetails() async {
     setState(() => isLoading = true);
 
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    if (cookieA == null || cookieB == null) {
+    if (!await _openPostCookieService.hasAuthCookies()) {
       setState(() => isLoading = false);
       return;
     }
@@ -1419,29 +1305,20 @@ class _OpenPostState extends State<OpenPost>
       // Parse the document from the CORRECT response (after retry if needed)
       final document = await compute(parseHtml, decodedBody);
 
-      // Double-check: make sure we didn't get an error page
-      final noticeSection = document.querySelector('section.notice-message');
-      if (noticeSection != null) {
-        final noticeText = noticeSection.text.toLowerCase().trim();
-        final isMatureWarning = (noticeText.contains('mature') ||
-                noticeText.contains('adult')) &&
-            (noticeText.contains('rated') || noticeText.contains('content'));
-
-        if (isMatureWarning) {
-          debugPrint(
-              'ERROR: Still got mature warning after retry - this should not happen');
-          setState(() => isLoading = false);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Failed to load NSFW content'),
-                backgroundColor: Colors.red,
-              ),
-            );
-            Navigator.of(context).pop();
-          }
-          return;
+      if (hasMatureRatingNotice(document)) {
+        debugPrint(
+            'ERROR: Still got mature warning after retry - this should not happen');
+        setState(() => isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to load NSFW content'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          Navigator.of(context).pop();
         }
+        return;
       }
 
       final parsedPost = OpenPostApiService.parsePostDocument(document);
@@ -1787,44 +1664,14 @@ class _OpenPostState extends State<OpenPost>
 
   void _parsePublicationTime(String rawTime) {
     try {
-      rawTime = rawTime.trim();
-
-      try {
-        // Correct format for "August 7, 2025 09:26:21 PM"
-        final format = DateFormat('MMMM d, yyyy hh:mm:ss a');
-        DateTime naiveDateTime = format.parse(rawTime);
-        if (isDstCorrectionApplied) {
-          naiveDateTime = naiveDateTime.subtract(const Duration(hours: 1));
-        }
-        publicationTime = naiveDateTime.toUtc();
+      final parsed = parseSubmissionPublicationTime(
+        rawTime,
+        applyDstCorrection: isDstCorrectionApplied,
+      );
+      if (parsed != null) {
+        publicationTime = parsed;
         debugPrint("Successfully parsed FA date: $publicationTime");
         return;
-      } catch (e) {
-        debugPrint("Failed to parse with primary format: $e");
-      }
-
-      // fallback formats
-      List<DateFormat> fallbackFormats = [
-        DateFormat('MMM d, yyyy hh:mm:ss a'),
-        DateFormat('MMM d, yyyy HH:mm:ss'),
-        DateFormat('MMM d, yyyy hh:mm a'),
-        DateFormat('MMM d, yyyy HH:mm'),
-        DateFormat('yyyy-MM-dd HH:mm:ss'),
-      ];
-
-      for (var format in fallbackFormats) {
-        try {
-          DateTime naiveDateTime = format.parse(rawTime);
-          if (isDstCorrectionApplied) {
-            naiveDateTime = naiveDateTime.subtract(const Duration(hours: 1));
-          }
-          publicationTime = naiveDateTime.toUtc();
-          debugPrint(
-              "Successfully parsed with fallback format: $publicationTime");
-          return;
-        } catch (e) {
-          // continue
-        }
       }
 
       debugPrint(
@@ -1929,8 +1776,7 @@ class _OpenPostState extends State<OpenPost>
     _isSendingInlineComment.value = true;
 
     try {
-      final success = await submitPostCommentOrReply(
-        secureStorage: _secureStorage,
+      final success = await _postCommentService.submitComment(
         message: commentText,
         submissionId: widget.uniqueNumber,
       );
@@ -2200,106 +2046,83 @@ class _OpenPostState extends State<OpenPost>
     return findFullShortenedCommentLink(commentHtml, truncatedUrl);
   }
 
+  String _getFullLinkFromCommentSource(String truncatedUrl,
+      {String? htmlSource}) {
+    if (htmlSource == null) return truncatedUrl;
+    return _getFullLinkFromCommentHtml(htmlSource, truncatedUrl) ??
+        truncatedUrl;
+  }
+
   /// Handles FA links found in comments.
   Future<void> _handleCommentLink(
       BuildContext context, String url, String commentHtml) async {
-    // If the URL appears truncated, tries to recover the full URL
-    if (url.contains(".....")) {
-      final recoveredUrl = _getFullLinkFromCommentHtml(commentHtml, url);
-      if (recoveredUrl != null && recoveredUrl.isNotEmpty) {
-        url = recoveredUrl;
-      }
-    }
+    final fullUrl = url.contains(".....")
+        ? _getFullLinkFromCommentSource(url, htmlSource: commentHtml)
+        : url;
+    final target = matchFALink(fullUrl);
 
-    final Uri uri = Uri.parse(url);
-    final String urlToMatch = uri.toString();
-
-    // 1. Gallery Folder Link
-    final RegExp galleryFolderRegex = RegExp(
-      r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
-    );
-    if (galleryFolderRegex.hasMatch(urlToMatch)) {
-      final match = galleryFolderRegex.firstMatch(urlToMatch)!;
-      final String tappedUsername = match.group(1)!;
-      final String folderNumber = match.group(2)!;
-      final String folderName = match.group(3)!;
-      final String folderUrl =
-          'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
-      Navigator.push(
-        context,
-        UserProfileScreen.route(
-          nickname: tappedUsername,
-          initialSection: ProfileSection.Gallery,
-          initialFolderUrl: folderUrl,
-          initialFolderName: folderName,
-        ),
-      );
-      return;
-    }
-
-    // 2. User Link
-    final RegExp userRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$',
-    );
-    if (userRegex.hasMatch(urlToMatch)) {
-      final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        UserProfileScreen.route(nickname: tappedUsername),
-      );
-      return;
-    }
-
-    // 3. Journal Link:
-    final RegExp journalRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
-    );
-
-    if (journalRegex.hasMatch(urlToMatch)) {
-      final Match match = journalRegex.firstMatch(urlToMatch)!;
-      final String? username = match.group(1);
-      final String? journalId = match.group(2);
-
-      if (username != null) {
-        // Matched: /journals/username/
+    switch (target.type) {
+      case FALinkTargetType.gallery:
         Navigator.push(
           context,
           UserProfileScreen.route(
-            nickname: username,
+            nickname: target.username!,
+            initialSection: ProfileSection.Gallery,
+          ),
+        );
+        return;
+      case FALinkTargetType.galleryFolder:
+        final tappedUsername = target.username!;
+        final folderNumber = target.folderNumber!;
+        final folderName = target.folderName!;
+        final folderUrl =
+            'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+        Navigator.push(
+          context,
+          UserProfileScreen.route(
+            nickname: tappedUsername,
+            initialSection: ProfileSection.Gallery,
+            initialFolderUrl: folderUrl,
+            initialFolderName: folderName,
+          ),
+        );
+        return;
+      case FALinkTargetType.user:
+        Navigator.push(
+          context,
+          UserProfileScreen.route(nickname: target.username!),
+        );
+        return;
+      case FALinkTargetType.journalUser:
+        Navigator.push(
+          context,
+          UserProfileScreen.route(
+            nickname: target.username!,
             initialSection: ProfileSection.Journals,
           ),
         );
-      } else if (journalId != null) {
-        // Matched: /journal/12345/
+        return;
+      case FALinkTargetType.journal:
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => OpenJournal(uniqueNumber: journalId),
+            builder: (context) => OpenJournal(uniqueNumber: target.journalId!),
           ),
         );
-      }
-
-      return;
+        return;
+      case FALinkTargetType.submission:
+        Navigator.push(
+          context,
+          OpenPost.route(
+            uniqueNumber: target.submissionId!,
+            imageUrl: '',
+          ),
+        );
+        return;
+      case FALinkTargetType.external:
+        await launchUrlString(fullUrl, mode: LaunchMode.externalApplication);
+        return;
     }
-
-    // 4. Submission/View Link
-    final RegExp viewRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$',
-    );
-    if (viewRegex.hasMatch(urlToMatch)) {
-      final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        OpenPost.route(
-          uniqueNumber: submissionId,
-          imageUrl: '',
-        ),
-      );
-      return;
-    }
-
-    // 5. Fallback: open externally
-    await launchUrlString(url, mode: LaunchMode.externalApplication);
   }
 
   void _showEditDialog() {
@@ -2448,10 +2271,9 @@ class _OpenPostState extends State<OpenPost>
   }
 
   Future<bool> _toggleFavorite(bool isLiked) async {
-    // Normalize the usernames by removing any leading '~' or '@' symbols.
     String normalizedCurrent =
-        (currentUsername ?? '').replaceAll(RegExp(r'^[~@]'), '');
-    String normalizedPost = (username ?? '').replaceAll(RegExp(r'^[~@]'), '');
+        normalizeFAUsernameForComparison(currentUsername);
+    String normalizedPost = normalizeFAUsernameForComparison(username);
 
     if (normalizedCurrent == normalizedPost) {
       ScaffoldMessenger.of(context).showSnackBar(

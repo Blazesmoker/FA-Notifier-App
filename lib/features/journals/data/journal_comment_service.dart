@@ -6,6 +6,44 @@ import 'package:http/http.dart' as http;
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 
+class JournalCommentService {
+  JournalCommentService({
+    FlutterSecureStorage? secureStorage,
+  }) : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            );
+
+  final FlutterSecureStorage _secureStorage;
+
+  Future<bool> submitComment({
+    required String message,
+    required String journalId,
+  }) {
+    return submitJournalCommentOrReply(
+      secureStorage: _secureStorage,
+      message: message,
+      journalId: journalId,
+    );
+  }
+
+  Future<bool> submitReplyToComment({
+    required String message,
+    required String journalId,
+    required String commentId,
+  }) {
+    return submitJournalReplyToComment(
+      secureStorage: _secureStorage,
+      message: message,
+      submissionId: journalId,
+      commentId: commentId,
+    );
+  }
+}
+
 Future<bool> submitJournalCommentOrReply({
   required FlutterSecureStorage secureStorage,
   required String message,

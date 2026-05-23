@@ -5,6 +5,52 @@ import 'package:http/http.dart' as http;
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 
+String extractClassicSubmissionCommentReplyId(String input) {
+  final regex = RegExp(r'/replyto/submission/(\d+)/');
+  final match = regex.firstMatch(input);
+  return match != null ? match.group(1)! : input;
+}
+
+class PostCommentService {
+  PostCommentService({
+    FlutterSecureStorage? secureStorage,
+  }) : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            );
+
+  final FlutterSecureStorage _secureStorage;
+
+  Future<bool> submitComment({
+    required String message,
+    required String submissionId,
+  }) {
+    return submitPostCommentOrReply(
+      secureStorage: _secureStorage,
+      message: message,
+      submissionId: submissionId,
+    );
+  }
+
+  Future<bool> submitReply({
+    required String message,
+    required String submissionId,
+    required String? commentId,
+    required bool isClassic,
+  }) {
+    return submitSubmissionReply(
+      secureStorage: _secureStorage,
+      message: message,
+      submissionId: submissionId,
+      commentId: commentId,
+      isClassic: isClassic,
+    );
+  }
+}
+
 Future<bool> submitPostCommentOrReply({
   required FlutterSecureStorage secureStorage,
   required String message,

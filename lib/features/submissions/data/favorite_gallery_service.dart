@@ -1,8 +1,9 @@
 // favorite_gallery_service.dart
 
 import 'dart:async';
-import 'package:http/http.dart' as http;
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 
@@ -16,6 +17,23 @@ class FavoriteGalleryService {
 
   factory FavoriteGalleryService() => _instance;
 
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(
+    iOptions: IOSOptions(
+      accountName: 'flutter_secure_storage_service',
+      accessibility: KeychainAccessibility.first_unlock,
+    ),
+  );
+
+  /// Returns false when FA auth cookies are missing.
+  Future<bool> hasAuthCookies() async {
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    return cookieA != null &&
+        cookieA.isNotEmpty &&
+        cookieB != null &&
+        cookieB.isNotEmpty;
+  }
+
   /// Stores debounce timers for each submission's "toggle" action.
   final Map<String, Timer> _debounceTimers = {};
 
@@ -23,8 +41,18 @@ class FavoriteGalleryService {
   final Map<String, bool> _pendingFavStates = {};
 
   /// Executes a POST request with retries every 3 seconds, up to 5 tries.
-  Future<void> executePostWithRetry(String url, String cookieA, String cookieB) async {
+  Future<void> executePostWithRetry(String url) async {
     debugPrint('[FAV SERVICE] Starting executePostWithRetry => $url');
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    if (cookieA == null ||
+        cookieA.isEmpty ||
+        cookieB == null ||
+        cookieB.isEmpty) {
+      debugPrint('[FAV SERVICE] Missing auth cookies for POST request.');
+      return;
+    }
+
     int attempts = 0;
     const maxAttempts = 5;
     while (attempts < maxAttempts) {
@@ -65,8 +93,6 @@ class FavoriteGalleryService {
     required bool isFav,
     required String? favUrl,
     required String? unfavUrl,
-    required String cookieA,
-    required String cookieB,
     void Function(String uniqueNumber, bool finalState)? onPostComplete,
   }) {
     debugPrint('[FAV SERVICE] toggleFavorite($uniqueNumber, isFav=$isFav)');
@@ -95,7 +121,7 @@ class FavoriteGalleryService {
 
       debugPrint('[FAV SERVICE] Debounce ended => POSTing $urlToUse');
 
-      await executePostWithRetry(urlToUse, cookieA, cookieB);
+      await executePostWithRetry(urlToUse);
 
 
       if (onPostComplete != null) {

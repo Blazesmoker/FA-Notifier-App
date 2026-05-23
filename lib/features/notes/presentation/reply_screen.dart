@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_html/flutter_html.dart' as html;
 
 import 'package:FANotifier/features/submissions/data/post_comment_service.dart';
-import 'package:FANotifier/features/submissions/domain/submission_comment_reply_target.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 
@@ -27,14 +25,8 @@ class ReplyScreen extends StatefulWidget {
 
 class _ReplyScreenState extends State<ReplyScreen> {
   final TextEditingController _replyController = TextEditingController();
+  final PostCommentService _commentService = PostCommentService();
   bool _isSending = false;
-
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accountName: 'flutter_secure_storage_service',
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
-  );
 
   void _sendReply() async {
     final replyText = _replyController.text.trim();
@@ -52,8 +44,7 @@ class _ReplyScreenState extends State<ReplyScreen> {
     }
 
     try {
-      final success = await submitSubmissionReply(
-        secureStorage: _secureStorage,
+      final success = await _commentService.submitReply(
         message: replyText,
         commentId: replyId,
         submissionId: widget.uniqueNumber,

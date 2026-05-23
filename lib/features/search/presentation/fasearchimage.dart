@@ -1,7 +1,6 @@
 // lib/fasearchimage.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/features/search/data/search_image_parser.dart';
 import 'package:FANotifier/features/search/data/search_image_service.dart';
@@ -43,12 +42,6 @@ class FASearchImageState extends State<FASearchImage> {
   List<Map<String, dynamic>> normalImagesQueue = [];
   final Set<String> imageUrls = <String>{};
   final ScrollController _scrollController = ScrollController();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accountName: 'flutter_secure_storage_service',
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
-  );
   final FavoriteService _favoriteService = FavoriteService();
   late final SearchImageService _searchImageService;
   final SubmissionFavoriteDetailsService _favoriteDetailsService =
@@ -71,7 +64,7 @@ class FASearchImageState extends State<FASearchImage> {
   @override
   void initState() {
     super.initState();
-    _searchImageService = SearchImageService(secureStorage: _secureStorage);
+    _searchImageService = SearchImageService();
     _sfwLoadFuture = _loadSfwEnabled();
     _fetchImages(currentPage);
     _scrollController.addListener(_scrollListener);

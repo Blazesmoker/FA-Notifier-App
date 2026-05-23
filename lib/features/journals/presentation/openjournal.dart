@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -47,13 +46,9 @@ class _OpenJournalState extends State<OpenJournal>
   String? publicationTimeRaw;
   int commentsCount = 0;
   List<Map<String, dynamic>> comments = [];
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-        accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock),
-  );
   late final OpenJournalApiService _api;
   late final JournalActionService _journalActionService;
+  late final JournalCommentService _journalCommentService;
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _commentFocusNode = FocusNode();
   bool _commentComposerFocusRequestedByUser = false;
@@ -137,10 +132,9 @@ class _OpenJournalState extends State<OpenJournal>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateKeyboardInset();
     });
-    _api = OpenJournalApiService(_secureStorage);
-    _journalActionService = JournalActionService(
-      secureStorage: _secureStorage,
-    );
+    _api = OpenJournalApiService();
+    _journalActionService = const JournalActionService();
+    _journalCommentService = JournalCommentService();
     // Only fetch the journal itself on open.
     // Extra "helper" fetches (user-page links, delete key) are done *on-demand*
     // when the user taps the relevant action, to avoid spammy requests.
@@ -784,8 +778,7 @@ class _OpenJournalState extends State<OpenJournal>
     _isSendingInlineComment.value = true;
 
     try {
-      final success = await submitJournalCommentOrReply(
-        secureStorage: _secureStorage,
+      final success = await _journalCommentService.submitComment(
         message: commentText,
         journalId: widget.uniqueNumber,
       );

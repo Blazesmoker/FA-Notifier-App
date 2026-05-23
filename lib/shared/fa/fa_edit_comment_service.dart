@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
@@ -67,6 +68,93 @@ class FaEditCommentService {
       logFormDebug: logFormDebug,
     );
   }
+}
+
+class AuthenticatedFaEditCommentService {
+  AuthenticatedFaEditCommentService({
+    FlutterSecureStorage? secureStorage,
+    FaEditCommentService? editCommentService,
+  })  : _secureStorage = secureStorage ??
+            FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            ),
+        _editCommentService = editCommentService ?? FaEditCommentService();
+
+  final FlutterSecureStorage _secureStorage;
+  final FaEditCommentService _editCommentService;
+
+  void close() {
+    _editCommentService.close();
+  }
+
+  Future<EditCommentLoadResult> loadEditCommentText({
+    required String editLink,
+  }) async {
+    final cookies = await _readCookies();
+    if (cookies == null) {
+      return const EditCommentLoadResult(
+        errorMessage: 'Authentication cookies are missing.',
+      );
+    }
+
+    return _editCommentService.loadEditCommentText(
+      editLink: editLink,
+      cookieA: cookies.cookieA,
+      cookieB: cookies.cookieB,
+    );
+  }
+
+  Future<EditCommentSubmitResult> submitEditComment({
+    required String editLink,
+    required String updatedText,
+    required bool requireFValue,
+    required bool includeFValue,
+    bool logFormDebug = false,
+  }) async {
+    final cookies = await _readCookies();
+    if (cookies == null) {
+      return const EditCommentSubmitResult(
+        success: false,
+        errorMessage: 'Authentication cookies are missing.',
+      );
+    }
+
+    return _editCommentService.submitEditComment(
+      editLink: editLink,
+      cookieA: cookies.cookieA,
+      cookieB: cookies.cookieB,
+      updatedText: updatedText,
+      requireFValue: requireFValue,
+      includeFValue: includeFValue,
+      logFormDebug: logFormDebug,
+    );
+  }
+
+  Future<_FaEditCommentCookies?> _readCookies() async {
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    if (cookieA == null || cookieB == null) {
+      return null;
+    }
+
+    return _FaEditCommentCookies(
+      cookieA: cookieA,
+      cookieB: cookieB,
+    );
+  }
+}
+
+class _FaEditCommentCookies {
+  const _FaEditCommentCookies({
+    required this.cookieA,
+    required this.cookieB,
+  });
+
+  final String cookieA;
+  final String cookieB;
 }
 
 Future<EditCommentLoadResult> loadEditCommentTextWithClient({

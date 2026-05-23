@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:FANotifier/shared/fa/fa_webview_cookie_service.dart';
@@ -25,10 +24,6 @@ class CreateJournalScreen extends StatefulWidget {
 
 class _CreateJournalScreenState extends State<CreateJournalScreen>
     with AutomaticKeepAliveClientMixin {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-      iOptions: IOSOptions(
-          accountName: 'flutter_secure_storage_service',
-          accessibility: KeychainAccessibility.first_unlock));
   late final FAWebViewCookieService _webViewCookieService;
   late final String initialUrl;
   final String finalizeUrlPrefix = 'https://www.furaffinity.net/journal/';
@@ -52,9 +47,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
   @override
   void initState() {
     super.initState();
-    _webViewCookieService = FAWebViewCookieService(
-      secureStorage: _secureStorage,
-    );
+    _webViewCookieService = const FAWebViewCookieService();
 
     if (widget.uniqueNumber != null) {
       initialUrl =

@@ -4,8 +4,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class FAWebViewCookieService {
   const FAWebViewCookieService({
-    required FlutterSecureStorage secureStorage,
-  }) : _secureStorage = secureStorage;
+    FlutterSecureStorage? secureStorage,
+  }) : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            );
 
   final FlutterSecureStorage _secureStorage;
 

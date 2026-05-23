@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:FANotifier/features/profile/data/profile_journals_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -23,14 +22,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
   int _fetchGeneration = 0;
 
   final ProfileJournalsService _profileJournalsService =
-      ProfileJournalsService(
-    secureStorage: const FlutterSecureStorage(
-      iOptions: IOSOptions(
-        accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock,
-      ),
-    ),
-  );
+      ProfileJournalsService();
 
   @override
   void initState() {

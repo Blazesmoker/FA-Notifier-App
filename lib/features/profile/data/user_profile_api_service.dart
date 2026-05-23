@@ -11,6 +11,7 @@ import 'package:FANotifier/features/profile/domain/user_link.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_username.dart';
 
 class UserProfileParsed {
   UserProfileParsed({
@@ -231,13 +232,20 @@ class ResolvedControlsShout {
 }
 
 class UserProfileApiService {
-  UserProfileApiService(this._secureStorage);
+  UserProfileApiService({
+    FlutterSecureStorage? secureStorage,
+  }) : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            );
 
   final FlutterSecureStorage _secureStorage;
-  final RegExp _usernameSanitizeRegex = RegExp(r'[^a-zA-Z0-9_.~-]');
 
   String _sanitizeUsername(String username) {
-    return username.replaceAll(_usernameSanitizeRegex, '').toLowerCase();
+    return sanitizeFAUsername(username);
   }
 
   Future<UserProfileFetchPayload> fetchProfile({

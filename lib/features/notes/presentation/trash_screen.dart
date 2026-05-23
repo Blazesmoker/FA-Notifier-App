@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/features/notes/presentation/message_detail_screen.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
 import 'package:FANotifier/features/notes/data/notesscreen_api_service.dart';
@@ -19,13 +18,6 @@ class TrashScreen extends StatefulWidget {
 
 class TrashScreenState extends State<TrashScreen> {
   static const Color _accent = Color(0xFFE09321);
-
-  final _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accountName: 'flutter_secure_storage_service',
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
-  );
 
   late final NotesApiService _notesApi;
   final ScrollController _scrollController = ScrollController();
@@ -49,7 +41,7 @@ class TrashScreenState extends State<TrashScreen> {
   @override
   void initState() {
     super.initState();
-    _notesApi = NotesApiService(_secureStorage);
+    _notesApi = NotesApiService();
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
               _scrollController.position.maxScrollExtent - 100 &&

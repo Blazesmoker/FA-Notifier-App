@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -25,9 +24,6 @@ class SubmissionsScreen extends StatefulWidget {
 
 class SubmissionsScreenState extends State<SubmissionsScreen>
     with AutomaticKeepAliveClientMixin<SubmissionsScreen> {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock));
   final FavoriteService _favoriteService = FavoriteService();
   late final SubmissionsService _submissionsService;
 
@@ -71,7 +67,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   @override
   void initState() {
     super.initState();
-    _submissionsService = SubmissionsService(secureStorage: _secureStorage);
+    _submissionsService = SubmissionsService();
     _scrollController.addListener(_scrollListenerForPagination);
     _loadSfwEnabled().then((_) => _refreshSubmissions());
 

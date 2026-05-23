@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/features/submissions/data/submission_description_parser.dart';
 import 'package:FANotifier/features/submissions/data/submission_description_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -41,13 +40,8 @@ class SubmissionDescriptionWebViewState
     with AutomaticKeepAliveClientMixin<SubmissionDescriptionWebView> {
   static const Color background = Color(0xFF121212);
 
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-        accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock),
-  );
   late final SubmissionDescriptionService _submissionDescriptionService =
-      SubmissionDescriptionService(secureStorage: _secureStorage);
+      SubmissionDescriptionService();
   late Future<String> _submissionDescriptionFuture;
   InAppWebViewController? _controller;
   double _webViewHeight = 50.0;

@@ -11,7 +11,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -21,6 +20,7 @@ import 'package:FANotifier/features/profile/domain/fa_folder.dart';
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
 import 'package:FANotifier/features/profile/domain/shout.dart';
 import 'package:FANotifier/features/profile/domain/user_link.dart';
+import 'package:FANotifier/shared/fa/fa_username.dart';
 import 'package:FANotifier/shared/fa/fa_webview_cookie_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_styles.dart';
@@ -32,6 +32,7 @@ import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 import 'package:FANotifier/features/profile/presentation/profilegallery.dart';
 import 'package:FANotifier/features/profile/presentation/post_shout.dart';
 import 'package:FANotifier/features/profile/presentation/profilejournals.dart';
+import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
 import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.dart';
 import 'package:FANotifier/features/profile/data/user_profile_api_service.dart';
@@ -181,11 +182,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
   final GlobalKey<UserDescriptionWebViewState> _webViewKey =
       GlobalKey<UserDescriptionWebViewState>();
 
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-        accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock),
-  );
   late final UserProfileApiService _api;
   late final FAWebViewCookieService _webViewCookieService;
 
@@ -425,10 +421,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
     super.initState();
     DetachableWebViewRouteRegistry.register(this);
 
-    _api = UserProfileApiService(_secureStorage);
-    _webViewCookieService = FAWebViewCookieService(
-      secureStorage: _secureStorage,
-    );
+    _api = UserProfileApiService();
+    _webViewCookieService = const FAWebViewCookieService();
     SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
 
     if (widget.initialFolderUrl != null &&
@@ -1330,93 +1324,74 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   /// Handles FA links inside HTML/description, matching the legacy inline logic.
   Future<void> _handleFALink(BuildContext context, String url) async {
-    final Uri uri = Uri.parse(url);
-    final String urlToMatch = uri.toString();
+    final target = matchFALink(url);
 
-    // Gallery Folder Link
-    final RegExp galleryFolderRegex = RegExp(
-      r'^https?://(?:www\.)?furaffinity\.net/gallery/([a-zA-Z0-9\-_.~]+)/folder/(\d+)/([a-zA-Z0-9\-_.~]+)/?$',
-    );
-    if (galleryFolderRegex.hasMatch(urlToMatch)) {
-      final match = galleryFolderRegex.firstMatch(urlToMatch)!;
-      final String tappedUsername = match.group(1)!;
-      final String folderNumber = match.group(2)!;
-      final String folderName = match.group(3)!;
-      final String folderUrl =
-          'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
-      exitShoutSelectionMode();
-      Navigator.push(
-        context,
-        UserProfileScreen.route(
-          nickname: tappedUsername,
-          initialSection: ProfileSection.Gallery,
-          initialFolderUrl: folderUrl,
-          initialFolderName: folderName,
-        ),
-      );
-      return;
-    }
-
-    // User Link
-    final RegExp userRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([a-zA-Z0-9\-_.~]+)/?$',
-    );
-    if (userRegex.hasMatch(urlToMatch)) {
-      final String tappedUsername = userRegex.firstMatch(urlToMatch)!.group(1)!;
-      exitShoutSelectionMode();
-      Navigator.push(
-        context,
-        UserProfileScreen.route(nickname: tappedUsername),
-      );
-      return;
-    }
-
-    // Journal Link
-    final RegExp journalRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/(?:journals/([a-zA-Z0-9\-_.~]+)|journal/(\d+))(?:/.*)?(?:#.*)?$',
-    );
-    if (journalRegex.hasMatch(urlToMatch)) {
-      final match = journalRegex.firstMatch(urlToMatch)!;
-      final String? userNameFromJournal = match.group(1);
-      final String? journalId = match.group(2);
-      if (userNameFromJournal != null) {
+    switch (target.type) {
+      case FALinkTargetType.gallery:
         exitShoutSelectionMode();
         Navigator.push(
           context,
           UserProfileScreen.route(
-            nickname: userNameFromJournal,
+            nickname: target.username!,
+            initialSection: ProfileSection.Gallery,
+          ),
+        );
+        return;
+      case FALinkTargetType.galleryFolder:
+        final tappedUsername = target.username!;
+        final folderNumber = target.folderNumber!;
+        final folderName = target.folderName!;
+        final String folderUrl =
+            'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+        exitShoutSelectionMode();
+        Navigator.push(
+          context,
+          UserProfileScreen.route(
+            nickname: tappedUsername,
+            initialSection: ProfileSection.Gallery,
+            initialFolderUrl: folderUrl,
+            initialFolderName: folderName,
+          ),
+        );
+        return;
+      case FALinkTargetType.user:
+        exitShoutSelectionMode();
+        Navigator.push(
+          context,
+          UserProfileScreen.route(nickname: target.username!),
+        );
+        return;
+      case FALinkTargetType.journalUser:
+        exitShoutSelectionMode();
+        Navigator.push(
+          context,
+          UserProfileScreen.route(
+            nickname: target.username!,
             initialSection: ProfileSection.Journals,
           ),
         );
-      } else if (journalId != null) {
+        return;
+      case FALinkTargetType.journal:
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => OpenJournal(uniqueNumber: journalId),
+            builder: (context) => OpenJournal(uniqueNumber: target.journalId!),
           ),
         );
-      }
-      return;
+        return;
+      case FALinkTargetType.submission:
+        Navigator.push(
+          context,
+          OpenPost.route(
+            uniqueNumber: target.submissionId!,
+            imageUrl: '',
+          ),
+        );
+        return;
+      case FALinkTargetType.external:
+        await launchUrlString(url, mode: LaunchMode.externalApplication);
+        return;
     }
-
-    // Submission/View Link
-    final RegExp viewRegex = RegExp(
-      r'^(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)(?:/.*)?(?:#.*)?$',
-    );
-    if (viewRegex.hasMatch(urlToMatch)) {
-      final String submissionId = viewRegex.firstMatch(urlToMatch)!.group(1)!;
-      Navigator.push(
-        context,
-        OpenPost.route(
-          uniqueNumber: submissionId,
-          imageUrl: '',
-        ),
-      );
-      return;
-    }
-
-    // Fallback: external link
-    await launchUrlString(url, mode: LaunchMode.externalApplication);
   }
 
   /// Fetches the user's profile data from FurAffinity.
@@ -1459,9 +1434,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
     }
   }
 
-  final _usernameSanitizeRegex = RegExp(r'[^a-zA-Z0-9\-_.~]');
   String _sanitizeUsername(String username) {
-    return username.replaceAll(_usernameSanitizeRegex, '').toLowerCase();
+    return sanitizeFAUsername(username);
   }
 
   void switchToGalleryTab() {

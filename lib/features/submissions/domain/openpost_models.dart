@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 class OpenPostParseResult {
   OpenPostParseResult({
     required this.currentUsername,
@@ -70,4 +72,55 @@ class FaPostTag {
   final bool isBlocked;
   final bool isMeta;
   final bool isSearchable;
+}
+
+class OpenPostUserPageActions {
+  const OpenPostUserPageActions({
+    required this.isClassic,
+    this.watchLink,
+    this.unwatchLink,
+    this.blockLink,
+    this.unblockLink,
+    this.blockKey,
+    this.unblockKey,
+  });
+
+  final bool isClassic;
+  final String? watchLink;
+  final String? unwatchLink;
+  final String? blockLink;
+  final String? unblockLink;
+  final String? blockKey;
+  final String? unblockKey;
+
+  bool get isWatching => unwatchLink != null;
+  bool get isBlocked => unblockLink != null;
+}
+
+DateTime? parseSubmissionPublicationTime(
+  String rawTime, {
+  required bool applyDstCorrection,
+}) {
+  final trimmed = rawTime.trim();
+
+  final formats = [
+    DateFormat('MMMM d, yyyy hh:mm:ss a'),
+    DateFormat('MMM d, yyyy hh:mm:ss a'),
+    DateFormat('MMM d, yyyy HH:mm:ss'),
+    DateFormat('MMM d, yyyy hh:mm a'),
+    DateFormat('MMM d, yyyy HH:mm'),
+    DateFormat('yyyy-MM-dd HH:mm:ss'),
+  ];
+
+  for (final format in formats) {
+    try {
+      var parsed = format.parse(trimmed);
+      if (applyDstCorrection) {
+        parsed = parsed.subtract(const Duration(hours: 1));
+      }
+      return parsed.toUtc();
+    } catch (_) {}
+  }
+
+  return null;
 }

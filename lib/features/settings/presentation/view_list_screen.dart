@@ -3,7 +3,6 @@ import 'package:FANotifier/features/settings/data/watchlist_user_service.dart';
 import 'package:FANotifier/features/profile/domain/user_link.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ViewListScreen extends StatefulWidget {
   final String title;
@@ -27,11 +26,6 @@ class _ViewListScreenState extends State<ViewListScreen> {
   static const Duration _pageOpenDelay = Duration(seconds: 2);
   static const Duration _retryDelay = Duration(seconds: 3);
 
-  final _secureStorage = FlutterSecureStorage(
-    iOptions: IOSOptions(
-        accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock),
-  );
   List<UserLink> users = [];
   List<UserLink> filteredUsers = [];
   bool isLoading = true;
@@ -136,7 +130,7 @@ class _ViewListScreenState extends State<ViewListScreen> {
   }
 
   Future<void> _fetchAllUsers() async {
-    final cookieHeader = await buildWatchlistCookieHeader(_secureStorage);
+    final cookieHeader = await buildWatchlistCookieHeader();
 
     if (cookieHeader.isEmpty) {
       setState(() {

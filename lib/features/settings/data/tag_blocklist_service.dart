@@ -14,12 +14,13 @@ const tagBlocklistProfileUrl = 'https://www.furaffinity.net/controls/profile/';
 const tagBlocklistRouteUrl = 'https://www.furaffinity.net/route/tag_blocking';
 
 Future<TagBlocklistParseResult> fetchTagBlocklist({
-  required FlutterSecureStorage secureStorage,
+  FlutterSecureStorage? secureStorage,
   required bool sfwEnabled,
 }) async {
+  final storage = secureStorage ?? _defaultSecureStorage();
   final resp = await _getWithCookie(
     tagBlocklistProfileUrl,
-    secureStorage: secureStorage,
+    secureStorage: storage,
     sfwEnabled: sfwEnabled,
   );
   if (resp.statusCode != 200) {
@@ -32,14 +33,15 @@ Future<TagBlocklistParseResult> fetchTagBlocklist({
 }
 
 Future<void> sendTagBlocklistRequest({
-  required FlutterSecureStorage secureStorage,
+  FlutterSecureStorage? secureStorage,
   required bool sfwEnabled,
   required String nonce,
   required String tagName,
   required bool shouldBlock,
 }) async {
-  final cookieA = await secureStorage.read(key: 'fa_cookie_a');
-  final cookieB = await secureStorage.read(key: 'fa_cookie_b');
+  final storage = secureStorage ?? _defaultSecureStorage();
+  final cookieA = await storage.read(key: 'fa_cookie_a');
+  final cookieB = await storage.read(key: 'fa_cookie_b');
   final sfwValue = sfwEnabled ? '1' : '0';
 
   if (cookieA == null || cookieB == null) {
@@ -101,4 +103,13 @@ String _decodeBody(Response response) {
   } catch (_) {
     return latin1.decode(response.bodyBytes, allowInvalid: true);
   }
+}
+
+FlutterSecureStorage _defaultSecureStorage() {
+  return const FlutterSecureStorage(
+    iOptions: IOSOptions(
+      accountName: 'flutter_secure_storage_service',
+      accessibility: KeychainAccessibility.first_unlock,
+    ),
+  );
 }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:FANotifier/features/auth/data/cloudflare_http_access_verifier.dart';
+import 'package:FANotifier/features/auth/data/cloudflare_webview_cookie_service.dart';
 import 'package:FANotifier/features/auth/domain/cloudflare_check_result.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
@@ -25,95 +25,21 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
   InAppWebViewController? _controller;
   bool _didComplete = false;
   late final CloudflareHttpAccessVerifier _httpAccessVerifier;
-
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accountName: 'flutter_secure_storage_service',
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
-  );
+  late final CloudflareWebViewCookieService _webViewCookieService;
 
   @override
   void initState() {
     super.initState();
-    _httpAccessVerifier =
-        CloudflareHttpAccessVerifier(secureStorage: _secureStorage);
+    _httpAccessVerifier = const CloudflareHttpAccessVerifier();
+    _webViewCookieService = const CloudflareWebViewCookieService();
   }
 
   Future<void> _setCookiesFromSecureStorage() async {
-    final cookieKeys = <String>[
-      'a',
-      'b',
-      'cc',
-      'cf_clearance',
-      'folder',
-      'nodesc',
-      'sz',
-      'sfw',
-    ];
-
-    for (final key in cookieKeys) {
-      final value = await _secureStorage.read(key: 'fa_cookie_$key');
-      if (value == null || value.isEmpty) continue;
-      await CookieManager.instance().setCookie(
-        url: WebUri('https://www.furaffinity.net'),
-        name: key,
-        value: value,
-        domain: '.furaffinity.net',
-        path: '/',
-        isHttpOnly: true,
-        isSecure: true,
-        expiresDate:
-            DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch,
-      );
-    }
+    await _webViewCookieService.setStoredCookies();
   }
 
   Future<void> _saveCookiesToSecureStorage() async {
-    final existingCf = await _secureStorage.read(key: 'fa_cookie_cf_clearance');
-    final cookies = await CookieManager.instance().getCookies(
-      url: WebUri('https://www.furaffinity.net'),
-    );
-
-    String? latestCf;
-    for (final cookie in cookies) {
-      await _secureStorage.write(
-        key: 'fa_cookie_${cookie.name}',
-        value: cookie.value,
-      );
-      if (cookie.name == 'cf_clearance' && cookie.value.isNotEmpty) {
-        latestCf = cookie.value;
-      }
-    }
-
-    if ((latestCf == null || latestCf.isEmpty) &&
-        existingCf != null &&
-        existingCf.isNotEmpty) {
-      await _secureStorage.write(key: 'fa_cookie_cf_clearance', value: existingCf);
-    } else if (latestCf != null && latestCf.isNotEmpty) {
-      await FaCookieHelper.writeCfClearance(latestCf);
-    }
-
-    if (_controller != null) {
-      try {
-        final rawDocumentCookie = await _controller!.evaluateJavascript(
-          source: 'document.cookie',
-        );
-        final documentCookie = rawDocumentCookie?.toString() ?? '';
-        final cookiePairs = documentCookie.split(';');
-        for (final pair in cookiePairs) {
-          final separator = pair.indexOf('=');
-          if (separator <= 0) continue;
-          final name = pair.substring(0, separator).trim();
-          final value = pair.substring(separator + 1).trim();
-          if (name.isEmpty || value.isEmpty) continue;
-          await _secureStorage.write(key: 'fa_cookie_$name', value: value);
-          if (name == 'cf_clearance') {
-            await FaCookieHelper.writeCfClearance(value);
-          }
-        }
-      } catch (_) {}
-    }
+    await _webViewCookieService.saveCurrentCookies(controller: _controller);
   }
 
   Future<bool> _verifyHttpAccess(String url) async {

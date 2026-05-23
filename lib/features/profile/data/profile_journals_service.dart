@@ -8,8 +8,15 @@ import 'package:FANotifier/features/profile/domain/profile_journals_models.dart'
 import 'package:FANotifier/shared/fa/fa_http.dart';
 
 class ProfileJournalsService {
-  ProfileJournalsService({required FlutterSecureStorage secureStorage})
-      : _secureStorage = secureStorage;
+  ProfileJournalsService({
+    FlutterSecureStorage? secureStorage,
+  }) : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            );
 
   final FlutterSecureStorage _secureStorage;
 

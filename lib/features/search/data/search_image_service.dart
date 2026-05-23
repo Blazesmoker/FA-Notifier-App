@@ -9,9 +9,15 @@ import 'package:FANotifier/shared/utils/content_rating_filters.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SearchImageService {
-  const SearchImageService({
-    required FlutterSecureStorage secureStorage,
-  }) : _secureStorage = secureStorage;
+  SearchImageService({
+    FlutterSecureStorage? secureStorage,
+  }) : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            );
 
   final FlutterSecureStorage _secureStorage;
 

@@ -1,6 +1,5 @@
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:FANotifier/features/notes/data/note_reply_service.dart';
@@ -38,15 +37,10 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   bool _useWebView = false;
   bool _isClassicTheme = false;
 
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions( 
-        accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock),
-  );
   late final NoteReplyService _noteReplyService =
-      NoteReplyService(secureStorage: _secureStorage);
+      NoteReplyService();
   late final NoteReplyWebViewCookieService _webViewCookieService =
-      NoteReplyWebViewCookieService(secureStorage: _secureStorage);
+      NoteReplyWebViewCookieService();
 
   String recipient = 'Loading...';
   bool _isMessageDetailsLoading = true;

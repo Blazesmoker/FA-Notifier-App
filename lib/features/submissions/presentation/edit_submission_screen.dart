@@ -2,7 +2,6 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:FANotifier/shared/fa/fa_webview_cookie_service.dart';
 
@@ -19,12 +18,6 @@ class EditSubmissionScreen extends StatefulWidget {
 }
 
 class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accountName: 'flutter_secure_storage_service',
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
-  );
   late final FAWebViewCookieService _webViewCookieService;
 
   InAppWebViewController? _webViewController;
@@ -36,9 +29,7 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
   @override
   void initState() {
     super.initState();
-    _webViewCookieService = FAWebViewCookieService(
-      secureStorage: _secureStorage,
-    );
+    _webViewCookieService = FAWebViewCookieService();
   }
 
   Future<void> _injectCustomCssAndJs() async {
