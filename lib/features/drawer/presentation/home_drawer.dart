@@ -2,9 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_switch/flutter_switch.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:FANotifier/features/drawer/data/app_update_service.dart';
+import 'package:FANotifier/features/drawer/data/nsfw_confirmation_preference.dart';
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/profile/domain/user_profile.dart';
 import 'package:FANotifier/features/notifications/domain/notifications.dart';
 import 'package:FANotifier/features/search/presentation/find_source_screen.dart';
@@ -63,8 +64,10 @@ class _HomeDrawerState extends State<HomeDrawer> {
   );
 
   FANotificationService? _faNotificationService;
+  final SfwModePreference _sfwModePreference = SfwModePreference();
+  final NsfwConfirmationPreference _nsfwConfirmationPreference =
+      NsfwConfirmationPreference();
   bool _sfwEnabled = true;
-  static const String NsfwConfirmationDisabled = 'nsfwConfirmationDisabled';
 
   GlobalKey _kofiKey = GlobalKey();
   List<Offset>? _starOrigins;
@@ -398,10 +401,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
 
   Future<void> _handleFALink(BuildContext context, String url) async {
     try {
-      String cleanUrl = url.trim();
-      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-        cleanUrl = 'https://$cleanUrl';
-      }
+      final cleanUrl = normalizeInputUrl(url);
       debugPrint('Processing URL: $cleanUrl');
       if (!context.mounted) {
         debugPrint('Context not mounted, cannot navigate');
@@ -422,15 +422,14 @@ class _HomeDrawerState extends State<HomeDrawer> {
   }
 
   Future<void> _loadSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
     setState(() {
-      _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+      _sfwEnabled = sfwEnabled;
     });
   }
 
   Future<void> _saveSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('sfwEnabled', _sfwEnabled);
+    await _sfwModePreference.saveSfwEnabled(_sfwEnabled);
   }
 
   Future<void> _showNsfwConfirmationDialog() async {
@@ -528,8 +527,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
 
     if (result == true) {
       if (_dontAskAgain) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool(NsfwConfirmationDisabled, true);
+        await _nsfwConfirmationPreference.saveDisabled(true);
       }
       await _toggleNsfwMode();
     }
@@ -953,11 +951,9 @@ class _HomeDrawerState extends State<HomeDrawer> {
                               inactiveColor: const Color(0xFF111111),
                               showOnOff: true,
                               onToggle: (val) async {
-                                final prefs =
-                                    await SharedPreferences.getInstance();
                                 bool confirmationDisabled =
-                                    prefs.getBool(NsfwConfirmationDisabled) ??
-                                        false;
+                                    await _nsfwConfirmationPreference
+                                        .loadDisabled();
                                 if (confirmationDisabled) {
                                   await _toggleNsfwMode();
                                 } else {

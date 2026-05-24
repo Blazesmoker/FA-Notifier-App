@@ -1,7 +1,7 @@
 // lib/fasearchimage.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/search/data/search_image_parser.dart';
 import 'package:FANotifier/features/search/data/search_image_service.dart';
 import 'package:FANotifier/shared/fa/cloudflare_challenge_exception.dart';
@@ -43,6 +43,7 @@ class FASearchImageState extends State<FASearchImage> {
   final Set<String> imageUrls = <String>{};
   final ScrollController _scrollController = ScrollController();
   final FavoriteService _favoriteService = FavoriteService();
+  final SfwModePreference _sfwModePreference = SfwModePreference();
   late final SearchImageService _searchImageService;
   final SubmissionFavoriteDetailsService _favoriteDetailsService =
       const SubmissionFavoriteDetailsService();
@@ -71,8 +72,7 @@ class FASearchImageState extends State<FASearchImage> {
   }
 
   Future<void> _loadSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+    _sfwEnabled = await _sfwModePreference.loadSfwEnabled();
   }
 
   @override

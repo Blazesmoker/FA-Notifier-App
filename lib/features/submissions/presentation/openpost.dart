@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
@@ -10,17 +9,14 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart';
-import 'package:FANotifier/shared/fa/network.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:like_button/like_button.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/app/app_theme.dart';
 import 'package:FANotifier/main.dart';
-import 'package:FANotifier/shared/fa/parsing_utils.dart';
 import 'package:FANotifier/shared/fa/fa_username.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -30,6 +26,7 @@ import 'package:FANotifier/features/submissions/data/openpost_cookie_service.dar
 import 'package:FANotifier/features/submissions/data/openpost_image_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_link_parser.dart';
 import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
 import 'package:FANotifier/features/submissions/presentation/SubmissionDescriptionWebview.dart';
 import 'package:FANotifier/features/submissions/presentation/add_post_comment_screen.dart';
@@ -38,8 +35,6 @@ import 'package:FANotifier/features/submissions/data/openpost_api_service.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
 import 'package:FANotifier/features/submissions/presentation/edit_submission_screen.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/features/comments/presentation/editcommentscreen.dart';
 import 'package:FANotifier/features/search/presentation/keyword_search_screen.dart';
 import 'package:FANotifier/features/notes/presentation/new_message.dart';
@@ -168,6 +163,7 @@ class _OpenPostState extends State<OpenPost>
   late final OpenPostActionService _openPostActionService;
   final OpenPostCookieService _openPostCookieService =
       const OpenPostCookieService();
+  final SfwModePreference _sfwModePreference = SfwModePreference();
   late final PostCommentService _postCommentService;
   final OpenPostImageService _openPostImageService =
       const OpenPostImageService();
@@ -362,15 +358,6 @@ class _OpenPostState extends State<OpenPost>
   List<String> iconBeforeUrls = [];
   List<String> iconAfterUrls = [];
 
-  String _fixUrl(String url) {
-    if (url.startsWith('//')) {
-      return 'https:$url';
-    } else if (url.startsWith('/')) {
-      return 'https://www.furaffinity.net$url';
-    }
-    return url;
-  }
-
   void _onScroll() {
     _pauseWebViewDuringScroll();
     if (!_scrollController.hasClients) return;
@@ -536,9 +523,9 @@ class _OpenPostState extends State<OpenPost>
   }
 
   Future<void> _loadSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
     setState(() {
-      _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+      _sfwEnabled = sfwEnabled;
     });
   }
 
@@ -547,22 +534,13 @@ class _OpenPostState extends State<OpenPost>
     Map<String, String>? additionalHeaders,
     bool skipSfw = false,
   }) async {
-    final cookieHeader = await _openPostCookieService.buildCookieHeader(
+    final response = await _openPostCookieService.getWithSfwCookie(
+      url: url,
       sfwEnabled: _sfwEnabled,
       nsfwAllowed: _nsfwAllowed,
+      additionalHeaders: additionalHeaders,
       skipSfw: skipSfw,
     );
-
-    debugPrint('Cookie header being sent: $cookieHeader');
-
-    final headers = <String, String>{
-      'Cookie':
-          await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
-      'User-Agent': FAHttp.userAgent,
-    };
-    if (additionalHeaders != null) headers.addAll(additionalHeaders);
-
-    final response = await httpClient.get(Uri.parse(url), headers: headers);
 
     debugPrint('Response status: ${response.statusCode}');
 
@@ -659,18 +637,8 @@ class _OpenPostState extends State<OpenPost>
     final response = await _getWithSfwCookie(userPageUrl);
 
     if (response.statusCode == 200) {
-      String decodedBody;
-      try {
-        decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-      } catch (e) {
-        try {
-          decodedBody = latin1.decode(response.bodyBytes);
-        } catch (e2) {
-          debugPrint('Failed to decode user page response: $e2');
-          return;
-        }
-      }
-      final document = await compute(parseHtml, decodedBody);
+      final decodedBody = decodeOpenPostResponseBody(response.bodyBytes);
+      final document = await parseOpenPostHtmlDocument(decodedBody);
 
       final actions = parseOpenPostUserPageActions(document);
 
@@ -1230,17 +1198,15 @@ class _OpenPostState extends State<OpenPost>
       return;
     }
 
-    final postUrl = 'https://www.furaffinity.net/view/${widget.uniqueNumber}/';
+    final postUrl = buildSubmissionViewUrl(widget.uniqueNumber);
     final response = await _getWithSfwCookie(postUrl);
 
     if (response.statusCode == 200) {
-      String decodedBody;
-      try {
-        decodedBody = response.body;
-      } on FormatException {
-        decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-      }
-      final document = await compute(parseHtml, decodedBody);
+      final decodedBody = decodeOpenPostFavoriteLinksBody(
+        response.body,
+        response.bodyBytes,
+      );
+      final document = await parseOpenPostHtmlDocument(decodedBody);
       final favoriteLinks = parseSubmissionFavoriteLinksFromDocument(
         document,
         includeClassicFallback: true,
@@ -1268,7 +1234,7 @@ class _OpenPostState extends State<OpenPost>
       return;
     }
 
-    final postUrl = 'https://www.furaffinity.net/view/${widget.uniqueNumber}/';
+    final postUrl = buildSubmissionViewUrl(widget.uniqueNumber);
 
     try {
       final response = await _getWithSfwCookie(postUrl);
@@ -1289,21 +1255,9 @@ class _OpenPostState extends State<OpenPost>
         return;
       }
 
-      String decodedBody;
-      try {
-        decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-      } catch (_) {
-        try {
-          decodedBody = latin1.decode(response.bodyBytes);
-        } catch (e2) {
-          debugPrint('Failed to decode response body: $e2');
-          setState(() => isLoading = false);
-          return;
-        }
-      }
+      final decodedBody = decodeOpenPostResponseBody(response.bodyBytes);
 
-      // Parse the document from the CORRECT response (after retry if needed)
-      final document = await compute(parseHtml, decodedBody);
+      final document = await parseOpenPostHtmlDocument(decodedBody);
 
       if (hasMatureRatingNotice(document)) {
         debugPrint(
@@ -1690,7 +1644,7 @@ class _OpenPostState extends State<OpenPost>
   }
 
   void _sharePost() {
-    final postUrl = 'https://www.furaffinity.net/view/${widget.uniqueNumber}/';
+    final postUrl = buildSubmissionViewUrl(widget.uniqueNumber);
     final shareContent = '$postUrl';
     Share.share(
       shareContent,
@@ -2075,8 +2029,11 @@ class _OpenPostState extends State<OpenPost>
         final tappedUsername = target.username!;
         final folderNumber = target.folderNumber!;
         final folderName = target.folderName!;
-        final folderUrl =
-            'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+        final folderUrl = buildFAGalleryFolderUrl(
+          username: tappedUsername,
+          folderNumber: folderNumber,
+          folderName: folderName,
+        );
         Navigator.push(
           context,
           UserProfileScreen.route(
@@ -2694,7 +2651,7 @@ class _OpenPostState extends State<OpenPost>
                           break;
                         case 'copy_link':
                           final postUrl =
-                              'https://www.furaffinity.net/view/${widget.uniqueNumber}/';
+                              buildSubmissionViewUrl(widget.uniqueNumber);
                           await Clipboard.setData(ClipboardData(text: postUrl));
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(

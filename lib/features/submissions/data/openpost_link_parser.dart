@@ -1,5 +1,9 @@
 import 'package:html/parser.dart' as html_parser;
 
+String buildSubmissionViewUrl(String submissionId) {
+  return 'https://www.furaffinity.net/view/$submissionId/';
+}
+
 String? findFullShortenedSubmissionLink(String htmlSource, String truncatedUrl) {
   final document = html_parser.parse(htmlSource);
   for (var anchor in document.querySelectorAll('a.auto_link_shortened')) {

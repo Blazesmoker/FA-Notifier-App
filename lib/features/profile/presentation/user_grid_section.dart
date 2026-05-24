@@ -21,14 +21,6 @@ class UserGridSection extends StatelessWidget {
     required this.sanitizedUsername,
   }) : super(key: key);
 
-  String _extractNickname(String url) {
-    final uri = Uri.parse(url);
-    if (uri.pathSegments.length >= 2 && uri.pathSegments[0] == 'user') {
-      return uri.pathSegments[1];
-    }
-    return 'Anonymous';
-  }
-
   @override
   Widget build(BuildContext context) {
     final displayUsers = users.take(6).toList();
@@ -59,7 +51,7 @@ class UserGridSection extends StatelessWidget {
                   spacing: 6.0,
                   runSpacing: 6.0,
                   children: displayUsers.map((user) {
-                    final nickname = _extractNickname(user.url);
+                    final nickname = user.nickname;
                     return SizedBox(
                       width: constraints.maxWidth / 3 - 4,
                       height: 34.0,

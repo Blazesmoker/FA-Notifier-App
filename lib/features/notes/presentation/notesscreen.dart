@@ -9,8 +9,8 @@ import 'package:FANotifier/features/notes/domain/message_model.dart';
 import 'package:FANotifier/features/notes/presentation/new_message.dart';
 import 'package:FANotifier/features/notifications/data/notification_service.dart';
 import 'package:FANotifier/features/notes/data/message_storage.dart';
+import 'package:FANotifier/features/notes/data/notes_first_run_preference.dart';
 import 'package:FANotifier/features/notes/data/note_unread_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
 import 'package:FANotifier/features/notes/data/notesscreen_api_service.dart';
 import 'package:FANotifier/features/notes/presentation/notesscreen_preview_dialog.dart';
@@ -37,6 +37,8 @@ class NotesScreenState extends State<NotesScreen>
   static const Color _accent = Color(0xFFE09321);
 
   late final NotesApiService _notesApi;
+  final NotesFirstRunPreference _notesFirstRunPreference =
+      NotesFirstRunPreference();
   late final NoteUnreadService _noteUnreadService =
       NoteUnreadService();
   late final TabController _tabController;
@@ -67,7 +69,6 @@ class NotesScreenState extends State<NotesScreen>
   final ScrollController _inboxScrollController = ScrollController();
   final ScrollController _sentScrollController = ScrollController();
 
-  static const _didFirstRunKey = 'did_first_run_skip';
   bool _didFirstRunSkip = false;
 
   bool _isDraggingFromEdge = false;
@@ -317,13 +318,11 @@ class NotesScreenState extends State<NotesScreen>
   }
 
   Future<void> _checkFirstRunSkip() async {
-    final prefs = await SharedPreferences.getInstance();
-    _didFirstRunSkip = prefs.getBool(_didFirstRunKey) ?? false;
+    _didFirstRunSkip = await _notesFirstRunPreference.loadDidFirstRunSkip();
   }
 
   Future<void> _setFirstRunSkipDone() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_didFirstRunKey, true);
+    await _notesFirstRunPreference.setFirstRunSkipDone();
     _didFirstRunSkip = true;
   }
 

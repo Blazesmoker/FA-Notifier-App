@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/submissions/data/favorite_service.dart';
 import 'package:FANotifier/features/submissions/data/submissions_service.dart';
 import 'package:FANotifier/features/submissions/domain/submission_fetch_models.dart';
@@ -12,7 +12,7 @@ import 'package:FANotifier/features/submissions/domain/submissions_listing_parse
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation_optimized.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/features/submissions/presentation/submission_list_item.dart';
+import 'package:FANotifier/features/submissions/domain/submission_list_item.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
 
 class SubmissionsScreen extends StatefulWidget {
@@ -25,6 +25,7 @@ class SubmissionsScreen extends StatefulWidget {
 class SubmissionsScreenState extends State<SubmissionsScreen>
     with AutomaticKeepAliveClientMixin<SubmissionsScreen> {
   final FavoriteService _favoriteService = FavoriteService();
+  final SfwModePreference _sfwModePreference = SfwModePreference();
   late final SubmissionsService _submissionsService;
 
   /// All submissions grouped by date
@@ -95,15 +96,10 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   }
 
   Future<void> _loadSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
     setState(() {
-      _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+      _sfwEnabled = sfwEnabled;
     });
-  }
-
-  Future<void> _saveSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('sfwEnabled', _sfwEnabled);
   }
 
   Future<bool> _onWillPop() async {

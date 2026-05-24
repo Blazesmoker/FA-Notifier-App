@@ -1,9 +1,11 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
+import 'package:FANotifier/shared/fa/parsing_utils.dart';
 
 String decodeOpenPostResponseBody(List<int> bodyBytes) {
   try {
@@ -15,6 +17,18 @@ String decodeOpenPostResponseBody(List<int> bodyBytes) {
       return latin1.decode(bodyBytes, allowInvalid: true);
     }
   }
+}
+
+String decodeOpenPostFavoriteLinksBody(String body, List<int> bodyBytes) {
+  try {
+    return body;
+  } on FormatException {
+    return utf8.decode(bodyBytes, allowMalformed: true);
+  }
+}
+
+Future<dom.Document> parseOpenPostHtmlDocument(String htmlBody) {
+  return compute(parseHtml, htmlBody);
 }
 
 bool hasSubmissionNotFoundError(String htmlBody) {

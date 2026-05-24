@@ -1,4 +1,9 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart';
+
+import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/network.dart';
 
 class OpenPostCookieService {
   const OpenPostCookieService({
@@ -37,5 +42,28 @@ class OpenPostCookieService {
     }
 
     return cookieHeader;
+  }
+
+  Future<Response> getWithSfwCookie({
+    required String url,
+    required bool sfwEnabled,
+    required bool nsfwAllowed,
+    Map<String, String>? additionalHeaders,
+    bool skipSfw = false,
+  }) async {
+    final cookieHeader = await buildCookieHeader(
+      sfwEnabled: sfwEnabled,
+      nsfwAllowed: nsfwAllowed,
+      skipSfw: skipSfw,
+    );
+
+    final headers = <String, String>{
+      'Cookie':
+          await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
+      'User-Agent': FAHttp.userAgent,
+    };
+    if (additionalHeaders != null) headers.addAll(additionalHeaders);
+
+    return httpClient.get(Uri.parse(url), headers: headers);
   }
 }

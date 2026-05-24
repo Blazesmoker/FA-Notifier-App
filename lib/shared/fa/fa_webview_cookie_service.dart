@@ -1,6 +1,6 @@
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class FAWebViewCookieService {
   const FAWebViewCookieService({
@@ -14,6 +14,7 @@ class FAWebViewCookieService {
             );
 
   final FlutterSecureStorage _secureStorage;
+  final SfwModePreference _sfwModePreference = const SfwModePreference();
 
   Future<void> setCookies() async {
     final cookieManager = CookieManager.instance();
@@ -51,8 +52,7 @@ class FAWebViewCookieService {
   }
 
   Future<String> _getSfwCookieValue() async {
-    final prefs = await SharedPreferences.getInstance();
-    final sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
     return sfwEnabled ? '1' : '0';
   }
 }

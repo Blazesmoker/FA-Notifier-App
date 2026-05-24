@@ -28,6 +28,14 @@ class FALinkTarget {
   final String? submissionId;
 }
 
+String buildFAGalleryFolderUrl({
+  required String username,
+  required String folderNumber,
+  required String folderName,
+}) {
+  return 'https://www.furaffinity.net/gallery/$username/folder/$folderNumber/$folderName/';
+}
+
 FALinkTarget matchFALink(String url) {
   final uri = Uri.parse(url);
   final urlToMatch = uri.toString();

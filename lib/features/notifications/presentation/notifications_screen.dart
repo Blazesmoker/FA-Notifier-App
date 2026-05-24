@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:provider/provider.dart';
 import 'package:html/dom.dart' as dom;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/notifications/data/fa_activities_polling_service.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
 import 'package:FANotifier/features/notifications/data/notification_content_parser.dart';
@@ -608,12 +608,12 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
 /// Widget for non-shouts sections.
 class NotificationSectionWidget extends StatelessWidget {
   final int sectionIndex;
+  final SfwModePreference _sfwModePreference = const SfwModePreference();
   const NotificationSectionWidget({Key? key, required this.sectionIndex})
       : super(key: key);
 
   Future<bool> isSfwModeEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('sfwEnabled') ?? true;
+    return _sfwModePreference.loadSfwEnabled();
   }
 
   @override
@@ -888,7 +888,12 @@ class NotificationSectionWidget extends StatelessWidget {
                                                     final folderName =
                                                         target.folderName!;
                                                     final folderUrl =
-                                                        'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+                                                        buildFAGalleryFolderUrl(
+                                                      username: tappedUsername,
+                                                      folderNumber:
+                                                          folderNumber,
+                                                      folderName: folderName,
+                                                    );
                                                     Navigator.push(
                                                       context,
                                                       UserProfileScreen.route(

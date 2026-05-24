@@ -1,7 +1,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:FANotifier/features/search/domain/search_filter_date_range.dart';
+import 'package:FANotifier/features/search/domain/search_filter_options.dart';
 import 'package:FANotifier/shared/utils/content_rating_filters.dart';
+import 'package:FANotifier/shared/utils/string_extensions.dart';
 
 class SearchFiltersScreen extends StatefulWidget {
   final Map<String, String> selectedSearchFilters;
@@ -22,15 +24,6 @@ class SearchFiltersScreen extends StatefulWidget {
 class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
   final Color _applyButtonColor = const Color(0xFFE09321);
 
-  static const List<Map<String, String>> _genderOptions = [
-    {'key': 'male', 'label': 'Male'},
-    {'key': 'female', 'label': 'Female'},
-    {'key': 'trans_male', 'label': 'Trans Male'},
-    {'key': 'trans_female', 'label': 'Trans Female'},
-    {'key': 'intersex', 'label': 'Intersex'},
-    {'key': 'non_binary', 'label': 'Non Binary'},
-  ];
-
   late Map<String, String> currentSearchFilters;
   DateTime? fromDate;
   DateTime? toDate;
@@ -47,7 +40,7 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
         currentSearchFilters['mode']!.isEmpty) {
       currentSearchFilters['mode'] = 'extended';
     }
-    for (final g in _genderOptions) {
+    for (final g in searchGenderOptions) {
       currentSearchFilters['gender-${g['key']}'] ??= '0';
     }
 
@@ -282,7 +275,7 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
         Wrap(
           spacing: 12.0,
           runSpacing: 4.0,
-          children: _genderOptions.map((opt) {
+          children: searchGenderOptions.map((opt) {
             final filterKey = 'gender-${opt['key']}';
             return _buildCheckboxOption(opt['label']!, filterKey, '1');
           }).toList(),
@@ -566,12 +559,5 @@ Example: fender @title fender -dragoneer -ferrox @message -rednef -dragoneer
       ''',
       style: TextStyle(fontSize: 14, color: Colors.white),
     );
-  }
-}
-
-extension StringExtension on String {
-  String capitalize() {
-    if (isEmpty) return this;
-    return this[0].toUpperCase() + substring(1);
   }
 }

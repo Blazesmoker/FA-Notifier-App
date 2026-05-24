@@ -8,6 +8,14 @@ import 'package:FANotifier/features/profile/presentation/user_profile_screen.dar
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
 import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
 
+String normalizeInputUrl(String url) {
+  final cleanUrl = url.trim();
+  if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+    return 'https://$cleanUrl';
+  }
+  return cleanUrl;
+}
+
 /// Centralized FA link handler.
 Future<void> handleFALink(
   BuildContext context,
@@ -38,8 +46,11 @@ Future<void> handleFALink(
       final tappedUsername = target.username!;
       final folderNumber = target.folderNumber!;
       final folderName = target.folderName!;
-      final String folderUrl =
-          'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+      final folderUrl = buildFAGalleryFolderUrl(
+        username: tappedUsername,
+        folderNumber: folderNumber,
+        folderName: folderName,
+      );
       Navigator.push(
         context,
         UserProfileScreen.route(

@@ -14,25 +14,26 @@ import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:FANotifier/features/notifications/data/notification_refresh_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:badges/badges.dart' as badges;
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:FANotifier/shared/utils/content_rating_filters.dart';
+import 'package:FANotifier/shared/utils/external_link_launcher.dart';
 import 'package:FANotifier/features/settings/data/home_start_screen_preference.dart';
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
 import 'package:FANotifier/app/app_theme.dart';
 import 'package:FANotifier/features/profile/domain/user_profile.dart';
 import 'package:FANotifier/features/notifications/domain/notifications.dart';
+import 'package:FANotifier/features/notifications/data/pending_navigation_store.dart';
 import 'package:FANotifier/shared/fa/fa_service.dart';
 import 'package:FANotifier/features/auth/data/startup_cloudflare_check_service.dart';
+import 'package:FANotifier/features/home/data/home_auth_cookie_service.dart';
+import 'package:FANotifier/features/home/data/home_session_preference.dart';
 import 'package:FANotifier/features/home/data/home_login_html_detector.dart';
 import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
@@ -58,6 +59,10 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isLoggedIn = false;
   bool _forceNotesRefresh = false;
   bool _sfwEnabled = true;
+  final SfwModePreference _sfwModePreference = SfwModePreference();
+  final HomeSessionPreference _homeSessionPreference = HomeSessionPreference();
+  final PendingNavigationStore _pendingNavigationStore =
+      PendingNavigationStore();
   HomeStartScreenPreference _homeStartScreenPreference =
       HomeStartScreenPreference.browse;
   bool _didOpenStartupProfile = false;
@@ -84,14 +89,11 @@ class _HomeScreenState extends State<HomeScreen> {
       filterOptionsNotifier = ValueNotifier({});
 
   InAppWebViewController? _webViewController;
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions(
-        accountName: 'flutter_secure_storage_service',
-        accessibility: KeychainAccessibility.first_unlock),
-  );
 
   final String loginUrl = 'https://www.furaffinity.net/login';
   final FaService _faService = FaService();
+  final HomeAuthCookieService _homeAuthCookieService =
+      const HomeAuthCookieService();
   late final StartupCloudflareCheckService _startupCloudflareCheckService;
   Timer? _dataRefreshTimer;
 
@@ -118,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _startupCloudflareCheckService =
-        StartupCloudflareCheckService(secureStorage: _secureStorage);
+        const StartupCloudflareCheckService();
     _navProvider =
         Provider.of<NotificationNavigationProvider>(context, listen: false);
     _navProvider.addListener(_handleNavProviderChange);
@@ -177,13 +179,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _handlePendingNavigation() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.reload();
     if (!mounted) return;
-    final String? pendingPayload = prefs.getString('pending_navigation');
+    final String? pendingPayload =
+        await _pendingNavigationStore.loadPayload(reload: true);
     if (pendingPayload == null) return;
     if (pendingPayload.isEmpty) {
-      await prefs.remove('pending_navigation');
+      await _pendingNavigationStore.clearPayload();
       return;
     }
 
@@ -212,7 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
 
-    await prefs.remove('pending_navigation');
+    await _pendingNavigationStore.clearPayload();
   }
 
   Future<void> _initializeAndLoadLoginState() async {
@@ -298,13 +299,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _saveLoginState(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isLoggedIn', value);
+    await _homeSessionPreference.saveIsLoggedIn(value);
   }
 
   Future<void> _loadLoginState() async {
-    final prefs = await SharedPreferences.getInstance();
-    bool savedLoginState = prefs.getBool('isLoggedIn') ?? false;
+    bool savedLoginState = await _homeSessionPreference.loadIsLoggedIn();
     setState(() {
       isLoggedIn = savedLoginState;
       if (!savedLoginState) {
@@ -314,8 +313,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    final sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
     setState(() {
       _sfwEnabled = sfwEnabled;
       browseFilters =
@@ -522,20 +520,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
         if (pageUrl.startsWith("https://www.furaffinity.net/") ||
             pageUrl == "https://www.furaffinity.net") {
-          final cookies = await CookieManager.instance().getCookies(
-            url: WebUri("https://www.furaffinity.net"),
-          );
-
-          final aCookie = cookies.firstWhereOrNull((c) => c.name == 'a');
-          if (aCookie != null && aCookie.value.isNotEmpty) {
-            for (var c in cookies) {
-              await _secureStorage.write(
-                  key: 'fa_cookie_${c.name}', value: c.value);
-            }
+          if (await _homeAuthCookieService.hasWebViewAuthCookie()) {
+            await _homeAuthCookieService.saveCookiesFromWebView();
 
             // Read previous login state BEFORE we set true
-            final prefs = await SharedPreferences.getInstance();
-            final wasLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+            final wasLoggedIn = await _homeSessionPreference.loadIsLoggedIn();
 
             await _saveLoginState(true);
             setState(() {
@@ -580,8 +569,7 @@ class _HomeScreenState extends State<HomeScreen> {
             uri.host.contains('furaffinity.net') &&
             uri.path.contains(passwordRecoveryPath)) {
           debugPrint("Password recovery URL detected.");
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          if (await tryLaunchExternalUri(uri)) {
             debugPrint('Opened Password Recovery in external browser.');
             return NavigationActionPolicy.CANCEL;
           } else {
@@ -624,16 +612,9 @@ class _HomeScreenState extends State<HomeScreen> {
             });
             _cancelStabilityTimer();
 
-            final cookies = await CookieManager.instance().getCookies(
-              url: WebUri("https://www.furaffinity.net"),
-            );
-            for (var c in cookies) {
-              await _secureStorage.write(
-                  key: 'fa_cookie_${c.name}', value: c.value);
-            }
+            await _homeAuthCookieService.saveCookiesFromWebView();
 
-            final prefs = await SharedPreferences.getInstance();
-            final wasLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+            final wasLoggedIn = await _homeSessionPreference.loadIsLoggedIn();
 
             await _saveLoginState(true);
             _startActivitiesPolling(triggerImmediate: true);
@@ -699,34 +680,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _setCookiesFromPrefs() async {
-    List<String> cookieKeys = [
-      'a',
-      'b',
-      'cc',
-      'cf_clearance',
-      'folder',
-      'nodesc',
-      'sz',
-      'sfw'
-    ];
-    for (var key in cookieKeys) {
-      String storageKey = 'fa_cookie_$key';
-      String? cookieValue = await _secureStorage.read(key: storageKey);
-      if (cookieValue != null && cookieValue.isNotEmpty) {
-        await CookieManager.instance().setCookie(
-          url: WebUri('https://www.furaffinity.net'),
-          name: key,
-          value: cookieValue,
-          domain: '.furaffinity.net',
-          path: '/',
-          isHttpOnly: true,
-          isSecure: true,
-          expiresDate: DateTime.now()
-              .add(const Duration(days: 30))
-              .millisecondsSinceEpoch,
-        );
-      }
-    }
+    await _homeAuthCookieService.setStoredCookies();
   }
 
   Widget _buildSelectedScreen() {
@@ -874,14 +828,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       FaActivitiesPollingService().stop();
-      await CookieManager.instance().deleteAllCookies();
+      await _homeAuthCookieService.clearWebViewCookies();
       debugPrint('[Logout] All cookies deleted.');
 
-      await _secureStorage.deleteAll();
+      await _homeAuthCookieService.clearStoredCookies();
       debugPrint('[Logout] FlutterSecureStorage cleared.');
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      await _homeSessionPreference.clearAll();
 
       await DefaultCacheManager().emptyCache();
       debugPrint('[Logout] Image cache cleared.');
@@ -966,18 +919,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _setSfwCookieToNSFW() async {
-    await _secureStorage.write(key: 'fa_cookie_sfw', value: '0');
-    await CookieManager.instance().setCookie(
-      url: WebUri('https://www.furaffinity.net'),
-      name: 'sfw',
-      value: '0',
-      domain: '.furaffinity.net',
-      path: '/',
-      isHttpOnly: true,
-      isSecure: true,
-      expiresDate:
-          DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch,
-    );
+    await _homeAuthCookieService.setSfwCookieToNsfw();
   }
 
   Future<void> _onRequestCloseApp() async {

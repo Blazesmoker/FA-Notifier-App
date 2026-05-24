@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/notifications/domain/notifications.dart';
 import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
@@ -116,6 +117,7 @@ class NotificationSection {
 /// Centralized service for notifications.
 class FANotificationService with ChangeNotifier {
   final Dio _dio = Dio();
+  final SfwModePreference _sfwModePreference = SfwModePreference();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
@@ -1623,8 +1625,7 @@ class FANotificationService with ChangeNotifier {
       String? cookieB = await const FlutterSecureStorage(iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
     accessibility: KeychainAccessibility.first_unlock)).read(key: 'fa_cookie_b');
-      final prefs = await SharedPreferences.getInstance();
-      bool sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+      bool sfwEnabled = await const SfwModePreference().loadSfwEnabled();
       String cookieHeader = '';
       if (cookieA != null && cookieA.isNotEmpty) {
         cookieHeader += 'a=$cookieA; ';

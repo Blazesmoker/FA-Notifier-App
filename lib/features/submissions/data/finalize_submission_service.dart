@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/submissions/data/finalize_submission_parser.dart';
 import 'package:FANotifier/features/submissions/domain/finalize_submission_options.dart';
 import 'package:FANotifier/features/submissions/domain/finalize_submission_request.dart';
@@ -10,7 +11,6 @@ import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class FinalizeSubmissionService {
   FinalizeSubmissionService({
@@ -28,6 +28,7 @@ class FinalizeSubmissionService {
   }
 
   final FlutterSecureStorage _secureStorage;
+  final SfwModePreference _sfwModePreference = SfwModePreference();
   final Dio _dio;
   final CookieJar _cookieJar;
 
@@ -149,8 +150,7 @@ class FinalizeSubmissionService {
     final sz = await _secureStorage.read(key: 'sz');
     final folder = await _secureStorage.read(key: 'folder');
 
-    final prefs = await SharedPreferences.getInstance();
-    final sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
     final sfwValue = sfwEnabled ? '1' : '0';
 
     final cookies = <Cookie>[];

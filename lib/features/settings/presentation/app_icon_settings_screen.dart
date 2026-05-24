@@ -1,8 +1,8 @@
 import 'dart:io';
 
+import 'package:FANotifier/features/settings/data/app_icon_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class AppIconSettingsScreen extends StatefulWidget {
   const AppIconSettingsScreen({Key? key}) : super(key: key);
@@ -12,7 +12,7 @@ class AppIconSettingsScreen extends StatefulWidget {
 }
 
 class _AppIconSettingsScreenState extends State<AppIconSettingsScreen> {
-  static const platform = MethodChannel('com.blazesmoker.fanotifier/icon');
+  final AppIconService _appIconService = AppIconService();
 
   bool useAdaptiveIcon = false;
 
@@ -23,21 +23,18 @@ class _AppIconSettingsScreenState extends State<AppIconSettingsScreen> {
   }
 
   Future<void> _loadIconPreference() async {
-    final prefs = await SharedPreferences.getInstance();
+    final loadedUseAdaptiveIcon = await _appIconService.loadUseAdaptiveIcon();
     if (!mounted) return;
     setState(() {
-      useAdaptiveIcon = prefs.getBool('useAdaptiveIcon') ?? false;
+      useAdaptiveIcon = loadedUseAdaptiveIcon;
     });
   }
 
   Future<void> _toggleIcon(bool value) async {
     setState(() => useAdaptiveIcon = value);
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('useAdaptiveIcon', useAdaptiveIcon);
-
     try {
-      await platform.invokeMethod('switchIcon', {'useAdaptive': useAdaptiveIcon});
+      await _appIconService.setUseAdaptiveIcon(useAdaptiveIcon);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

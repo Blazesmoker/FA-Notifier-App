@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/profile/data/profile_journals_parser.dart';
 import 'package:FANotifier/features/profile/domain/profile_journals_models.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
@@ -19,6 +19,7 @@ class ProfileJournalsService {
             );
 
   final FlutterSecureStorage _secureStorage;
+  final SfwModePreference _sfwModePreference = SfwModePreference();
 
   Future<ProfileJournalsPageData> fetchJournalsPage({
     required String username,
@@ -82,7 +83,6 @@ class ProfileJournalsService {
   }
 
   Future<bool> _loadSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('sfwEnabled') ?? true;
+    return _sfwModePreference.loadSfwEnabled();
   }
 }

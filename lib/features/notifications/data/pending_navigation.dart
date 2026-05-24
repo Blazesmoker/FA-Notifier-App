@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:FANotifier/main.dart'; // navigatorKey
 import 'package:FANotifier/features/notifications/data/NotificationNavigationProvider.dart';
 import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:FANotifier/features/notifications/data/notification_refresh_service.dart';
+import 'package:FANotifier/features/notifications/data/pending_navigation_store.dart';
 
 Future<void> processPendingNavigation({String from = 'unknown'}) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.reload();
-  final payload = prefs.getString('pending_navigation');
+  final pendingNavigationStore = PendingNavigationStore();
+  final payload = await pendingNavigationStore.loadPayload(reload: true);
 
   if (payload == null) {
     debugPrint('[PENDING_NAV] nothing to process (from=$from)');
@@ -20,7 +19,7 @@ Future<void> processPendingNavigation({String from = 'unknown'}) async {
 
   if (payload.isEmpty) {
     debugPrint('[PENDING_NAV] empty payload; clearing (from=$from)');
-    await prefs.remove('pending_navigation');
+    await pendingNavigationStore.clearPayload();
     return;
   }
 
@@ -73,5 +72,5 @@ Future<void> processPendingNavigation({String from = 'unknown'}) async {
   }
 
   // Clear only after successfully handling.
-  await prefs.remove('pending_navigation');
+  await pendingNavigationStore.clearPayload();
 }

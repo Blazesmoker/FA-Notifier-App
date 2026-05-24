@@ -1,9 +1,9 @@
 // lib/fa_image_grid.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/features/browse/data/browse_image_parser.dart';
 import 'package:FANotifier/features/browse/data/browse_image_service.dart';
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:FANotifier/features/submissions/data/submission_favorite_details_service.dart';
 import 'package:FANotifier/features/submissions/data/favorite_service.dart';
@@ -55,6 +55,7 @@ class FAImageGridState extends State<FAImageGrid> {
   final SubmissionFavoriteDetailsService _favoriteDetailsService =
       const SubmissionFavoriteDetailsService();
   final FavoriteService _favoriteService = FavoriteService();
+  final SfwModePreference _sfwModePreference = SfwModePreference();
 
   bool _sfwEnabled = true;
   late final Future<void> _sfwLoadFuture;
@@ -73,8 +74,7 @@ class FAImageGridState extends State<FAImageGrid> {
   }
 
   Future<void> _loadSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+    _sfwEnabled = await _sfwModePreference.loadSfwEnabled();
   }
 
   @override

@@ -12,16 +12,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
-import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/main.dart';
 import 'package:FANotifier/features/profile/domain/fa_folder.dart';
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
 import 'package:FANotifier/features/profile/domain/shout.dart';
 import 'package:FANotifier/features/profile/domain/user_link.dart';
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/shared/fa/fa_username.dart';
 import 'package:FANotifier/shared/fa/fa_webview_cookie_service.dart';
+import 'package:FANotifier/shared/utils/external_link_launcher.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_styles.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_components.dart';
@@ -184,13 +184,14 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   late final UserProfileApiService _api;
   late final FAWebViewCookieService _webViewCookieService;
+  final SfwModePreference _sfwModePreference = SfwModePreference();
 
   bool _sfwEnabled = true;
 
   Future<void> _loadSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
     setState(() {
-      _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+      _sfwEnabled = sfwEnabled;
     });
   }
 
@@ -309,28 +310,17 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   bool get isOwnProfile => _profileParsed?.isOwnProfile ?? false;
 
-  bool _compareFolderUrls(String url1, String url2) {
-    final uri1 = Uri.parse(url1);
-    final uri2 = Uri.parse(url2);
-
-    String normalizePath(String path) =>
-        path.endsWith('/') ? path.substring(0, path.length - 1) : path;
-
-    return uri1.scheme == uri2.scheme &&
-        uri1.host == uri2.host &&
-        normalizePath(uri1.path) == normalizePath(uri2.path);
-  }
-
   void _onFoldersParsed(List<FaFolder> folders) {
     setState(() {
       if (_selectedFolderUrl.isNotEmpty) {
         final matchingFolder = folders.firstWhere(
-          (folder) => _compareFolderUrls(folder.url, _selectedFolderUrl),
+          (folder) =>
+              areFaFolderUrlsEquivalent(folder.url, _selectedFolderUrl),
           orElse: () =>
               FaFolder(name: _selectedFolderName, url: _selectedFolderUrl),
         );
         _selectedFolderName = matchingFolder.name;
-        if (!_compareFolderUrls(matchingFolder.url, _selectedFolderUrl)) {
+        if (!areFaFolderUrlsEquivalent(matchingFolder.url, _selectedFolderUrl)) {
           _selectedFolderUrl = matchingFolder.url;
         }
       } else if (folders.isNotEmpty) {
@@ -1312,10 +1302,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _launchURL(String url) async {
-    final Uri uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
+    if (!await tryLaunchExternalUrl(url)) {
       debugPrint('Could not launch $url');
       showAppSnackBar(context, 'Could not launch URL: $url',
           backgroundColor: Colors.red);
@@ -1341,8 +1328,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
         final tappedUsername = target.username!;
         final folderNumber = target.folderNumber!;
         final folderName = target.folderName!;
-        final String folderUrl =
-            'https://www.furaffinity.net/gallery/$tappedUsername/folder/$folderNumber/$folderName/';
+        final folderUrl = buildFAGalleryFolderUrl(
+          username: tappedUsername,
+          folderNumber: folderNumber,
+          folderName: folderName,
+        );
         exitShoutSelectionMode();
         Navigator.push(
           context,
@@ -1483,16 +1473,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
         isLoadingMoreShouts = false;
       });
     }
-  }
-
-  /// Helper function to extract integer values from the stats text
-  int? _extractStatValue(String statsText, String label) {
-    final regex = RegExp('$label\\s*(\\d+)');
-    final match = regex.firstMatch(statsText);
-    if (match != null && match.groupCount > 0) {
-      return int.tryParse(match.group(1)!);
-    }
-    return null;
   }
 
   // Animated banner/avatar helpers
@@ -1843,9 +1823,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         );
         return;
       }
-      final unblockUri = Uri.parse(unblockLink!);
-
-      final key = unblockUri.queryParameters['key'];
+      final key = extractBlockUnblockKey(unblockLink!);
 
       if (key == null || key.isEmpty) {
         showAppSnackBar(
@@ -1872,9 +1850,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         return;
       }
 
-      final blockUri = Uri.parse(blockLink!);
-
-      final key = blockUri.queryParameters['key'];
+      final key = extractBlockUnblockKey(blockLink!);
 
       if (key == null || key.isEmpty) {
         showAppSnackBar(

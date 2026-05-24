@@ -1,6 +1,6 @@
 import 'package:FANotifier/features/settings/data/tag_blocklist_service.dart';
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
@@ -13,6 +13,7 @@ class TagBlocklistScreen extends StatefulWidget {
 
 class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
   final TextEditingController _addController = TextEditingController();
+  final SfwModePreference _sfwModePreference = SfwModePreference();
   final Set<String> _tagToggleInFlight = <String>{};
 
   bool _sfwEnabled = true;
@@ -39,10 +40,10 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
   }
 
   Future<void> _loadSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
     if (!mounted) return;
     setState(() {
-      _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+      _sfwEnabled = sfwEnabled;
     });
   }
 

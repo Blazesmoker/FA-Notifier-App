@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:FANotifier/shared/fa/fa_webview_cookie_service.dart';
 import 'package:FANotifier/shared/widgets/tags_and_codes_webview_widget.dart';
+import 'package:FANotifier/features/journals/data/create_journal_service.dart';
+import 'package:FANotifier/features/journals/data/create_journal_webview_scripts.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 
 class CreateJournalScreen extends StatefulWidget {
@@ -24,9 +26,11 @@ class CreateJournalScreen extends StatefulWidget {
 
 class _CreateJournalScreenState extends State<CreateJournalScreen>
     with AutomaticKeepAliveClientMixin {
+  final CreateJournalService _createJournalService =
+      const CreateJournalService();
+  final SfwModePreference _sfwModePreference = SfwModePreference();
   late final FAWebViewCookieService _webViewCookieService;
   late final String initialUrl;
-  final String finalizeUrlPrefix = 'https://www.furaffinity.net/journal/';
 
   InAppWebViewController? _webViewController;
   final GlobalKey webViewKey = GlobalKey();
@@ -48,29 +52,23 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
   void initState() {
     super.initState();
     _webViewCookieService = const FAWebViewCookieService();
-
-    if (widget.uniqueNumber != null) {
-      initialUrl =
-          'https://www.furaffinity.net/controls/journal/1/${widget.uniqueNumber}/';
-    } else {
-      initialUrl = 'https://www.furaffinity.net/controls/journal/';
-    }
+    initialUrl = _createJournalService.buildInitialUrl(widget.uniqueNumber);
     _handledCurrentJournal = false;
     _loadSfwEnabled();
   }
 
   void _loadSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
     setState(() {
-      _sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+      _sfwEnabled = sfwEnabled;
     });
   }
 
   Future<void> _handlePossibleJournalSuccess(String? url) async {
     if (_handledCurrentJournal) return;
-    if (url == null || !url.startsWith(finalizeUrlPrefix)) return;
+    if (!_createJournalService.isJournalFinalizeUrl(url)) return;
 
-    final journalId = _extractJournalId(url);
+    final journalId = _createJournalService.extractJournalId(url!);
     if (journalId == null) return;
 
     _handledCurrentJournal = true;
@@ -87,18 +85,6 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     });
 
     _startCountdown();
-  }
-
-  String? _extractJournalId(String url) {
-    try {
-      final uri = Uri.parse(url);
-      if (uri.pathSegments.length >= 2 && uri.pathSegments[0] == 'journal') {
-        return uri.pathSegments[1];
-      }
-    } catch (e) {
-      debugPrint('Error parsing journal ID: $e');
-    }
-    return null;
   }
 
   void _startCountdown() {
@@ -135,31 +121,19 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     super.dispose();
   }
 
-  bool _isOnEditorPage(String? url) {
-    if (url == null) return false;
-    return url.contains('/controls/journal');
-  }
-
   Future<void> _detectJournalViaDom(String? currentUrl) async {
     if (_handledCurrentJournal) return;
     if (_webViewController == null) return;
-    if (_isOnEditorPage(currentUrl)) return;
+    if (_createJournalService.isEditorPage(currentUrl)) return;
 
-    final result = await _webViewController!.evaluateJavascript(source: '''
-(function() {
-  const links = document.querySelectorAll('a[href^="/journal/"]');
-  for (const link of links) {
-    const href = link.getAttribute('href');
-    if (href && href.endsWith('/')) return href;
-  }
-  return null;
-})();
-''');
+    final result = await _webViewController!.evaluateJavascript(
+      source: buildFindCreatedJournalPathScript(),
+    );
 
     if (result == null) return;
 
-    final fullUrl = 'https://www.furaffinity.net' + result;
-    final journalId = _extractJournalId(fullUrl);
+    final fullUrl = _createJournalService.buildFullJournalUrl(result);
+    final journalId = _createJournalService.extractJournalId(fullUrl);
     if (journalId == null) return;
 
     _handledCurrentJournal = true;
@@ -183,106 +157,18 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
   Future<void> _injectJournalFormCss() async {
     if (_webViewController == null) return;
 
-    await _webViewController!.evaluateJavascript(source: '''
-      (function() {
-        if (window.__journalCssInjected) return;
-        window.__journalCssInjected = true;
-
-        var style = document.createElement('style');
-        style.type = 'text/css';
-        style.innerHTML = \`
-          .sidebar {
-            display: none !important;
-          }
-          #journal-form {
-            margin: 0 auto !important;
-            padding: 0 !important;
-            width: 100% !important;
-            max-width: 600px !important;
-            background-color: #ffffff !important;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1) !important;
-            border-radius: 8px !important;
-          }
-          #journal-form .section-body {
-            padding: 10px !important;
-          }
-          .mobile-navigation,
-          #header,
-          #footer,
-          .leaderboardAd,
-          .news-block,
-          .mobile-notification-bar,
-          nav#ddmenu,
-          .online-stats,
-          .footnote,
-          .footerAds,
-          .floatleft,
-          .submenu-trigger,
-          .banner-svg,
-          .leaderboardAd,
-          .newsBlock,
-          .footerAds__column,
-          .message-bar-desktop,
-          .notification-container,
-          .dropdown,
-          .dropzone { 
-            display: none !important; 
-          }
-        \`;
-        document.head.appendChild(style);
-
-        var headers = document.querySelectorAll('.section-header h2');
-        headers.forEach(function(header) {
-          if (header.textContent.trim() === 'Previous Journals') {
-            var section = header.closest('section');
-            if (section) {
-              section.style.display = 'none';
-            }
-          }
-        });
-      })();
-    ''');
+    await _webViewController!.evaluateJavascript(
+      source: buildJournalFormInjectionScript(),
+    );
     debugPrint("CSS and JavaScript injection completed.");
   }
 
   Future<void> _wrapSelection(String tag) async {
     if (_webViewController == null) return;
 
-    await _webViewController!.evaluateJavascript(source: '''
-(function(){
-  var open='[$tag]';
-  var close='[/$tag]';
-  var active=document.activeElement;
-
-  if (active && (active.tagName==='TEXTAREA' || (active.tagName==='INPUT' && active.type==='text'))) {
-    var s=active.selectionStart, e=active.selectionEnd;
-    if (s!=null && e!=null && e>s) {
-      var before=active.value.substring(0,s);
-      var sel=active.value.substring(s,e);
-      var after=active.value.substring(e);
-      active.value=before+open+sel+close+after;
-      active.selectionStart=before.length+open.length;
-      active.selectionEnd=active.selectionStart+sel.length;
-      active.dispatchEvent(new Event('input',{bubbles:true}));
-    }
-    return;
-  }
-
-  var sel=window.getSelection();
-  if (!sel || sel.rangeCount===0) return;
-  var r=sel.getRangeAt(0);
-  var t=sel.toString();
-  var node=document.createTextNode(open+t+close);
-  r.deleteContents();
-  r.insertNode(node);
-
-  var nr=document.createRange();
-  nr.setStartAfter(node);
-  nr.collapse(true);
-  sel.removeAllRanges();
-  sel.addRange(nr);
-})();
-''');
+    await _webViewController!.evaluateJavascript(
+      source: buildJournalWrapSelectionScript(tag),
+    );
   }
 
   ContextMenu _buildContextMenu() {

@@ -1,13 +1,12 @@
 // lib/screens/notificationsSettings.dart
 
 import 'dart:io';
+
+import 'package:FANotifier/features/notifications/data/notification_settings_service.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
-import 'package:FANotifier/features/notifications/data/notification_service.dart';
 
 class NotificationsSettingsScreen extends StatefulWidget {
   const NotificationsSettingsScreen({Key? key}) : super(key: key);
@@ -19,8 +18,8 @@ class NotificationsSettingsScreen extends StatefulWidget {
 
 class _NotificationsSettingsScreenState
     extends State<NotificationsSettingsScreen> {
-  static const MethodChannel _settingsChannel =
-      MethodChannel('com.blazesmoker.fanotifier/settings');
+  final NotificationSettingsService _notificationSettingsService =
+      NotificationSettingsService();
   bool useAdaptiveNotificationIcon = false;
 
   @override
@@ -30,20 +29,16 @@ class _NotificationsSettingsScreenState
   }
 
   Future<void> _loadNotificationIconPreference() async {
-    final prefs = await SharedPreferences.getInstance();
+    final loadedUseAdaptiveNotificationIcon =
+        await _notificationSettingsService.loadUseAdaptiveNotificationIcon();
     setState(() {
-      useAdaptiveNotificationIcon =
-          prefs.getBool('useAdaptiveNotificationIcon') ?? false;
+      useAdaptiveNotificationIcon = loadedUseAdaptiveNotificationIcon;
     });
   }
 
   Future<void> _toggleNotificationIcon(bool value) async {
     setState(() => useAdaptiveNotificationIcon = value);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('useAdaptiveNotificationIcon', value);
-
-    // Recreates channels so they pick up the new icon
-    await NotificationService().updateNotificationChannels();
+    await _notificationSettingsService.setUseAdaptiveNotificationIcon(value);
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -86,9 +81,8 @@ class _NotificationsSettingsScreenState
   }
 
   Future<void> _openNotificationSettings() async {
-    final opened = Platform.isAndroid
-        ? await _settingsChannel.invokeMethod<bool>('openAppSettings') ?? false
-        : await openAppSettings();
+    final opened =
+        await _notificationSettingsService.openNotificationSettings();
     if (!mounted || opened) {
       return;
     }
@@ -235,7 +229,8 @@ class _NotificationsSettingsScreenState
                       value: settings.soundNewNotesEnabled,
                       onChanged: (bool value) async {
                         settings.setSoundNewNotesEnabled(value);
-                        await NotificationService().updateNotificationChannels();
+                        await _notificationSettingsService
+                            .refreshNotificationChannels();
                       },
                     ),
                     SwitchListTile(
@@ -244,7 +239,8 @@ class _NotificationsSettingsScreenState
                       value: settings.vibrationNewNotesEnabled,
                       onChanged: (bool value) async {
                         settings.setVibrationNewNotesEnabled(value);
-                        await NotificationService().updateNotificationChannels();
+                        await _notificationSettingsService
+                            .refreshNotificationChannels();
                       },
                     ),
                     SwitchListTile(
@@ -253,7 +249,8 @@ class _NotificationsSettingsScreenState
                       value: settings.soundNewActivitiesEnabled,
                       onChanged: (bool value) async {
                         settings.setSoundNewActivitiesEnabled(value);
-                        await NotificationService().updateNotificationChannels();
+                        await _notificationSettingsService
+                            .refreshNotificationChannels();
                       },
                     ),
                     SwitchListTile(
@@ -262,7 +259,8 @@ class _NotificationsSettingsScreenState
                       value: settings.vibrationNewActivitiesEnabled,
                       onChanged: (bool value) async {
                         settings.setVibrationNewActivitiesEnabled(value);
-                        await NotificationService().updateNotificationChannels();
+                        await _notificationSettingsService
+                            .refreshNotificationChannels();
                       },
                     ),
                   ],

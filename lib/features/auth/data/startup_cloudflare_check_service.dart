@@ -6,8 +6,14 @@ import 'package:http/http.dart' as http;
 
 class StartupCloudflareCheckService {
   const StartupCloudflareCheckService({
-    required FlutterSecureStorage secureStorage,
-  }) : _secureStorage = secureStorage;
+    FlutterSecureStorage? secureStorage,
+  }) : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(
+                accountName: 'flutter_secure_storage_service',
+                accessibility: KeychainAccessibility.first_unlock,
+              ),
+            );
 
   final FlutterSecureStorage _secureStorage;
 

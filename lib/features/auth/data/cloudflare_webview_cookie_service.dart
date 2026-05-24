@@ -16,6 +16,14 @@ class CloudflareWebViewCookieService {
 
   final FlutterSecureStorage _secureStorage;
 
+  bool isChallengePage({
+    required String url,
+    required String body,
+  }) {
+    return url.contains('/cdn-cgi/challenge-platform') ||
+        FaCookieHelper.isCloudflareChallengePage(body: body);
+  }
+
   Future<void> setStoredCookies() async {
     final cookieKeys = <String>[
       'a',

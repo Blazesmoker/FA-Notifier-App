@@ -4,6 +4,8 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:FANotifier/features/notes/data/note_reply_service.dart';
 import 'package:FANotifier/features/notes/data/note_reply_webview_cookie_service.dart';
+import 'package:FANotifier/features/notes/data/note_reply_webview_navigation_service.dart';
+import 'package:FANotifier/features/notes/data/note_reply_webview_scripts.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -41,6 +43,8 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       NoteReplyService();
   late final NoteReplyWebViewCookieService _webViewCookieService =
       NoteReplyWebViewCookieService();
+  final NoteReplyWebViewNavigationService _webViewNavigationService =
+      const NoteReplyWebViewNavigationService();
 
   String recipient = 'Loading...';
   bool _isMessageDetailsLoading = true;
@@ -106,7 +110,8 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       return;
     }
 
-    final webViewUrl = 'https://www.furaffinity.net${widget.messageLink}';
+    final webViewUrl =
+        _webViewNavigationService.buildMessageUrl(widget.messageLink);
 
     late final PlatformWebViewControllerCreationParams params;
     if (WebViewPlatform.instance is WebKitWebViewPlatform) {
@@ -127,7 +132,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
           onPageStarted: (String url) {
             // Check if we've navigated to the messages list (success)
             debugPrint('DEBUG: WebView page started: $url');
-            if (url.contains('/msg/pms/') && !url.contains('/viewmessage/')) {
+            if (_webViewNavigationService.isSentMessagesListUrl(url)) {
               debugPrint('DEBUG: Success detected in onPageStarted');
               if (mounted && !_replySentSuccessfully) {
                 debugPrint('DEBUG: Setting _replySentSuccessfully = true in onPageStarted');
@@ -149,7 +154,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
             }
 
             // Double-check for success page
-            if (url.contains('/msg/pms/') && !url.contains('/viewmessage/')) {
+            if (_webViewNavigationService.isSentMessagesListUrl(url)) {
               debugPrint('DEBUG: Success detected in onPageFinished');
               if (mounted && !_replySentSuccessfully) {
                 debugPrint('DEBUG: Setting _replySentSuccessfully = true in onPageFinished');
@@ -180,58 +185,14 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     final replyText = _replyController.text.trim();
     if (replyText.isEmpty) return;
 
-    final fullMessage = '$replyText\n\n—————————\n${widget.originalContent}';
-    final escapedMessage = fullMessage
-        .replaceAll('\\', '\\\\')
-        .replaceAll('\n', '\\n')
-        .replaceAll('\r', '\\r')
-        .replaceAll('\'', '\\\'')
-        .replaceAll('"', '\\"');
-
-    final js = '''
-      (function() {
-        // Added viewport meta tag for better mobile zoom control
-        var viewport = document.querySelector('meta[name="viewport"]');
-        if (!viewport) {
-          viewport = document.createElement('meta');
-          viewport.name = 'viewport';
-          document.head.appendChild(viewport);
-        }
-        viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes';
-        
-        // Waits a bit for the form to be fully loaded
-        setTimeout(function() {
-          // Fills in the form fields
-          var toField = document.querySelector('input[name="to"]');
-          var subjectField = document.querySelector('input[name="subject"]');
-          var messageField = document.querySelector('textarea[name="message"]');
-          
-          if (toField) toField.value = '$recipient';
-          if (subjectField) subjectField.value = '${widget.subject}';
-          if (messageField) messageField.value = '$escapedMessage';
-          
-       
-          var style = document.createElement('style');
-          style.innerHTML = `
-            .block-menu-top, .block-banners, .footer, 
-            .headerAds, .leaderboardAd, .footerAds,
-            table[cellpadding="10"]:first-of-type { display: none !important; }
-            body { padding-top: 20px !important; }
-            .maintable { margin-top: 0 !important; }
-            .viewmessage .maintable:first-of-type { display: none !important; }
-          `;
-          document.head.appendChild(style);
-          
-          // Scroll to the reply form
-          var noteForm = document.getElementById('note-form');
-          if (noteForm) {
-            noteForm.scrollIntoView({ behavior: 'smooth' });
-          }
-        }, 500);
-      })();
-    ''';
-
-    await controller.runJavaScript(js);
+    await controller.runJavaScript(
+      buildNoteReplyFormScript(
+        replyText: replyText,
+        originalContent: widget.originalContent,
+        recipient: recipient,
+        subject: widget.subject,
+      ),
+    );
   }
 
   Future<void> _sendReplyModern() async {

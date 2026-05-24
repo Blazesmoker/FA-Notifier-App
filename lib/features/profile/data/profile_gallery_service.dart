@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/profile/data/profile_posts_parser.dart';
 import 'package:FANotifier/features/profile/domain/fa_folder.dart';
 import 'package:FANotifier/features/profile/domain/profile_submission_data.dart';
@@ -24,6 +24,10 @@ class ProfileGalleryPageData {
   final List<FaFolder> folders;
 }
 
+String buildDefaultProfileGalleryUrl(String username) {
+  return 'https://www.furaffinity.net/gallery/$username/';
+}
+
 class ProfileGalleryService {
   ProfileGalleryService({
     FlutterSecureStorage? secureStorage,
@@ -36,6 +40,22 @@ class ProfileGalleryService {
             );
 
   final FlutterSecureStorage _secureStorage;
+  final SfwModePreference _sfwModePreference = SfwModePreference();
+
+  String buildInitialGalleryUrl(String username, String selectedFolderUrl) {
+    if (selectedFolderUrl.isNotEmpty) {
+      return selectedFolderUrl;
+    }
+    return buildDefaultGalleryUrl(username);
+  }
+
+  String buildDefaultGalleryUrl(String username) {
+    return buildDefaultProfileGalleryUrl(username);
+  }
+
+  String normalizeFolderUrl(String selectedFolderUrl) {
+    return selectedFolderUrl.replaceAll(RegExp(r'/$'), '');
+  }
 
   Future<ProfileGalleryPageData> fetchGalleryPage({
     required String url,
@@ -157,8 +177,7 @@ class ProfileGalleryService {
   }
 
   Future<String> _getSfwCookieValue() async {
-    final prefs = await SharedPreferences.getInstance();
-    final sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
     return sfwEnabled ? '1' : '0';
   }
 }

@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/profile/domain/profile_posts_parse_result.dart';
 import 'package:FANotifier/features/profile/data/profile_posts_parser.dart';
 import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
@@ -21,6 +21,7 @@ class ProfileScrapsService {
             );
 
   final FlutterSecureStorage _secureStorage;
+  final SfwModePreference _sfwModePreference = SfwModePreference();
 
   Future<ProfilePostsParseResult> fetchScrapsPage(String url) async {
     final cookieHeader = await _getAllCookies();
@@ -86,8 +87,7 @@ class ProfileScrapsService {
   }
 
   Future<String> _getSfwCookieValue() async {
-    final prefs = await SharedPreferences.getInstance();
-    final sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
     return sfwEnabled ? '1' : '0';
   }
 }

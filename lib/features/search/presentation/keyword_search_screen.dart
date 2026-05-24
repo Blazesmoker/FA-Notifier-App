@@ -1,7 +1,7 @@
 // keyword_search_screen.dart
 import 'package:flutter/material.dart';
 import 'package:FANotifier/features/search/presentation/fasearchimage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/shared/utils/content_rating_filters.dart';
 import 'package:FANotifier/features/search/presentation/search_filters_screen.dart';
 
@@ -19,6 +19,7 @@ class _KeywordSearchScreenState extends State<KeywordSearchScreen> {
   late TextEditingController _searchController;
   late String _currentSearchQuery;
   late Map<String, String> _currentSearchFilters;
+  final SfwModePreference _sfwModePreference = SfwModePreference();
   bool _sfwEnabled = true;
 
   @override
@@ -32,8 +33,7 @@ class _KeywordSearchScreenState extends State<KeywordSearchScreen> {
   }
 
   Future<void> _loadSfwEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    final sfwEnabled = prefs.getBool('sfwEnabled') ?? true;
+    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
     if (!mounted) return;
     setState(() {
       _sfwEnabled = sfwEnabled;

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:FANotifier/app/app_theme.dart'; // If you need to reference AppTheme.fontName, etc.
+import 'package:FANotifier/shared/utils/external_link_launcher.dart';
 
 import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/features/settings/presentation/siteSettings.dart';
@@ -18,9 +18,7 @@ class SettingsScreen extends StatelessWidget {
 
   Future<void> _openTelegram(BuildContext context) async {
     try {
-      if (!await launchUrl(_telegramUri, mode: LaunchMode.externalApplication)) {
-        await launchUrl(_telegramUri);
-      }
+      await launchExternalUriWithFallback(_telegramUri);
     } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open the Telegram link')),

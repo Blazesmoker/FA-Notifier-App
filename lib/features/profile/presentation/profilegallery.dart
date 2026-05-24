@@ -67,7 +67,8 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
       _selectedFolderUrl = widget.selectedFolderUrl!;
       _selectedFolderName = '';
     } else {
-      _selectedFolderUrl = 'https://www.furaffinity.net/gallery/${widget.username}/';
+      _selectedFolderUrl =
+          _profileGalleryService.buildDefaultGalleryUrl(widget.username);
       _selectedFolderName = 'Main Gallery';
     }
     _nextPageUrl = _buildInitialUrl();
@@ -79,8 +80,8 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectedFolderUrl != widget.selectedFolderUrl) {
       _selectedFolderUrl = (widget.selectedFolderUrl == null || widget.selectedFolderUrl!.isEmpty)
-          ? 'https://www.furaffinity.net/gallery/${widget.username}/'
-          : widget.selectedFolderUrl!.replaceAll(RegExp(r'/$'), '');
+          ? _profileGalleryService.buildDefaultGalleryUrl(widget.username)
+          : _profileGalleryService.normalizeFolderUrl(widget.selectedFolderUrl!);
       _nextPageUrl = _buildInitialUrl();
       _refresh();
     }
@@ -94,11 +95,10 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
 
   String _buildInitialUrl() {
-    if (_selectedFolderUrl.isNotEmpty) {
-      return _selectedFolderUrl;
-    } else {
-      return 'https://www.furaffinity.net/gallery/${widget.username}/';
-    }
+    return _profileGalleryService.buildInitialGalleryUrl(
+      widget.username,
+      _selectedFolderUrl,
+    );
   }
 
 

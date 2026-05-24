@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:FANotifier/features/browse/data/browse_filter_options_service.dart';
+import 'package:FANotifier/features/browse/domain/browse_filter_display_names.dart';
 import 'package:FANotifier/shared/utils/content_rating_filters.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
@@ -28,13 +29,6 @@ class _FiltersScreenState extends State<FiltersScreen> {
   // Stores the fetched filter options.
   Map<String, List<Map<String, String>>> _filterOptions = {};
 
-  static const Map<String, String> filterDisplayNames = {
-    'cat': 'Category',
-    'atype': 'Type',
-    'species': 'Species',
-    'gender': 'Gender',
-  };
-
   static const Color applyButtonColor = Color(0xFFE09321);
 
   bool _ratingGeneral = true;
@@ -51,7 +45,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
     );
 
     currentFilters = {};
-    filterDisplayNames.forEach((internalKey, displayLabel) {
+    browseFilterDisplayNames.forEach((internalKey, displayLabel) {
       currentFilters[internalKey] = selectedFilters[displayLabel]!;
     });
 
@@ -153,7 +147,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
                       horizontal: 16.0, vertical: 16.0),
                   child: Column(
                     children: <Widget>[
-                      ...filterDisplayNames.entries.map((entry) {
+                      ...browseFilterDisplayNames.entries.map((entry) {
                         return Column(
                           children: [
                             buildFilterButton(context, entry.key, entry.value),
@@ -371,7 +365,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
 
   void _showFilterDialog(
       BuildContext context, String filterType, String selectedValueCode) async {
-    String dialogTitle = 'Select ${filterDisplayNames[filterType]}';
+    String dialogTitle = 'Select ${browseFilterDisplayNames[filterType]}';
 
     final selectedValue = await showDialog<String>(
       context: context,

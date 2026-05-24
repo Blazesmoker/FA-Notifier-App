@@ -4,7 +4,6 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:FANotifier/features/auth/data/cloudflare_http_access_verifier.dart';
 import 'package:FANotifier/features/auth/data/cloudflare_webview_cookie_service.dart';
 import 'package:FANotifier/features/auth/domain/cloudflare_check_result.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 
 class CloudflareCheckScreen extends StatefulWidget {
@@ -70,9 +69,10 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
       return;
     }
 
-    final isChallenge =
-        currentUrl.contains('/cdn-cgi/challenge-platform') ||
-        FaCookieHelper.isCloudflareChallengePage(body: body);
+    final isChallenge = _webViewCookieService.isChallengePage(
+      url: currentUrl,
+      body: body,
+    );
 
     if (isChallenge) {
       debugPrint('[Cloudflare] WebView is still on a challenge page: $currentUrl');

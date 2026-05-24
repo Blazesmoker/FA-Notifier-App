@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:FANotifier/features/profile/data/profile_gallery_service.dart';
 import 'package:FANotifier/features/profile/domain/fa_folder.dart';
 import 'package:FANotifier/features/profile/presentation/profilegallery.dart';
 
@@ -27,7 +28,7 @@ class UserProfileGallerySection extends StatelessWidget {
   Widget build(BuildContext context) {
     final galleryUrl = selectedFolderUrl.isNotEmpty
         ? selectedFolderUrl
-        : 'https://www.furaffinity.net/gallery/$sanitizedUsername/';
+        : buildDefaultProfileGalleryUrl(sanitizedUsername);
 
     return CustomScrollView(
       slivers: [
