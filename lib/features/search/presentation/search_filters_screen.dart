@@ -291,21 +291,28 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
         Text('Sort by Range',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
-        Wrap(
-          spacing: 12.0,
-          runSpacing: 8.0,
-          children: [
-            _buildRadioOption('1 Day', 'range', '1day'),
-            _buildRadioOption('3 Days', 'range', '3days'),
-            _buildRadioOption('7 Days', 'range', '7days'),
-            _buildRadioOption('30 Days', 'range', '30days'),
-            _buildRadioOption('90 Days', 'range', '90days'),
-            _buildRadioOption('1 Year', 'range', '1year'),
-            _buildRadioOption('3 Years', 'range', '3years'),
-            _buildRadioOption('5 Years', 'range', '5years'),
-            _buildRadioOption('All Time', 'range', 'all'),
-            _buildRadioOption('Manual', 'range', 'manual'),
-          ],
+        RadioGroup<String>(
+          groupValue: currentSearchFilters['range'],
+          onChanged: (String? newValue) => _handleRadioChanged(
+            'range',
+            newValue,
+          ),
+          child: Wrap(
+            spacing: 12.0,
+            runSpacing: 8.0,
+            children: [
+              _buildRadioOption('1 Day', 'range', '1day'),
+              _buildRadioOption('3 Days', 'range', '3days'),
+              _buildRadioOption('7 Days', 'range', '7days'),
+              _buildRadioOption('30 Days', 'range', '30days'),
+              _buildRadioOption('90 Days', 'range', '90days'),
+              _buildRadioOption('1 Year', 'range', '1year'),
+              _buildRadioOption('3 Years', 'range', '3years'),
+              _buildRadioOption('5 Years', 'range', '5years'),
+              _buildRadioOption('All Time', 'range', 'all'),
+              _buildRadioOption('Manual', 'range', 'manual'),
+            ],
+          ),
         ),
         if (currentSearchFilters['range'] == 'manual') ...[
           SizedBox(height: 10),
@@ -377,11 +384,42 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
       children: [
         Text('Sort by Matching Keywords',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        _buildRadioOption('All of the words', 'mode', 'all'),
-        _buildRadioOption('Any of the words', 'mode', 'any'),
-        _buildRadioOption('Extended (See "Advanced")', 'mode', 'extended'),
+        RadioGroup<String>(
+          groupValue: currentSearchFilters['mode'],
+          onChanged: (String? newValue) => _handleRadioChanged(
+            'mode',
+            newValue,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildRadioOption('All of the words', 'mode', 'all'),
+              _buildRadioOption('Any of the words', 'mode', 'any'),
+              _buildRadioOption('Extended (See "Advanced")', 'mode', 'extended'),
+            ],
+          ),
+        ),
       ],
     );
+  }
+
+  void _handleRadioChanged(String filterKey, String? newValue) {
+    if (newValue == null) return;
+    setState(() {
+      currentSearchFilters[filterKey] = newValue;
+    });
+    if (filterKey == 'range' && newValue == 'manual') {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _editManualDates();
+      });
+    } else if (filterKey == 'range') {
+      setState(() {
+        fromDate = null;
+        toDate = null;
+        currentSearchFilters['range_from'] = '';
+        currentSearchFilters['range_to'] = '';
+      });
+    }
   }
 
   Widget _buildRadioOption(String label, String filterKey, String value) {
@@ -391,24 +429,6 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
         Radio<String>(
           activeColor: _applyButtonColor,
           value: value,
-          groupValue: currentSearchFilters[filterKey],
-          onChanged: (String? newValue) async {
-            setState(() {
-              currentSearchFilters[filterKey] = newValue!;
-            });
-            if (filterKey == 'range' && newValue == 'manual') {
-              WidgetsBinding.instance.addPostFrameCallback((_) async {
-                await _editManualDates();
-              });
-            } else if (filterKey == 'range') {
-              setState(() {
-                fromDate = null;
-                toDate = null;
-                currentSearchFilters['range_from'] = '';
-                currentSearchFilters['range_to'] = '';
-              });
-            }
-          },
         ),
         Text(
           label,

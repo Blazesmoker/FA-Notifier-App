@@ -195,8 +195,6 @@ class SubmissionDescriptionWebViewState
 
   /// Injects CSS to enable text selection and apply the FA dark theme.
   String _injectFACSS(String submissionDescHtml) {
-    String bgColor =
-        '#${background.value.toRadixString(16).substring(2).padLeft(6, '0')}';
     String textColor = '#FFFFFF';
 
     final selectionCss = widget.enableTextSelection
@@ -460,14 +458,19 @@ user-select: none !important;
                 }
                 return NavigationActionPolicy.ALLOW;
               },
-              onLoadError: (controller, url, code, message) {
-                showAppSnackBar(context, 'Failed to load content: $message',
+              onReceivedError: (controller, request, error) {
+                if (request.isForMainFrame == false) return;
+                showAppSnackBar(context,
+                    'Failed to load content: ${error.description}',
                     backgroundColor: Colors.red);
               },
-              onLoadHttpError: (controller, url, statusCode, description) {
+              onReceivedHttpError: (controller, request, errorResponse) {
+                if (request.isForMainFrame == false) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('HTTP Error $statusCode: $description'),
+                    content: Text(
+                      'HTTP Error ${errorResponse.statusCode}: ${errorResponse.reasonPhrase}',
+                    ),
                     backgroundColor: Colors.red,
                   ),
                 );

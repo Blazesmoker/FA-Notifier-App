@@ -232,7 +232,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
                 Theme(
                   data: Theme.of(context).copyWith(
                     textSelectionTheme: TextSelectionThemeData(
-                      selectionColor: const Color(0xFFE09321).withOpacity(0.4),
+                      selectionColor: const Color(0xFFE09321).withValues(alpha: 0.4),
                       selectionHandleColor: const Color(0xFFE09321),
                     ),
                   ),

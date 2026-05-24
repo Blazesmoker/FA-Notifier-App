@@ -389,23 +389,25 @@ class _FiltersScreenState extends State<FiltersScreen> {
                 ),
                 const Divider(height: 1),
                 Expanded(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _filterOptions[filterType]?.length ?? 0,
-                    itemBuilder: (context, index) {
-                      String optionLabel =
-                          _filterOptions[filterType]![index]['label']!;
-                      String optionValue =
-                          _filterOptions[filterType]![index]['value']!;
-                      return RadioListTile<String>(
-                        title: Text(optionLabel),
-                        value: optionValue,
-                        groupValue: currentFilters[filterType],
-                        onChanged: (String? value) {
-                          Navigator.of(context).pop(value);
-                        },
-                      );
+                  child: RadioGroup<String>(
+                    groupValue: currentFilters[filterType],
+                    onChanged: (String? value) {
+                      Navigator.of(context).pop(value);
                     },
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _filterOptions[filterType]?.length ?? 0,
+                      itemBuilder: (context, index) {
+                        String optionLabel =
+                            _filterOptions[filterType]![index]['label']!;
+                        String optionValue =
+                            _filterOptions[filterType]![index]['value']!;
+                        return RadioListTile<String>(
+                          title: Text(optionLabel),
+                          value: optionValue,
+                        );
+                      },
+                    ),
                   ),
                 ),
                 const Divider(height: 1),

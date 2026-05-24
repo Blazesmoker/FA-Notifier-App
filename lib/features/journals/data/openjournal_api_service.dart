@@ -197,23 +197,6 @@ class OpenJournalApiService {
             .contains('the item you are trying to reach is not in our database');
   }
 
-  String _extractCommentText(dom.Element c) {
-    final textEl = c.querySelector('comment-user-text.comment_text') ??
-        c.querySelector('comment-user-text') ??
-        c.querySelector('.comment_text') ??
-        c.querySelector('.comment_text .user-submitted-links') ??
-        c.querySelector('comment-user-text .user-submitted-links');
-
-    if (textEl == null) return '';
-
-    final cleaned = textEl.clone(true);
-    cleaned
-        .querySelectorAll('div.floatright, .floatright')
-        .forEach((e) => e.remove());
-
-    return cleaned.text.replaceAll(RegExp(r'\s+'), ' ').trim();
-  }
-
   List<Map<String, dynamic>> _parseCommentsFromDocument(dom.Document document) {
     final commentBodies = <Map<String, dynamic>>[];
 

@@ -2,14 +2,12 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:FANotifier/features/profile/presentation/user_description_webview.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:url_launcher/url_launcher_string.dart';
@@ -20,7 +18,6 @@ import 'package:FANotifier/features/profile/domain/shout.dart';
 import 'package:FANotifier/features/profile/domain/user_link.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/shared/fa/fa_username.dart';
-import 'package:FANotifier/shared/fa/fa_webview_cookie_service.dart';
 import 'package:FANotifier/shared/utils/external_link_launcher.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_styles.dart';
@@ -29,7 +26,6 @@ import 'package:FANotifier/features/journals/presentation/create_journal.dart';
 import 'package:FANotifier/features/notes/presentation/new_message.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/features/profile/presentation/profilegallery.dart';
 import 'package:FANotifier/features/profile/presentation/post_shout.dart';
 import 'package:FANotifier/features/profile/presentation/profilejournals.dart';
 import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
@@ -183,7 +179,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
       GlobalKey<UserDescriptionWebViewState>();
 
   late final UserProfileApiService _api;
-  late final FAWebViewCookieService _webViewCookieService;
   final SfwModePreference _sfwModePreference = SfwModePreference();
 
   bool _sfwEnabled = true;
@@ -384,8 +379,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   int _previousIndex = 0;
 
-  late Future<String> _userDescriptionFuture;
-
   bool isLoadingMoreShouts = false;
   bool _isShoutSelectionMode = false;
   bool _isDeletingSelectedShouts = false;
@@ -412,7 +405,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
     DetachableWebViewRouteRegistry.register(this);
 
     _api = UserProfileApiService();
-    _webViewCookieService = const FAWebViewCookieService();
     SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
 
     if (widget.initialFolderUrl != null &&
@@ -897,8 +889,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
         return Icons.favorite;
       case ProfileSection.Journals:
         return Icons.book;
-      default:
-        return Icons.home;
     }
   }
 
@@ -914,13 +904,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         return 'Favs';
       case ProfileSection.Journals:
         return 'Journals';
-      default:
-        return 'Home';
     }
-  }
-
-  Future<void> _setupWebviewCookies() async {
-    await _webViewCookieService.setCookies();
   }
 
   Future<void> _sendWatchUnwatchRequest(String urlPath,
@@ -1411,7 +1395,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       debugPrint("isBlocked: $isBlocked");
     } on StateError catch (e) {
       setState(() {
-        errorMessage = e.message ?? e.toString();
+        errorMessage = e.message;
         isLoading = false;
       });
       debugPrint(e.toString());
@@ -2007,7 +1991,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                             pinned: true,
                             floating: false,
                             snap: false,
-                            backgroundColor: Colors.black.withOpacity(
+                            backgroundColor: Colors.black.withValues(alpha:
                               (_scrollController.hasClients &&
                                       _scrollController.offset > 50)
                                   ? (_scrollController.offset / 200)
@@ -2123,7 +2107,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                     children: [
                                       buildAnimatedBanner(constraints),
                                       ColoredBox(
-                                        color: Colors.black.withOpacity(0.15),
+                                        color: Colors.black.withValues(alpha: 0.15),
                                       ),
                                     ],
                                   ),
@@ -2501,7 +2485,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                   ),
                   if (showLoadingIndicator)
                     Container(
-                      color: Colors.black.withOpacity(1.0),
+                      color: Colors.black.withValues(alpha: 1.0),
                       child: const Center(
                         child: PulsatingLoadingIndicator(
                           size: 88.0,

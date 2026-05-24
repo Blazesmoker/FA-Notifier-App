@@ -7,6 +7,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:FANotifier/features/profile/domain/user_profile.dart';
 import 'package:FANotifier/features/notifications/domain/notifications.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/parsing_utils.dart';
 
 class FaService {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
@@ -74,8 +75,7 @@ class FaService {
           final avatarImg = document.querySelector(
             'div.floatleft.hideonmobile > a[href^="/user/"] img.loggedin_user_avatar.avatar',
           );
-          profileImageUrl =
-              avatarImg?.attributes['src']?.replaceFirst('//', 'https://');
+          profileImageUrl = normalizeFaUrl(avatarImg?.attributes['src']);
         } else {
           final profilePath = myUsernameAnchor.attributes['href'];
           if (profilePath != null) {

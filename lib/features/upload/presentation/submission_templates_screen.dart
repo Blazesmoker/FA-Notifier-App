@@ -245,9 +245,8 @@ class _SubmissionTemplatesScreenState extends State<SubmissionTemplatesScreen> w
     });
   }
 
-  Future<void> _onReorder(int oldIndex, int newIndex) async {
+  Future<void> _onReorderItem(int oldIndex, int newIndex) async {
     setState(() {
-      if (newIndex > oldIndex) newIndex -= 1;
       final item = _templates.removeAt(oldIndex);
       _templates.insert(newIndex, item);
     });
@@ -282,7 +281,7 @@ class _SubmissionTemplatesScreenState extends State<SubmissionTemplatesScreen> w
                         index: index,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                          child: Icon(Icons.unfold_more, color: _accent.withOpacity(0.9)),
+                          child: Icon(Icons.unfold_more, color: _accent.withValues(alpha: 0.9)),
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -365,7 +364,7 @@ class _SubmissionTemplatesScreenState extends State<SubmissionTemplatesScreen> w
           : ReorderableListView.builder(
         padding: const EdgeInsets.only(top: 6, bottom: 18),
         itemCount: _templates.length,
-        onReorder: _onReorder,
+        onReorderItem: _onReorderItem,
         proxyDecorator: _proxyDecorator,
         itemBuilder: (context, index) => _templateItem(_templates[index], index),
       )),

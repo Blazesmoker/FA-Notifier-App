@@ -60,8 +60,6 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   final Set<int> _visibleTileIndices = {};
 
 
-  bool _isClassicStyle = false;
-
   @override
   bool get wantKeepAlive => true;
 
@@ -102,15 +100,13 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     });
   }
 
-  Future<bool> _onWillPop() async {
+  void _onWillPop() {
     if (_selectionMode) {
       setState(() {
         _selectionMode = false;
         _selectedSubmissions.clear();
       });
-      return false;
     }
-    return true;
   }
 
   void _scrollListenerForPagination() {
@@ -184,7 +180,6 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   }
 
   void _applyListing(SubmissionsListingParseResult parsed) {
-    _isClassicStyle = parsed.isClassicStyle;
     _baseSubmissionsUrl ??= parsed.baseSubmissionsUrl;
     _dateGroups.addAll(parsed.dateGroups);
 
@@ -508,8 +503,14 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return WillPopScope(
-      onWillPop: _onWillPop,
+    return PopScope(
+      canPop: !_selectionMode,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (didPop) return;
+        if (_selectionMode) {
+          _onWillPop();
+        }
+      },
       child: Scaffold(
         drawerEnableOpenDragGesture: false,
         appBar: AppBar(

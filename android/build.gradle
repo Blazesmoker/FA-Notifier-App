@@ -2,7 +2,7 @@
 
 buildscript {
 
-    ext.kotlin_version = '2.2.21'
+    ext.kotlin_version = '2.3.21'
 
     repositories {
         google()
@@ -10,7 +10,7 @@ buildscript {
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.13.1'
+        classpath 'com.android.tools.build:gradle:9.2.1'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
 
 
@@ -34,6 +34,28 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+subprojects {
+    if (project.name == "firebase_analytics") {
+        plugins.withId("com.android.library") {
+            plugins.apply("kotlin-android")
+            tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                kotlinOptions {
+                    jvmTarget = "17"
+                }
+            }
+        }
+    }
+    if (project.name == "flutter_app_badge_control") {
+        afterEvaluate {
+            plugins.withId("com.android.library") {
+                android {
+                    compileSdkVersion rootProject.ext.compileSdkVersion
+                }
+            }
+        }
+    }
+}
+
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
@@ -41,9 +63,9 @@ tasks.register("clean", Delete) {
 ext {
     flutter = [
             minSdkVersion : 26,
-            targetSdkVersion : 36
+            targetSdkVersion : 37
     ]
-    compileSdkVersion = 36
-    targetSdkVersion = 36
+    compileSdkVersion = 37
+    targetSdkVersion = 37
     minSdkVersion = 26
 }

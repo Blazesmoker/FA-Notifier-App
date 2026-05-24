@@ -6,7 +6,6 @@ import 'package:http/http.dart' as http;
 import 'package:dio/dio.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/notifications/domain/notifications.dart';
 import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
@@ -117,7 +116,6 @@ class NotificationSection {
 /// Centralized service for notifications.
 class FANotificationService with ChangeNotifier {
   final Dio _dio = Dio();
-  final SfwModePreference _sfwModePreference = SfwModePreference();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     iOptions: IOSOptions( 
     accountName: 'flutter_secure_storage_service',
@@ -259,16 +257,18 @@ class FANotificationService with ChangeNotifier {
     String nicknameLink = "";
 
     dom.Element? parentAnchor = li.querySelector(
-        'span.c-usernameBlockSimple.username-underlined a[href^="/user/"]'
+        'span.c-usernameBlockSimple.username-underlined a[href*="/user/"]'
     );
 
     if (parentAnchor == null) {
-      parentAnchor = li.querySelector('a[href^="/user/"]');
+      parentAnchor = li.querySelector('a[href*="/user/"]');
     }
     if (parentAnchor != null) {
       String? href = parentAnchor.attributes['href'];
       if (href != null) {
-        final regExp = RegExp(r'^/user/([^/]+)/?$');
+        final regExp = RegExp(
+          r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([^/]+)/?$',
+        );
         final match = regExp.firstMatch(href);
         if (match != null) {
           nicknameLink = match.group(1)!;
@@ -276,6 +276,87 @@ class FANotificationService with ChangeNotifier {
       }
     }
     return nicknameLink;
+  }
+
+  static String? _extractUsernameFromHref(String? href) {
+    if (href == null) return null;
+    final match = RegExp(
+      r'(?:https?://(?:www\.)?furaffinity\.net)?/user/([^/]+)/?',
+    ).firstMatch(href);
+    return match?.group(1);
+  }
+
+  static String? _extractSubmissionIdFromHref(String? href) {
+    if (href == null) return null;
+    final match = RegExp(
+      r'(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)/?',
+    ).firstMatch(href);
+    return match?.group(1);
+  }
+
+  static String? _extractJournalIdFromHref(String? href) {
+    if (href == null) return null;
+    final match = RegExp(
+      r'(?:https?://(?:www\.)?furaffinity\.net)?/journal/(\d+)/?',
+    ).firstMatch(href);
+    return match?.group(1);
+  }
+
+  static String? _normalizeImageUrl(String? src) {
+    final trimmed = src?.trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    if (trimmed.startsWith('//')) return 'https:$trimmed';
+    if (trimmed.startsWith('/')) return 'https://www.furaffinity.net$trimmed';
+    return trimmed;
+  }
+
+  static String _normalizeSectionHeading(String heading) {
+    var normalized =
+        heading.trim().replaceFirst(RegExp(r'^New\s+', caseSensitive: false), '');
+    if (normalized.isEmpty) return 'No Title';
+    return normalized
+        .split(' ')
+        .map((word) => word.isNotEmpty ? word[0].toUpperCase() + word.substring(1) : '')
+        .join(' ');
+  }
+
+  static String _sectionHeadingFromContainer(dom.Element container) {
+    final explicitHeading = (container.querySelector('h2') ??
+            container.querySelector('h3') ??
+            container.querySelector('legend') ??
+            container.querySelector('.section-header .highlight'))
+        ?.text
+        .trim();
+    if (explicitHeading != null && explicitHeading.isNotEmpty) {
+      return _normalizeSectionHeading(explicitHeading);
+    }
+
+    final lowerId = (container.id.isNotEmpty
+            ? container.id
+            : container.classes.join(' '))
+        .toLowerCase();
+    final html = container.outerHtml.toLowerCase();
+    if ((lowerId.contains('submission') && lowerId.contains('comment')) ||
+        html.contains('name="comments-submissions[]"')) {
+      return 'Submission Comments';
+    }
+    if ((lowerId.contains('journal') && lowerId.contains('comment')) ||
+        html.contains('name="comments-journals[]"')) {
+      return 'Journal Comments';
+    }
+    if (lowerId.contains('journal') || html.contains('name="journals[]"')) {
+      return 'Journals';
+    }
+    if (lowerId.contains('watch') || html.contains('name="watches[]"')) {
+      return 'Watches';
+    }
+    if (lowerId.contains('shout') || html.contains('name="shouts[]"')) {
+      return 'Shouts';
+    }
+    if (lowerId.contains('favorite') || html.contains('name="favorites[]"')) {
+      return 'Favorites';
+    }
+    return 'No Title';
   }
 
 
@@ -299,6 +380,10 @@ class FANotificationService with ChangeNotifier {
     notifyListeners();
   }
 
+  void setItemChecked(NotificationItem item, bool checked) {
+    item.isChecked = checked;
+    notifyListeners();
+  }
 
   /// Fetch and parse notifications from /msg/others/.
   Future<void> fetchNotifications() async {
@@ -409,17 +494,7 @@ class FANotificationService with ChangeNotifier {
 
       List<NotificationSection> fetchedSections = [];
       for (var container in containers) {
-        // Example headings: "New Watches", "New Shouts", etc.
-        String heading =
-            (container.querySelector('h2') ?? container.querySelector('h3'))?.text.trim() ?? 'No Title';
-        heading = heading.replaceFirst(RegExp(r'^New\s+', caseSensitive: false), '');
-        if (heading.isNotEmpty) {
-          // Capitalize each word of the heading
-          heading = heading
-              .split(' ')
-              .map((word) => word.isNotEmpty ? word[0].toUpperCase() + word.substring(1) : '')
-              .join(' ');
-        }
+        String heading = _sectionHeadingFromContainer(container);
 
         // Grab <li> items and ignore <li class="section-controls">
         final liItems = container
@@ -463,19 +538,11 @@ class FANotificationService with ChangeNotifier {
 
                 dom.Element? avatarLink = li.querySelector('td.avatar a');
                 if (avatarLink != null) {
-                  String? href = avatarLink.attributes['href'];
-                  if (href != null) {
-                    final match = RegExp(r'/user/([^/]+)/').firstMatch(href);
-                    if (match != null) {
-                      linkUsername = match.group(1);
-                    }
-                  }
+                  linkUsername =
+                      _extractUsernameFromHref(avatarLink.attributes['href']);
                 }
                 if (av != null) {
-                  avatarUrl = av.attributes['src'];
-                  if (avatarUrl != null && avatarUrl.startsWith('//')) {
-                    avatarUrl = 'https:$avatarUrl';
-                  }
+                  avatarUrl = _normalizeImageUrl(av.attributes['src']);
                 }
               }
               dom.Element? infoDiv = li.querySelector('div.info');
@@ -486,13 +553,8 @@ class FANotificationService with ChangeNotifier {
 
               dom.Element? avatarLink = li.querySelector('td.avatar a');
               if (avatarLink != null) {
-                String? href = avatarLink.attributes['href'];
-                if (href != null) {
-                  final match = RegExp(r'/user/([^/]+)/').firstMatch(href);
-                  if (match != null) {
-                    username = match.group(1);
-                  }
-                }
+                username =
+                    _extractUsernameFromHref(avatarLink.attributes['href']);
               }
 
               String avatarHtml = li.querySelector('div.avatar')?.outerHtml ?? '';
@@ -504,21 +566,13 @@ class FANotificationService with ChangeNotifier {
 
                 dom.Element? avatarLink = li.querySelector('div.avatar a');
                 if (avatarLink != null) {
-                  String? href = avatarLink.attributes['href'];
-                  if (href != null) {
-                    final match = RegExp(r'/user/([^/]+)/').firstMatch(href);
-                    if (match != null) {
-                      linkUsername = match.group(1);
-                    }
-                  }
+                  linkUsername =
+                      _extractUsernameFromHref(avatarLink.attributes['href']);
                 }
                 displayName = infoDiv.querySelector('span')?.text.trim();
                 dom.Element? avatarImg = li.querySelector('div.avatar img.avatar');
                 if (avatarImg != null) {
-                  avatarUrl = avatarImg.attributes['src'];
-                  if (avatarUrl != null && avatarUrl.startsWith('//')) {
-                    avatarUrl = 'https:$avatarUrl';
-                  }
+                  avatarUrl = _normalizeImageUrl(avatarImg.attributes['src']);
                 }
                 content = infoDiv.outerHtml;
               }
@@ -527,22 +581,14 @@ class FANotificationService with ChangeNotifier {
             dom.Element? subLink = li.querySelector('a[href*="/view/"]');
             if (subLink != null) {
               url = subLink.attributes['href'];
-              RegExp viewReg = RegExp(r'^/view/(\d+)/.*$');
-              RegExpMatch? match = viewReg.firstMatch(url ?? '');
-              if (match != null) {
-                submissionId = match.group(1);
-              }
+              submissionId = _extractSubmissionIdFromHref(url);
               content = content.replaceAll('"', '');
             }
           } else if (lowerHeading.contains('journal comments')) {
             dom.Element? journLink = li.querySelector('a[href*="/journal/"]');
             if (journLink != null) {
               url = journLink.attributes['href'];
-              RegExp journalReg = RegExp(r'^/journal/(\d+)/.*$');
-              RegExpMatch? match = journalReg.firstMatch(url ?? '');
-              if (match != null) {
-                journalId = match.group(1);
-              }
+              journalId = _extractJournalIdFromHref(url);
             }
             if (username != null && journalId != null) {
               content = "$username replied to your journal $journalId";
@@ -558,11 +604,7 @@ class FANotificationService with ChangeNotifier {
             dom.Element? subLink = li.querySelector('a[href*="/view/"]');
             if (subLink != null) {
               url = subLink.attributes['href'];
-              RegExp viewReg = RegExp(r'^/view/(\d+)/.*$');
-              RegExpMatch? match = viewReg.firstMatch(url ?? '');
-              if (match != null) {
-                submissionId = match.group(1);
-              }
+              submissionId = _extractSubmissionIdFromHref(url);
               content = content.replaceAll('"', '');
             }
             if (content.isNotEmpty) {
@@ -571,7 +613,6 @@ class FANotificationService with ChangeNotifier {
           }
           else if (lowerHeading.contains('shouts')) {
             bool isClassic = document.querySelector('body')?.attributes['data-static-path'] == '/themes/classic';
-            String nicknameLink = "";
             if (isClassic) {
               if (li.localName == 'table' && li.id.startsWith('shout-')) {
                 if (li.text.trim() == 'Shout has been removed from your page.') {
@@ -579,22 +620,12 @@ class FANotificationService with ChangeNotifier {
                 } else {
                   dom.Element? av = li.querySelector('td.alt1 a img.avatar');
                   if (av != null) {
-                    avatarUrl = av.attributes['src'];
-                    if (avatarUrl != null && avatarUrl.startsWith('//')) {
-                      avatarUrl = 'https:$avatarUrl';
-                    }
+                    avatarUrl = _normalizeImageUrl(av.attributes['src']);
                   }
                   dom.Element? unameLink = li.querySelector('div.c-usernameBlock a.c-usernameBlock__displayName');
                   if (unameLink != null) {
                     username = unameLink.text.trim();
                     url = unameLink.attributes['href'];
-                    if (url != null) {
-                      final regExp = RegExp(r'^/user/([^/]+)/?$');
-                      final match = regExp.firstMatch(url);
-                      if (match != null) {
-                        nicknameLink = match.group(1)!;
-                      }
-                    }
                   }
                   dom.Element? dateElem = li.querySelector('span.popup_date');
                   if (dateElem != null) {
@@ -610,11 +641,10 @@ class FANotificationService with ChangeNotifier {
                   }
                 }
               } else if (li.querySelector('input[type="checkbox"][name="shouts[]"]') != null) {
-                dom.Element? userLink = li.querySelector('a[href^="/user/"]');
+                dom.Element? userLink = li.querySelector('a[href*="/user/"]');
                 if (userLink != null) {
                   username = userLink.text.trim();
                   url = userLink.attributes['href'];
-                  nicknameLink = _extractNicknameLink(li);
                 }
                 dom.Element? dateElem = li.querySelector('span.popup_date');
                 if (dateElem != null) {
@@ -627,31 +657,27 @@ class FANotificationService with ChangeNotifier {
                 if (li.text.contains('Shout has been removed')) {
                   content = 'Shout has been removed from your page.';
                 } else {
-                  dom.Element? userLink = li.querySelector('a[href^="/user/"]');
+                  dom.Element? userLink = li.querySelector('a[href*="/user/"]');
                   if (userLink != null) {
                     username = userLink.text.trim();
                     url = userLink.attributes['href'];
-                    nicknameLink = _extractNicknameLink(li);
                   }
                   dom.Element? av = li.querySelector('div.avatar img.avatar');
                   if (av != null) {
-                    avatarUrl = av.attributes['src'];
-                    if (avatarUrl != null && avatarUrl.startsWith('//')) {
-                      avatarUrl = 'https:$avatarUrl';
-                    }
+                    avatarUrl = _normalizeImageUrl(av.attributes['src']);
                   }
                 }
               }
             } else {
 
               dom.Element? nameSpan = li.querySelector(
-                  'span.c-usernameBlockSimple.username-underlined a[href^="/user/"] span.c-usernameBlockSimple__displayName'
+                  'span.c-usernameBlockSimple.username-underlined a[href*="/user/"] span.c-usernameBlockSimple__displayName'
               );
               if (nameSpan != null) {
                 username = nameSpan.text.trim();
               }
               dom.Element? parentAnchor = li.querySelector(
-                  'span.c-usernameBlockSimple.username-underlined a[href^="/user/"]'
+                  'span.c-usernameBlockSimple.username-underlined a[href*="/user/"]'
               );
               if (parentAnchor != null) {
                 url = parentAnchor.attributes['href'];
@@ -660,17 +686,10 @@ class FANotificationService with ChangeNotifier {
                   username = username ?? "";
 
                 }
-                String nicknameLinkTemp = _extractNicknameLink(li);
-                if (nicknameLinkTemp.isNotEmpty) {
-
-                }
               }
               dom.Element? avatarImg = li.querySelector('div.avatar img.avatar');
               if (avatarImg != null) {
-                avatarUrl = avatarImg.attributes['src'];
-                if (avatarUrl != null && avatarUrl.startsWith('//')) {
-                  avatarUrl = 'https:$avatarUrl';
-                }
+                avatarUrl = _normalizeImageUrl(avatarImg.attributes['src']);
               }
               dom.Element? timeSpan = li.querySelector('div.floatright span.popup_date');
               if (timeSpan != null) {
@@ -708,11 +727,7 @@ class FANotificationService with ChangeNotifier {
             dom.Element? journLink = li.querySelector('a[href*="/journal/"]');
             if (journLink != null) {
               url = journLink.attributes['href'];
-              RegExp journalReg = RegExp(r'^/journal/(\d+)/.*$');
-              RegExpMatch? match = journalReg.firstMatch(url ?? '');
-              if (match != null) {
-                journalId = match.group(1);
-              }
+              journalId = _extractJournalIdFromHref(url);
             }
             content = content.trim();
             content = content.replaceAll('"', '').trim();
@@ -885,7 +900,7 @@ class FANotificationService with ChangeNotifier {
             }
             dom.Element? avatarDiv = c.querySelector('div.avatar');
             if (avatarDiv != null) {
-              dom.Element? link = avatarDiv.querySelector('a[href^="/user/"]');
+              dom.Element? link = avatarDiv.querySelector('a[href*="/user/"]');
               if (link != null) {
                 dom.Element? img = link.querySelector('img.comment_useravatar');
                 if (img != null) {
@@ -948,19 +963,19 @@ class FANotificationService with ChangeNotifier {
     if (myUsernameElem != null) {
       final href = myUsernameElem.attributes['href'];
       if (href != null) {
-        final match = RegExp(r'^/user/([^/]+)/?$').firstMatch(href);
-        if (match != null) return match.group(1)!;
+        final username = _extractUsernameFromHref(href);
+        if (username != null) return username;
       }
     }
 
     if (!isClassic) {
       // Modern menubar user link.
       final menubarLink =
-          doc.querySelector('div.floatleft.hideonmobile a[href^="/user/"]');
+          doc.querySelector('div.floatleft.hideonmobile a[href*="/user/"]');
       final href = menubarLink?.attributes['href'];
       if (href != null) {
-        final match = RegExp(r'^/user/([^/]+)/?$').firstMatch(href);
-        if (match != null) return match.group(1)!;
+        final username = _extractUsernameFromHref(href);
+        if (username != null) return username;
       }
     }
 
@@ -1086,7 +1101,7 @@ class FANotificationService with ChangeNotifier {
         String nicknameLink = "";
         if (!isRemoved) {
           final nameSpan = li.querySelector(
-              'span.c-usernameBlockSimple.username-underlined a[href^="/user/"] span.c-usernameBlockSimple__displayName');
+              'span.c-usernameBlockSimple.username-underlined a[href*="/user/"] span.c-usernameBlockSimple__displayName');
           if (nameSpan != null) nickname = nameSpan.text.trim();
           nicknameLink = _extractNicknameLink(li);
         }
@@ -1242,10 +1257,6 @@ class FANotificationService with ChangeNotifier {
     }
     // If anything fails, return empty list.
     return <Map<String, dynamic>>[];
-  }
-
-  String _normalizeDate(String s) {
-    return s.replaceFirst(RegExp(r'^on\s+'), '').trim();
   }
 
   /// Remove selected items in a section.

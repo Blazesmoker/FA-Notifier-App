@@ -166,7 +166,7 @@ class MessageList extends StatelessWidget {
               children: [
                 Container(
                   color: isSelected
-                      ? _accent.withOpacity(selectionOpacity)
+                      ? _accent.withValues(alpha: selectionOpacity)
                       : Colors.black,
                   padding: const EdgeInsets.symmetric(
                     vertical: 8.0,

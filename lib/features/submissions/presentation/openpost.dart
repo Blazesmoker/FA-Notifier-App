@@ -29,7 +29,6 @@ import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
 import 'package:FANotifier/features/submissions/presentation/SubmissionDescriptionWebview.dart';
-import 'package:FANotifier/features/submissions/presentation/add_post_comment_screen.dart';
 import 'package:FANotifier/features/profile/presentation/avatardownloadscreen.dart';
 import 'package:FANotifier/features/submissions/data/openpost_api_service.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
@@ -179,7 +178,6 @@ class _OpenPostState extends State<OpenPost>
   String? favLink;
   String? unfavLink;
   bool isFavorited = false;
-  int _likeButtonKeyCounter = 0;
   String? watchLink;
   String? unwatchLink;
   String? blockLink;
@@ -659,48 +657,6 @@ class _OpenPostState extends State<OpenPost>
     }
   }
 
-  Future<void> _showKeywordsDialog() async {
-    if (keywords.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No keywords available.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Keywords'),
-          content: SingleChildScrollView(
-            child: Wrap(
-              spacing: 8.0,
-              runSpacing: 8.0,
-              children: keywords.map((keyword) {
-                return ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _navigateToSearch(keyword);
-                  },
-                  child: Text(keyword),
-                );
-              }).toList(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   Widget _buildTagsPanel() {
     final bool hasAnyTags =
         keywordTags.isNotEmpty || metaKeywordTags.isNotEmpty;
@@ -788,7 +744,7 @@ class _OpenPostState extends State<OpenPost>
 
     final Color accent = isBlocked ? Colors.redAccent : const Color(0xFFE09321);
     final Color border =
-        isBlocked ? accent.withOpacity(0.55) : const Color(0xFF2A2A2A);
+        isBlocked ? accent.withValues(alpha: 0.55) : const Color(0xFF2A2A2A);
 
     return Container(
       decoration: BoxDecoration(
@@ -1646,9 +1602,11 @@ class _OpenPostState extends State<OpenPost>
   void _sharePost() {
     final postUrl = buildSubmissionViewUrl(widget.uniqueNumber);
     final shareContent = '$postUrl';
-    Share.share(
-      shareContent,
-      subject: submissionTitle ?? 'Fur Affinity Post',
+    SharePlus.instance.share(
+      ShareParams(
+        text: shareContent,
+        subject: submissionTitle ?? 'Fur Affinity Post',
+      ),
     );
   }
 
@@ -1949,8 +1907,9 @@ class _OpenPostState extends State<OpenPost>
           .create();
       await tempFile.writeAsBytes(bytes);
 
-      // Share the image file using share_plus
-      await Share.shareXFiles([XFile(tempFile.path)]);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(tempFile.path)]),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1980,15 +1939,6 @@ class _OpenPostState extends State<OpenPost>
       final status = await Permission.storage.request();
       return status.isGranted;
     }
-  }
-
-  /// Helper method to recover the full link from truncated FA links
-  String? _getFullLinkFromFetchedHtml(String truncatedUrl) {
-    if (submissionDescription == null) return null;
-    return findFullShortenedSubmissionLink(
-      submissionDescription!,
-      truncatedUrl,
-    );
   }
 
   String fixTruncatedLinks(String htmlContent) {
@@ -3462,7 +3412,6 @@ class _OpenPostState extends State<OpenPost>
                         ]),
                         builder: (context, _) {
                           final keyboardInset = _keyboardInset.value;
-                          final isExpanded = _isCommentComposerExpanded.value;
                           return Padding(
                             padding: EdgeInsets.only(
                               left: 8,

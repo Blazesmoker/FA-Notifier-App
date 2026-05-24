@@ -178,10 +178,8 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
 
   Widget _buildTagPill(String tagName) {
     final bool inFlight = _tagToggleInFlight.contains(tagName);
-    const bool isBlocked = true;
-
-    final Color accent = isBlocked ? Colors.redAccent : const Color(0xFFE09321);
-    final Color border = isBlocked ? accent.withOpacity(0.55) : const Color(0xFF2A2A2A);
+    const Color accent = Colors.redAccent;
+    final Color border = accent.withValues(alpha: 0.55);
 
     return Container(
       decoration: BoxDecoration(

@@ -673,8 +673,10 @@ class NotificationSectionWidget extends StatelessWidget {
                                     builder: (context, constraints) {
                                       return InkWell(
                                         onTap: () {
-                                          item.isChecked = !item.isChecked;
-                                          service.notifyListeners();
+                                          service.setItemChecked(
+                                            item,
+                                            !item.isChecked,
+                                          );
                                         },
                                         splashColor: Colors.grey[800],
                                         highlightColor: Colors.grey[600],
@@ -689,8 +691,10 @@ class NotificationSectionWidget extends StatelessWidget {
                                               value: item.isChecked,
                                               onChanged: (bool? value) {
                                                 if (value != null) {
-                                                  item.isChecked = value;
-                                                  service.notifyListeners();
+                                                  service.setItemChecked(
+                                                    item,
+                                                    value,
+                                                  );
                                                 }
                                               },
                                             ),
@@ -1131,7 +1135,6 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   int _initialTabIndex = 0;
   bool _didAutoRefetch = false;
   bool _isDraggingFromEdge = false;
-  double _startDragX = 0.0;
   int _previousSectionCount = 0;
   int _lastTabIndex = -1;
 
@@ -1658,7 +1661,6 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   onHorizontalDragStart: (details) {
                     if (details.globalPosition.dx <= 62.0) {
                       _isDraggingFromEdge = true;
-                      _startDragX = details.globalPosition.dx;
                     }
                   },
                   onHorizontalDragUpdate: (details) {

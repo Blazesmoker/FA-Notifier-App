@@ -59,12 +59,6 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const String telegramDisplayText = 'Join our Telegram Group!';
-    final noSplashTheme = Theme.of(context).copyWith(
-      splashFactory: NoSplash.splashFactory,
-      splashColor: Colors.transparent,
-      highlightColor: Colors.transparent,
-      hoverColor: Colors.transparent,
-    );
     return SafeArea(
       top: false,
       child: Scaffold(

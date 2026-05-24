@@ -72,9 +72,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Timer? _elementCheckTimer;
   DateTime? _firstTimeElementFound;
-  bool _mainPageStable = false;
-
-  int _previousSum = 0;
 
   final GlobalKey<DrawerUserControllerState> _drawerKey =
       GlobalKey<DrawerUserControllerState>();
@@ -99,8 +96,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   int _unreadCount = 0;
   Timer? _foregroundFetchTimer;
-
-  Notifications? _currentNotifications;
 
   /// Initial section for NotificationsScreen.
   String? _notificationsInitialSection;
@@ -334,11 +329,6 @@ class _HomeScreenState extends State<HomeScreen> {
     NotificationSettingsProvider settings,
     FANotificationService faNotificationService,
   ) {
-    _previousSum = faNotificationService.sections.fold<int>(
-      0,
-      (sum, s) => sum + s.items.length,
-    );
-
     int visible = 0;
     for (final section in faNotificationService.sections) {
       final title = section.title;
@@ -356,10 +346,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return visible;
   }
 
-  void _onNotificationsUpdated(Notifications notifications) {
-    setState(() {
-      _currentNotifications = notifications;
-    });
+  void _onNotificationsUpdated(Notifications _) {
+    setState(() {});
   }
 
   void _onBottomNavigationItemTapped(int index) {
@@ -482,14 +470,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildWebView() {
     return InAppWebView(
       initialUrlRequest: URLRequest(url: WebUri(loginUrl)),
-      initialOptions: InAppWebViewGroupOptions(
-        crossPlatform: InAppWebViewOptions(
-          javaScriptEnabled: true,
-          useShouldOverrideUrlLoading: true,
-          mediaPlaybackRequiresUserGesture: false,
-          clearCache: false,
-          supportZoom: true,
-        ),
+      initialSettings: InAppWebViewSettings(
+        javaScriptEnabled: true,
+        useShouldOverrideUrlLoading: true,
+        mediaPlaybackRequiresUserGesture: false,
+        supportZoom: true,
       ),
       onWebViewCreated: (InAppWebViewController controller) {
         _webViewController = controller;
@@ -606,7 +591,6 @@ class _HomeScreenState extends State<HomeScreen> {
           final elapsed = DateTime.now().difference(_firstTimeElementFound!);
           if (elapsed >= const Duration(seconds: 1)) {
             setState(() {
-              _mainPageStable = true;
               isLoggedIn = true;
               _webViewController = null;
             });
@@ -847,7 +831,6 @@ class _HomeScreenState extends State<HomeScreen> {
         isLoggedIn = false;
         _userProfile = null;
         _unreadCount = 0;
-        _currentNotifications = null;
         isLoadingProfile = false;
         drawerIndex = DrawerIndex.HOME;
         _selectedIndex = 0;
@@ -1022,8 +1005,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: const Icon(Icons.notifications),
                                 position: badges.BadgePosition.topEnd(
                                     top: -5, end: -7),
-                                padding: const EdgeInsets.all(2),
-                                badgeColor: Colors.red,
+                                badgeStyle: const badges.BadgeStyle(
+                                  padding: EdgeInsets.all(2),
+                                  badgeColor: Colors.red,
+                                ),
                               ),
                               label: 'Notifications',
                               backgroundColor: AppTheme.background,
@@ -1047,8 +1032,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: const Icon(Icons.mail),
                                 position: badges.BadgePosition.topEnd(
                                     top: -5, end: -7),
-                                padding: const EdgeInsets.all(2),
-                                badgeColor: Colors.red,
+                                badgeStyle: const badges.BadgeStyle(
+                                  padding: EdgeInsets.all(2),
+                                  badgeColor: Colors.red,
+                                ),
                               ),
                               label: 'Notes',
                               backgroundColor: AppTheme.background,

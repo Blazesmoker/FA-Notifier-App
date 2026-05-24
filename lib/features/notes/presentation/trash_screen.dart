@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:FANotifier/features/notes/presentation/message_detail_screen.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
 import 'package:FANotifier/features/notes/data/notesscreen_api_service.dart';
-import 'package:FANotifier/features/notes/presentation/notesscreen_widgets.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
 /// Regulate selection highlight opacity here. Values 0.0–1.0.
@@ -577,7 +576,7 @@ class TrashMessageList extends StatelessWidget {
               children: [
                 Container(
                   color: isSelected
-                      ? _accent.withOpacity(selectionOpacity)
+                      ? _accent.withValues(alpha: selectionOpacity)
                       : Colors.black,
                   padding: const EdgeInsets.symmetric(
                     vertical: 8.0,

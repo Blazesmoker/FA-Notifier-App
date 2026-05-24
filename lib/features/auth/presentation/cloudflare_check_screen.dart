@@ -143,7 +143,6 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             useShouldOverrideUrlLoading: true,
-            clearCache: false,
             supportZoom: true,
             userAgent: FAHttp.userAgent,
           ),

@@ -12,6 +12,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/shared/fa/fa_username.dart';
+import 'package:FANotifier/shared/fa/parsing_utils.dart';
 
 class UserProfileParsed {
   UserProfileParsed({
@@ -1100,8 +1101,6 @@ class UserProfileApiService {
   static UserProfileParsed parseUserProfile(String htmlBody) {
     final document = html_parser.parse(htmlBody);
 
-    bool localHasRealUserProfile = true;
-
     String? userProfileImageUrl;
     String? userProfilePostNumber;
     String? userProfileTexts;
@@ -1135,7 +1134,7 @@ class UserProfileApiService {
     final profilePicElem = document.querySelector('userpage-nav-avatar img') ??
         document.querySelector('img.avatar');
     profileImageUrl = profilePicElem != null
-        ? (profilePicElem.attributes['src']?.replaceFirst('//', 'https://'))
+        ? normalizeFaUrl(profilePicElem.attributes['src'])
         : null;
 
     final displayNameElem = document
@@ -1740,7 +1739,7 @@ class UserProfileApiService {
             : '$displayNameShout\n@$usernameWithoutSymbol';
 
         final usernameLink = container.querySelector('div.avatar a');
-        String? profileNickname = usernameLink?.attributes['href'] != null
+        String profileNickname = usernameLink?.attributes['href'] != null
             ? usernameLink!.attributes['href']!
                 .split('/')
                 .where((part) => part.isNotEmpty)
@@ -1807,7 +1806,7 @@ class UserProfileApiService {
           id: shoutId,
           avatarUrl: avatarUrl,
           username: cmtUsername,
-          profileNickname: profileNickname ?? 'Unknown',
+          profileNickname: profileNickname,
           date: relativeDate,
           text: text,
           popupDateFull: fullDate,

@@ -2,6 +2,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:FANotifier/core/utils/html_tags_debug.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
+import 'package:FANotifier/shared/fa/parsing_utils.dart';
 
 class OpenPostApiService {
   /// Parses the main post document and returns structured data.
@@ -71,10 +72,9 @@ class OpenPostApiService {
     // Full image
     final imageElem = logQuery(document,
         '.submission-area img#submissionImg[src], img#submissionImg[src]');
-    String? fullViewUrl = imageElem?.attributes['data-fullview-src']
-        ?.replaceFirst('//', 'https://');
-    fullViewUrl ??=
-        imageElem?.attributes['src']?.replaceFirst('//', 'https://');
+    String? fullViewUrl =
+        normalizeFaUrl(imageElem?.attributes['data-fullview-src']);
+    fullViewUrl ??= normalizeFaUrl(imageElem?.attributes['src']);
 
     // Description
     var descElem = logQuery(
@@ -522,8 +522,7 @@ class OpenPostApiService {
       currentUsername: currentUsername,
       username: extractedUsername,
       linkUsername: linkUser,
-      profileImageUrl:
-          profileIcon?.attributes['src']?.replaceFirst('//', 'https://'),
+      profileImageUrl: normalizeFaUrl(profileIcon?.attributes['src']),
       submissionTitle: titleElem?.text.trim(),
       fullViewImageUrl: fullViewUrl,
       submissionDescription: fixedDescription,
@@ -644,10 +643,11 @@ class OpenPostApiService {
         }
       }
 
-      String? profileImage = commentContainer
-          .querySelector('img.avatar, .avatar img')
-          ?.attributes['src']
-          ?.replaceFirst('//', 'https://');
+      String? profileImage = normalizeFaUrl(
+        commentContainer
+            .querySelector('img.avatar, .avatar img')
+            ?.attributes['src'],
+      );
 
       final displayNameAnchor = commentContainer
           .querySelector('a.c-usernameBlock__displayName span.js-displayName');

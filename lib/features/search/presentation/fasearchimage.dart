@@ -1,6 +1,7 @@
 // lib/fasearchimage.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/search/data/search_image_parser.dart';
 import 'package:FANotifier/features/search/data/search_image_service.dart';
@@ -548,7 +549,8 @@ class FASearchImageState extends State<FASearchImage> {
                   physics: const AlwaysScrollableScrollPhysics(
                       parent: BouncingScrollPhysics()),
                   controller: _scrollController,
-                  cacheExtent: screenHeight * 1.5,
+                  scrollCacheExtent:
+                      ScrollCacheExtent.pixels(screenHeight * 1.5),
                   itemCount: imageRows.length + (isLoading ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == imageRows.length) {

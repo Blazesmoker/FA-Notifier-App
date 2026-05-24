@@ -50,7 +50,6 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   bool _isPausedForScroll = false;
   double _webViewHeight = 50.0;
   bool _mountWebView = true;
-  bool _webViewLoaded = false;
 
   // Store the cleaned HTML so we search it for full links.
   String? _userDescriptionHtml;
@@ -433,7 +432,6 @@ user-select: none !important;
                         if (!mounted) return;
                         setState(() {
                           _webViewHeight = height;
-                          _webViewLoaded = true;
                         });
                         widget.onWebViewLoaded?.call(true);
                       });
@@ -463,20 +461,25 @@ user-select: none !important;
                       }
                       return NavigationActionPolicy.ALLOW;
                     },
-                    onLoadError: (controller, url, code, message) {
+                    onReceivedError: (controller, request, error) {
+                      if (request.isForMainFrame == false) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Failed to load content: $message'),
+                          content: Text(
+                            'Failed to load content: ${error.description}',
+                          ),
                           backgroundColor: Colors.red,
                         ),
                       );
                     },
-                    onLoadHttpError:
-                        (controller, url, statusCode, description) {
+                    onReceivedHttpError:
+                        (controller, request, errorResponse) {
+                      if (request.isForMainFrame == false) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content:
-                              Text('HTTP Error $statusCode: $description'),
+                          content: Text(
+                            'HTTP Error ${errorResponse.statusCode}: ${errorResponse.reasonPhrase}',
+                          ),
                           backgroundColor: Colors.red,
                         ),
                       );

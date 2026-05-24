@@ -43,8 +43,6 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
   bool _hasMore = true;
   String? _nextPageUrl;
 
-  // Internal folder state variables.
-  String _selectedFolderName = 'Main Gallery';
   String _selectedFolderUrl = '';
 
   // Concurrency management for fetching submission data (HQ URL, fav state).
@@ -65,11 +63,9 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
     if (widget.selectedFolderUrl != null && widget.selectedFolderUrl!.isNotEmpty) {
       _selectedFolderUrl = widget.selectedFolderUrl!;
-      _selectedFolderName = '';
     } else {
       _selectedFolderUrl =
           _profileGalleryService.buildDefaultGalleryUrl(widget.username);
-      _selectedFolderName = 'Main Gallery';
     }
     _nextPageUrl = _buildInitialUrl();
     _refresh();
@@ -99,16 +95,6 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
       widget.username,
       _selectedFolderUrl,
     );
-  }
-
-
-  void _onFolderSelected(FaFolder folder) {
-    setState(() {
-      _selectedFolderName = folder.name;
-      _selectedFolderUrl = folder.url;
-    });
-    _nextPageUrl = _buildInitialUrl();
-    _refresh();
   }
 
   Future<void> _refresh() async {
@@ -330,8 +316,6 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
               author: null,
               onToggle: (val) => _handleToggleFavorite(index, val),
               onTap: () {
-                final resolved = Uri.parse('https://www.furaffinity.net')
-                    .resolve(item['postUrl']);
                 Navigator.push(
                   context,
                   OpenPost.route(

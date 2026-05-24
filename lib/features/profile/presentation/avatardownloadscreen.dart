@@ -85,7 +85,9 @@ class AvatarDownloadScreen extends StatelessWidget {
       final tempFile = await File('${tempDir.path}/$filename').create(recursive: true);
       await tempFile.writeAsBytes(imageData.bytes);
 
-      await Share.shareXFiles([XFile(tempFile.path)]);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(tempFile.path)]),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to share image: $e'), backgroundColor: Colors.red),

@@ -417,13 +417,13 @@ class _FindSourceScreenState extends State<FindSourceScreen>
         statusBarColor: Color(0xFF111111),
         statusBarIconBrightness: Brightness.light,
       ),
-      child: WillPopScope(
-        onWillPop: () async {
+      child: PopScope(
+        canPop: !_selectionMode,
+        onPopInvokedWithResult: (bool didPop, dynamic result) {
+          if (didPop) return;
           if (_selectionMode) {
             _exitSelectionMode();
-            return false;
           }
-          return true;
         },
         child: Scaffold(
           backgroundColor: const Color(0xFF111111),

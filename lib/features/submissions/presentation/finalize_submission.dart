@@ -359,35 +359,30 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
                 'Submission Rating',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
-              RadioListTile<String>(
-                title: const Text('General'),
-                value: '0',
+              RadioGroup<String>(
                 groupValue: _rating,
-                onChanged: (value) {
+                onChanged: (String? value) {
+                  if (value == null) return;
                   setState(() {
-                    _rating = value!;
+                    _rating = value;
                   });
                 },
-              ),
-              RadioListTile<String>(
-                title: const Text('Mature'),
-                value: '2',
-                groupValue: _rating,
-                onChanged: (value) {
-                  setState(() {
-                    _rating = value!;
-                  });
-                },
-              ),
-              RadioListTile<String>(
-                title: const Text('Adult'),
-                value: '1',
-                groupValue: _rating,
-                onChanged: (value) {
-                  setState(() {
-                    _rating = value!;
-                  });
-                },
+                child: const Column(
+                  children: [
+                    RadioListTile<String>(
+                      title: Text('General'),
+                      value: '0',
+                    ),
+                    RadioListTile<String>(
+                      title: Text('Mature'),
+                      value: '2',
+                    ),
+                    RadioListTile<String>(
+                      title: Text('Adult'),
+                      value: '1',
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 20),
 

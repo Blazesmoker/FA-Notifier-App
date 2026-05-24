@@ -499,11 +499,12 @@ class _InfoWebViewDialogState extends State<InfoWebViewDialog> {
                       });
                     }
                   },
-                  onLoadError: (controller, uri, code, message) {
+                  onReceivedError: (controller, request, error) {
                     if (!mounted) return;
                     setState(() {
                       _isLoading = false;
-                      _errorMessage = 'Page load error: $message (code $code)';
+                      _errorMessage =
+                          'Page load error: ${error.description} (code ${error.type})';
                     });
                   },
                   onConsoleMessage: (controller, consoleMessage) {

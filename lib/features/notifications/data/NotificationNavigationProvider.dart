@@ -4,6 +4,7 @@ class NotificationNavigationProvider extends ChangeNotifier {
   int? _targetIndex;
 
   int? get targetIndex => _targetIndex;
+  bool get hasNavigationListeners => hasListeners;
 
   /// Set a target tab, notifying listeners once.
   void setTargetIndex(int index) {

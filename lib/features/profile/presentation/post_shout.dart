@@ -17,7 +17,6 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
   final TextEditingController _shoutController = TextEditingController();
   late final ShoutService _shoutService;
 
-  int _currentLength = 0;
   final int _maxLength = 222;
   bool _isLoading = false;
   final ValueNotifier<int> _lengthNotifier = ValueNotifier<int>(0);

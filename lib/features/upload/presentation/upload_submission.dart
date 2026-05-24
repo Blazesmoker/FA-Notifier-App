@@ -55,73 +55,9 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   late final Animation<double> _toolsMenuFade;
   late final Animation<Offset> _toolsMenuSlide;
 
-
-  ValueNotifier<String>? _uploadedFileUri;
   List<int>? _uploadedFileBytes;
+  // ignore: unused_field
   String? _uploadedFileName;
-
-
-  Future<JsPromptResponse?> _handleFileChooser(
-      InAppWebViewController controller,
-      JsPromptRequest jsPromptRequest,
-      ) async {
-    try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif'],
-        allowMultiple: false,
-        withData: true,
-      );
-
-      if (result == null || result.files.isEmpty) {
-        return JsPromptResponse(
-          message: '',
-          handledByClient: true,
-        );
-      }
-
-      final file = result.files.first;
-      _uploadedFileName = file.name;
-      _uploadedFileBytes = file.bytes?.toList();
-
-      if (_uploadedFileBytes == null && file.path != null) {
-        final fileFromPath = File(file.path!);
-        _uploadedFileBytes = await fileFromPath.readAsBytes();
-      }
-
-      if (_uploadedFileBytes == null) {
-        debugPrint('Failed to read file bytes');
-        return JsPromptResponse(
-          message: '',
-          handledByClient: true,
-        );
-      }
-
-      final base64Data = base64Encode(_uploadedFileBytes!);
-
-      await controller.evaluateJavascript(
-        source: buildUploadFileInputScript(
-          base64Data: base64Data,
-          fileName: _uploadedFileName!,
-          extension: file.extension ?? 'png',
-          returnResult: true,
-        ),
-      );
-
-      debugPrint('File loaded successfully: $_uploadedFileName');
-      return JsPromptResponse(
-        message: 'success',
-        handledByClient: true,
-      );
-
-    } catch (e) {
-      debugPrint('Error in file chooser: $e');
-      return JsPromptResponse(
-        message: '',
-        handledByClient: true,
-      );
-    }
-  }
 
   @override
   void initState() {
@@ -593,7 +529,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
           child: SizeTransition(
             sizeFactor: _toolsMenuSize,
             axis: Axis.vertical,
-            axisAlignment: -1.0,
+            alignment: const AlignmentDirectional(-1.0, -1.0),
             child: menu,
           ),
         ),
@@ -601,7 +537,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     );
   }
 
-  Widget _divider() => Container(height: 1, color: _accent.withOpacity(0.18));
+  Widget _divider() => Container(height: 1, color: _accent.withValues(alpha: 0.18));
 
   Widget _toolsItem({
     required IconData icon,
@@ -769,23 +705,15 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       String? fileName;
 
       if (source == 'files') {
-        final result = await FilePicker.pickFiles(
+        final file = await FilePicker.pickFile(
           type: FileType.custom,
           allowedExtensions: ['jpg', 'jpeg', 'png', 'gif'],
-          allowMultiple: false,
-          withData: true,
         );
 
-        if (result == null || result.files.isEmpty) return;
+        if (file == null) return;
 
-        final file = result.files.first;
         fileName = file.name;
-        _uploadedFileBytes = file.bytes?.toList();
-
-        if (_uploadedFileBytes == null && file.path != null) {
-          selectedFile = File(file.path!);
-          _uploadedFileBytes = await selectedFile.readAsBytes();
-        }
+        _uploadedFileBytes = (await file.readAsBytes()).toList();
       } else if (source == 'gallery') {
         final ImagePicker picker = ImagePicker();
         final XFile? pickedFile = await picker.pickImage(

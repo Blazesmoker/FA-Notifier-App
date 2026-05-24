@@ -75,8 +75,6 @@ class _HomeDrawerState extends State<HomeDrawer> {
   Timer? _kofiTimer;
   bool _isCooldownActive = false;
 
-  String? _latestGithubVersion;
-  String? _currentAppVersion;
   bool _updateAvailable = false;
 
   @override
@@ -107,8 +105,6 @@ class _HomeDrawerState extends State<HomeDrawer> {
     if (!mounted || updateInfo == null) return;
 
     setState(() {
-      _currentAppVersion = updateInfo.currentVersion;
-      _latestGithubVersion = updateInfo.latestVersion;
       _updateAvailable = updateInfo.updateAvailable;
     });
   }
@@ -208,7 +204,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        splashColor: isKoFi ? Colors.transparent : Colors.grey.withOpacity(0.1),
+        splashColor: isKoFi ? Colors.transparent : Colors.grey.withValues(alpha: 0.1),
         highlightColor: isKoFi ? Colors.transparent : Colors.transparent,
         splashFactory: isKoFi ? NoSplash.splashFactory : null,
         onTap: () {
@@ -337,7 +333,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
                         width: drawerContentWidth,
                         height: 46,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: const BorderRadius.only(
                             topRight: Radius.circular(28),
                             bottomRight: Radius.circular(28),
@@ -758,7 +754,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
                                               boxShadow: <BoxShadow>[
                                                 BoxShadow(
                                                   color: AppTheme.grey
-                                                      .withOpacity(0.0),
+                                                      .withValues(alpha: 0.0),
                                                   offset:
                                                       const Offset(2.0, 4.0),
                                                   blurRadius: 8,

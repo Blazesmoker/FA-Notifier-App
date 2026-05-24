@@ -34,7 +34,7 @@ class _StarBurstAnimationState extends State<StarBurstAnimation>
     _starAnimations = [];
     _starColors = [];
 
-    for (final origin in widget.origins) {
+    for (final _ in widget.origins) {
       for (int i = 0; i < 9; i++) {
         final angle = 2 * pi * i / 9;
         final radius = random.nextDouble() * 20 + 40;

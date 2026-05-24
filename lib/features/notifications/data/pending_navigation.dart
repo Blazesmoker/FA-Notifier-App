@@ -41,7 +41,7 @@ Future<void> processPendingNavigation({String from = 'unknown'}) async {
 
   // If nobody is listening yet, don't clear the payload; let HomeScreen/lifecycle
   // pick it up once mounted.
-  if (!navProvider.hasListeners) {
+  if (!navProvider.hasNavigationListeners) {
     debugPrint('[PENDING_NAV] navProvider has no listeners; keeping pending (from=$from)');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       processPendingNavigation(from: '$from/retry_listeners');

@@ -80,7 +80,7 @@ class NotificationService {
     );
 
     await flutterLocalNotificationsPlugin.initialize(
-      initializationSettings,
+      settings: initializationSettings,
       onDidReceiveNotificationResponse: onDidReceiveNotificationResponse,
       onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
@@ -362,10 +362,10 @@ class NotificationService {
     final details = NotificationDetails(android: android, iOS: ios);
 
     await flutterLocalNotificationsPlugin.show(
-      id,
-      title,
-      body,
-      details,
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: details,
       payload: payload,
     );
 
@@ -384,7 +384,7 @@ class NotificationService {
           '${type}_sound_off_vibration_on',
           '${type}_sound_off_vibration_off',
         ]) {
-          await androidPlugin.deleteNotificationChannel(channelId);
+          await androidPlugin.deleteNotificationChannel(channelId: channelId);
         }
       }
     }

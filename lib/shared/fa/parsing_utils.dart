@@ -14,3 +14,11 @@ dom.Document _parseHtmlSync(String html) {
 Future<dom.Document> parseHtml(String html) async {
   return compute(_parseHtmlSync, html);
 }
+
+String? normalizeFaUrl(String? value) {
+  final trimmed = value?.trim();
+  if (trimmed == null || trimmed.isEmpty) return null;
+  if (trimmed.startsWith('//')) return 'https:$trimmed';
+  if (trimmed.startsWith('/')) return 'https://www.furaffinity.net$trimmed';
+  return trimmed;
+}

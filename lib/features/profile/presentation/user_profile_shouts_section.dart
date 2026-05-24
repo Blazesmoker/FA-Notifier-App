@@ -127,7 +127,7 @@ class UserProfileShoutsSection extends StatelessWidget {
                     opacity: animation,
                     child: SizeTransition(
                       sizeFactor: animation,
-                      axisAlignment: -1.0,
+                      alignment: const AlignmentDirectional(-1.0, -1.0),
                       child: child,
                     ),
                   ),

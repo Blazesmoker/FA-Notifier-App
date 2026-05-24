@@ -299,11 +299,6 @@ class _OpenJournalState extends State<OpenJournal>
     }
   }
 
-  /// Dedicated helper to recover full link from a truncated comment HTML.
-  String? _getFullLinkFromCommentHtml(String commentHtml, String truncatedUrl) {
-    return findFullShortenedJournalLink(commentHtml, truncatedUrl);
-  }
-
   /// Helper for full submission description HTML.
   String _getFullLinkFromFetchedHtml(String truncatedUrl,
       {String? htmlSource}) {
@@ -443,24 +438,6 @@ class _OpenJournalState extends State<OpenJournal>
     }
   }
 
-  Future<void> _fetchUserPageLinksNew() async {
-    final slug = authorUserName ?? username;
-    if (slug == null) return;
-    try {
-      final links = await _api.fetchUserPageLinks(slug);
-      setState(() {
-        watchLink = links['watchLink'];
-        unwatchLink = links['unwatchLink'];
-        blockLink = links['blockLink'];
-        unblockLink = links['unblockLink'];
-        isWatching = unwatchLink != null;
-        isBlocked = unblockLink != null;
-      });
-    } catch (e) {
-      debugPrint('Failed to fetch user page links: $e');
-    }
-  }
-
   Future<void> _fetchCommentsNew(String body) async {
     try {
       final parsed = await _api.fetchCommentsFromBody(body);
@@ -580,33 +557,6 @@ class _OpenJournalState extends State<OpenJournal>
     return DateFormat.yMMMd().add_jm().format(localTime);
   }
 
-  Future<void> _sendWatchUnwatchRequest(String urlPath,
-      {required bool shouldWatch}) async {
-    try {
-      final statusCode =
-          await _journalActionService.sendWatchRequest(urlPath);
-      if (statusCode == null) {
-        showAppSnackBar(context, 'Please log in to perform this action.',
-            backgroundColor: Colors.red);
-        return;
-      }
-      if (statusCode == 200) {
-        await _fetchUserPageLinksNew();
-        showAppSnackBar(context,
-            '${shouldWatch ? 'Now watching $username' : 'Stopped watching $username'}',
-            backgroundColor: Colors.green);
-      } else {
-        showAppSnackBar(
-            context, 'Failed to ${shouldWatch ? 'watch' : 'unwatch'} user.',
-            backgroundColor: Colors.red);
-      }
-    } catch (e) {
-      showAppSnackBar(context,
-          'An error occurred while trying to ${shouldWatch ? 'watch' : 'unwatch'} user.',
-          backgroundColor: Colors.red);
-    }
-  }
-
   // (legacy _fetchComments removed; use _fetchCommentsNew)
   Future<void> hideComment(String hideLink, String commentId) async {
     final shouldHide = await showDialog<bool>(
@@ -690,9 +640,11 @@ class _OpenJournalState extends State<OpenJournal>
     final postUrl =
         'https://www.furaffinity.net/journal/${widget.uniqueNumber}/';
     final shareContent = '$postUrl';
-    Share.share(
-      shareContent,
-      subject: submissionTitle ?? 'Fur Affinity Post',
+    SharePlus.instance.share(
+      ShareParams(
+        text: shareContent,
+        subject: submissionTitle ?? 'Fur Affinity Post',
+      ),
     );
   }
 
@@ -1125,7 +1077,7 @@ class _OpenJournalState extends State<OpenJournal>
                                                   TextSelectionThemeData(
                                                 selectionColor:
                                                     const Color(0xFFE09321)
-                                                        .withOpacity(0.4),
+                                                        .withValues(alpha: 0.4),
                                                 selectionHandleColor:
                                                     const Color(0xFFE09321),
                                               ),
@@ -1662,7 +1614,6 @@ class _OpenJournalState extends State<OpenJournal>
                       ]),
                       builder: (context, _) {
                         final keyboardInset = _keyboardInset.value;
-                        final isExpanded = _isCommentComposerExpanded.value;
                         return Padding(
                           padding: EdgeInsets.only(
                             left: 8,
@@ -1682,6 +1633,8 @@ class _OpenJournalState extends State<OpenJournal>
                               _isSendingInlineComment,
                             ]),
                             builder: (context, _) {
+                              final isExpanded =
+                                  _isCommentComposerExpanded.value;
                               final collapsedLines =
                                   _commentDraftCollapsedLines.value;
                               final hasText = _commentDraftHasText.value;

@@ -72,7 +72,6 @@ class NotesScreenState extends State<NotesScreen>
   bool _didFirstRunSkip = false;
 
   bool _isDraggingFromEdge = false;
-  double _startDragX = 0.0;
 
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
@@ -914,7 +913,6 @@ class NotesScreenState extends State<NotesScreen>
               const edgeWidth = 62.0;
               if (details.globalPosition.dx <= edgeWidth) {
                 _isDraggingFromEdge = true;
-                _startDragX = details.globalPosition.dx;
               }
             },
             onHorizontalDragUpdate: (DragUpdateDetails details) {

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -28,14 +27,11 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     with AutomaticKeepAliveClientMixin {
   final CreateJournalService _createJournalService =
       const CreateJournalService();
-  final SfwModePreference _sfwModePreference = SfwModePreference();
   late final FAWebViewCookieService _webViewCookieService;
   late final String initialUrl;
 
   InAppWebViewController? _webViewController;
   final GlobalKey webViewKey = GlobalKey();
-
-  bool _sfwEnabled = true;
 
   bool _isWaitingToOpenJournal = false;
   String? _journalId;
@@ -54,14 +50,6 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     _webViewCookieService = const FAWebViewCookieService();
     initialUrl = _createJournalService.buildInitialUrl(widget.uniqueNumber);
     _handledCurrentJournal = false;
-    _loadSfwEnabled();
-  }
-
-  void _loadSfwEnabled() async {
-    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
-    setState(() {
-      _sfwEnabled = sfwEnabled;
-    });
   }
 
   Future<void> _handlePossibleJournalSuccess(String? url) async {
@@ -246,7 +234,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
             if (_isWaitingToOpenJournal)
               Positioned.fill(
                 child: Container(
-                  color: Colors.black.withOpacity(0.7),
+                  color: Colors.black.withValues(alpha: 0.7),
                   child: Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,

@@ -330,7 +330,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                       child: Theme(
                         data: Theme.of(context).copyWith(
                           textSelectionTheme: TextSelectionThemeData(
-                            selectionColor: Color(0xFFE09321).withOpacity(0.4),
+                            selectionColor: Color(0xFFE09321).withValues(alpha: 0.4),
                             selectionHandleColor: Color(0xFFE09321),
                           ),
                         ),
