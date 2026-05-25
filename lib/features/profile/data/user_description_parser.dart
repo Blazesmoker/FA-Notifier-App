@@ -36,6 +36,14 @@ String extractUserDescriptionHtml(String html, {bool allowBodyFallback = false})
   return userDescElem.outerHtml.trim();
 }
 
+String extractUserDescriptionHtmlDefault(String html) {
+  return extractUserDescriptionHtml(html);
+}
+
+String extractUserDescriptionHtmlWithBodyFallback(String html) {
+  return extractUserDescriptionHtml(html, allowBodyFallback: true);
+}
+
 String? findFullAutoShortenedLink(
   String htmlSource,
   String truncatedUrl,

@@ -112,10 +112,12 @@ class _OpenJournalState extends State<OpenJournal>
 
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<SelectionAreaState> _titleSelectionKey = GlobalKey();
+  final GlobalKey<SelectionAreaState> _journalBodySelectionKey = GlobalKey();
   final Map<Object, GlobalKey<SelectionAreaState>> _commentSelectionKeys =
       <Object, GlobalKey<SelectionAreaState>>{};
   final Map<Object, String> _commentSelectedTexts = <Object, String>{};
   String _titleSelectedText = '';
+  String _journalBodySelectedText = '';
   int? _selectionClearPointerId;
   Offset? _selectionClearPointerDownPosition;
   DateTime? _selectionClearPointerDownTime;
@@ -209,6 +211,10 @@ class _OpenJournalState extends State<OpenJournal>
     _titleSelectedText = content?.plainText ?? '';
   }
 
+  void _updateJournalBodySelectedText(SelectedContent? content) {
+    _journalBodySelectedText = content?.plainText ?? '';
+  }
+
   void _updateCommentSelectedText(
     Object selectionId,
     SelectedContent? content,
@@ -230,6 +236,7 @@ class _OpenJournalState extends State<OpenJournal>
 
   void _clearAllTextSelections() {
     _clearSelectionArea(_titleSelectionKey);
+    _clearSelectionArea(_journalBodySelectionKey);
     for (final key in _commentSelectionKeys.values) {
       _clearSelectionArea(key);
     }
@@ -1082,7 +1089,18 @@ class _OpenJournalState extends State<OpenJournal>
                                                     const Color(0xFFE09321),
                                               ),
                                             ),
-                                            child: html_pkg.Html(
+                                            child: SelectionArea(
+                                              key: _journalBodySelectionKey,
+                                              onSelectionChanged:
+                                                  _updateJournalBodySelectedText,
+                                              contextMenuBuilder:
+                                                  ReadOnlySelectionContextMenu
+                                                      .builder(
+                                                selectedTextProvider: () =>
+                                                    _journalBodySelectedText,
+                                                includeIosTranslate: true,
+                                              ),
+                                              child: html_pkg.Html(
                                               data: submissionDescription ?? '',
                                               style: {
                                                 "body": html_pkg.Style(
@@ -1391,7 +1409,9 @@ class _OpenJournalState extends State<OpenJournal>
                                                   },
                                                 ),
                                               ],
-                                            ))
+                                              ),
+                                            ),
+                                        )
                                       ],
                                     ),
                                   ),

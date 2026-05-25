@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -44,6 +45,6 @@ class UserDescriptionService {
     }
 
     final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-    return extractUserDescriptionHtml(decodedBody);
+    return compute(extractUserDescriptionHtmlDefault, decodedBody);
   }
 }

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:FANotifier/features/profile/data/user_description_parser.dart';
@@ -172,10 +174,8 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   }
 
   Future<String> _processInitialHtml(String html) async {
-    final extractedHtml = extractUserDescriptionHtml(
-      html,
-      allowBodyFallback: true,
-    );
+    final extractedHtml =
+        await compute(extractUserDescriptionHtmlWithBodyFallback, html);
     _userDescriptionHtml = extractedHtml;
     return extractedHtml;
   }
@@ -193,14 +193,18 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   String _injectFACSS(String userDescHtml) {
     final selectionCss = widget.enableTextSelection
         ? '''
--webkit-touch-callout: default;
--webkit-user-select: text;
-user-select: text;
+      html, body, body * {
+        -webkit-touch-callout: default !important;
+        -webkit-user-select: text !important;
+        user-select: text !important;
+      }
 '''
         : '''
--webkit-touch-callout: none !important;
--webkit-user-select: none !important;
-user-select: none !important;
+      html, body, body * {
+        -webkit-touch-callout: none !important;
+        -webkit-user-select: none !important;
+        user-select: none !important;
+      }
 ''';
 
     return '''
@@ -213,12 +217,12 @@ user-select: none !important;
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/wenk/1.0.8/wenk.min.css">
     <style>
       ::selection {
-        background: #E09321 !important;
+        background: rgba(224, 147, 33, 0.4) !important;
         color: #fff !important;
       }
 
       ::-webkit-selection {
-        background: #E09321 !important;
+        background: rgba(224, 147, 33, 0.4) !important;
         color: #fff !important;
       }
 
@@ -228,8 +232,9 @@ user-select: none !important;
         background-color: #000 !important;
         color: #fff !important;
         font-family: 'Open Sans', sans-serif;
-        $selectionCss
       }
+
+      $selectionCss
 
       body {
         margin: 8px;
@@ -388,6 +393,13 @@ user-select: none !important;
                 child: SizedBox(
                   height: _webViewHeight,
                   child: InAppWebView(
+                    gestureRecognizers: widget.enableTextSelection
+                        ? <Factory<OneSequenceGestureRecognizer>>{
+                            Factory<OneSequenceGestureRecognizer>(
+                              () => LongPressGestureRecognizer(),
+                            ),
+                          }
+                        : null,
                     initialData: InAppWebViewInitialData(
                       data: _injectFACSS(cleanHtml),
                       baseUrl: WebUri('https://www.furaffinity.net'),

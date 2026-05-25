@@ -20,6 +20,10 @@
         android:icon="@drawable/fathemed"
         >
 
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableHcpp"
+            android:value="true" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.flutter_inappwebview_android.fileprovider"

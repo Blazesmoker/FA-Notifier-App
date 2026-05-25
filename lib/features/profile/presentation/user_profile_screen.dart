@@ -161,7 +161,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
   void dispose() {
     _tabSettleTimer?.cancel();
     _scrollWebViewResumeTimer?.cancel();
-    SchedulerBinding.instance.removeTimingsCallback(_handleFrameTimings);
+    if (_webViewScrollOptimizationEnabled) {
+      SchedulerBinding.instance.removeTimingsCallback(_handleFrameTimings);
+    }
     _backSwipeAnimationController.dispose();
     _tabController.dispose();
     _scrollController.removeListener(_onProfileScroll);
@@ -190,7 +192,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
     });
   }
 
-  /// Handles long-press on the user description for copy/select actions.
   Future<void> _handleDescriptionLongPress(
       LongPressStartDetails details) async {
     final RenderBox overlay =
@@ -359,6 +360,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   static const double _edgeBackSwipeTriggerWidth = 62.0;
   static const double _edgeBackSwipeMinDistance = 72.0;
   static const double _edgeBackSwipeMinVelocity = 700.0;
+  static const bool _webViewScrollOptimizationEnabled = false;
 
   late ScrollController _scrollController;
   late final ValueNotifier<bool> _showMoveUpFab = ValueNotifier<bool>(false);
@@ -405,7 +407,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
     DetachableWebViewRouteRegistry.register(this);
 
     _api = UserProfileApiService();
-    SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
+    if (_webViewScrollOptimizationEnabled) {
+      SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
+    }
 
     if (widget.initialFolderUrl != null &&
         widget.initialFolderUrl!.isNotEmpty) {
@@ -516,21 +520,24 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   void _onProfileScroll() {
-    _pauseWebViewDuringScroll();
+    if (_webViewScrollOptimizationEnabled) {
+      _pauseWebViewDuringScroll();
+    }
     _onScrollForMoveUpFab();
   }
 
   bool _handleProfileScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollStartNotification ||
-        notification is ScrollUpdateNotification ||
-        notification is OverscrollNotification) {
+    if (_webViewScrollOptimizationEnabled &&
+        (notification is ScrollStartNotification ||
+            notification is ScrollUpdateNotification ||
+            notification is OverscrollNotification)) {
       _pauseWebViewDuringScroll();
     }
     return false;
   }
 
   void _handleFrameTimings(List<FrameTiming> timings) {
-    if (_enableScrollWebViewPause) {
+    if (!_webViewScrollOptimizationEnabled || _enableScrollWebViewPause) {
       return;
     }
     for (final timing in timings) {
@@ -556,7 +563,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   void _pauseWebViewDuringScroll() {
-    if (!_enableScrollWebViewPause) {
+    if (!_webViewScrollOptimizationEnabled || !_enableScrollWebViewPause) {
       return;
     }
     final state = _webViewKey.currentState;
@@ -2743,7 +2750,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
       webViewKey: _webViewKey,
       sanitizedUsername: sanitizedUsername,
       onDescriptionLongPressStart: _handleDescriptionLongPress,
-      enableScrollPerformancePause: _enableScrollWebViewPause,
+      enableScrollPerformancePause:
+          _webViewScrollOptimizationEnabled && _enableScrollWebViewPause,
       onWebViewLoaded: (loaded) {
         Future.delayed(Duration(milliseconds: 25), () {
           setState(() {

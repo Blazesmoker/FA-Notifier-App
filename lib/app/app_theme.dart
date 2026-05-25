@@ -143,10 +143,8 @@ class AppTheme {
         shadowColor: Colors.transparent,
       ),
       textSelectionTheme: TextSelectionThemeData(
-
         selectionHandleColor: Color(0xFFE09321),
-
-          selectionColor: Color(0xFFE09321)
+        selectionColor: Color(0xFFE09321).withValues(alpha: 0.4),
       ),
 
       pageTransitionsTheme: const PageTransitionsTheme(

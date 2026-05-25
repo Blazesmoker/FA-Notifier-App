@@ -237,6 +237,7 @@ class _OpenPostState extends State<OpenPost>
   static const double _edgeBackSwipeTriggerWidth = 62.0;
   static const double _edgeBackSwipeMinDistance = 72.0;
   static const double _edgeBackSwipeMinVelocity = 700.0;
+  static const bool _webViewScrollOptimizationEnabled = false;
   late final ValueNotifier<double> _backSwipeOffsetNotifier =
       ValueNotifier<double>(0.0);
   late final AnimationController _backSwipeAnimationController;
@@ -257,7 +258,9 @@ class _OpenPostState extends State<OpenPost>
     _postCommentService = PostCommentService();
     DetachableWebViewRouteRegistry.register(this);
     WidgetsBinding.instance.addObserver(this);
-    SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
+    if (_webViewScrollOptimizationEnabled) {
+      SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
+    }
     _scrollController.addListener(_onScroll);
     _commentController.addListener(_onCommentDraftChanged);
     _commentFocusNode.addListener(_syncCommentComposerExpansion);
@@ -293,7 +296,9 @@ class _OpenPostState extends State<OpenPost>
   void dispose() {
     DetachableWebViewRouteRegistry.unregister(this);
     routeObserver.unsubscribe(this);
-    SchedulerBinding.instance.removeTimingsCallback(_handleFrameTimings);
+    if (_webViewScrollOptimizationEnabled) {
+      SchedulerBinding.instance.removeTimingsCallback(_handleFrameTimings);
+    }
     _backSwipeAnimationController.dispose();
     _backSwipeOffsetNotifier.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -357,7 +362,9 @@ class _OpenPostState extends State<OpenPost>
   List<String> iconAfterUrls = [];
 
   void _onScroll() {
-    _pauseWebViewDuringScroll();
+    if (_webViewScrollOptimizationEnabled) {
+      _pauseWebViewDuringScroll();
+    }
     if (!_scrollController.hasClients) return;
     final shouldShow = _scrollController.offset > 350;
     if (shouldShow == _showScrollToTopNotifier.value) return;
@@ -365,16 +372,17 @@ class _OpenPostState extends State<OpenPost>
   }
 
   bool _handlePostScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollStartNotification ||
-        notification is ScrollUpdateNotification ||
-        notification is OverscrollNotification) {
+    if (_webViewScrollOptimizationEnabled &&
+        (notification is ScrollStartNotification ||
+            notification is ScrollUpdateNotification ||
+            notification is OverscrollNotification)) {
       _pauseWebViewDuringScroll();
     }
     return false;
   }
 
   void _handleFrameTimings(List<FrameTiming> timings) {
-    if (_enableScrollWebViewPause) {
+    if (!_webViewScrollOptimizationEnabled || _enableScrollWebViewPause) {
       return;
     }
     for (final timing in timings) {
@@ -400,7 +408,7 @@ class _OpenPostState extends State<OpenPost>
   }
 
   void _pauseWebViewDuringScroll() {
-    if (!_enableScrollWebViewPause) {
+    if (!_webViewScrollOptimizationEnabled || !_enableScrollWebViewPause) {
       return;
     }
     final state = _submissionWebViewKey.currentState;
@@ -3097,7 +3105,8 @@ class _OpenPostState extends State<OpenPost>
                                       forceHybridComposition: false,
                                       routeDetached: _isPostWebViewDetached,
                                       enableScrollPerformancePause:
-                                          _enableScrollWebViewPause,
+                                          _webViewScrollOptimizationEnabled &&
+                                              _enableScrollWebViewPause,
                                       onHeightChanged: (double height) {
                                         if (!_webViewLoaded) {
                                           Future.delayed(

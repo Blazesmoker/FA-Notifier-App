@@ -35,6 +35,14 @@ String extractSubmissionDescriptionHtml(
   return submissionDesc.outerHtml;
 }
 
+String extractSubmissionDescriptionHtmlDefault(String html) {
+  return extractSubmissionDescriptionHtml(html);
+}
+
+String extractSubmissionDescriptionHtmlWithBodyFallback(String html) {
+  return extractSubmissionDescriptionHtml(html, allowBodyFallback: true);
+}
+
 String findFullSubmissionAutoShortenedLink(
   String htmlSource,
   String truncatedUrl,

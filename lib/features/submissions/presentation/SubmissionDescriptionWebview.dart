@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:FANotifier/features/submissions/data/submission_description_parser.dart';
@@ -173,13 +175,10 @@ class SubmissionDescriptionWebViewState
   }
 
   Future<String> _processInitialHtml(String html) async {
-    final descriptionHtml = extractSubmissionDescriptionHtml(
-      html,
-      allowBodyFallback: true,
-    );
-    final cleanHtml = _injectFACSS(descriptionHtml);
-    _submissionDescriptionHtml = cleanHtml;
-    return cleanHtml;
+    final descriptionHtml =
+        await compute(extractSubmissionDescriptionHtmlWithBodyFallback, html);
+    _submissionDescriptionHtml = descriptionHtml;
+    return descriptionHtml;
   }
 
   /// Fetches and cleans the HTML content for the submission description.
@@ -188,9 +187,8 @@ class SubmissionDescriptionWebViewState
         await _submissionDescriptionService.fetchDescriptionHtml(
       widget.submissionId,
     );
-    final cleanHtml = _injectFACSS(descriptionHtml);
-    _submissionDescriptionHtml = cleanHtml;
-    return cleanHtml;
+    _submissionDescriptionHtml = descriptionHtml;
+    return descriptionHtml;
   }
 
   /// Injects CSS to enable text selection and apply the FA dark theme.
@@ -199,14 +197,18 @@ class SubmissionDescriptionWebViewState
 
     final selectionCss = widget.enableTextSelection
         ? '''
--webkit-touch-callout: default;
--webkit-user-select: text;
-user-select: text;
+      html, body, body * {
+        -webkit-touch-callout: default !important;
+        -webkit-user-select: text !important;
+        user-select: text !important;
+      }
 '''
         : '''
--webkit-touch-callout: none !important;
--webkit-user-select: none !important;
-user-select: none !important;
+      html, body, body * {
+        -webkit-touch-callout: none !important;
+        -webkit-user-select: none !important;
+        user-select: none !important;
+      }
 ''';
 
     return '''
@@ -221,12 +223,12 @@ user-select: none !important;
 
     <style>
       ::selection {
-        background: #E09321 !important;
+        background: rgba(224, 147, 33, 0.4) !important;
         color: #fff !important;
       }
 
       ::-webkit-selection {
-        background: #E09321 !important;
+        background: rgba(224, 147, 33, 0.4) !important;
         color: #fff !important;
       }
 
@@ -236,8 +238,9 @@ user-select: none !important;
         background-color: #000 !important;
         color: $textColor !important;
         font-family: 'Open Sans', sans-serif;
-        $selectionCss
       }
+
+      $selectionCss
 
       body {
         margin: 8px;
@@ -385,6 +388,13 @@ user-select: none !important;
                 child: SizedBox(
                   height: _webViewHeight,
                   child: InAppWebView(
+              gestureRecognizers: widget.enableTextSelection
+                  ? <Factory<OneSequenceGestureRecognizer>>{
+                      Factory<OneSequenceGestureRecognizer>(
+                        () => LongPressGestureRecognizer(),
+                      ),
+                    }
+                  : null,
               initialData: InAppWebViewInitialData(
                 data: _injectFACSS(cleanHtml),
                 baseUrl: WebUri('https://www.furaffinity.net'),

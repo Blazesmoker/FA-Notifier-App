@@ -650,7 +650,10 @@ Future<void> _afterFirstFrameBoot(TimezoneProvider timezoneProvider) async {
     tz.initializeTimeZones();
     await timezoneProvider.fetchTimezone();
     final notificationService = NotificationService();
-    await notificationService.init();
+    await notificationService.init(
+      onLaunchPayloadSaved: () =>
+          processPendingNavigation(from: 'notification_launch_details'),
+    );
     await notificationService.updateNotificationChannels();
     const channel = MethodChannel('app.notifications');
     try {

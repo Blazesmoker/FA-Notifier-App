@@ -62,7 +62,9 @@ class NotificationService {
     return allocatedId;
   }
 
-  Future<void> init() async {
+  Future<void> init({
+    Future<void> Function()? onLaunchPayloadSaved,
+  }) async {
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/fathemednotif');
 
@@ -123,6 +125,7 @@ class NotificationService {
       if (payload != null && payload.isNotEmpty) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('pending_navigation', payload);
+        await onLaunchPayloadSaved?.call();
       }
     }
   }

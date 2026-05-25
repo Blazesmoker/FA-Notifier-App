@@ -107,34 +107,46 @@ class UserProfileHomeSection extends StatelessWidget {
             userDescription!.trim().isNotEmpty)
           GestureDetector(
             onLongPressStart: onDescriptionLongPressStart,
-            child: VisibilityDetector(
-              key: ObjectKey(webViewKey),
-              onVisibilityChanged: (info) {
-                final state = webViewKey.currentState;
-                if (state == null) {
-                  return;
-                }
-                if (info.visibleFraction > 0.15) {
-                  state.resumeWebView(
-                    reason: UserDescriptionWebViewPauseReason.visibility,
-                  );
-                } else {
-                  state.pauseWebView(
-                    reason: UserDescriptionWebViewPauseReason.visibility,
-                  );
-                }
-              },
-              child: UserDescriptionWebView(
-                key: webViewKey,
-                sanitizedUsername: sanitizedUsername,
-                initialHtml: userDescription,
-                forceHybridComposition: false,
-                enableTextSelection: false,
-                enableScrollPerformancePause: enableScrollPerformancePause,
-                disableIosScrolling: true,
-                onWebViewLoaded: onWebViewLoaded,
-              ),
-            ),
+            child: enableScrollPerformancePause
+                ? VisibilityDetector(
+                    key: ObjectKey(webViewKey),
+                    onVisibilityChanged: (info) {
+                      final state = webViewKey.currentState;
+                      if (state == null) {
+                        return;
+                      }
+                      if (info.visibleFraction > 0.15) {
+                        state.resumeWebView(
+                          reason: UserDescriptionWebViewPauseReason.visibility,
+                        );
+                      } else {
+                        state.pauseWebView(
+                          reason: UserDescriptionWebViewPauseReason.visibility,
+                        );
+                      }
+                    },
+                    child: UserDescriptionWebView(
+                      key: webViewKey,
+                      sanitizedUsername: sanitizedUsername,
+                      initialHtml: userDescription,
+                      forceHybridComposition: false,
+                      enableTextSelection: false,
+                      enableScrollPerformancePause:
+                          enableScrollPerformancePause,
+                      disableIosScrolling: true,
+                      onWebViewLoaded: onWebViewLoaded,
+                    ),
+                  )
+                : UserDescriptionWebView(
+                    key: webViewKey,
+                    sanitizedUsername: sanitizedUsername,
+                    initialHtml: userDescription,
+                    forceHybridComposition: false,
+                    enableTextSelection: false,
+                    enableScrollPerformancePause: false,
+                    disableIosScrolling: true,
+                    onWebViewLoaded: onWebViewLoaded,
+                  ),
           ),
         const SizedBox(height: 16.0),
         if (featuredImageUrl != null &&
