@@ -12,7 +12,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 }
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
 
     var flutterEngine: FlutterEngine?
 
@@ -212,14 +212,8 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 
         fLog("Application launching...")
 
-        let isBackgroundLaunch = application.applicationState == .background
-        if isBackgroundLaunch {
+        if application.applicationState == .background {
             fLog("Background launch detected - skipping FlutterEngine.run for UI entrypoint")
-        } else {
-            let engine = FlutterEngine(name: "shared_engine")
-            engine.run()
-            self.flutterEngine = engine
-            GeneratedPluginRegistrant.register(with: engine)
         }
         GeneratedPluginRegistrant.register(with: self)
         setupNotificationChannelIfNeeded()
@@ -258,12 +252,8 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
 
-    override func applicationDidEnterBackground(_ application: UIApplication) {
-        handleDidEnterBackground(source: "appDelegate")
-    }
-
-    override func applicationDidBecomeActive(_ application: UIApplication) {
-        handleDidBecomeActive(source: "appDelegate")
+    func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+        GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     }
 
     func handleDidEnterBackground(source: String) {
@@ -458,12 +448,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     }
     #endif
 
-    override func applicationWillResignActive(_ application: UIApplication) {
-        fLog("App will resign active")
-    }
-    override func applicationWillEnterForeground(_ application: UIApplication) {
-        fLog("App will enter foreground")
-    }
     override func applicationWillTerminate(_ application: UIApplication) {
         fLog("App will terminate")
     }
