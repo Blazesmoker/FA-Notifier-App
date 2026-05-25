@@ -7,7 +7,7 @@ class ContentRatingFilters {
     'Category': '1',
     'Type': '1',
     'Species': '1',
-    'Gender': '0',
+    'Gender': '',
   };
 
   static const Map<String, String> _defaultSearchFields = {

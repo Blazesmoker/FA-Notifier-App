@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html;
 
 import 'package:FANotifier/features/submissions/data/post_comment_service.dart';
@@ -125,7 +126,7 @@ class _ReplyScreenState extends State<ReplyScreen> {
                 /// HEADER
                 Row(
                   children: [
-                    Image.network(
+                    FaNetworkImage(
                       widget.comment['profileImage'] ?? '',
                       width: 36,
                       height: 36,
@@ -169,7 +170,10 @@ class _ReplyScreenState extends State<ReplyScreen> {
                       builder: (_) => AlertDialog(
                         title: Text(widget.comment['username'] ?? 'Anonymous'),
                         content: SingleChildScrollView(
-                          child: html.Html(data: htmlComment ?? plainText),
+                          child: html.Html(
+                            data: htmlComment ?? plainText,
+                            extensions: [faHtmlImageExtension()],
+                          ),
                         ),
                         actions: [
                           TextButton(
@@ -214,6 +218,7 @@ class _ReplyScreenState extends State<ReplyScreen> {
                           textDecoration: TextDecoration.none,
                         ),
                       },
+                      extensions: [faHtmlImageExtension()],
                     )
                         : Text(
                       plainText,

@@ -2,8 +2,8 @@
 
 import 'dart:async';
 import 'dart:collection';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:FANotifier/features/profile/data/profile_gallery_service.dart';
@@ -128,10 +128,9 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
       // Pre-cache thumbnail images
       WidgetsBinding.instance.addPostFrameCallback((_) {
         for (var post in result.posts) {
-          precacheImage(
-            CachedNetworkImageProvider(post['thumbnailUrl']),
-            context,
-          );
+          faNetworkImageProvider(post['thumbnailUrl']).then((provider) {
+            if (!_isDisposed) precacheImage(provider, context);
+          });
         }
       });
 
@@ -372,12 +371,12 @@ class _FavImageTile extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image.network(
+              FaNetworkImage(
                 thumbnailUrl,
                 fit: BoxFit.cover,
               ),
               if (hqUrl != null && hqUrl!.isNotEmpty)
-                Image.network(
+                FaNetworkImage(
                   hqUrl!,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {

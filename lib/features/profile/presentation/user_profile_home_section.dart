@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -278,7 +279,7 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
                 child: Center(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8.0),
-                    child: Image.network(
+                    child: FaNetworkImage(
                       userProfileImageUrl!,
                       fit: BoxFit.cover,
                       loadingBuilder: (context, child, loadingProgress) {

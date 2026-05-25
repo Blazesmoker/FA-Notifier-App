@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 
 class ProfileStatItem extends StatelessWidget {
   final String count;
@@ -137,7 +138,7 @@ class FeaturedSubmissionSection extends StatelessWidget {
               onTap: onTap,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8.0),
-                child: Image.network(
+                child: FaNetworkImage(
                   imageUrl,
                   fit: BoxFit.contain,
                   loadingBuilder: (context, child, loadingProgress) {

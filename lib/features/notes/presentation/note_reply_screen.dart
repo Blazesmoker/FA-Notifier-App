@@ -10,6 +10,7 @@ import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 
 class NoteReplyScreen extends StatefulWidget {
   final String subject;
@@ -527,6 +528,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
                                         onLinkTap: (url, _, __) {
                                           if (url != null) handleFALink(context, url);
                                         },
+                                        extensions: [faHtmlImageExtension()],
                                       ),
                                     ),
                                   )

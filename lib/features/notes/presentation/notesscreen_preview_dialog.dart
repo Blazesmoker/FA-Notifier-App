@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
 
@@ -156,7 +157,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
                         width: 60,
                         height: 60,
                         color: Colors.transparent,
-                        child: Image.network(
+                        child: FaNetworkImage(
                           'https:$avatarUrl',
                           fit: BoxFit.cover,
                           alignment: Alignment.center,
@@ -272,6 +273,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
                       onLinkTap: (url, _, __) {
                         if (url != null) handleFALink(context, url);
                       },
+                      extensions: [faHtmlImageExtension()],
                     ),
                   ),
                 )

@@ -4,13 +4,25 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:FANotifier/features/profile/data/user_description_parser.dart';
 import 'package:FANotifier/features/profile/data/user_description_service.dart';
+import 'package:FANotifier/shared/utils/fa_icon_image_inliner.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
 enum UserDescriptionWebViewPauseReason { route, visibility, scrolling }
+
+class _UserDescriptionWebViewContent {
+  final String html;
+  final String faThemeCss;
+
+  const _UserDescriptionWebViewContent({
+    required this.html,
+    required this.faThemeCss,
+  });
+}
 
 class UserDescriptionWebView extends StatefulWidget {
   final String sanitizedUsername;
@@ -20,6 +32,7 @@ class UserDescriptionWebView extends StatefulWidget {
   final bool enableTextSelection;
   final bool enableScrollPerformancePause;
   final bool disableIosScrolling;
+  final bool fillAvailableHeight;
   final ValueChanged<bool>? onWebViewLoaded;
 
   const UserDescriptionWebView({
@@ -30,6 +43,7 @@ class UserDescriptionWebView extends StatefulWidget {
     this.enableTextSelection = false,
     this.enableScrollPerformancePause = true,
     this.disableIosScrolling = false,
+    this.fillAvailableHeight = false,
     this.forceHybridComposition = false,
     this.onWebViewLoaded,
   }) : super(key: key);
@@ -42,7 +56,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     with AutomaticKeepAliveClientMixin<UserDescriptionWebView> {
   late final UserDescriptionService _userDescriptionService =
       UserDescriptionService();
-  late Future<String> _userDescriptionFuture;
+  late Future<_UserDescriptionWebViewContent> _userDescriptionFuture;
   InAppWebViewController? _controller;
   final Set<UserDescriptionWebViewPauseReason> _pauseReasons =
       <UserDescriptionWebViewPauseReason>{};
@@ -173,24 +187,36 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     });
   }
 
-  Future<String> _processInitialHtml(String html) async {
+  Future<_UserDescriptionWebViewContent> _processInitialHtml(String html) async {
     final extractedHtml =
         await compute(extractUserDescriptionHtmlWithBodyFallback, html);
-    _userDescriptionHtml = extractedHtml;
-    return extractedHtml;
+    final htmlWithInlinedIcons = await inlineFaIconUsernameImages(extractedHtml);
+    _userDescriptionHtml = htmlWithInlinedIcons;
+    return _UserDescriptionWebViewContent(
+      html: htmlWithInlinedIcons,
+      faThemeCss: await _loadFaThemeCss(),
+    );
   }
 
   /// Fetches and cleans the HTML content for the user description.
-  Future<String> _fetchCleanHTML() async {
+  Future<_UserDescriptionWebViewContent> _fetchCleanHTML() async {
     final extractedHtml = await _userDescriptionService.fetchCleanHtml(
       widget.sanitizedUsername,
     );
-    _userDescriptionHtml = extractedHtml;
-    return extractedHtml;
+    final htmlWithInlinedIcons = await inlineFaIconUsernameImages(extractedHtml);
+    _userDescriptionHtml = htmlWithInlinedIcons;
+    return _UserDescriptionWebViewContent(
+      html: htmlWithInlinedIcons,
+      faThemeCss: await _loadFaThemeCss(),
+    );
+  }
+
+  Future<String> _loadFaThemeCss() {
+    return rootBundle.loadString('assets/webview/fa/ui_theme_dark.css');
   }
 
   /// Injects necessary CSS into the HTML content.
-  String _injectFACSS(String userDescHtml) {
+  String _injectFACSS(String userDescHtml, String faThemeCss) {
     final selectionCss = widget.enableTextSelection
         ? '''
       html, body, body * {
@@ -213,9 +239,10 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="https://www.furaffinity.net/">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,500,500i,600,600i,700,700i">
-    <link rel="stylesheet" href="https://www.furaffinity.net/themes/beta/css/ui_theme_dark.css?u=2024112800">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/wenk/1.0.8/wenk.min.css">
     <style>
+      $faThemeCss
+
       ::selection {
         background: rgba(224, 147, 33, 0.4) !important;
         color: #fff !important;
@@ -242,6 +269,10 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
 
       .container, .section-body, .userpage-layout-profile, .user-submitted-links {
         background-color: transparent !important;
+      }
+
+      #page-userpage .userpage-profile {
+        border: none !important;
       }
 
       img {
@@ -306,8 +337,10 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     <script src="https://www.furaffinity.net/themes/beta/js/common.js?u=2024112800"></script>
     <script src="https://www.furaffinity.net/themes/beta/js/script.js?u=2024112800"></script>
   </head>
-  <body class="ui_theme_dark">
-    $userDescHtml
+  <body class="c-bodyColor" id="pageid-userpage">
+    <div id="page-userpage">
+      $userDescHtml
+    </div>
   </body>
 </html>
 ''';
@@ -346,7 +379,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return FutureBuilder<String>(
+    return FutureBuilder<_UserDescriptionWebViewContent>(
       future: _userDescriptionFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -370,7 +403,9 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
           );
         }
 
-        final cleanHtml = snapshot.data ?? '';
+        final content = snapshot.data;
+        final cleanHtml = content?.html ?? '';
+        final faThemeCss = content?.faThemeCss ?? '';
 
         _userDescriptionHtml ??= cleanHtml;
 
@@ -384,15 +419,22 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
           );
         }
 
-        return Padding(
-          padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
-          child: RepaintBoundary(
-            child: ExcludeSemantics(
-              child: ColoredBox(
-                color: Colors.black,
-                child: SizedBox(
-                  height: _webViewHeight,
-                  child: InAppWebView(
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final webViewHeight =
+                widget.fillAvailableHeight && constraints.hasBoundedHeight
+                    ? constraints.maxHeight
+                    : _webViewHeight;
+
+            return Padding(
+              padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+              child: RepaintBoundary(
+                child: ExcludeSemantics(
+                  child: ColoredBox(
+                    color: Colors.black,
+                    child: SizedBox(
+                      height: webViewHeight,
+                      child: InAppWebView(
                     gestureRecognizers: widget.enableTextSelection
                         ? <Factory<OneSequenceGestureRecognizer>>{
                             Factory<OneSequenceGestureRecognizer>(
@@ -401,7 +443,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
                           }
                         : null,
                     initialData: InAppWebViewInitialData(
-                      data: _injectFACSS(cleanHtml),
+                      data: _injectFACSS(cleanHtml, faThemeCss),
                       baseUrl: WebUri('https://www.furaffinity.net'),
                       encoding: 'utf-8',
                       mimeType: 'text/html',
@@ -419,6 +461,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
                       useHybridComposition: widget.forceHybridComposition,
                       transparentBackground: Platform.isIOS,
                       disallowOverScroll: Platform.isIOS,
+                      textZoom: 100,
                     ),
                     onWebViewCreated: (controller) {
                       _controller = controller;
@@ -442,9 +485,11 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
                       double height = double.tryParse(heightString) ?? 300.0;
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (!mounted) return;
-                        setState(() {
-                          _webViewHeight = height;
-                        });
+                        if (!widget.fillAvailableHeight) {
+                          setState(() {
+                            _webViewHeight = height;
+                          });
+                        }
                         widget.onWebViewLoaded?.call(true);
                       });
                     },
@@ -499,11 +544,13 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
                     onConsoleMessage: (controller, consoleMessage) {
                       debugPrint('WebView Console: ${consoleMessage.message}');
                     },
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -546,6 +593,7 @@ class UserDescriptionWebViewScreen extends StatelessWidget {
           forceHybridComposition: true,
           enableTextSelection: true,
           enableScrollPerformancePause: false,
+          fillAvailableHeight: true,
         ),
       ),
     );

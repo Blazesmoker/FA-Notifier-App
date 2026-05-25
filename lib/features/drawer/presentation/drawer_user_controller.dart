@@ -1,6 +1,7 @@
 // lib/custom_drawer/drawer_user_controller.dart
 
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:FANotifier/features/drawer/presentation/home_drawer.dart';
 import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
 import 'package:FANotifier/features/profile/domain/user_profile.dart';
@@ -319,7 +320,7 @@ class AvatarWidget extends StatelessWidget {
         width: radius * 2,
         height: radius * 2,
         child: imageUrl != null && imageUrl!.isNotEmpty
-            ? Image.network(
+            ? FaNetworkImage(
           imageUrl!,
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {

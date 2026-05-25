@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
@@ -970,7 +971,7 @@ class _OpenJournalState extends State<OpenJournal>
                                                       );
                                                     }
                                                   },
-                                                  child: Image.network(
+                                                  child: FaNetworkImage(
                                                     profileImageUrl!,
                                                     width: 46,
                                                     height: 46,
@@ -1343,7 +1344,7 @@ class _OpenJournalState extends State<OpenJournal>
                                                             "a.furaffinity.net") &&
                                                         resolvedUrl
                                                             .endsWith(".gif")) {
-                                                      return Image.network(
+                                                      return FaNetworkImage(
                                                         resolvedUrl,
                                                         width:
                                                             50, // profile emoji size.
@@ -1377,7 +1378,7 @@ class _OpenJournalState extends State<OpenJournal>
                                                       );
                                                     }
 
-                                                    return Image.network(
+                                                    return FaNetworkImage(
                                                       resolvedUrl,
                                                       width: 50,
                                                       height: 50,

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/submissions/data/favorite_service.dart';
@@ -162,7 +162,9 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
         for (var item in _flatSubmissionsList) {
           final url = item['thumbnailUrl'];
           if (url != null) {
-            precacheImage(CachedNetworkImageProvider(url), context);
+            faNetworkImageProvider(url).then((provider) {
+              if (mounted) precacheImage(provider, context);
+            });
           }
         }
       });
@@ -851,7 +853,7 @@ class _FavImageTile extends StatelessWidget {
                             fit: StackFit.expand,
                             children: [
                               // --- THUMBNAIL (always visible) ---
-                              Image.network(
+                              FaNetworkImage(
                                 thumbnailUrl,
                                 fit: BoxFit.cover,
                                 errorBuilder: (ctx, err, stack) => Container(
@@ -926,7 +928,7 @@ class _FadeInNetworkImageState extends State<_FadeInNetworkImage> {
 
   @override
   Widget build(BuildContext context) {
-    return Image.network(
+    return FaNetworkImage(
       widget.imageUrl,
       fit: widget.fit,
       frameBuilder: (context, child, frame, _) {

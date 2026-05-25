@@ -2,6 +2,7 @@ import 'package:FANotifier/features/profile/domain/shout.dart';
 import 'package:FANotifier/features/profile/data/shout_text_parser.dart';
 import 'package:FANotifier/features/profile/presentation/shout_widget.dart';
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
 
 class UserProfileShoutsSection extends StatelessWidget {
@@ -193,7 +194,7 @@ class UserProfileShoutsSection extends StatelessWidget {
                                   children: [
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(4.0),
-                                      child: Image.network(
+                                      child: FaNetworkImage(
                                         shout.avatarUrl,
                                         width: 40,
                                         height: 40,

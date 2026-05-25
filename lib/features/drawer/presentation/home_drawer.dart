@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_switch/flutter_switch.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -761,7 +762,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
                                                 ),
                                               ],
                                             ),
-                                            child: Image.network(
+                                            child: FaNetworkImage(
                                               widget
                                                   .userProfile!.profileImageUrl,
                                               fit: BoxFit.cover,

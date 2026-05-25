@@ -5,11 +5,13 @@ import 'package:http/http.dart' as http;
 
 import 'package:FANotifier/features/profile/domain/avatar_image_data.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_media_auth.dart';
 
 Future<AvatarImageData> fetchAvatarImageData(String imageUrl) async {
   final response = await http.get(
     Uri.parse(imageUrl),
-    headers: {'User-Agent': FAHttp.userAgent},
+    headers: await FaMediaAuth.headersForUrl(imageUrl) ??
+        {'User-Agent': FAHttp.userAgent},
   );
   final bytes = response.statusCode == 200
       ? response.bodyBytes

@@ -2,6 +2,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/shared/fa/fa_media_auth.dart';
 
 class CloudflareWebViewCookieService {
   const CloudflareWebViewCookieService({
@@ -83,7 +84,10 @@ class CloudflareWebViewCookieService {
       await FaCookieHelper.writeCfClearance(latestCf);
     }
 
-    if (controller == null) return;
+    if (controller == null) {
+      FaMediaAuth.invalidate();
+      return;
+    }
 
     try {
       final rawDocumentCookie = await controller.evaluateJavascript(
@@ -103,5 +107,7 @@ class CloudflareWebViewCookieService {
         }
       }
     } catch (_) {}
+
+    FaMediaAuth.invalidate();
   }
 }

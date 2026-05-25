@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'dart:async';
 import 'package:FANotifier/features/profile/data/profile_image_row_layout.dart';
 import 'package:FANotifier/features/profile/data/profile_scraps_service.dart';
@@ -72,7 +73,9 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
 
   void _preloadImagesImmediately(List<Map<String, dynamic>> fetchedImages) {
     for (var image in fetchedImages) {
-      precacheImage(NetworkImage(image['url']), context);
+      faNetworkImageProvider(image['url']).then((provider) {
+        if (mounted) precacheImage(provider, context);
+      });
     }
   }
 
@@ -368,7 +371,7 @@ class _FavImageTileScrapsSliverState extends State<_FavImageTileScrapsSliver> {
               borderRadius: 8,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(
+                child: FaNetworkImage(
                   widget.imageUrl,
                   width: widget.width,
                   height: widget.height,

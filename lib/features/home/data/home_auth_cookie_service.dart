@@ -1,6 +1,8 @@
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'package:FANotifier/shared/fa/fa_media_auth.dart';
+
 class HomeAuthCookieService {
   const HomeAuthCookieService({
     FlutterSecureStorage? secureStorage,
@@ -34,6 +36,7 @@ class HomeAuthCookieService {
         value: cookie.value,
       );
     }
+    FaMediaAuth.invalidate();
   }
 
   Future<void> setStoredCookies() async {
@@ -66,8 +69,9 @@ class HomeAuthCookieService {
     }
   }
 
-  Future<void> clearStoredCookies() {
-    return _secureStorage.deleteAll();
+  Future<void> clearStoredCookies() async {
+    await _secureStorage.deleteAll();
+    FaMediaAuth.invalidate();
   }
 
   Future<void> clearWebViewCookies() {
@@ -76,6 +80,7 @@ class HomeAuthCookieService {
 
   Future<void> setSfwCookieToNsfw() async {
     await _secureStorage.write(key: 'fa_cookie_sfw', value: '0');
+    FaMediaAuth.invalidate();
     await CookieManager.instance().setCookie(
       url: WebUri('https://www.furaffinity.net'),
       name: 'sfw',

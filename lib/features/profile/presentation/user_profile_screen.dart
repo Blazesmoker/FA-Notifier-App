@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:FANotifier/features/profile/presentation/user_description_webview.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
@@ -1065,7 +1066,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                 children: [
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(6),
-                                    child: Image.network(
+                                    child: FaNetworkImage(
                                       shout.avatarUrl,
                                       width: 42,
                                       height: 42,
@@ -1475,7 +1476,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     }
 
     return RepaintBoundary(
-      child: Image.network(
+      child: FaNetworkImage(
         profileBannerUrl ??
             'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg',
         fit: BoxFit.cover,
@@ -1541,41 +1542,47 @@ class UserProfileScreenState extends State<UserProfileScreen>
       });
     }
 
-    final ImageStream stream =
-        NetworkImage(trimmedUrl).resolve(const ImageConfiguration());
-    late final ImageStreamListener listener;
-    listener = ImageStreamListener(
-      (ImageInfo imageInfo, bool synchronousCall) async {
-        stream.removeListener(listener);
-        final bool hasTransparentEdge =
-            await _imageHasTransparentEdge(imageInfo.image);
-        if (!mounted ||
-            generation != _profileAvatarTransparencyCheckGeneration ||
-            _profileAvatarTransparencyCheckedUrl != trimmedUrl) {
-          return;
-        }
-        final bool shouldShowBorder = !hasTransparentEdge;
-        if (_shouldShowProfileAvatarBorder != shouldShowBorder) {
-          setState(() {
-            _shouldShowProfileAvatarBorder = shouldShowBorder;
-          });
-        }
-      },
-      onError: (Object error, StackTrace? stackTrace) {
-        stream.removeListener(listener);
-        if (!mounted ||
-            generation != _profileAvatarTransparencyCheckGeneration ||
-            _profileAvatarTransparencyCheckedUrl != trimmedUrl) {
-          return;
-        }
-        if (!_shouldShowProfileAvatarBorder) {
-          setState(() {
-            _shouldShowProfileAvatarBorder = true;
-          });
-        }
-      },
-    );
-    stream.addListener(listener);
+    faNetworkImageProvider(trimmedUrl).then((provider) {
+      if (!mounted ||
+          generation != _profileAvatarTransparencyCheckGeneration ||
+          _profileAvatarTransparencyCheckedUrl != trimmedUrl) {
+        return;
+      }
+      final ImageStream stream = provider.resolve(const ImageConfiguration());
+      late final ImageStreamListener listener;
+      listener = ImageStreamListener(
+        (ImageInfo imageInfo, bool synchronousCall) async {
+          stream.removeListener(listener);
+          final bool hasTransparentEdge =
+              await _imageHasTransparentEdge(imageInfo.image);
+          if (!mounted ||
+              generation != _profileAvatarTransparencyCheckGeneration ||
+              _profileAvatarTransparencyCheckedUrl != trimmedUrl) {
+            return;
+          }
+          final bool shouldShowBorder = !hasTransparentEdge;
+          if (_shouldShowProfileAvatarBorder != shouldShowBorder) {
+            setState(() {
+              _shouldShowProfileAvatarBorder = shouldShowBorder;
+            });
+          }
+        },
+        onError: (Object error, StackTrace? stackTrace) {
+          stream.removeListener(listener);
+          if (!mounted ||
+              generation != _profileAvatarTransparencyCheckGeneration ||
+              _profileAvatarTransparencyCheckedUrl != trimmedUrl) {
+            return;
+          }
+          if (!_shouldShowProfileAvatarBorder) {
+            setState(() {
+              _shouldShowProfileAvatarBorder = true;
+            });
+          }
+        },
+      );
+      stream.addListener(listener);
+    });
   }
 
   Future<bool> _imageHasTransparentEdge(ui.Image image) async {
@@ -1617,7 +1624,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                 fit: BoxFit.cover,
                 gaplessPlayback: true,
               )
-            : Image.network(
+            : FaNetworkImage(
                 profileImageUrl!,
                 width: _profileAvatarSize,
                 height: _profileAvatarSize,
@@ -1722,7 +1729,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
               ...userIconBeforeUrls.map(
                 (url) => Padding(
                   padding: const EdgeInsets.only(right: 4),
-                  child: Image.network(url, width: 20, height: 20),
+                  child: FaNetworkImage(url, width: 20, height: 20),
                 ),
               ),
             SelectableLinkify(
@@ -1740,7 +1747,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
               ...userIconAfterUrls.map(
                 (url) => Padding(
                   padding: const EdgeInsets.only(right: 4),
-                  child: Image.network(url, width: 20, height: 20),
+                  child: FaNetworkImage(url, width: 20, height: 20),
                 ),
               ),
             SelectableLinkify(

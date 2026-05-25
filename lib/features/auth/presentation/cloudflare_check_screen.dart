@@ -79,6 +79,14 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
       return;
     }
 
+    final verified = await _verifyHttpAccess(currentUrl);
+    if (!verified || !mounted) {
+      debugPrint(
+        '[Cloudflare] WebView loaded a normal page but HTTP verification is still failing.',
+      );
+      return;
+    }
+
     if (widget.returnPageHtml) {
       _didComplete = true;
       if (mounted) {
@@ -90,14 +98,6 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
           ),
         );
       }
-      return;
-    }
-
-    final verified = await _verifyHttpAccess(currentUrl);
-    if (!verified || !mounted) {
-      debugPrint(
-        '[Cloudflare] WebView loaded a normal page but HTTP verification is still failing.',
-      );
       return;
     }
 

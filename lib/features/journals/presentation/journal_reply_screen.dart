@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html;
 
 import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
@@ -135,7 +136,7 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
 
               Row(
                 children: [
-                  Image.network(
+                  FaNetworkImage(
                     widget.profileImage,
                     width: 36,
                     height: 36,
@@ -219,6 +220,7 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
                       textDecoration: TextDecoration.none,
                     ),
                   },
+                  extensions: [faHtmlImageExtension()],
                 )
 
                     : Text(

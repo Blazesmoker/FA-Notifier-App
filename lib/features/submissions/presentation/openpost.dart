@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:FANotifier/features/notes/presentation/reply_screen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart';
 import 'package:intl/intl.dart';
@@ -29,7 +30,7 @@ import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
 import 'package:FANotifier/features/submissions/presentation/SubmissionDescriptionWebview.dart';
-import 'package:FANotifier/features/profile/presentation/avatardownloadscreen.dart';
+import 'package:FANotifier/features/profile/presentation/image_inspect_screen.dart';
 import 'package:FANotifier/features/submissions/data/openpost_api_service.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
@@ -1404,7 +1405,7 @@ class _OpenPostState extends State<OpenPost>
                   ),
                   const SizedBox(height: 8),
                   if (fullViewImageUrl != null)
-                    Image.network(
+                    FaNetworkImage(
                       fullViewImageUrl!,
                       height: 150,
                     ),
@@ -1578,6 +1579,19 @@ class _OpenPostState extends State<OpenPost>
     ).whenComplete(() {
       _suppressNextRouteDetach = false;
     });
+  }
+
+  Future<void> _openImageInspectScreen(String imageUrl) async {
+    _dismissCommentComposerFocus();
+    _suppressNextRouteDetach = true;
+    try {
+      await Navigator.push(
+        context,
+        ImageInspectScreen.route(imageUrl: imageUrl),
+      );
+    } finally {
+      _suppressNextRouteDetach = false;
+    }
   }
 
   void _parsePublicationTime(String rawTime) {
@@ -2689,7 +2703,7 @@ class _OpenPostState extends State<OpenPost>
                                                     borderRadius:
                                                         BorderRadius.zero,
                                                   ),
-                                                  child: Image.network(
+                                                  child: FaNetworkImage(
                                                     profileImageUrl!,
                                                     fit: BoxFit.cover,
                                                     alignment: Alignment.center,
@@ -2736,7 +2750,7 @@ class _OpenPostState extends State<OpenPost>
                                                                     .only(
                                                                     right: 4.0),
                                                             child:
-                                                                Image.network(
+                                                                FaNetworkImage(
                                                               url,
                                                               width: 20,
                                                               height: 20,
@@ -2766,7 +2780,7 @@ class _OpenPostState extends State<OpenPost>
                                                                     .only(
                                                                     left: 4.0),
                                                             child:
-                                                                Image.network(
+                                                                FaNetworkImage(
                                                               url,
                                                               width: 20,
                                                               height: 20,
@@ -2876,15 +2890,8 @@ class _OpenPostState extends State<OpenPost>
                                       }
                                     },
                                     onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              AvatarDownloadScreen(
-                                            imageUrl: fullViewImageUrl!,
-                                          ),
-                                        ),
-                                      );
+                                      _openImageInspectScreen(
+                                          fullViewImageUrl!);
                                     },
                                     child: ClipRect(
                                       child: LayoutBuilder(
@@ -2899,7 +2906,7 @@ class _OpenPostState extends State<OpenPost>
                                             child: InteractiveViewer(
                                               minScale: 1.0,
                                               maxScale: 10.0,
-                                              child: Image.network(
+                                              child: FaNetworkImage(
                                                 fullViewImageUrl!,
                                                 fit: BoxFit.contain,
                                                 loadingBuilder: (

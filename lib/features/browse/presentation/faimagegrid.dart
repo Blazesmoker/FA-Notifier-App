@@ -1,6 +1,7 @@
 // lib/fa_image_grid.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart';
 import 'package:FANotifier/features/browse/data/browse_image_parser.dart';
 import 'package:FANotifier/features/browse/data/browse_image_service.dart';
@@ -737,7 +738,7 @@ class _FavImageTileState extends State<_FavImageTile> {
               borderRadius: 8.0,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8.0),
-                child: Image.network(
+                child: FaNetworkImage(
                   imageUrl,
                   width: widget.width,
                   height: widget.height,

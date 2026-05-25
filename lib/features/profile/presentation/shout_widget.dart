@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:FANotifier/features/profile/domain/shout.dart';
@@ -94,7 +95,7 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                                   child: SizedBox(
                                     width: 46,
                                     height: 46,
-                                    child: Image.network(
+                                    child: FaNetworkImage(
                                       widget.shout.avatarUrl,
                                       fit: BoxFit.cover,
                                       filterQuality: FilterQuality.low,
@@ -131,7 +132,7 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                                         if (widget
                                             .shout.iconBeforeUrls.isNotEmpty)
                                           ...widget.shout.iconBeforeUrls.map(
-                                              (url) => Image.network(url,
+                                              (url) => FaNetworkImage(url,
                                                   width: 16, height: 16)),
                                         Flexible(
                                           child: AutoSizeText(
@@ -147,7 +148,7 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                                         if (widget
                                             .shout.iconAfterUrls.isNotEmpty)
                                           ...widget.shout.iconAfterUrls.map(
-                                              (url) => Image.network(url,
+                                              (url) => FaNetworkImage(url,
                                                   width: 16, height: 16)),
                                       ],
                                     ),
@@ -351,7 +352,7 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                           if (src == null) return const SizedBox.shrink();
                           final resolvedUrl =
                               src.startsWith('//') ? 'https:$src' : src;
-                          return Image.network(
+                          return FaNetworkImage(
                             resolvedUrl,
                             width: 50,
                             height: 50,

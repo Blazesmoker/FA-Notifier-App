@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:FANotifier/features/profile/data/profile_journals_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 
 class ProfileJournals extends StatefulWidget {
@@ -179,6 +180,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
                           await _openJournal(journal['uniqueNumber']);
                         },
                         extensions: [
+                          faHtmlImageExtension(),
                           TagExtension(
                             tagsToExtend: {"i"},
                             builder: (ExtensionContext context) {

@@ -3,6 +3,7 @@ import 'package:FANotifier/features/profile/presentation/user_profile_screen.dar
 import 'package:extended_text/extended_text.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:provider/provider.dart';
 import 'package:html/dom.dart' as dom;
@@ -964,6 +965,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                                 }
                                               }
                                             },
+                                            extensions: [faHtmlImageExtension()],
                                           ),
                                         ),
                                         const SizedBox(height: 0),
@@ -1740,7 +1742,7 @@ class _FadeInNetworkImageState extends State<FadeInNetworkImage> {
         widget.placeholder,
 
         // Image fades in smoothly
-        Image.network(
+        FaNetworkImage(
           widget.imageUrl,
           fit: widget.fit,
           alignment: widget.alignment,
@@ -1793,7 +1795,7 @@ class _AvatarFadeInImageState extends State<_AvatarFadeInImage> {
         ),
 
         // Real image fades in on top
-        Image.network(
+        FaNetworkImage(
           widget.imageUrl,
           fit: BoxFit.cover,
           frameBuilder: (context, child, frame, _) {

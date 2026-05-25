@@ -1,5 +1,6 @@
 import 'package:extended_text/extended_text.dart';
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter_html/flutter_html.dart' as fh;
 
@@ -141,7 +142,7 @@ class _CommentWidgetState extends State<CommentWidget> {
                             );
                           }
                         },
-                        child: Image.network(
+                        child: FaNetworkImage(
                           widget.comment['profileImage'],
                           width: 46,
                           height: 46,
@@ -180,7 +181,7 @@ class _CommentWidgetState extends State<CommentWidget> {
                                 final isEditedIcon = url.contains('edited.png');
                                 return Padding(
                                   padding: const EdgeInsets.only(right: 4.0),
-                                  child: Image.network(
+                                  child: FaNetworkImage(
                                     url,
                                     width: 16,
                                     height: 16,
@@ -207,7 +208,7 @@ class _CommentWidgetState extends State<CommentWidget> {
                               ...widget.comment['iconAfterUrls'].map(
                                 (url) => Padding(
                                   padding: const EdgeInsets.only(left: 4.0),
-                                  child: Image.network(
+                                  child: FaNetworkImage(
                                     url,
                                     width: 16,
                                     height: 16,
@@ -271,6 +272,7 @@ class _CommentWidgetState extends State<CommentWidget> {
                               }
                             },
                             extensions: [
+                              faHtmlImageExtension(),
                               fh.TagExtension.inline(
                                 tagsToExtend: {'i'},
                                 builder: (context) {

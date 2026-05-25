@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'package:FANotifier/shared/fa/fa_media_auth.dart';
+
 class FaCookieHelper {
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(
     iOptions: IOSOptions(
@@ -24,6 +26,7 @@ class FaCookieHelper {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return;
     await _secureStorage.write(key: _cfKey, value: trimmed);
+    FaMediaAuth.invalidate();
   }
 
   static Future<String> appendCfClearanceToCookieHeader(String cookieHeader) async {

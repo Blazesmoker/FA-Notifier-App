@@ -1,6 +1,7 @@
 // lib/fasearchimage.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/search/data/search_image_parser.dart';
@@ -762,7 +763,7 @@ class _FavSearchTileState extends State<_FavSearchTile> {
               borderRadius: 8.0,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8.0),
-                child: Image.network(
+                child: FaNetworkImage(
                   imageUrl,
                   width: widget.width,
                   height: widget.height,

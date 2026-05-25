@@ -3,12 +3,24 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:FANotifier/features/submissions/data/submission_description_parser.dart';
 import 'package:FANotifier/features/submissions/data/submission_description_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:FANotifier/shared/utils/fa_icon_image_inliner.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
+
+class _SubmissionDescriptionWebViewContent {
+  final String html;
+  final String faThemeCss;
+
+  const _SubmissionDescriptionWebViewContent({
+    required this.html,
+    required this.faThemeCss,
+  });
+}
 
 class SubmissionDescriptionWebView extends StatefulWidget {
   final String submissionId;
@@ -17,6 +29,7 @@ class SubmissionDescriptionWebView extends StatefulWidget {
   final bool forceHybridComposition;
   final bool enableTextSelection;
   final bool enableScrollPerformancePause;
+  final bool fillAvailableHeight;
   final void Function(double height)? onHeightChanged;
   final bool routeDetached;
 
@@ -27,6 +40,7 @@ class SubmissionDescriptionWebView extends StatefulWidget {
     this.forceHybridComposition = false,
     this.enableTextSelection = false,
     this.enableScrollPerformancePause = true,
+    this.fillAvailableHeight = false,
     this.onHeightChanged,
     this.routeDetached = false,
     Key? key,
@@ -44,7 +58,7 @@ class SubmissionDescriptionWebViewState
 
   late final SubmissionDescriptionService _submissionDescriptionService =
       SubmissionDescriptionService();
-  late Future<String> _submissionDescriptionFuture;
+  late Future<_SubmissionDescriptionWebViewContent> _submissionDescriptionFuture;
   InAppWebViewController? _controller;
   double _webViewHeight = 50.0;
   static const Duration _scrollWebViewResumeDelay =
@@ -174,25 +188,40 @@ class SubmissionDescriptionWebViewState
     });
   }
 
-  Future<String> _processInitialHtml(String html) async {
+  Future<_SubmissionDescriptionWebViewContent> _processInitialHtml(
+      String html) async {
     final descriptionHtml =
         await compute(extractSubmissionDescriptionHtmlWithBodyFallback, html);
-    _submissionDescriptionHtml = descriptionHtml;
-    return descriptionHtml;
+    final htmlWithInlinedIcons =
+        await inlineFaIconUsernameImages(descriptionHtml);
+    _submissionDescriptionHtml = htmlWithInlinedIcons;
+    return _SubmissionDescriptionWebViewContent(
+      html: htmlWithInlinedIcons,
+      faThemeCss: await _loadFaThemeCss(),
+    );
   }
 
   /// Fetches and cleans the HTML content for the submission description.
-  Future<String> _fetchCleanHTML() async {
+  Future<_SubmissionDescriptionWebViewContent> _fetchCleanHTML() async {
     final descriptionHtml =
         await _submissionDescriptionService.fetchDescriptionHtml(
       widget.submissionId,
     );
-    _submissionDescriptionHtml = descriptionHtml;
-    return descriptionHtml;
+    final htmlWithInlinedIcons =
+        await inlineFaIconUsernameImages(descriptionHtml);
+    _submissionDescriptionHtml = htmlWithInlinedIcons;
+    return _SubmissionDescriptionWebViewContent(
+      html: htmlWithInlinedIcons,
+      faThemeCss: await _loadFaThemeCss(),
+    );
+  }
+
+  Future<String> _loadFaThemeCss() {
+    return rootBundle.loadString('assets/webview/fa/ui_theme_dark.css');
   }
 
   /// Injects CSS to enable text selection and apply the FA dark theme.
-  String _injectFACSS(String submissionDescHtml) {
+  String _injectFACSS(String submissionDescHtml, String faThemeCss) {
     String textColor = '#FFFFFF';
 
     final selectionCss = widget.enableTextSelection
@@ -218,10 +247,11 @@ class SubmissionDescriptionWebViewState
     <base href="https://www.furaffinity.net/">
 
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,500,500i,600,600i,700,700i">
-    <link rel="stylesheet" href="https://www.furaffinity.net/themes/beta/css/ui_theme_dark.css?u=2024112800">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/wenk/1.0.8/wenk.min.css">
 
     <style>
+      $faThemeCss
+
       ::selection {
         background: rgba(224, 147, 33, 0.4) !important;
         color: #fff !important;
@@ -321,7 +351,7 @@ class SubmissionDescriptionWebViewState
     <script src="https://www.furaffinity.net/themes/beta/js/common.js?u=2024112800"></script>
     <script src="https://www.furaffinity.net/themes/beta/js/script.js?u=2024112800"></script>
   </head>
-  <body class="ui_theme_dark">
+  <body class="c-bodyColor" id="pageid-submission">
     $submissionDescHtml
   </body>
 </html>
@@ -346,7 +376,7 @@ class SubmissionDescriptionWebViewState
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return FutureBuilder<String>(
+    return FutureBuilder<_SubmissionDescriptionWebViewContent>(
       future: _submissionDescriptionFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -366,7 +396,9 @@ class SubmissionDescriptionWebViewState
             ),
           );
         }
-        final cleanHtml = snapshot.data ?? '';
+        final content = snapshot.data;
+        final cleanHtml = content?.html ?? '';
+        final faThemeCss = content?.faThemeCss ?? '';
         _submissionDescriptionHtml ??= cleanHtml;
 
         if (!_mountWebView) {
@@ -379,15 +411,22 @@ class SubmissionDescriptionWebViewState
           );
         }
 
-        return Padding(
-          padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
-          child: RepaintBoundary(
-            child: ExcludeSemantics(
-              child: ColoredBox(
-                color: Colors.black,
-                child: SizedBox(
-                  height: _webViewHeight,
-                  child: InAppWebView(
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final webViewHeight =
+                widget.fillAvailableHeight && constraints.hasBoundedHeight
+                    ? constraints.maxHeight
+                    : _webViewHeight;
+
+            return Padding(
+              padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+              child: RepaintBoundary(
+                child: ExcludeSemantics(
+                  child: ColoredBox(
+                    color: Colors.black,
+                    child: SizedBox(
+                      height: webViewHeight,
+                      child: InAppWebView(
               gestureRecognizers: widget.enableTextSelection
                   ? <Factory<OneSequenceGestureRecognizer>>{
                       Factory<OneSequenceGestureRecognizer>(
@@ -396,7 +435,7 @@ class SubmissionDescriptionWebViewState
                     }
                   : null,
               initialData: InAppWebViewInitialData(
-                data: _injectFACSS(cleanHtml),
+                data: _injectFACSS(cleanHtml, faThemeCss),
                 baseUrl: WebUri('https://www.furaffinity.net'),
                 encoding: 'utf-8',
                 mimeType: 'text/html',
@@ -413,6 +452,7 @@ class SubmissionDescriptionWebViewState
                 // loadWithOverviewMode: true,
                 useHybridComposition: widget.forceHybridComposition,
                 transparentBackground: Platform.isIOS,
+                textZoom: 100,
               ),
               onWebViewCreated: (controller) {
                 _controller = controller;
@@ -432,9 +472,11 @@ class SubmissionDescriptionWebViewState
                 double height = double.tryParse(heightString) ?? 300.0;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (!mounted) return;
-                  setState(() {
-                    _webViewHeight = height;
-                  });
+                  if (!widget.fillAvailableHeight) {
+                    setState(() {
+                      _webViewHeight = height;
+                    });
+                  }
                   if (widget.onHeightChanged != null) {
                     widget.onHeightChanged!(height);
                   }
@@ -488,11 +530,13 @@ class SubmissionDescriptionWebViewState
               onConsoleMessage: (controller, consoleMessage) {
                 debugPrint('WebView Console: ${consoleMessage.message}');
               },
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -533,6 +577,7 @@ class SubmissionDescriptionWebViewScreen extends StatelessWidget {
           forceHybridComposition: true,
           enableTextSelection: true,
           enableScrollPerformancePause: false,
+          fillAvailableHeight: true,
         ),
       ),
     );

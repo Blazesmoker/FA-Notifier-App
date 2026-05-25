@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 
 Map<String, html_pkg.Style> userProfileHtmlStyles() {
@@ -200,7 +201,7 @@ List<html_pkg.HtmlExtension> buildUserProfileBBCodeExtensions() {
 
         final resolvedUrl = src.startsWith('//') ? 'https:$src' : src;
 
-        return Image.network(
+        return FaNetworkImage(
           resolvedUrl,
           width: 50,
           height: 50,

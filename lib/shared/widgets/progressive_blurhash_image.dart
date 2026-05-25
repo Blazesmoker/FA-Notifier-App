@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_blurhash/flutter_blurhash.dart' as fb;
 
 class ProgressiveBlurHashImage extends StatefulWidget {
@@ -76,19 +77,22 @@ class _ProgressiveBlurHashImageState extends State<ProgressiveBlurHashImage> {
   }
 
   void _loadNetworkImage() {
-    final image = Image.network(widget.imageUrl, fit: BoxFit.cover);
-    final stream = image.image.resolve(const ImageConfiguration());
-    stream.addListener(ImageStreamListener(
-          (info, syncCall) {
-        setState(() {
-          _networkImage = image;
-          _isNetworkImageLoaded = true;
-        });
-      },
-      onError: (exception, stackTrace) {
-        debugPrint('Error loading network image: $exception');
-      },
-    ));
+    faNetworkImageProvider(widget.imageUrl).then((provider) {
+      final image = Image(image: provider, fit: BoxFit.cover);
+      final stream = provider.resolve(const ImageConfiguration());
+      stream.addListener(ImageStreamListener(
+            (info, syncCall) {
+          if (!mounted) return;
+          setState(() {
+            _networkImage = image;
+            _isNetworkImageLoaded = true;
+          });
+        },
+        onError: (exception, stackTrace) {
+          debugPrint('Error loading network image: $exception');
+        },
+      ));
+    });
   }
 
   @override

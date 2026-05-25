@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:FANotifier/features/profile/data/profile_favorites_service.dart';
 import 'package:FANotifier/features/profile/data/profile_image_row_layout.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -76,7 +77,9 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
   /// Preload some images to improve scrolling smoothness.
   void _preloadImagesImmediately(List<Map<String, dynamic>> images) {
     for (var image in images) {
-      precacheImage(NetworkImage(image['url']), context);
+      faNetworkImageProvider(image['url']).then((provider) {
+        if (mounted) precacheImage(provider, context);
+      });
     }
   }
 
@@ -365,7 +368,7 @@ class _FavImageTileFavsState extends State<_FavImageTileFavs> {
               borderRadius: 8,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(
+                child: FaNetworkImage(
                   widget.imageUrl,
                   width: widget.width,
                   height: widget.height,
