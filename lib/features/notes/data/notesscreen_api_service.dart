@@ -13,10 +13,21 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 import 'package:FANotifier/features/notes/domain/message_model.dart';
+import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
 import 'package:FANotifier/core/utils/utils.dart';
 import 'package:FANotifier/shared/utils/notes_notifications_text_edit.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+
+class NotesPageSnapshot {
+  const NotesPageSnapshot({
+    required this.messages,
+    required this.topbarCounts,
+  });
+
+  final List<Message> messages;
+  final NotificationCounts? topbarCounts;
+}
 
 class NotesApiService {
   NotesApiService({
@@ -42,20 +53,18 @@ class NotesApiService {
       ..connectionTimeout = const Duration(seconds: 20);
     final client = IOClient(ioHttp);
     try {
-      final resp = await client
-          .get(
-            Uri.parse(url),
-            headers: {
-              'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-                'a=$cookieA; b=$cookieB; folder=$folder',
-              ),
-              'User-Agent': FAHttp.userAgent,
-              HttpHeaders.connectionHeader: 'close',
-              'Accept':
-                  'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            },
-          )
-          .timeout(const Duration(seconds: 30));
+      final resp = await client.get(
+        Uri.parse(url),
+        headers: {
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB; folder=$folder',
+          ),
+          'User-Agent': FAHttp.userAgent,
+          HttpHeaders.connectionHeader: 'close',
+          'Accept':
+              'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        },
+      ).timeout(const Duration(seconds: 30));
       return resp;
     } finally {
       client.close();
@@ -64,6 +73,14 @@ class NotesApiService {
   }
 
   Future<List<Message>> fetchNotesPage({
+    required String folder,
+    required int page,
+  }) async {
+    final snapshot = await fetchNotesPageSnapshot(folder: folder, page: page);
+    return snapshot.messages;
+  }
+
+  Future<NotesPageSnapshot> fetchNotesPageSnapshot({
     required String folder,
     required int page,
   }) async {
@@ -89,93 +106,10 @@ class NotesApiService {
         if (resp.statusCode == 200) {
           final decoded = utf8.decode(resp.bodyBytes, allowMalformed: true);
           final doc = html_parser.parse(decoded);
-          final bool isClassic =
-              doc.querySelector('body[data-static-path="/themes/classic"]') !=
-                  null;
-
-          var noteElements =
-              doc.querySelectorAll('#notes-list .note-list-container');
-          if (noteElements.isEmpty && isClassic) {
-            List<dom.Element> classicRows =
-                List.from(doc.querySelectorAll('#notes-list tr.note'));
-            if (classicRows.isNotEmpty &&
-                classicRows.last.querySelector('input[type="checkbox"]') ==
-                    null) {
-              classicRows.removeLast();
-            }
-            noteElements = classicRows;
-          }
-
-          final List<Message> fetched = [];
-          for (var noteEl in noteElements) {
-            final subject = noteEl
-                    .querySelector(
-                        '.note-list-subject-container .c-noteListItem__subject')
-                    ?.text
-                    .trim() ??
-                noteEl
-                    .querySelector('a.notelink.note-read.read')
-                    ?.text
-                    .trim() ??
-                noteEl
-                    .querySelector('a.notelink.note-unread.unread')
-                    ?.text
-                    .trim() ??
-                'No subject';
-
-            final sender = noteEl
-                    .querySelector(
-                        '.c-usernameBlock__displayName .js-displayName')
-                    ?.text
-                    .trim() ??
-                noteEl
-                    .querySelector(
-                        'div.c-usernameBlock.marquee-container a.c-usernameBlock__displayName.js-displayName-block span.js-displayName')
-                    ?.text
-                    .trim() ??
-                'Unknown sender';
-
-            // Recipient: second .c-usernameBlock (after "To") when present in list row
-            final displayNameEls = noteEl.querySelectorAll('.c-usernameBlock__displayName .js-displayName');
-            final recipient = displayNameEls.length > 1
-                ? (displayNameEls.elementAt(1).text.trim())
-                : '';
-
-            final date = noteEl
-                    .querySelector('.note-list-senddate span')
-                    ?.attributes['title'] ??
-                noteEl
-                    .querySelector('td.alt1.nowrap span.popup_date')
-                    ?.attributes['title'] ??
-                '';
-
-            final link = noteEl
-                    .querySelector('.note-list-subject-container a')
-                    ?.attributes['href'] ??
-                noteEl
-                    .querySelector('a.notelink.note-unread.unread')
-                    ?.attributes['href'] ??
-                noteEl
-                    .querySelector('a.notelink.note-read.read')
-                    ?.attributes['href'] ??
-                '';
-
-            final isUnread = (noteEl.querySelector('img.unread') != null ||
-                noteEl.querySelector('img[src*="pms-unread.png"]') != null);
-
-            final id = extractMessageId(link);
-
-            fetched.add(Message(
-              id: id,
-              subject: subject,
-              sender: sender,
-              recipient: recipient,
-              date: date,
-              link: link,
-              isUnread: isUnread,
-            ));
-          }
-          return fetched;
+          return NotesPageSnapshot(
+            messages: _parseMessages(doc),
+            topbarCounts: _parseTopbarCounts(doc),
+          );
         } else if (resp.statusCode == 503) {
           retry++;
           if (retry > maxRetries) {
@@ -209,6 +143,140 @@ class NotesApiService {
     }
   }
 
+  List<Message> _parseMessages(dom.Document doc) {
+    final bool isClassic =
+        doc.querySelector('body[data-static-path="/themes/classic"]') != null;
+
+    var noteElements = doc.querySelectorAll('#notes-list .note-list-container');
+    if (noteElements.isEmpty && isClassic) {
+      List<dom.Element> classicRows =
+          List.from(doc.querySelectorAll('#notes-list tr.note'));
+      if (classicRows.isNotEmpty &&
+          classicRows.last.querySelector('input[type="checkbox"]') == null) {
+        classicRows.removeLast();
+      }
+      noteElements = classicRows;
+    }
+
+    final List<Message> fetched = [];
+    for (var noteEl in noteElements) {
+      final subject = noteEl
+              .querySelector(
+                  '.note-list-subject-container .c-noteListItem__subject')
+              ?.text
+              .trim() ??
+          noteEl.querySelector('a.notelink.note-read.read')?.text.trim() ??
+          noteEl.querySelector('a.notelink.note-unread.unread')?.text.trim() ??
+          'No subject';
+
+      final sender = noteEl
+              .querySelector('.c-usernameBlock__displayName .js-displayName')
+              ?.text
+              .trim() ??
+          noteEl
+              .querySelector(
+                  'div.c-usernameBlock.marquee-container a.c-usernameBlock__displayName.js-displayName-block span.js-displayName')
+              ?.text
+              .trim() ??
+          'Unknown sender';
+
+      final displayNameEls = noteEl
+          .querySelectorAll('.c-usernameBlock__displayName .js-displayName');
+      final recipient = displayNameEls.length > 1
+          ? (displayNameEls.elementAt(1).text.trim())
+          : '';
+
+      final date = noteEl
+              .querySelector('.note-list-senddate span')
+              ?.attributes['title'] ??
+          noteEl
+              .querySelector('td.alt1.nowrap span.popup_date')
+              ?.attributes['title'] ??
+          '';
+
+      final link = noteEl
+              .querySelector('.note-list-subject-container a')
+              ?.attributes['href'] ??
+          noteEl
+              .querySelector('a.notelink.note-unread.unread')
+              ?.attributes['href'] ??
+          noteEl
+              .querySelector('a.notelink.note-read.read')
+              ?.attributes['href'] ??
+          '';
+
+      final isUnread = (noteEl.querySelector('img.unread') != null ||
+          noteEl.querySelector('img[src*="pms-unread.png"]') != null);
+
+      final id = extractMessageId(link);
+
+      fetched.add(Message(
+        id: id,
+        subject: subject,
+        sender: sender,
+        recipient: recipient,
+        date: date,
+        link: link,
+        isUnread: isUnread,
+      ));
+    }
+    return fetched;
+  }
+
+  NotificationCounts? _parseTopbarCounts(dom.Document doc) {
+    final links = doc.querySelectorAll(
+      'li.message-bar-desktop a.notification-container, li.noblock a.notification-container',
+    );
+    if (links.isEmpty) return null;
+
+    final counts = <String, int>{
+      'S': 0,
+      'W': 0,
+      'C': 0,
+      'F': 0,
+      'J': 0,
+      'N': 0,
+    };
+    for (final link in links) {
+      final href = link.attributes['href'] ?? '';
+      final title = (link.attributes['title'] ?? '').trim();
+      final text = link.text.trim();
+      final key = _topbarTypeKey(href: href, title: title);
+      if (key == null) continue;
+      counts[key] = _extractTopbarCount(title.isNotEmpty ? title : text);
+    }
+
+    return NotificationCounts(
+      submissions: counts['S'] ?? 0,
+      watches: counts['W'] ?? 0,
+      comments: counts['C'] ?? 0,
+      favorites: counts['F'] ?? 0,
+      journals: counts['J'] ?? 0,
+      notes: counts['N'] ?? 0,
+    );
+  }
+
+  String? _topbarTypeKey({
+    required String href,
+    required String title,
+  }) {
+    final h = href.toLowerCase();
+    final t = title.toLowerCase();
+    if (h.contains('msg/submissions') || t.contains('submission')) return 'S';
+    if (h.contains('#watches') || t.contains('watch')) return 'W';
+    if (h.contains('#comments') || t.contains('comment')) return 'C';
+    if (h.contains('#favorites') || t.contains('favorite')) return 'F';
+    if (h.contains('#journals') || t.contains('journal')) return 'J';
+    if (h.contains('msg/pms') || t.contains('note')) return 'N';
+    return null;
+  }
+
+  int _extractTopbarCount(String text) {
+    final match = RegExp(r'\d{1,3}(?:[,.]\d{3})*|\d+').firstMatch(text);
+    if (match == null) return 0;
+    return int.tryParse(match.group(0)!.replaceAll(RegExp(r'[,.]'), '')) ?? 0;
+  }
+
   Future<String> fetchMessageContent(String link) async {
     final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
@@ -234,7 +302,8 @@ class NotesApiService {
               'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
           HttpHeaders.connectionHeader: 'close',
         },
-        validateStatus: (status) => status != null && status >= 200 && status < 400,
+        validateStatus: (status) =>
+            status != null && status >= 200 && status < 400,
       ),
     );
     if (resp.statusCode == 200) {
@@ -251,7 +320,8 @@ class NotesApiService {
         final innerDoc = html_parser.parse(rawHtml);
 
         innerDoc.querySelectorAll('a.auto_link_shortened').forEach((anchor) {
-          final fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
+          final fullLink =
+              anchor.attributes['title'] ?? anchor.attributes['href'];
           if (fullLink != null) {
             anchor.innerHtml = fullLink;
           }
@@ -274,7 +344,8 @@ class NotesApiService {
           final innerDoc = html_parser.parse(rawHtml);
 
           innerDoc.querySelectorAll('a.auto_link_shortened').forEach((anchor) {
-            final fullLink = anchor.attributes['title'] ?? anchor.attributes['href'];
+            final fullLink =
+                anchor.attributes['title'] ?? anchor.attributes['href'];
             if (fullLink != null) {
               anchor.innerHtml = fullLink;
             }
@@ -336,7 +407,8 @@ class NotesApiService {
               'Content-Type': 'application/x-www-form-urlencoded',
               'Accept':
                   'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-              'Referer': 'https://www.furaffinity.net/controls/switchbox/trash/',
+              'Referer':
+                  'https://www.furaffinity.net/controls/switchbox/trash/',
               'Origin': 'https://www.furaffinity.net',
             },
             body: body,

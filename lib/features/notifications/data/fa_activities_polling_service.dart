@@ -73,6 +73,31 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     return future;
   }
 
+  Future<void> handleExternalCounts({
+    required NotificationCounts currentCounts,
+    required int shownNewNoteNotifications,
+    required bool resetTimer,
+    required String source,
+  }) {
+    if (resetTimer) {
+      _resetTimer();
+    }
+    final existing = _inFlight;
+    if (existing != null) return existing;
+
+    _faNotificationService?.applyTopbarCounts(currentCounts);
+
+    final future = _maybeSendActivitiesNotification(
+      currentCounts,
+      shownNewNoteNotifications: shownNewNoteNotifications,
+      triggerNotesRefreshOnNotesIncrease: false,
+    ).whenComplete(() {
+      _inFlight = null;
+    });
+    _inFlight = future;
+    return future;
+  }
+
   Future<void> _runOnce(FANotificationService svc,
       {required String source}) async {
     try {
@@ -157,7 +182,10 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
   }
 
   Future<void> _maybeSendActivitiesNotification(
-      NotificationCounts currentCounts) async {
+    NotificationCounts currentCounts, {
+    int shownNewNoteNotifications = 0,
+    bool triggerNotesRefreshOnNotesIncrease = true,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
@@ -179,9 +207,14 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       final ActivitiesDiff diff = await activitiesStateStore
           .diffAndUpdateLastSeen(currentCounts: currentCounts);
 
-      if (diff.increasedBy.notes > 0) {
+      if (triggerNotesRefreshOnNotesIncrease && diff.increasedBy.notes > 0) {
         NotesRefreshService().triggerRefresh();
       }
+
+      final int noteIncrease =
+          diff.increasedBy.notes > shownNewNoteNotifications
+              ? diff.increasedBy.notes
+              : shownNewNoteNotifications;
 
       final NotificationCounts enabledIncreases = NotificationCounts(
         submissions: submissionsEnabled ? diff.increasedBy.submissions : 0,
@@ -189,7 +222,7 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
         comments: commentsEnabled ? diff.increasedBy.comments : 0,
         favorites: favoritesEnabled ? diff.increasedBy.favorites : 0,
         journals: journalsEnabled ? diff.increasedBy.journals : 0,
-        notes: notesEnabled ? diff.increasedBy.notes : 0,
+        notes: notesEnabled ? noteIncrease : 0,
       );
 
       final bool hasEnabledIncrease = enabledIncreases.submissions > 0 ||

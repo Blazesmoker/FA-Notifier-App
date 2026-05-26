@@ -28,7 +28,6 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:FANotifier/app/analytics_privacy.dart';
 import 'package:FANotifier/core/cache/custom_cache_manager.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
-import 'package:FANotifier/features/notifications/domain/notifications.dart';
 import 'package:FANotifier/features/notifications/data/activities_notification_state.dart';
 import 'package:FANotifier/features/notifications/data/notification_service.dart';
 import 'package:FANotifier/core/utils/utils.dart';
@@ -37,7 +36,6 @@ import 'package:FANotifier/features/home/presentation/home_screen.dart';
 import 'package:FANotifier/app/app_theme.dart';
 import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
 import 'package:FANotifier/features/settings/data/thumbnail_display_settings_provider.dart';
-import 'package:FANotifier/shared/fa/fa_service.dart';
 import 'package:provider/provider.dart';
 import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
 import 'package:html/dom.dart' as dom;
@@ -67,6 +65,15 @@ final GlobalKey<DrawerUserControllerState> drawerKey =
 
 const String fetchBackgroundTask = "fetchBackgroundTask";
 const String iOSWorkInitTask = "com.blazesmoker.FANotifier.refresh";
+bool _workmanagerInitialized = false;
+
+Future<void> ensureWorkmanagerInitialized() async {
+  if (_workmanagerInitialized) return;
+  debugPrint("Initializing Workmanager...");
+  await Workmanager().initialize(callbackDispatcher);
+  _workmanagerInitialized = true;
+  debugPrint("Workmanager initialized");
+}
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -102,7 +109,9 @@ void callbackDispatcher() {
         return Future.value(true);
       }
       appLog('[BG] App is INACTIVE - proceeding with background fetch');
-      if (task == fetchBackgroundTask || task == iOSWorkInitTask) {
+      if (task == fetchBackgroundTask ||
+          task == iOSWorkInitTask ||
+          task == Workmanager.iOSBackgroundTask) {
         appLog('[BG] Valid background task detected: $task');
         try {
           bool didFirstRunSkip = prefs.getBool('did_first_run_skip') ?? false;
@@ -112,14 +121,32 @@ void callbackDispatcher() {
             return Future.value(true);
           }
           int shownNewNoteNotifications = 0;
+          NotificationCounts? currentCounts;
 
           appLog('[BG] === Starting UNREAD NOTES CHECK ===');
           try {
-            final List<Message> fetchedInbox = await _fetchInboxTwoPagesBg();
-            kDebugPrint(
-                '[BG] Fetched ${fetchedInbox.length} messages from inbox');
             final Set<String> shownSet = await MessageStorage.getShownNoteIds();
-            kDebugPrint('[BG] Already shown: ${shownSet.length} message IDs');
+            final Set<String> seenSet = await MessageStorage.getSeenNoteIds();
+            final _BackgroundInboxSnapshot snapshot =
+                await _fetchInboxSnapshotBg(
+              shownNoteIds: shownSet,
+              seenNoteIds: seenSet,
+            );
+            final List<Message> fetchedInbox = snapshot.messages;
+            currentCounts = snapshot.topbarCounts;
+            kDebugPrint(
+              '[BG] Fetched ${fetchedInbox.length} messages from inbox '
+              '(page2=${snapshot.fetchedPage2})',
+            );
+            kDebugPrint(
+                '[BG] Already shown: ${shownSet.length} message IDs; seen: ${seenSet.length}');
+            if (currentCounts != null) {
+              final countsForLog = currentCounts;
+              kDebugPrint(
+                  '[BG] Page 1 topbar counts: S:${countsForLog.submissions} W:${countsForLog.watches} C:${countsForLog.comments} F:${countsForLog.favorites} J:${countsForLog.journals} N:${countsForLog.notes}');
+            } else {
+              appLog('[BG] Page 1 topbar counts unavailable.');
+            }
             final List<Message> unread =
                 fetchedInbox.where((m) => m.isUnread).toList();
             kDebugPrint('[BG] Found ${unread.length} unread messages');
@@ -166,25 +193,20 @@ void callbackDispatcher() {
                     '[BG] Saved ${shownNewNoteIds.length} new message IDs');
               }
             }
+            final fetchedIds = fetchedInbox.map((m) => m.id).toList();
+            if (fetchedIds.isNotEmpty) {
+              await MessageStorage.addSeenNoteIds(fetchedIds);
+              kDebugPrint('[BG] Saved ${fetchedIds.length} seen message IDs');
+            }
           } catch (e) {
             appLog('[BG ERROR] Notes check failed: $e');
           }
           appLog('[BG] === Starting NOTIFICATION COUNTS CHECK ===');
           try {
-            final faService = FaService();
-            final Notifications? newNotifications =
-                await faService.fetchNotifications();
-            if (newNotifications != null) {
-              NotificationCounts currentCounts = NotificationCounts(
-                submissions: int.tryParse(newNotifications.submissions) ?? 0,
-                watches: int.tryParse(newNotifications.watches) ?? 0,
-                comments: int.tryParse(newNotifications.comments) ?? 0,
-                favorites: int.tryParse(newNotifications.favorites) ?? 0,
-                journals: int.tryParse(newNotifications.journals) ?? 0,
-                notes: int.tryParse(newNotifications.notes) ?? 0,
-              );
+            final counts = currentCounts;
+            if (counts != null) {
               kDebugPrint(
-                  '[BG] New counts: S:${currentCounts.submissions} W:${currentCounts.watches} C:${currentCounts.comments} F:${currentCounts.favorites} J:${currentCounts.journals} N:${currentCounts.notes}');
+                  '[BG] New counts: S:${counts.submissions} W:${counts.watches} C:${counts.comments} F:${counts.favorites} J:${counts.journals} N:${counts.notes}');
               final bool submissionsEnabled =
                   prefs.getBool('drawer_notif_submissions_enabled') ?? true;
               final bool watchesEnabled =
@@ -199,27 +221,8 @@ void callbackDispatcher() {
                   prefs.getBool('drawer_notif_notes_enabled') ?? true;
 
               final activitiesStateStore = ActivitiesNotificationStateStore();
-              if (shownNewNoteNotifications > 0) {
-                final previousCounts =
-                    await activitiesStateStore.loadLastSeenCounts();
-                final int inferredNotesCount =
-                    previousCounts.notes + shownNewNoteNotifications;
-                if (currentCounts.notes < inferredNotesCount) {
-                  currentCounts = NotificationCounts(
-                    submissions: currentCounts.submissions,
-                    watches: currentCounts.watches,
-                    comments: currentCounts.comments,
-                    favorites: currentCounts.favorites,
-                    journals: currentCounts.journals,
-                    notes: inferredNotesCount,
-                  );
-                  appLog(
-                    '[BG] Activity notes count adjusted to preserve N+$shownNewNoteNotifications after note preview fetch.',
-                  );
-                }
-              }
               final ActivitiesDiff diff = await activitiesStateStore
-                  .diffAndUpdateLastSeen(currentCounts: currentCounts);
+                  .diffAndUpdateLastSeen(currentCounts: counts);
               kDebugPrint(
                   '[BG] Last-seen counts: S:${diff.previous.submissions} W:${diff.previous.watches} C:${diff.previous.comments} F:${diff.previous.favorites} J:${diff.previous.journals} N:${diff.previous.notes}');
               kDebugPrint(
@@ -233,7 +236,11 @@ void callbackDispatcher() {
                 comments: commentsEnabled ? diff.increasedBy.comments : 0,
                 favorites: favoritesEnabled ? diff.increasedBy.favorites : 0,
                 journals: journalsEnabled ? diff.increasedBy.journals : 0,
-                notes: notesEnabled ? diff.increasedBy.notes : 0,
+                notes: notesEnabled
+                    ? (diff.increasedBy.notes > shownNewNoteNotifications
+                        ? diff.increasedBy.notes
+                        : shownNewNoteNotifications)
+                    : 0,
               );
 
               final bool hasEnabledIncrease =
@@ -246,12 +253,12 @@ void callbackDispatcher() {
               final bool shouldNotify = hasEnabledIncrease;
 
               final NotificationCounts filteredCounts = NotificationCounts(
-                submissions: submissionsEnabled ? currentCounts.submissions : 0,
-                watches: watchesEnabled ? currentCounts.watches : 0,
-                comments: commentsEnabled ? currentCounts.comments : 0,
-                favorites: favoritesEnabled ? currentCounts.favorites : 0,
-                journals: journalsEnabled ? currentCounts.journals : 0,
-                notes: notesEnabled ? currentCounts.notes : 0,
+                submissions: submissionsEnabled ? counts.submissions : 0,
+                watches: watchesEnabled ? counts.watches : 0,
+                comments: commentsEnabled ? counts.comments : 0,
+                favorites: favoritesEnabled ? counts.favorites : 0,
+                journals: journalsEnabled ? counts.journals : 0,
+                notes: notesEnabled ? counts.notes : 0,
               );
               final String messageBody = _buildNotificationMessage(
                 filteredCounts,
@@ -267,7 +274,7 @@ void callbackDispatcher() {
                 if (soundActivitiesEnabled || vibrationActivitiesEnabled) {
                   final bool isDuplicate =
                       await activitiesStateStore.isDuplicateShownNotification(
-                    currentCounts: currentCounts,
+                    currentCounts: counts,
                     body: messageBody,
                   );
                   if (isDuplicate) {
@@ -288,7 +295,7 @@ void callbackDispatcher() {
                     );
                     await commitIOSBadgeNumber(badgeNumber);
                     await activitiesStateStore.markActivityNotificationShown(
-                      currentCounts: currentCounts,
+                      currentCounts: counts,
                       body: messageBody,
                     );
                     appLog('[BG] Activity notification shown.');
@@ -445,7 +452,32 @@ int stableNotificationIdFromString(String value) {
   return hash == 0 ? 1 : hash;
 }
 
-Future<List<Message>> _fetchInboxTwoPagesBg() async {
+class _BackgroundInboxSnapshot {
+  const _BackgroundInboxSnapshot({
+    required this.messages,
+    required this.topbarCounts,
+    required this.fetchedPage2,
+  });
+
+  final List<Message> messages;
+  final NotificationCounts? topbarCounts;
+  final bool fetchedPage2;
+}
+
+class _ParsedInboxPage {
+  const _ParsedInboxPage({
+    required this.messages,
+    required this.topbarCounts,
+  });
+
+  final List<Message> messages;
+  final NotificationCounts? topbarCounts;
+}
+
+Future<_BackgroundInboxSnapshot> _fetchInboxSnapshotBg({
+  required Set<String> shownNoteIds,
+  required Set<String> seenNoteIds,
+}) async {
   final storage = const FlutterSecureStorage(
     iOptions: IOSOptions(
       accountName: 'flutter_secure_storage_service',
@@ -458,107 +490,218 @@ Future<List<Message>> _fetchInboxTwoPagesBg() async {
     debugPrint('[BG] No cookies found - user not logged in');
     throw Exception('Not logged in');
   }
-  final result = <Message>[];
-  for (int page = 1; page <= 2; page++) {
-    final url = Uri.parse('https://www.furaffinity.net/msg/pms/$page/');
-    final resp = await http.get(
-      url,
-      headers: {
-        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-          'a=$cookieA; b=$cookieB; folder=inbox',
-        ),
-        'User-Agent': FAHttp.userAgent,
-      },
+
+  final page1 = await _fetchInboxPageBg(
+    page: 1,
+    cookieA: cookieA,
+    cookieB: cookieB,
+  );
+  final result = <Message>[...page1.messages];
+  var fetchedPage2 = false;
+
+  if (_shouldFetchInboxPage2Bg(
+    page1: page1,
+    shownNoteIds: shownNoteIds,
+    seenNoteIds: seenNoteIds,
+  )) {
+    final page2 = await _fetchInboxPageBg(
+      page: 2,
+      cookieA: cookieA,
+      cookieB: cookieB,
     );
-    if (resp.statusCode == 200) {
-      final decoded = utf8.decode(resp.bodyBytes, allowMalformed: true);
-      final doc = html_parser.parse(decoded);
-      var noteElements = doc.querySelectorAll(
-          '.message-center-pms-note-list-view .note-list-container');
-      if (noteElements.isEmpty) {
-        noteElements = doc.querySelectorAll('#notes-list .note-list-container');
+    result.addAll(page2.messages);
+    fetchedPage2 = true;
+  }
+
+  return _BackgroundInboxSnapshot(
+    messages: result,
+    topbarCounts: page1.topbarCounts,
+    fetchedPage2: fetchedPage2,
+  );
+}
+
+bool _shouldFetchInboxPage2Bg({
+  required _ParsedInboxPage page1,
+  required Set<String> shownNoteIds,
+  required Set<String> seenNoteIds,
+}) {
+  if (page1.messages.isEmpty) return false;
+
+  final knownIds = <String>{...shownNoteIds, ...seenNoteIds};
+  final allPage1RowsAreBrandNewUnread = page1.messages.every((message) {
+    if (!message.isUnread) return false;
+    if (message.id.trim().isEmpty) return false;
+    return !knownIds.contains(message.id);
+  });
+  if (!allPage1RowsAreBrandNewUnread) return false;
+
+  final topbarNotes = page1.topbarCounts?.notes;
+  if (topbarNotes != null) {
+    final page1UnreadCount = page1.messages.where((m) => m.isUnread).length;
+    if (topbarNotes <= page1UnreadCount) return false;
+  }
+
+  return true;
+}
+
+Future<_ParsedInboxPage> _fetchInboxPageBg({
+  required int page,
+  required String cookieA,
+  required String cookieB,
+}) async {
+  final url = Uri.parse('https://www.furaffinity.net/msg/pms/$page/');
+  final resp = await http.get(
+    url,
+    headers: {
+      'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+        'a=$cookieA; b=$cookieB; folder=inbox',
+      ),
+      'User-Agent': FAHttp.userAgent,
+    },
+  );
+  if (resp.statusCode != 200) {
+    throw Exception('HTTP ${resp.statusCode}');
+  }
+
+  final decoded = utf8.decode(resp.bodyBytes, allowMalformed: true);
+  final doc = html_parser.parse(decoded);
+  return _ParsedInboxPage(
+    messages: _parseInboxMessagesBg(doc),
+    topbarCounts: page == 1 ? _parseTopbarCountsBg(doc) : null,
+  );
+}
+
+List<Message> _parseInboxMessagesBg(dom.Document doc) {
+  var noteElements = doc.querySelectorAll(
+      '.message-center-pms-note-list-view .note-list-container');
+  if (noteElements.isEmpty) {
+    noteElements = doc.querySelectorAll('#notes-list .note-list-container');
+  }
+  if (noteElements.isEmpty) {
+    final bool isClassic =
+        doc.querySelector('body[data-static-path="/themes/classic"]') != null;
+    if (isClassic) {
+      List<dom.Element> classicRows =
+          List.from(doc.querySelectorAll('#notes-list tr.note'));
+      if (classicRows.isNotEmpty &&
+          classicRows.last.querySelector('input[type="checkbox"]') == null) {
+        classicRows.removeLast();
       }
-      if (noteElements.isEmpty) {
-        final bool isClassic =
-            doc.querySelector('body[data-static-path="/themes/classic"]') !=
-                null;
-        if (isClassic) {
-          List<dom.Element> classicRows =
-              List.from(doc.querySelectorAll('#notes-list tr.note'));
-          if (classicRows.isNotEmpty &&
-              classicRows.last.querySelector('input[type="checkbox"]') ==
-                  null) {
-            classicRows.removeLast();
-          }
-          noteElements = classicRows;
-        } else {
-          noteElements = doc.querySelectorAll('td.note-list-container tr.note');
-        }
-      }
-      if (noteElements.isEmpty) break;
-      for (var noteEl in noteElements) {
-        final subject = noteEl
-                .querySelector(
-                    '.note-list-subject-container .c-noteListItem__subject')
-                ?.text
-                .trim() ??
-            noteEl.querySelector('a.notelink.note-read.read')?.text.trim() ??
-            noteEl
-                .querySelector('a.notelink.note-unread.unread')
-                ?.text
-                .trim() ??
-            noteEl.querySelector('a.notelink')?.text.trim() ??
-            'No subject';
-        final sender = noteEl
-                .querySelector('.c-usernameBlock__displayName .js-displayName')
-                ?.text
-                .trim() ??
-            noteEl
-                .querySelector(
-                    'div.c-usernameBlock.marquee-container a.c-usernameBlock__displayName.js-displayName-block span.js-displayName')
-                ?.text
-                .trim() ??
-            'Unknown sender';
-        final aTag = noteEl.querySelector('.note-list-subject-container a') ??
-            noteEl.querySelector('a.notelink.note-unread.unread') ??
-            noteEl.querySelector('a.notelink.note-read.read') ??
-            noteEl.querySelector('a.notelink');
-        final classicLink = aTag?.attributes['href'] ?? '';
-        final String link = classicLink.startsWith('/viewmessage/')
-            ? classicLink
-            : (aTag?.attributes['newhref'] ?? classicLink);
-        final checkbox = noteEl.querySelector('input[type="checkbox"]');
-        final idFromLink = extractMessageId(link);
-        final id = idFromLink.isNotEmpty
-            ? idFromLink
-            : (checkbox?.attributes['value'] ??
-                (link.isNotEmpty ? link : '$sender|$subject|unknown-date'));
-        final date = noteEl
-                .querySelector('.note-list-senddate span')
-                ?.attributes['title'] ??
+      noteElements = classicRows;
+    } else {
+      noteElements = doc.querySelectorAll('td.note-list-container tr.note');
+    }
+  }
+
+  final result = <Message>[];
+  for (var noteEl in noteElements) {
+    final subject = noteEl
+            .querySelector(
+                '.note-list-subject-container .c-noteListItem__subject')
+            ?.text
+            .trim() ??
+        noteEl.querySelector('a.notelink.note-read.read')?.text.trim() ??
+        noteEl.querySelector('a.notelink.note-unread.unread')?.text.trim() ??
+        noteEl.querySelector('a.notelink')?.text.trim() ??
+        'No subject';
+    final sender = noteEl
+            .querySelector('.c-usernameBlock__displayName .js-displayName')
+            ?.text
+            .trim() ??
+        noteEl
+            .querySelector(
+                'div.c-usernameBlock.marquee-container a.c-usernameBlock__displayName.js-displayName-block span.js-displayName')
+            ?.text
+            .trim() ??
+        'Unknown sender';
+    final aTag = noteEl.querySelector('.note-list-subject-container a') ??
+        noteEl.querySelector('a.notelink.note-unread.unread') ??
+        noteEl.querySelector('a.notelink.note-read.read') ??
+        noteEl.querySelector('a.notelink');
+    final classicLink = aTag?.attributes['href'] ?? '';
+    final String link = classicLink.startsWith('/viewmessage/')
+        ? classicLink
+        : (aTag?.attributes['newhref'] ?? classicLink);
+    final checkbox = noteEl.querySelector('input[type="checkbox"]');
+    final idFromLink = extractMessageId(link);
+    final id = idFromLink.isNotEmpty
+        ? idFromLink
+        : (checkbox?.attributes['value'] ??
+            (link.isNotEmpty ? link : '$sender|$subject|unknown-date'));
+    final date =
+        noteEl.querySelector('.note-list-senddate span')?.attributes['title'] ??
             noteEl
                 .querySelector('td.alt1.nowrap span.popup_date')
                 ?.attributes['title'] ??
             noteEl.querySelector('span.popup_date')?.attributes['title'] ??
             'Unknown date';
-        final isUnread = noteEl.querySelector('img.unread') != null ||
-            noteEl.querySelector('img[src*="pms-unread.png"]') != null ||
-            noteEl.querySelector('a.notelink.note-unread.unread') != null;
-        result.add(Message(
-          id: id,
-          subject: subject,
-          sender: sender,
-          recipient: '',
-          date: date,
-          link: link,
-          isUnread: isUnread,
-        ));
-      }
-    } else {
-      throw Exception('HTTP ${resp.statusCode}');
-    }
+    final isUnread = noteEl.querySelector('img.unread') != null ||
+        noteEl.querySelector('img[src*="pms-unread.png"]') != null ||
+        noteEl.querySelector('a.notelink.note-unread.unread') != null;
+    result.add(Message(
+      id: id,
+      subject: subject,
+      sender: sender,
+      recipient: '',
+      date: date,
+      link: link,
+      isUnread: isUnread,
+    ));
   }
   return result;
+}
+
+NotificationCounts? _parseTopbarCountsBg(dom.Document doc) {
+  final links = doc.querySelectorAll(
+      'li.message-bar-desktop a.notification-container, li.noblock a.notification-container');
+  if (links.isEmpty) return null;
+
+  final counts = <String, int>{
+    'S': 0,
+    'W': 0,
+    'C': 0,
+    'F': 0,
+    'J': 0,
+    'N': 0,
+  };
+  for (final link in links) {
+    final href = link.attributes['href'] ?? '';
+    final title = (link.attributes['title'] ?? '').trim();
+    final text = link.text.trim();
+    final key = _topbarTypeKeyBg(href: href, title: title);
+    if (key == null) continue;
+    counts[key] = _extractTopbarCountBg(title.isNotEmpty ? title : text);
+  }
+
+  return NotificationCounts(
+    submissions: counts['S'] ?? 0,
+    watches: counts['W'] ?? 0,
+    comments: counts['C'] ?? 0,
+    favorites: counts['F'] ?? 0,
+    journals: counts['J'] ?? 0,
+    notes: counts['N'] ?? 0,
+  );
+}
+
+String? _topbarTypeKeyBg({
+  required String href,
+  required String title,
+}) {
+  final h = href.toLowerCase();
+  final t = title.toLowerCase();
+  if (h.contains('msg/submissions') || t.contains('submission')) return 'S';
+  if (h.contains('#watches') || t.contains('watch')) return 'W';
+  if (h.contains('#comments') || t.contains('comment')) return 'C';
+  if (h.contains('#favorites') || t.contains('favorite')) return 'F';
+  if (h.contains('#journals') || t.contains('journal')) return 'J';
+  if (h.contains('msg/pms') || t.contains('note')) return 'N';
+  return null;
+}
+
+int _extractTopbarCountBg(String text) {
+  final match = RegExp(r'\d{1,3}(?:[,.]\d{3})*|\d+').firstMatch(text);
+  if (match == null) return 0;
+  return int.tryParse(match.group(0)!.replaceAll(RegExp(r'[,.]'), '')) ?? 0;
 }
 
 Future<String> _fetchMessageContentInBackground(String link) async {
@@ -741,9 +884,7 @@ Future<void> _afterFirstFrameBoot(TimezoneProvider timezoneProvider) async {
     final cacheManager = CustomCacheManager();
     final cacheMonitorService = CacheMonitorService(cacheManager);
     await cacheMonitorService.checkStorageUsage();
-    debugPrint("Initializing Workmanager...");
-    await Workmanager().initialize(callbackDispatcher);
-    debugPrint("Workmanager initialized");
+    await ensureWorkmanagerInitialized();
     if (Platform.isAndroid) {
       await Workmanager().registerPeriodicTask(
         "FANotify",
@@ -793,6 +934,12 @@ void main() async {
   await FAHttp.init();
   AppLifecycleNetworkReset.attach();
   HttpOverrides.global = FreshHttpOverrides();
+  try {
+    await ensureWorkmanagerInitialized();
+  } catch (e, st) {
+    debugPrint('[BOOT] early Workmanager init failed: $e');
+    debugPrint(st.toString());
+  }
   debugPrint("===============================================");
   debugPrint("APP STARTING: ${DateTime.now()}");
   debugPrint("===============================================");

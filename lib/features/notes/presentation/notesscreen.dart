@@ -8,9 +8,11 @@ import 'package:FANotifier/features/notes/presentation/message_detail_screen.dar
 import 'package:FANotifier/features/notes/domain/message_model.dart';
 import 'package:FANotifier/features/notes/presentation/new_message.dart';
 import 'package:FANotifier/features/notifications/data/notification_service.dart';
+import 'package:FANotifier/features/notifications/data/fa_activities_polling_service.dart';
 import 'package:FANotifier/features/notes/data/message_storage.dart';
 import 'package:FANotifier/features/notes/data/notes_first_run_preference.dart';
 import 'package:FANotifier/features/notes/data/note_unread_service.dart';
+import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
 import 'package:FANotifier/features/notes/data/notesscreen_api_service.dart';
 import 'package:FANotifier/features/notes/presentation/notesscreen_preview_dialog.dart';
@@ -39,8 +41,7 @@ class NotesScreenState extends State<NotesScreen>
   late final NotesApiService _notesApi;
   final NotesFirstRunPreference _notesFirstRunPreference =
       NotesFirstRunPreference();
-  late final NoteUnreadService _noteUnreadService =
-      NoteUnreadService();
+  late final NoteUnreadService _noteUnreadService = NoteUnreadService();
   late final TabController _tabController;
 
   StreamSubscription<void>? _notesRefreshSub;
@@ -56,13 +57,15 @@ class NotesScreenState extends State<NotesScreen>
   bool _hasMoreInbox = true;
   String? _lastInboxTopId;
 
-  bool isLoadingSent = true;
+  bool isLoadingSent = false;
   bool isLoadingMoreSent = false;
   String errorSent = '';
   List<Message> sentMessages = [];
   bool _isFetchingMoreSent = false;
   int _currentSentPage = 1;
   bool _hasMoreSent = true;
+  bool _hasLoadedSent = false;
+  bool _sentNeedsRefresh = true;
 
   bool _isDialogOpen = false;
 
@@ -93,7 +96,7 @@ class NotesScreenState extends State<NotesScreen>
         _hasMoreInbox = true;
         _hasMoreSent = true;
         await _fetchInbox(page: 1, clearOld: false);
-        await _fetchSent(page: 1, clearOld: false);
+        await _refreshSentIfVisibleOrMarkStale();
       });
     }
 
@@ -125,17 +128,46 @@ class NotesScreenState extends State<NotesScreen>
     _hasMoreInbox = true;
     _hasMoreSent = true;
     _fetchInbox(page: 1, clearOld: false);
-    _fetchSent(page: 1, clearOld: false);
+    _refreshSentIfVisibleOrMarkStale();
   }
 
   void _onTabChanged() {
-    if (!_tabController.indexIsChanging && mounted &&
+    if (!mounted) return;
+    if (_tabController.index == 1) {
+      _ensureSentLoaded();
+    }
+    if (!_tabController.indexIsChanging &&
         _tabController.index != _prevTabIndex) {
       _prevTabIndex = _tabController.index;
       setState(() {
         _selectionMode = false;
         _selectedIds.clear();
       });
+    }
+  }
+
+  Future<void> _refreshSentIfVisibleOrMarkStale() async {
+    _currentSentPage = 1;
+    _hasMoreSent = true;
+    _sentNeedsRefresh = true;
+    if (_tabController.index == 1) {
+      await _ensureSentLoaded(force: true);
+    }
+  }
+
+  Future<void> _ensureSentLoaded({bool force = false}) async {
+    if (isLoadingSent) return;
+    if (!force && _hasLoadedSent && !_sentNeedsRefresh) return;
+
+    _currentSentPage = 1;
+    _hasMoreSent = true;
+    await _fetchSent(page: 1, clearOld: false);
+
+    if (errorSent.isEmpty) {
+      _hasLoadedSent = true;
+      _sentNeedsRefresh = false;
+    } else {
+      _sentNeedsRefresh = true;
     }
   }
 
@@ -162,35 +194,39 @@ class NotesScreenState extends State<NotesScreen>
       _toggleSelection(msg);
     } else {
       if (_tabController.index == 0) {
-        Navigator.of(context).push(MaterialPageRoute(
+        Navigator.of(context)
+            .push(MaterialPageRoute(
           builder: (_) => MessageDetailScreen(
             messageLink: msg.link,
             folder: 'inbox',
           ),
-        )).then((result) {
+        ))
+            .then((result) {
           if (result == 'refresh' || result == 'marked_unread') {
             _currentInboxPage = 1;
             _currentSentPage = 1;
             _hasMoreInbox = true;
             _hasMoreSent = true;
             _fetchInbox(page: 1, clearOld: false);
-            _fetchSent(page: 1, clearOld: false);
+            _refreshSentIfVisibleOrMarkStale();
           }
         });
       } else {
-        Navigator.of(context).push(MaterialPageRoute(
+        Navigator.of(context)
+            .push(MaterialPageRoute(
           builder: (_) => MessageDetailScreen(
             messageLink: msg.link,
             folder: 'sent',
           ),
-        )).then((result) {
+        ))
+            .then((result) {
           if (result == 'refresh' || result == 'marked_unread') {
             _currentInboxPage = 1;
             _currentSentPage = 1;
             _hasMoreInbox = true;
             _hasMoreSent = true;
             _fetchInbox(page: 1, clearOld: false);
-            _fetchSent(page: 1, clearOld: false);
+            _refreshSentIfVisibleOrMarkStale();
           }
         });
       }
@@ -217,7 +253,8 @@ class NotesScreenState extends State<NotesScreen>
           suppressNewUnreadNotifications: true,
         );
         try {
-          final page2Messages = await _notesApi.fetchNotesPage(folder: 'inbox', page: 2);
+          final page2Messages =
+              await _notesApi.fetchNotesPage(folder: 'inbox', page: 2);
           final unread = page2Messages.where((m) => m.isUnread).toList();
           if (unread.isNotEmpty) {
             final unreadIds = unread.map((m) => m.id).toList();
@@ -286,7 +323,7 @@ class NotesScreenState extends State<NotesScreen>
       _fetchInboxTwoPagesOnly();
       _currentSentPage = 1;
       _hasMoreSent = true;
-      _fetchSent(page: 1, clearOld: false);
+      _refreshSentIfVisibleOrMarkStale();
     });
   }
 
@@ -311,7 +348,7 @@ class NotesScreenState extends State<NotesScreen>
         _hasMoreInbox = true;
         _hasMoreSent = true;
         _fetchInbox(page: 1, clearOld: false);
-        _fetchSent(page: 1, clearOld: false);
+        _refreshSentIfVisibleOrMarkStale();
       });
     }
   }
@@ -338,6 +375,10 @@ class NotesScreenState extends State<NotesScreen>
         final unreadIds = unread.map((e) => e.id).toList();
         await MessageStorage.addShownNoteIds(unreadIds);
       }
+      final fetchedIds = combined.map((e) => e.id).toList();
+      if (fetchedIds.isNotEmpty) {
+        await MessageStorage.addSeenNoteIds(fetchedIds);
+      }
       await _setFirstRunSkipDone();
     } catch (_) {}
   }
@@ -345,7 +386,7 @@ class NotesScreenState extends State<NotesScreen>
   void _initInboxAndSent() {
     _inboxScrollController.addListener(() {
       if (_inboxScrollController.position.pixels ==
-          _inboxScrollController.position.maxScrollExtent &&
+              _inboxScrollController.position.maxScrollExtent &&
           !_isFetchingMoreInbox &&
           _hasMoreInbox) {
         _loadMoreInbox();
@@ -354,7 +395,7 @@ class NotesScreenState extends State<NotesScreen>
 
     _sentScrollController.addListener(() {
       if (_sentScrollController.position.pixels ==
-          _sentScrollController.position.maxScrollExtent &&
+              _sentScrollController.position.maxScrollExtent &&
           !_isFetchingMoreSent &&
           _hasMoreSent) {
         _loadMoreSent();
@@ -362,20 +403,74 @@ class NotesScreenState extends State<NotesScreen>
     });
 
     _fetchInbox(page: 1);
-    _fetchSent(page: 1);
   }
 
   Future<void> _fetchInboxTwoPagesOnly() async {
     try {
-      List<Message> newFetched = [];
-      newFetched
-          .addAll(await _notesApi.fetchNotesPage(folder: 'inbox', page: 1));
-      newFetched
-          .addAll(await _notesApi.fetchNotesPage(folder: 'inbox', page: 2));
-      await _handleNewUnreadMessages(newFetched);
+      final shownIds = await MessageStorage.getShownNoteIds();
+      final seenIds = await MessageStorage.getSeenNoteIds();
+      final page1 =
+          await _notesApi.fetchNotesPageSnapshot(folder: 'inbox', page: 1);
+      final newFetched = <Message>[...page1.messages];
+      if (_shouldFetchInboxPage2(
+        page1: page1,
+        shownNoteIds: shownIds,
+        seenNoteIds: seenIds,
+      )) {
+        newFetched
+            .addAll(await _notesApi.fetchNotesPage(folder: 'inbox', page: 2));
+      }
+      final shownCount = await _handleNewUnreadMessages(newFetched);
+      await _handleNotesPageTopbarCounts(
+        page1.topbarCounts,
+        shownNewNoteNotifications: shownCount,
+        source: 'notes_screen_two_page_refresh',
+      );
+      final fetchedIds = newFetched.map((m) => m.id).toList();
+      if (fetchedIds.isNotEmpty) {
+        await MessageStorage.addSeenNoteIds(fetchedIds);
+      }
     } catch (e) {
       debugPrint('[Foreground fetchInboxTwoPagesOnly] error => $e');
     }
+  }
+
+  bool _shouldFetchInboxPage2({
+    required NotesPageSnapshot page1,
+    required Set<String> shownNoteIds,
+    required Set<String> seenNoteIds,
+  }) {
+    if (page1.messages.isEmpty) return false;
+
+    final knownIds = <String>{...shownNoteIds, ...seenNoteIds};
+    final allPage1RowsAreBrandNewUnread = page1.messages.every((message) {
+      if (!message.isUnread) return false;
+      if (message.id.trim().isEmpty) return false;
+      return !knownIds.contains(message.id);
+    });
+    if (!allPage1RowsAreBrandNewUnread) return false;
+
+    final topbarNotes = page1.topbarCounts?.notes;
+    if (topbarNotes != null) {
+      final page1UnreadCount = page1.messages.where((m) => m.isUnread).length;
+      if (topbarNotes <= page1UnreadCount) return false;
+    }
+
+    return true;
+  }
+
+  Future<void> _handleNotesPageTopbarCounts(
+    NotificationCounts? counts, {
+    required int shownNewNoteNotifications,
+    required String source,
+  }) async {
+    if (counts == null) return;
+    await FaActivitiesPollingService().handleExternalCounts(
+      currentCounts: counts,
+      shownNewNoteNotifications: shownNewNoteNotifications,
+      resetTimer: true,
+      source: source,
+    );
   }
 
   Future<void> _fetchInbox({
@@ -393,8 +488,9 @@ class NotesScreenState extends State<NotesScreen>
     }
 
     try {
-      final newMessages =
-      await _notesApi.fetchNotesPage(folder: 'inbox', page: page);
+      final snapshot =
+          await _notesApi.fetchNotesPageSnapshot(folder: 'inbox', page: page);
+      final newMessages = snapshot.messages;
 
       if (page == 1) {
         setState(() {
@@ -417,7 +513,12 @@ class NotesScreenState extends State<NotesScreen>
       }
 
       if (page == 1 && !suppressNewUnreadNotifications) {
-        await _handleNewUnreadMessages(newMessages);
+        final shownCount = await _handleNewUnreadMessages(newMessages);
+        await _handleNotesPageTopbarCounts(
+          snapshot.topbarCounts,
+          shownNewNoteNotifications: shownCount,
+          source: 'notes_screen_inbox_refresh',
+        );
       } else {
         final unread = newMessages.where((m) => m.isUnread).toList();
         if (unread.isNotEmpty) {
@@ -427,6 +528,10 @@ class NotesScreenState extends State<NotesScreen>
         if (page == 1 && newMessages.isNotEmpty) {
           _lastInboxTopId = newMessages.first.id;
         }
+      }
+      final fetchedIds = newMessages.map((m) => m.id).toList();
+      if (fetchedIds.isNotEmpty) {
+        await MessageStorage.addSeenNoteIds(fetchedIds);
       }
     } catch (e) {
       setState(() {
@@ -462,7 +567,7 @@ class NotesScreenState extends State<NotesScreen>
 
     try {
       final newMessages =
-      await _notesApi.fetchNotesPage(folder: 'sent', page: page);
+          await _notesApi.fetchNotesPage(folder: 'sent', page: page);
 
       if (page == 1) {
         setState(() {
@@ -477,6 +582,10 @@ class NotesScreenState extends State<NotesScreen>
       setState(() {
         isLoadingSent = false;
       });
+      if (page == 1) {
+        _hasLoadedSent = true;
+        _sentNeedsRefresh = false;
+      }
 
       if (newMessages.isEmpty) {
         setState(() {
@@ -489,6 +598,9 @@ class NotesScreenState extends State<NotesScreen>
         isLoadingSent = false;
         _hasMoreSent = false;
       });
+      if (page == 1) {
+        _sentNeedsRefresh = true;
+      }
     }
   }
 
@@ -505,7 +617,7 @@ class NotesScreenState extends State<NotesScreen>
     _isFetchingMoreSent = false;
   }
 
-  Future<void> _handleNewUnreadMessages(List<Message> fetchedInbox) async {
+  Future<int> _handleNewUnreadMessages(List<Message> fetchedInbox) async {
     try {
       final previousTopId = _lastInboxTopId;
       if (fetchedInbox.isNotEmpty) {
@@ -513,21 +625,20 @@ class NotesScreenState extends State<NotesScreen>
       }
 
       final unread = fetchedInbox.where((m) => m.isUnread).toList();
-      if (unread.isEmpty) return;
+      if (unread.isEmpty) return 0;
 
       if (!_didFirstRunSkip) {
-        return;
+        return 0;
       }
 
       final shownIds = await MessageStorage.getShownNoteIds();
       final unreadNotShown =
           unread.where((m) => !shownIds.contains(m.id)).toList();
-      if (unreadNotShown.isEmpty) return;
+      if (unreadNotShown.isEmpty) return 0;
 
       int anchorIndex = -1;
       if (previousTopId != null) {
-        anchorIndex =
-            fetchedInbox.indexWhere((m) => m.id == previousTopId);
+        anchorIndex = fetchedInbox.indexWhere((m) => m.id == previousTopId);
       }
 
       final Set<String>? eligibleIds;
@@ -555,6 +666,7 @@ class NotesScreenState extends State<NotesScreen>
             .toList();
       }
 
+      var shownCount = 0;
       for (var msg in newUnread) {
         try {
           final content = await _notesApi.fetchMessageContent(msg.link);
@@ -565,6 +677,7 @@ class NotesScreenState extends State<NotesScreen>
             'note_${msg.id}',
             "notes",
           );
+          shownCount++;
 
           await _markAsUnreadWithoutRefetch(msg);
         } catch (_) {}
@@ -572,7 +685,10 @@ class NotesScreenState extends State<NotesScreen>
 
       final newIds = unreadNotShown.map((m) => m.id).toList();
       await MessageStorage.addShownNoteIds(newIds);
-    } catch (_) {}
+      return shownCount;
+    } catch (_) {
+      return 0;
+    }
   }
 
   Future<void> _markAsUnreadWithoutRefetch(Message msg) async {
@@ -591,7 +707,8 @@ class NotesScreenState extends State<NotesScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.grey[900],
-        title: const Text('Move to Trash', style: TextStyle(color: Colors.white)),
+        title:
+            const Text('Move to Trash', style: TextStyle(color: Colors.white)),
         content: const Text(
           'Are you sure you want to send selected Notes to Trash folder?',
           style: TextStyle(color: Colors.white70),
@@ -603,7 +720,8 @@ class NotesScreenState extends State<NotesScreen>
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Trash', style: TextStyle(color: _accent, fontWeight: FontWeight.bold)),
+            child: const Text('Trash',
+                style: TextStyle(color: _accent, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -661,7 +779,7 @@ class NotesScreenState extends State<NotesScreen>
       builder: (_) {
         return Dialog(
           insetPadding:
-          const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
+              const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
           backgroundColor: Colors.grey[900],
           child: PreviewDialogContent(
             message: message,
@@ -691,9 +809,8 @@ class NotesScreenState extends State<NotesScreen>
   }
 
   Widget _buildNotesScaffold(BuildContext context) {
-    final bool showInitialLoader =
-        (inboxMessages.isEmpty && isLoadingInbox) &&
-            (sentMessages.isEmpty && isLoadingSent);
+    final bool showInitialLoader = (inboxMessages.isEmpty && isLoadingInbox) &&
+        (sentMessages.isEmpty && isLoadingSent);
 
     if (showInitialLoader) {
       return Scaffold(
@@ -752,14 +869,14 @@ class NotesScreenState extends State<NotesScreen>
                           )
                         : const SizedBox.shrink(),
                   ),
-
                   InkResponse(
                     onTap: () {
                       if (_selectionMode && _selectedIds.isNotEmpty) {
                         _onTrashPressed();
                       } else if (!_selectionMode) {
                         Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const TrashScreen()),
+                          MaterialPageRoute(
+                              builder: (_) => const TrashScreen()),
                         );
                       }
                     },
@@ -826,7 +943,7 @@ class NotesScreenState extends State<NotesScreen>
                     refreshSent: () async {
                       _currentSentPage = 1;
                       _hasMoreSent = true;
-                      await _fetchSent(page: 1, clearOld: false);
+                      await _refreshSentIfVisibleOrMarkStale();
                     },
                     loadMore: _loadMoreInbox,
                     onOpenMessage: (msg) {
@@ -844,7 +961,7 @@ class NotesScreenState extends State<NotesScreen>
                           _hasMoreInbox = true;
                           _hasMoreSent = true;
                           _fetchInbox(page: 1, clearOld: false);
-                          _fetchSent(page: 1, clearOld: false);
+                          _refreshSentIfVisibleOrMarkStale();
                         }
                       });
                     },
@@ -887,7 +1004,7 @@ class NotesScreenState extends State<NotesScreen>
                           _hasMoreInbox = true;
                           _hasMoreSent = true;
                           _fetchInbox(page: 1, clearOld: false);
-                          _fetchSent(page: 1, clearOld: false);
+                          _refreshSentIfVisibleOrMarkStale();
                         }
                       });
                     },

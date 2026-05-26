@@ -1,6 +1,12 @@
 import UIKit
 import Flutter
 
+private func sceneLog(_ msg: String) {
+    let line = "[SceneDelegate] \(msg)"
+    NSLog("%@", line)
+    debugPrint("flutter: \(line)")
+}
+
 @available(iOS 13.0, *)
 class SceneDelegate: UIResponder, UIWindowSceneDelegate, FlutterSceneLifeCycleProvider {
     let sceneLifeCycleDelegate = FlutterPluginSceneLifeCycleDelegate()
@@ -54,8 +60,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate, FlutterSceneLifeCyclePr
 
         sceneLifeCycleDelegate.sceneDidBecomeActive(scene)
 
-        let appDelegate = UIApplication.shared.delegate as? AppDelegate
-        appDelegate?.handleDidBecomeActive(source: "sceneDelegate")
+        if let appDelegate = UIApplication.shared.delegate as? AppDelegate {
+            appDelegate.handleDidBecomeActive(source: "sceneDelegate")
+        } else {
+            sceneLog("AppDelegate unavailable during sceneDidBecomeActive")
+        }
     }
 
     func sceneWillResignActive(_ scene: UIScene) {
@@ -65,8 +74,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate, FlutterSceneLifeCyclePr
     func sceneDidEnterBackground(_ scene: UIScene) {
         sceneLifeCycleDelegate.sceneDidEnterBackground(scene)
 
-        let appDelegate = UIApplication.shared.delegate as? AppDelegate
-        appDelegate?.handleDidEnterBackground(source: "sceneDelegate")
+        if let appDelegate = UIApplication.shared.delegate as? AppDelegate {
+            appDelegate.handleDidEnterBackground(source: "sceneDelegate")
+        } else {
+            sceneLog("AppDelegate unavailable during sceneDidEnterBackground")
+        }
     }
 
     func scene(

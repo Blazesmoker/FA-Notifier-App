@@ -24,6 +24,11 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         debugPrint("flutter: \(line)")
     }
 
+    private func setFlutterSharedBool(_ value: Bool, forKey key: String) {
+        UserDefaults.standard.set(value, forKey: "flutter.\(key)")
+        UserDefaults.standard.synchronize()
+    }
+
     private var notifChannel: FlutterMethodChannel?
     private var pendingNotificationPayload: [String: Any]?
     private var translationChannel: FlutterMethodChannel?
@@ -264,14 +269,32 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     }
 
+    override func applicationDidEnterBackground(_ application: UIApplication) {
+        handleDidEnterBackground(source: "appDelegate")
+    }
+
+    override func applicationDidBecomeActive(_ application: UIApplication) {
+        handleDidBecomeActive(source: "appDelegate")
+    }
+
+    override func applicationWillResignActive(_ application: UIApplication) {
+        fLog("App will resign active")
+    }
+
+    override func applicationWillEnterForeground(_ application: UIApplication) {
+        fLog("App will enter foreground")
+    }
+
     func handleDidEnterBackground(source: String) {
         fLog("App entering background (\(source))")
+        setFlutterSharedBool(false, forKey: "isAppActive")
         scheduleBackgroundFetch()
         logApproxNextFetch("didEnterBackground:\(source)")
     }
 
     func handleDidBecomeActive(source: String) {
         fLog("App became active (\(source))")
+        setFlutterSharedBool(true, forKey: "isAppActive")
         setupNotificationChannelIfNeeded()
         setupTranslationChannelIfNeeded()
         getPendingBackgroundTasks()

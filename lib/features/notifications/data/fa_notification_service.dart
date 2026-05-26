@@ -230,6 +230,34 @@ class FANotificationService with ChangeNotifier {
     registeredUsersOnline: '0',
   );
 
+  void applyTopbarCounts(NotificationCounts counts) {
+    latestCounts = counts;
+    _setMessageBarCount('S', counts.submissions);
+    _setMessageBarCount('W', counts.watches);
+    _setMessageBarCount('C', counts.comments);
+    _setMessageBarCount('F', counts.favorites);
+    _setMessageBarCount('J', counts.journals);
+    _setMessageBarCount('N', counts.notes);
+    latestTopBarNotifications = Notifications(
+      submissions: '${counts.submissions}',
+      watches: '${counts.watches}',
+      journals: '${counts.journals}',
+      notes: '${counts.notes}',
+      comments: '${counts.comments}',
+      favorites: '${counts.favorites}',
+      registeredUsersOnline: latestTopBarNotifications.registeredUsersOnline,
+    );
+    notifyListeners();
+  }
+
+  void _setMessageBarCount(String key, int value) {
+    if (value > 0) {
+      messageBarCounts[key] = value;
+    } else {
+      messageBarCounts.remove(key);
+    }
+  }
+
   static int _extractAnyInt(String s) {
     final m = RegExp(r'\d{1,3}(?:[,.]\d{3})*|\d+').firstMatch(s);
     if (m == null) return 0;
