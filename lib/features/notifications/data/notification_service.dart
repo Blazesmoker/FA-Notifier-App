@@ -311,8 +311,9 @@ class NotificationService {
     String title,
     String body,
     String payload,
-    String type,
-  ) async {
+    String type, {
+    int? badgeNumber,
+  }) async {
     appLog('NotificationService.showNotification type=$type');
     kDebugPrint(
         'NotificationService.showNotification id=$id title=$title type=$type');
@@ -359,6 +360,7 @@ class NotificationService {
       presentAlert: true,
       presentBadge: true,
       presentSound: soundEnabled,
+      badgeNumber: badgeNumber,
       interruptionLevel: InterruptionLevel.active,
     );
 

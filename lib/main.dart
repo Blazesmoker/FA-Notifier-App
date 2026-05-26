@@ -111,6 +111,8 @@ void callbackDispatcher() {
             appLog('[BG] First run not complete - skipping notifications');
             return Future.value(true);
           }
+          int shownNewNoteNotifications = 0;
+
           appLog('[BG] === Starting UNREAD NOTES CHECK ===');
           try {
             final List<Message> fetchedInbox = await _fetchInboxTwoPagesBg();
@@ -125,6 +127,7 @@ void callbackDispatcher() {
               final List<Message> newNotes =
                   unread.where((m) => !shownSet.contains(m.id)).toList();
               kDebugPrint('[BG] New unread messages: ${newNotes.length}');
+              final List<String> shownNewNoteIds = <String>[];
               for (var msg in newNotes) {
                 try {
                   kDebugPrint(
@@ -132,19 +135,22 @@ void callbackDispatcher() {
                   final String content =
                       await _fetchMessageContentInBackground(msg.link);
                   final String payload = 'note_${msg.id}';
+                  final int? badgeNumber =
+                      await nextIOSBadgeNumberForNotification();
                   await notificationService.showNotification(
-                    msg.id.hashCode,
+                    stableNotificationIdFromString(msg.id),
                     'New Note from ${msg.sender}',
                     content,
                     payload,
                     'notes',
+                    badgeNumber: badgeNumber,
                   );
+                  await commitIOSBadgeNumber(badgeNumber);
+                  shownNewNoteNotifications++;
+                  shownNewNoteIds.add(msg.id);
                   kDebugPrint('[BG] Notification shown for message ${msg.id}');
-                  if (Platform.isIOS) {
-                    int currentBadge = await getBadgeCounter();
-                    int newBadge = currentBadge + 1;
-                    await updateBadgeCounter(newBadge);
-                    kDebugPrint('[BG] Badge updated to: $newBadge');
+                  if (badgeNumber != null) {
+                    kDebugPrint('[BG] Badge updated to: $badgeNumber');
                   }
                   await _markAsUnreadBackground(msg);
                   kDebugPrint(
@@ -154,10 +160,10 @@ void callbackDispatcher() {
                       '[BG ERROR] Failed to process message ${msg.id}: $e');
                 }
               }
-              if (newNotes.isNotEmpty) {
-                final List<String> newIds = newNotes.map((m) => m.id).toList();
-                await MessageStorage.addShownNoteIds(newIds);
-                kDebugPrint('[BG] Saved ${newIds.length} new message IDs');
+              if (shownNewNoteIds.isNotEmpty) {
+                await MessageStorage.addShownNoteIds(shownNewNoteIds);
+                kDebugPrint(
+                    '[BG] Saved ${shownNewNoteIds.length} new message IDs');
               }
             }
           } catch (e) {
@@ -169,7 +175,7 @@ void callbackDispatcher() {
             final Notifications? newNotifications =
                 await faService.fetchNotifications();
             if (newNotifications != null) {
-              final NotificationCounts newCounts = NotificationCounts(
+              NotificationCounts currentCounts = NotificationCounts(
                 submissions: int.tryParse(newNotifications.submissions) ?? 0,
                 watches: int.tryParse(newNotifications.watches) ?? 0,
                 comments: int.tryParse(newNotifications.comments) ?? 0,
@@ -178,7 +184,7 @@ void callbackDispatcher() {
                 notes: int.tryParse(newNotifications.notes) ?? 0,
               );
               kDebugPrint(
-                  '[BG] New counts: S:${newCounts.submissions} W:${newCounts.watches} C:${newCounts.comments} F:${newCounts.favorites} J:${newCounts.journals} N:${newCounts.notes}');
+                  '[BG] New counts: S:${currentCounts.submissions} W:${currentCounts.watches} C:${currentCounts.comments} F:${currentCounts.favorites} J:${currentCounts.journals} N:${currentCounts.notes}');
               final bool submissionsEnabled =
                   prefs.getBool('drawer_notif_submissions_enabled') ?? true;
               final bool watchesEnabled =
@@ -193,8 +199,27 @@ void callbackDispatcher() {
                   prefs.getBool('drawer_notif_notes_enabled') ?? true;
 
               final activitiesStateStore = ActivitiesNotificationStateStore();
+              if (shownNewNoteNotifications > 0) {
+                final previousCounts =
+                    await activitiesStateStore.loadLastSeenCounts();
+                final int inferredNotesCount =
+                    previousCounts.notes + shownNewNoteNotifications;
+                if (currentCounts.notes < inferredNotesCount) {
+                  currentCounts = NotificationCounts(
+                    submissions: currentCounts.submissions,
+                    watches: currentCounts.watches,
+                    comments: currentCounts.comments,
+                    favorites: currentCounts.favorites,
+                    journals: currentCounts.journals,
+                    notes: inferredNotesCount,
+                  );
+                  appLog(
+                    '[BG] Activity notes count adjusted to preserve N+$shownNewNoteNotifications after note preview fetch.',
+                  );
+                }
+              }
               final ActivitiesDiff diff = await activitiesStateStore
-                  .diffAndUpdateLastSeen(currentCounts: newCounts);
+                  .diffAndUpdateLastSeen(currentCounts: currentCounts);
               kDebugPrint(
                   '[BG] Last-seen counts: S:${diff.previous.submissions} W:${diff.previous.watches} C:${diff.previous.comments} F:${diff.previous.favorites} J:${diff.previous.journals} N:${diff.previous.notes}');
               kDebugPrint(
@@ -211,22 +236,22 @@ void callbackDispatcher() {
                 notes: notesEnabled ? diff.increasedBy.notes : 0,
               );
 
-              final bool hasEnabledIncrease = enabledIncreases.submissions > 0 ||
-                  enabledIncreases.watches > 0 ||
-                  enabledIncreases.comments > 0 ||
-                  enabledIncreases.favorites > 0 ||
-                  enabledIncreases.journals > 0 ||
-                  enabledIncreases.notes > 0;
-              final bool shouldNotify = hasEnabledIncrease &&
-                  diff.hasNonZeroPreviousIncrease(enabledIncreases);
+              final bool hasEnabledIncrease =
+                  enabledIncreases.submissions > 0 ||
+                      enabledIncreases.watches > 0 ||
+                      enabledIncreases.comments > 0 ||
+                      enabledIncreases.favorites > 0 ||
+                      enabledIncreases.journals > 0 ||
+                      enabledIncreases.notes > 0;
+              final bool shouldNotify = hasEnabledIncrease;
 
               final NotificationCounts filteredCounts = NotificationCounts(
-                submissions: submissionsEnabled ? newCounts.submissions : 0,
-                watches: watchesEnabled ? newCounts.watches : 0,
-                comments: commentsEnabled ? newCounts.comments : 0,
-                favorites: favoritesEnabled ? newCounts.favorites : 0,
-                journals: journalsEnabled ? newCounts.journals : 0,
-                notes: notesEnabled ? newCounts.notes : 0,
+                submissions: submissionsEnabled ? currentCounts.submissions : 0,
+                watches: watchesEnabled ? currentCounts.watches : 0,
+                comments: commentsEnabled ? currentCounts.comments : 0,
+                favorites: favoritesEnabled ? currentCounts.favorites : 0,
+                journals: journalsEnabled ? currentCounts.journals : 0,
+                notes: notesEnabled ? currentCounts.notes : 0,
               );
               final String messageBody = _buildNotificationMessage(
                 filteredCounts,
@@ -240,26 +265,30 @@ void callbackDispatcher() {
                 final bool vibrationActivitiesEnabled =
                     prefs.getBool('vibration_new_activities_enabled') ?? true;
                 if (soundActivitiesEnabled || vibrationActivitiesEnabled) {
-                  final bool isDuplicate = await activitiesStateStore
-                      .isDuplicateShownNotification(
-                    currentCounts: newCounts,
+                  final bool isDuplicate =
+                      await activitiesStateStore.isDuplicateShownNotification(
+                    currentCounts: currentCounts,
                     body: messageBody,
                   );
                   if (isDuplicate) {
                     appLog(
                         '[BG] Duplicate activity notification skipped: $messageBody');
                   } else {
-                    final int activityNotificationId =
-                        await notificationService.allocateActivityNotificationId();
+                    final int activityNotificationId = await notificationService
+                        .allocateActivityNotificationId();
+                    final int? badgeNumber =
+                        await nextIOSBadgeNumberForNotification();
                     await notificationService.showNotification(
                       activityNotificationId,
                       'New FA Activity',
                       messageBody,
                       'activity_fa_activity',
                       'activities',
+                      badgeNumber: badgeNumber,
                     );
+                    await commitIOSBadgeNumber(badgeNumber);
                     await activitiesStateStore.markActivityNotificationShown(
-                      currentCounts: newCounts,
+                      currentCounts: currentCounts,
                       body: messageBody,
                     );
                     appLog('[BG] Activity notification shown.');
@@ -270,9 +299,6 @@ void callbackDispatcher() {
                   appLog(
                       '[BG] Activities sound+vibration disabled; not showing notification.');
                 }
-              } else if (hasEnabledIncrease) {
-                appLog(
-                    '[BG] Enabled activity increase came from zero baseline; not notifying.');
               } else {
                 appLog('[BG] No enabled category increased; not notifying.');
               }
@@ -317,7 +343,7 @@ String _formatNotificationPart({
   if (current <= 0) return '';
   final int previous = current - increasedBy;
   if (increasedBy > 0 && previous > 0) {
-    return '$current$suffix(+${increasedBy})';
+    return '$current$suffix(+$increasedBy)';
   }
   return '$current$suffix';
 }
@@ -373,14 +399,29 @@ Future<void> debugLogs(String message) async {
 
 Future<int> getBadgeCounter() async {
   final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
   return prefs.getInt('badgeCounter') ?? 0;
+}
+
+Future<int?> nextIOSBadgeNumberForNotification() async {
+  if (!Platform.isIOS) return null;
+  return await getBadgeCounter() + 1;
+}
+
+Future<void> commitIOSBadgeNumber(int? badgeNumber) async {
+  if (badgeNumber == null) return;
+  await updateBadgeCounter(badgeNumber);
 }
 
 Future<void> updateBadgeCounter(int newCount) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt('badgeCounter', newCount);
   if (Platform.isIOS) {
-    FlutterAppBadgeControl.updateBadgeCount(newCount);
+    try {
+      await FlutterAppBadgeControl.updateBadgeCount(newCount);
+    } catch (e) {
+      appLog('[BADGE] Failed to update iOS app badge: $e');
+    }
   }
 }
 
@@ -388,8 +429,20 @@ Future<void> resetBadgeCounter() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt('badgeCounter', 0);
   if (Platform.isIOS) {
-    FlutterAppBadgeControl.removeBadge();
+    try {
+      await FlutterAppBadgeControl.removeBadge();
+    } catch (e) {
+      appLog('[BADGE] Failed to clear iOS app badge: $e');
+    }
   }
+}
+
+int stableNotificationIdFromString(String value) {
+  var hash = 0;
+  for (final codeUnit in value.codeUnits) {
+    hash = ((hash * 31) + codeUnit) & 0x3fffffff;
+  }
+  return hash == 0 ? 1 : hash;
 }
 
 Future<List<Message>> _fetchInboxTwoPagesBg() async {
@@ -444,29 +497,53 @@ Future<List<Message>> _fetchInboxTwoPagesBg() async {
       }
       if (noteElements.isEmpty) break;
       for (var noteEl in noteElements) {
-        final subject =
-            noteEl.querySelector('a.notelink')?.text.trim() ?? 'No subject';
+        final subject = noteEl
+                .querySelector(
+                    '.note-list-subject-container .c-noteListItem__subject')
+                ?.text
+                .trim() ??
+            noteEl.querySelector('a.notelink.note-read.read')?.text.trim() ??
+            noteEl
+                .querySelector('a.notelink.note-unread.unread')
+                ?.text
+                .trim() ??
+            noteEl.querySelector('a.notelink')?.text.trim() ??
+            'No subject';
         final sender = noteEl
                 .querySelector('.c-usernameBlock__displayName .js-displayName')
                 ?.text
                 .trim() ??
+            noteEl
+                .querySelector(
+                    'div.c-usernameBlock.marquee-container a.c-usernameBlock__displayName.js-displayName-block span.js-displayName')
+                ?.text
+                .trim() ??
             'Unknown sender';
+        final aTag = noteEl.querySelector('.note-list-subject-container a') ??
+            noteEl.querySelector('a.notelink.note-unread.unread') ??
+            noteEl.querySelector('a.notelink.note-read.read') ??
+            noteEl.querySelector('a.notelink');
+        final classicLink = aTag?.attributes['href'] ?? '';
+        final String link = classicLink.startsWith('/viewmessage/')
+            ? classicLink
+            : (aTag?.attributes['newhref'] ?? classicLink);
         final checkbox = noteEl.querySelector('input[type="checkbox"]');
-        final id = checkbox?.attributes['value'] ?? '';
-        final aTag = noteEl.querySelector('a.notelink');
-        String link = '';
-        if (aTag != null) {
-          final classicLink = aTag.attributes['href'] ?? '';
-          if (classicLink.startsWith('/viewmessage/')) {
-            link = classicLink;
-          } else {
-            link = aTag.attributes['newhref'] ?? classicLink;
-          }
-        }
-        final date =
+        final idFromLink = extractMessageId(link);
+        final id = idFromLink.isNotEmpty
+            ? idFromLink
+            : (checkbox?.attributes['value'] ??
+                (link.isNotEmpty ? link : '$sender|$subject|unknown-date'));
+        final date = noteEl
+                .querySelector('.note-list-senddate span')
+                ?.attributes['title'] ??
+            noteEl
+                .querySelector('td.alt1.nowrap span.popup_date')
+                ?.attributes['title'] ??
             noteEl.querySelector('span.popup_date')?.attributes['title'] ??
-                'Unknown date';
-        final isUnread = noteEl.querySelector('img.unread') != null;
+            'Unknown date';
+        final isUnread = noteEl.querySelector('img.unread') != null ||
+            noteEl.querySelector('img[src*="pms-unread.png"]') != null ||
+            noteEl.querySelector('a.notelink.note-unread.unread') != null;
         result.add(Message(
           id: id,
           subject: subject,

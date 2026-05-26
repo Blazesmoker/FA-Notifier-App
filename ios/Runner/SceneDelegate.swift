@@ -37,8 +37,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate, FlutterSceneLifeCyclePr
         if let windowScene = window?.windowScene, scene === windowScene {
             window = nil
         }
-        if let pendingWindowScene = pendingWindowScene, scene === pendingWindowScene {
-            pendingWindowScene = nil
+        if let pendingWindowScene = self.pendingWindowScene, scene === pendingWindowScene {
+            self.pendingWindowScene = nil
             pendingSession = nil
             pendingConnectionOptions = nil
         }

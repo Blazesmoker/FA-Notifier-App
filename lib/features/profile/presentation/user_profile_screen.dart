@@ -1481,6 +1481,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
             'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg',
         fit: BoxFit.cover,
         alignment: Alignment(alignmentX, 0),
+        gaplessPlayback: true,
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) {
             return child;
@@ -2116,6 +2117,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
                               builder: (context, constraints) {
                                 final Widget staticBannerLayers =
                                     Positioned.fill(
+                                  key: const ValueKey<String>(
+                                      'profileBannerLayer'),
                                   child: Stack(
                                     fit: StackFit.expand,
                                     children: [

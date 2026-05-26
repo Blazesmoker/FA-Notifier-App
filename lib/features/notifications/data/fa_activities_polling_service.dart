@@ -107,7 +107,7 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     if (current <= 0) return '';
     final int previous = current - increasedBy;
     if (increasedBy > 0 && previous > 0) {
-      return '$current$suffix(+${increasedBy})';
+      return '$current$suffix(+$increasedBy)';
     }
     return '$current$suffix';
   }
@@ -198,8 +198,7 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
           enabledIncreases.favorites > 0 ||
           enabledIncreases.journals > 0 ||
           enabledIncreases.notes > 0;
-      final bool shouldNotify = hasEnabledIncrease &&
-          diff.hasNonZeroPreviousIncrease(enabledIncreases);
+      final bool shouldNotify = hasEnabledIncrease;
 
       if (!shouldNotify) return;
 

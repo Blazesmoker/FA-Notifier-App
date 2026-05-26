@@ -4,7 +4,7 @@ import SwiftUI
 import Translation
 import workmanager_apple
 import BackgroundTasks
-import flutter_secure_storage
+import flutter_local_notifications
 
 func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     GeneratedPluginRegistrant.register(with: registry)
@@ -28,6 +28,12 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     private var pendingNotificationPayload: [String: Any]?
     private var translationChannel: FlutterMethodChannel?
     private var translationHostController: UIViewController?
+
+    private func configurePluginRegistrantCallbacks() {
+        FlutterLocalNotificationsPlugin.setPluginRegistrantCallback { registry in
+            GeneratedPluginRegistrant.register(with: registry)
+        }
+    }
 
     private func findFlutterViewController() -> FlutterViewController? {
         if let vc = window?.rootViewController as? FlutterViewController {
@@ -219,6 +225,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         setupNotificationChannelIfNeeded()
         setupTranslationChannelIfNeeded()
         UNUserNotificationCenter.current().delegate = self
+        configurePluginRegistrantCallbacks()
         WorkmanagerPlugin.setPluginRegistrantCallback(registerPluginsForBackgroundIsolate)
 
         if #available(iOS 13.0, *) {
@@ -253,6 +260,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     }
 
     func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+        configurePluginRegistrantCallbacks()
         GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     }
 
