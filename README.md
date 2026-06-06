@@ -1,7 +1,8 @@
 # FA-Notifier
-Unofficial FurAffinity android/ios App
 
-v1.2.3
+Unofficial FurAffinity Android/iOS App
+
+v1.2.9
 
 Official FA Notifier Telegram group: https://t.me/+xTEmmXoDW5tkMGFi
 

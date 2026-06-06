@@ -25,6 +25,14 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
   StreamSubscription<void>? _refreshSub;
   AppLifecycleState? _lastLifecycleState;
   bool _observerAttached = false;
+  bool _notesScreenVisible = false;
+  bool _notificationsScreenVisible = false;
+  NotificationCounts? _pendingExternalCounts;
+  bool _pendingExternalResetTimer = false;
+  String? _pendingExternalSource;
+
+  bool get _acknowledgingScreenVisible =>
+      _notesScreenVisible || _notificationsScreenVisible;
 
   void start({required FANotificationService faNotificationService}) {
     _faNotificationService = faNotificationService;
@@ -45,6 +53,9 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     _refreshSub?.cancel();
     _refreshSub = null;
     _faNotificationService = null;
+    _pendingExternalCounts = null;
+    _pendingExternalResetTimer = false;
+    _pendingExternalSource = null;
     if (_observerAttached) {
       WidgetsBinding.instance.removeObserver(this);
       _observerAttached = false;
@@ -54,6 +65,41 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
   void resetSchedule() {
     if (_faNotificationService == null) return;
     _resetTimer();
+  }
+
+  void setNotesScreenVisible(bool visible) {
+    if (_notesScreenVisible == visible) return;
+    final wasVisible = _acknowledgingScreenVisible;
+    _notesScreenVisible = visible;
+    _handleAcknowledgingScreenVisibilityChange(wasVisible);
+  }
+
+  void setNotificationsScreenVisible(bool visible) {
+    if (_notificationsScreenVisible == visible) return;
+    final wasVisible = _acknowledgingScreenVisible;
+    _notificationsScreenVisible = visible;
+    _handleAcknowledgingScreenVisibilityChange(wasVisible);
+  }
+
+  void _handleAcknowledgingScreenVisibilityChange(bool wasVisible) {
+    if (wasVisible || !_acknowledgingScreenVisible) return;
+
+    final existing = _inFlight;
+    if (existing == null) {
+      unawaited(triggerNow(
+        resetTimer: true,
+        source: 'acknowledging_screen_visible',
+      ));
+      return;
+    }
+
+    unawaited(existing.whenComplete(() async {
+      if (!_acknowledgingScreenVisible) return;
+      await triggerNow(
+        resetTimer: true,
+        source: 'acknowledging_screen_visible',
+      );
+    }));
   }
 
   Future<void> triggerNow({required bool resetTimer, required String source}) {
@@ -73,9 +119,28 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     return future;
   }
 
+  Future<void> _drainPendingExternalCountsAfter(Future<void> existing) async {
+    try {
+      await existing;
+    } catch (_) {}
+    final pendingCounts = _pendingExternalCounts;
+    final pendingSource = _pendingExternalSource;
+    if (pendingCounts == null || pendingSource == null) return;
+
+    final resetTimer = _pendingExternalResetTimer;
+    _pendingExternalCounts = null;
+    _pendingExternalResetTimer = false;
+    _pendingExternalSource = null;
+
+    await handleExternalCounts(
+      currentCounts: pendingCounts,
+      resetTimer: resetTimer,
+      source: pendingSource,
+    );
+  }
+
   Future<void> handleExternalCounts({
     required NotificationCounts currentCounts,
-    required int shownNewNoteNotifications,
     required bool resetTimer,
     required String source,
   }) {
@@ -83,14 +148,20 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       _resetTimer();
     }
     final existing = _inFlight;
-    if (existing != null) return existing;
+    if (existing != null) {
+      _faNotificationService?.applyTopbarCounts(currentCounts);
+      _pendingExternalCounts = currentCounts;
+      _pendingExternalResetTimer = _pendingExternalResetTimer || resetTimer;
+      _pendingExternalSource = source;
+      return _drainPendingExternalCountsAfter(existing);
+    }
 
     _faNotificationService?.applyTopbarCounts(currentCounts);
 
     final future = _maybeSendActivitiesNotification(
       currentCounts,
-      shownNewNoteNotifications: shownNewNoteNotifications,
       triggerNotesRefreshOnNotesIncrease: false,
+      source: source,
     ).whenComplete(() {
       _inFlight = null;
     });
@@ -105,7 +176,8 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     } catch (_) {
       return;
     }
-    await _maybeSendActivitiesNotification(svc.latestCounts);
+    if (svc.errorMessage != null) return;
+    await _maybeSendActivitiesNotification(svc.latestCounts, source: source);
   }
 
   void _ensureTimer() {
@@ -130,8 +202,7 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     required String suffix,
   }) {
     if (current <= 0) return '';
-    final int previous = current - increasedBy;
-    if (increasedBy > 0 && previous > 0) {
+    if (increasedBy > 0) {
       return '$current$suffix(+$increasedBy)';
     }
     return '$current$suffix';
@@ -183,8 +254,8 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
 
   Future<void> _maybeSendActivitiesNotification(
     NotificationCounts currentCounts, {
-    int shownNewNoteNotifications = 0,
     bool triggerNotesRefreshOnNotesIncrease = true,
+    required String source,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -205,16 +276,24 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
 
       final activitiesStateStore = ActivitiesNotificationStateStore();
       final ActivitiesDiff diff = await activitiesStateStore
-          .diffAndUpdateLastSeen(currentCounts: currentCounts);
+          .diffFromAcknowledged(currentCounts: currentCounts);
 
       if (triggerNotesRefreshOnNotesIncrease && diff.increasedBy.notes > 0) {
         NotesRefreshService().triggerRefresh();
       }
 
-      final int noteIncrease =
-          diff.increasedBy.notes > shownNewNoteNotifications
-              ? diff.increasedBy.notes
-              : shownNewNoteNotifications;
+      final bool acknowledgeRequested =
+          await activitiesStateStore.consumeAcknowledgeOnNextForegroundFetch();
+      final bool shouldAcknowledge = source == 'login_established' ||
+          source == 'lifecycle_resumed' ||
+          acknowledgeRequested;
+      if (shouldAcknowledge) {
+        await activitiesStateStore.acknowledgeCurrentCounts(
+          currentCounts: currentCounts,
+        );
+        await NotificationService().cancelActivityNotification();
+        return;
+      }
 
       final NotificationCounts enabledIncreases = NotificationCounts(
         submissions: submissionsEnabled ? diff.increasedBy.submissions : 0,
@@ -222,7 +301,7 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
         comments: commentsEnabled ? diff.increasedBy.comments : 0,
         favorites: favoritesEnabled ? diff.increasedBy.favorites : 0,
         journals: journalsEnabled ? diff.increasedBy.journals : 0,
-        notes: notesEnabled ? noteIncrease : 0,
+        notes: notesEnabled ? diff.increasedBy.notes : 0,
       );
 
       final bool hasEnabledIncrease = enabledIncreases.submissions > 0 ||
@@ -231,15 +310,25 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
           enabledIncreases.favorites > 0 ||
           enabledIncreases.journals > 0 ||
           enabledIncreases.notes > 0;
-      final bool shouldNotify = hasEnabledIncrease;
-
-      if (!shouldNotify) return;
+      if (!hasEnabledIncrease) {
+        if (diff.hasAnyIncrease) {
+          await activitiesStateStore.acknowledgeCurrentCounts(
+            currentCounts: currentCounts,
+          );
+        }
+        return;
+      }
 
       final bool soundActivitiesEnabled =
           prefs.getBool('sound_new_activities_enabled') ?? true;
       final bool vibrationActivitiesEnabled =
           prefs.getBool('vibration_new_activities_enabled') ?? true;
-      if (!soundActivitiesEnabled && !vibrationActivitiesEnabled) return;
+      if (!soundActivitiesEnabled && !vibrationActivitiesEnabled) {
+        await activitiesStateStore.acknowledgeCurrentCounts(
+          currentCounts: currentCounts,
+        );
+        return;
+      }
 
       final NotificationCounts filteredCounts = NotificationCounts(
         submissions: submissionsEnabled ? currentCounts.submissions : 0,
@@ -253,20 +342,16 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
         filteredCounts,
         enabledIncreases,
       );
+      if (!messageBody.contains('(+')) return;
 
       final bool isDuplicate =
-          await activitiesStateStore.isDuplicateShownNotification(
+          await activitiesStateStore.areCurrentCountsLastShown(
         currentCounts: currentCounts,
-        body: messageBody,
       );
       if (isDuplicate) return;
 
-      final notificationService = NotificationService();
-      final int activityNotificationId =
-          await notificationService.allocateActivityNotificationId();
-
-      await notificationService.showNotification(
-        activityNotificationId,
+      await NotificationService().showNotification(
+        NotificationService.activityNotificationId,
         'New FA Activity',
         messageBody,
         'activity_fa_activity',
@@ -275,6 +360,12 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       await activitiesStateStore.markActivityNotificationShown(
         currentCounts: currentCounts,
         body: messageBody,
+        acknowledgeSubmissions: _notificationsScreenVisible,
+        acknowledgeWatches: _notificationsScreenVisible,
+        acknowledgeComments: _notificationsScreenVisible,
+        acknowledgeFavorites: _notificationsScreenVisible,
+        acknowledgeJournals: _notificationsScreenVisible,
+        acknowledgeNotes: _notesScreenVisible,
       );
     } catch (_) {}
   }
@@ -290,7 +381,15 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
           prev == AppLifecycleState.detached;
       _ensureTimer();
       if (realResume) {
-        triggerNow(resetTimer: true, source: 'lifecycle_resumed');
+        final existing = _inFlight;
+        if (existing == null) {
+          triggerNow(resetTimer: true, source: 'lifecycle_resumed');
+        } else {
+          unawaited(existing.whenComplete(() async {
+            if (_lastLifecycleState != AppLifecycleState.resumed) return;
+            await triggerNow(resetTimer: true, source: 'lifecycle_resumed');
+          }));
+        }
       }
       return;
     }

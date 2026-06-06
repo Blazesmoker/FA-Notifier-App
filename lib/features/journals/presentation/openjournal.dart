@@ -21,7 +21,11 @@ import 'package:FANotifier/shared/utils/utils.dart';
 import 'package:FANotifier/features/journals/data/openjournal_api_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
+import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
+import 'package:FANotifier/shared/translation/translation_service.dart';
 import 'package:FANotifier/main.dart';
+import 'package:provider/provider.dart';
 
 class OpenJournal extends StatefulWidget {
   final String uniqueNumber;
@@ -50,6 +54,7 @@ class _OpenJournalState extends State<OpenJournal>
   late final OpenJournalApiService _api;
   late final JournalActionService _journalActionService;
   late final JournalCommentService _journalCommentService;
+  final TranslationService _translationService = TranslationService.instance;
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _commentFocusNode = FocusNode();
   bool _commentComposerFocusRequestedByUser = false;
@@ -226,6 +231,69 @@ class _OpenJournalState extends State<OpenJournal>
       return;
     }
     _commentSelectedTexts[selectionId] = text;
+  }
+
+  String _journalTranslationSourceText() {
+    final description = submissionDescription == null
+        ? ''
+        : _translationService.plainTextFromHtml(submissionDescription!);
+    return '${submissionTitle ?? ''}\n$description'.trim();
+  }
+
+  bool _shouldOfferJournalTranslation(
+    TranslatorSettingsProvider settings, {
+    VoidCallback? onLanguageDetectionUpdated,
+  }) {
+    return _translationService.shouldOfferTranslation(
+      _journalTranslationSourceText(),
+      settings,
+      onLanguageDetectionUpdated: onLanguageDetectionUpdated,
+    );
+  }
+
+  bool _shouldOfferCommentTranslation(
+    Map<String, dynamic> comment,
+    TranslatorSettingsProvider settings, {
+    VoidCallback? onLanguageDetectionUpdated,
+  }) {
+    if (comment['deleted'] == true) return false;
+    return _translationService.shouldOfferTranslation(
+      _commentTranslationSourceText(comment),
+      settings,
+      onLanguageDetectionUpdated: onLanguageDetectionUpdated,
+    );
+  }
+
+  String _commentTranslationSourceText(Map<String, dynamic> comment) {
+    final commentHtml = comment['commentHtml'] as String?;
+    if (commentHtml != null && commentHtml.trim().isNotEmpty) {
+      return _translationService.plainTextFromHtml(commentHtml);
+    }
+    return comment['text']?.toString() ?? '';
+  }
+
+  Future<void> _openJournalTranslation(
+    TranslatorSettingsProvider settings,
+  ) async {
+    await NativeTranslateLauncher.open(
+      _journalTranslationSourceText(),
+      targetLanguageCode: settings.targetLanguageCode,
+    );
+  }
+
+  Future<void> _openCommentTranslation(
+    Map<String, dynamic> comment,
+    TranslatorSettingsProvider settings,
+  ) async {
+    await NativeTranslateLauncher.open(
+      _commentTranslationSourceText(comment),
+      targetLanguageCode: settings.targetLanguageCode,
+    );
+  }
+
+  void _handleTranslationLanguageDetected() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   void _clearSelectionArea(GlobalKey<SelectionAreaState> key) {
@@ -839,6 +907,7 @@ class _OpenJournalState extends State<OpenJournal>
 
   @override
   Widget build(BuildContext context) {
+    final translatorSettings = context.watch<TranslatorSettingsProvider>();
     final double viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
     return ValueListenableBuilder<bool>(
       valueListenable: _commentDraftHasText,
@@ -892,6 +961,9 @@ class _OpenJournalState extends State<OpenJournal>
                     }
                     unawaited(_confirmAndDeleteJournal());
                     break;
+                  case 'translate':
+                    unawaited(_openJournalTranslation(translatorSettings));
+                    break;
                 }
               },
               itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
@@ -909,6 +981,10 @@ class _OpenJournalState extends State<OpenJournal>
                     value: 'delete',
                     child: Text('Delete'),
                   ),
+                const PopupMenuItem<String>(
+                  value: 'translate',
+                  child: Text('Translate'),
+                ),
               ],
             ),
           ],
@@ -1572,6 +1648,18 @@ class _OpenJournalState extends State<OpenJournal>
                                             _selectedCommentTextFor(
                                                 selectionId),
                                         includeIosTranslate: true,
+                                      ),
+                                      showTranslateButton:
+                                          _shouldOfferCommentTranslation(
+                                        comment,
+                                        translatorSettings,
+                                        onLanguageDetectionUpdated:
+                                            _handleTranslationLanguageDetected,
+                                      ),
+                                      onTranslateToggle: () =>
+                                          _openCommentTranslation(
+                                        comment,
+                                        translatorSettings,
                                       ),
                                     );
                                   },

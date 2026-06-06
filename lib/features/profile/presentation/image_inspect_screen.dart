@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +20,7 @@ class ImageInspectScreen extends StatefulWidget {
     return PageRouteBuilder<void>(
       opaque: false,
       barrierColor: Colors.transparent,
+      reverseTransitionDuration: Duration.zero,
       pageBuilder: (context, animation, secondaryAnimation) {
         return FadeTransition(
           opacity: animation,
@@ -32,23 +34,52 @@ class ImageInspectScreen extends StatefulWidget {
   State<ImageInspectScreen> createState() => _ImageInspectScreenState();
 }
 
-class _ImageInspectScreenState extends State<ImageInspectScreen> {
+class _ImageInspectScreenState extends State<ImageInspectScreen>
+    with SingleTickerProviderStateMixin {
   final TransformationController _transformationController =
       TransformationController();
+  late final AnimationController _doubleTapZoomAnimationController;
+  Matrix4 _zoomAnimationStart = Matrix4.identity();
+  Matrix4 _zoomAnimationEnd = Matrix4.identity();
   Offset? _tapDownPosition;
+  Offset? _lastTapUpPosition;
+  DateTime? _lastTapUpTime;
+  Timer? _tapToggleTimer;
   Offset _dragOffset = Offset.zero;
+  int _activePointerCount = 0;
   double _verticalSwipeDistance = 0;
   bool _canDismissWithSwipe = false;
+  bool _hasMultiTouchInteraction = false;
+  bool _hadMultiplePointers = false;
+  bool _suppressDismissUntilPointersReleased = false;
   bool _isDraggingToDismiss = false;
+  bool _isDismissing = false;
   bool _chromeVisible = true;
 
   static const double _dismissDistance = 250;
   static const double _dismissVelocity = 900;
   static const double _fadeDistance = 360;
   static const double _tapSlop = 12;
+  static const double _doubleTapSlop = 36;
+  static const double _doubleTapScale = 4.0;
+  static const Duration _doubleTapTimeout = Duration(milliseconds: 300);
+  static const Duration _doubleTapZoomDuration = Duration(milliseconds: 240);
+  static const Duration _settleDuration = Duration(milliseconds: 180);
+  static const Duration _dismissAnimationDuration = Duration(milliseconds: 450);
+
+  @override
+  void initState() {
+    super.initState();
+    _doubleTapZoomAnimationController = AnimationController(
+      vsync: this,
+      duration: _doubleTapZoomDuration,
+    )..addListener(_updateDoubleTapZoomAnimation);
+  }
 
   @override
   void dispose() {
+    _tapToggleTimer?.cancel();
+    _doubleTapZoomAnimationController.dispose();
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
       overlays: SystemUiOverlay.values,
@@ -152,6 +183,172 @@ class _ImageInspectScreenState extends State<ImageInspectScreen> {
       );
     }
   }
+
+  void _clearPendingTapToggle() {
+    _tapToggleTimer?.cancel();
+    _tapToggleTimer = null;
+    _lastTapUpPosition = null;
+    _lastTapUpTime = null;
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    if (_isDismissing) {
+      _tapDownPosition = null;
+      return;
+    }
+    _doubleTapZoomAnimationController.stop();
+    _activePointerCount += 1;
+    if (_activePointerCount > 1) {
+      _hadMultiplePointers = true;
+      _suppressDismissUntilPointersReleased = true;
+      _verticalSwipeDistance = 0;
+      _canDismissWithSwipe = false;
+      if (_isDraggingToDismiss) {
+        setState(() {
+          _dragOffset = Offset.zero;
+          _isDraggingToDismiss = false;
+        });
+      }
+      _clearPendingTapToggle();
+    }
+    _tapDownPosition = event.position;
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    if (_isDismissing) {
+      _tapDownPosition = null;
+      return;
+    }
+    final hadMultiplePointers =
+        _hadMultiplePointers || _activePointerCount > 1;
+    if (_activePointerCount > 0) {
+      _activePointerCount -= 1;
+    }
+    if (_activePointerCount == 0) {
+      _hadMultiplePointers = false;
+      _suppressDismissUntilPointersReleased = false;
+    }
+
+    final tapDownPosition = _tapDownPosition;
+    _tapDownPosition = null;
+    if (hadMultiplePointers) {
+      return;
+    }
+    if (tapDownPosition == null) {
+      return;
+    }
+    if ((event.position - tapDownPosition).distance > _tapSlop) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final lastTapUpPosition = _lastTapUpPosition;
+    final lastTapUpTime = _lastTapUpTime;
+    final isDoubleTap = lastTapUpPosition != null &&
+        lastTapUpTime != null &&
+        now.difference(lastTapUpTime) <= _doubleTapTimeout &&
+        (event.position - lastTapUpPosition).distance <= _doubleTapSlop;
+
+    if (isDoubleTap) {
+      _clearPendingTapToggle();
+      _toggleZoomAt(event.position);
+      return;
+    }
+
+    _tapToggleTimer?.cancel();
+    _lastTapUpPosition = event.position;
+    _lastTapUpTime = now;
+    _tapToggleTimer = Timer(_doubleTapTimeout, () {
+      if (!mounted) {
+        return;
+      }
+      _tapToggleTimer = null;
+      _lastTapUpPosition = null;
+      _lastTapUpTime = null;
+      _toggleChrome();
+    });
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    _tapDownPosition = null;
+    if (_activePointerCount > 0) {
+      _activePointerCount -= 1;
+    }
+    if (_activePointerCount == 0) {
+      _hadMultiplePointers = false;
+      _suppressDismissUntilPointersReleased = false;
+    }
+  }
+
+  void _toggleZoomAt(Offset globalPosition) {
+    if (_isDismissing) {
+      return;
+    }
+
+    final currentScale =
+        _transformationController.value.getMaxScaleOnAxis();
+    if (currentScale > 1.05) {
+      _animateDoubleTapZoomTo(Matrix4.identity());
+      return;
+    }
+
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox) {
+      return;
+    }
+
+    final localPosition = renderObject.globalToLocal(globalPosition);
+    final zoom = Matrix4.identity()
+      ..translate(
+        -localPosition.dx * (_doubleTapScale - 1),
+        -localPosition.dy * (_doubleTapScale - 1),
+      )
+      ..scale(_doubleTapScale);
+    _animateDoubleTapZoomTo(zoom);
+  }
+
+  void _animateDoubleTapZoomTo(Matrix4 target) {
+    _doubleTapZoomAnimationController.stop();
+    _zoomAnimationStart = _transformationController.value.clone();
+    _zoomAnimationEnd = target;
+    _doubleTapZoomAnimationController.forward(from: 0.0);
+  }
+
+  void _updateDoubleTapZoomAnimation() {
+    final progress = Curves.easeInOutCubic.transform(
+      _doubleTapZoomAnimationController.value,
+    );
+    final values = List<double>.generate(
+      16,
+      (index) =>
+          _zoomAnimationStart.storage[index] +
+          (_zoomAnimationEnd.storage[index] -
+                  _zoomAnimationStart.storage[index]) *
+              progress,
+    );
+    _transformationController.value = Matrix4.fromList(values);
+  }
+
+  Future<void> _dismissWithSwipe() async {
+    if (_isDismissing) {
+      return;
+    }
+
+    final direction = _dragOffset.dy < 0 ? -1.0 : 1.0;
+    final screenHeight = MediaQuery.of(context).size.height;
+    setState(() {
+      _dragOffset = Offset(0, direction * (screenHeight + 200));
+      _isDraggingToDismiss = false;
+      _isDismissing = true;
+    });
+
+    await Future<void>.delayed(_dismissAnimationDuration);
+
+    if (mounted) {
+      await Navigator.of(context).maybePop();
+    }
+  }
+
   Future<bool> _requestPermissionAndroid() async {
     final androidInfo = await DeviceInfoPlugin().androidInfo;
     final sdkInt = androidInfo.version.sdkInt;
@@ -178,10 +375,11 @@ class _ImageInspectScreenState extends State<ImageInspectScreen> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: AnimatedOpacity(
-          opacity: _chromeVisible ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 160),
+          opacity: _chromeVisible && !_isDismissing ? 1.0 : 0.0,
+          duration:
+              _isDismissing ? Duration.zero : const Duration(milliseconds: 160),
           child: IgnorePointer(
-            ignoring: !_chromeVisible,
+            ignoring: !_chromeVisible || _isDismissing,
             child: AppBar(
               backgroundColor: Colors.transparent,
               elevation: 0,
@@ -213,19 +411,9 @@ class _ImageInspectScreenState extends State<ImageInspectScreen> {
         ),
       ),
       body: Listener(
-        onPointerDown: (event) {
-          _tapDownPosition = event.position;
-        },
-        onPointerUp: (event) {
-          final tapDownPosition = _tapDownPosition;
-          _tapDownPosition = null;
-          if (tapDownPosition == null) {
-            return;
-          }
-          if ((event.position - tapDownPosition).distance <= _tapSlop) {
-            _toggleChrome();
-          }
-        },
+        onPointerDown: _handlePointerDown,
+        onPointerUp: _handlePointerUp,
+        onPointerCancel: _handlePointerCancel,
         child: Stack(
           children: [
             Positioned.fill(
@@ -239,14 +427,28 @@ class _ImageInspectScreenState extends State<ImageInspectScreen> {
               transformationController: _transformationController,
               minScale: 0.5,
               maxScale: 10.0,
-              onInteractionStart: (_) {
+              onInteractionStart: (details) {
+                if (_isDismissing) {
+                  return;
+                }
                 _verticalSwipeDistance = 0;
+                _hasMultiTouchInteraction = details.pointerCount != 1;
                 _canDismissWithSwipe =
+                    !_hasMultiTouchInteraction &&
+                    !_suppressDismissUntilPointersReleased &&
                     _transformationController.value.getMaxScaleOnAxis() <=
                         1.05;
               },
               onInteractionUpdate: (details) {
-                if (!_canDismissWithSwipe || details.pointerCount != 1) {
+                if (_isDismissing) {
+                  return;
+                }
+                if (details.pointerCount != 1) {
+                  _hasMultiTouchInteraction = true;
+                  _canDismissWithSwipe = false;
+                  return;
+                }
+                if (!_canDismissWithSwipe) {
                   return;
                 }
                 setState(() {
@@ -256,17 +458,24 @@ class _ImageInspectScreenState extends State<ImageInspectScreen> {
                 });
               },
               onInteractionEnd: (details) {
+                if (_isDismissing) {
+                  return;
+                }
                 final verticalVelocity =
                     details.velocity.pixelsPerSecond.dy.abs();
                 final shouldDismiss =
                     _canDismissWithSwipe &&
+                    !_hasMultiTouchInteraction &&
+                    !_suppressDismissUntilPointersReleased &&
+                    _isDraggingToDismiss &&
                     (_verticalSwipeDistance.abs() >= _dismissDistance ||
                         verticalVelocity >= _dismissVelocity);
                 _verticalSwipeDistance = 0;
                 _canDismissWithSwipe = false;
+                _hasMultiTouchInteraction = false;
 
                 if (shouldDismiss) {
-                  Navigator.of(context).maybePop();
+                  unawaited(_dismissWithSwipe());
                   return;
                 }
 
@@ -278,8 +487,12 @@ class _ImageInspectScreenState extends State<ImageInspectScreen> {
               child: AnimatedContainer(
                 duration: _isDraggingToDismiss
                     ? Duration.zero
-                    : const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
+                    : _isDismissing
+                        ? _dismissAnimationDuration
+                        : _settleDuration,
+                curve: _isDismissing
+                    ? Curves.easeInOutCubic
+                    : Curves.easeOutCubic,
                 transform: Matrix4.translationValues(
                   _dragOffset.dx,
                   _dragOffset.dy,

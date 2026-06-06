@@ -21,6 +21,8 @@ class CommentWidget extends StatefulWidget {
   final ValueChanged<SelectedContent?>? onSelectionChanged;
   final Widget Function(BuildContext, SelectableRegionState)?
       contextMenuBuilder;
+  final bool showTranslateButton;
+  final VoidCallback? onTranslateToggle;
 
   const CommentWidget({
     Key? key,
@@ -35,6 +37,8 @@ class CommentWidget extends StatefulWidget {
     this.selectionAreaKey,
     this.onSelectionChanged,
     this.contextMenuBuilder,
+    this.showTranslateButton = false,
+    this.onTranslateToggle,
   }) : super(key: key);
 
   @override
@@ -51,7 +55,8 @@ class _CommentWidgetState extends State<CommentWidget> {
         ((100.0 - widthPercent) / 3.0).round().clamp(0, 4).toInt();
     final double leftPadding = nestingLevel * 16.0;
     final String? commentHtml = widget.comment['commentHtml'];
-    final bool hasHtml = commentHtml != null && commentHtml.trim().isNotEmpty;
+    final bool hasHtml =
+        commentHtml != null && commentHtml.trim().isNotEmpty;
     final String normalizedCommentHtml =
         hasHtml ? normalizeSmilieTokensToHtml(commentHtml) : '';
     final decoration = BoxDecoration(
@@ -412,6 +417,21 @@ class _CommentWidgetState extends State<CommentWidget> {
                                       color: Colors.white, fontSize: 14)),
                             ],
                           ),
+                        ),
+                      if (widget.showTranslateButton)
+                        IconButton(
+                          padding: const EdgeInsets.only(left: 2, right: 4),
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
+                          tooltip: 'Translate',
+                          icon: const Icon(
+                            Icons.g_translate,
+                            size: 18,
+                            color: Colors.white,
+                          ),
+                          onPressed: widget.onTranslateToggle,
                         ),
                       TextButton(
                         style: TextButton.styleFrom(

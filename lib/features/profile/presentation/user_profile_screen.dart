@@ -39,6 +39,10 @@ import 'package:FANotifier/features/profile/presentation/user_profile_gallery_se
 import 'package:FANotifier/features/profile/presentation/user_profile_home_section.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_journals_section.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_scraps_section.dart';
+import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
+import 'package:FANotifier/shared/translation/translation_service.dart';
+import 'package:provider/provider.dart';
 
 class _TransparentUserProfilePageRoute<T> extends PageRoute<T> {
   _TransparentUserProfilePageRoute({
@@ -183,6 +187,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   late final UserProfileApiService _api;
   final SfwModePreference _sfwModePreference = SfwModePreference();
+  final TranslationService _translationService = TranslationService.instance;
 
   bool _sfwEnabled = true;
 
@@ -254,6 +259,22 @@ class UserProfileScreenState extends State<UserProfileScreen>
   String? get registrationDate => _profileParsed?.registrationDate;
   String? get userDescription => _profileParsed?.userDescription;
   bool get hasRealUserProfile => _profileParsed?.hasRealUserProfile ?? true;
+
+  String _profileTranslationSourceText() {
+    return _translationService.plainTextFromHtml(userDescription ?? '');
+  }
+
+  Future<void> _openProfileTranslation(
+    TranslatorSettingsProvider settings,
+  ) async {
+    final webViewText = await _webViewKey.currentState?.getPlainText();
+    await NativeTranslateLauncher.open(
+      webViewText?.trim().isNotEmpty == true
+          ? webViewText!
+          : _profileTranslationSourceText(),
+      targetLanguageCode: settings.targetLanguageCode,
+    );
+  }
 
   bool get isClassicMarkup => _profileParsed?.isClassicMarkup ?? false;
   bool get acceptingTrades => _profileParsed?.acceptingTrades ?? false;
@@ -1893,6 +1914,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         isOwnProfile &&
         _isShoutSelectionMode &&
         _selectedShoutCount > 0;
+    final translatorSettings = context.watch<TranslatorSettingsProvider>();
 
     return ExcludeSemantics(
         child: AnnotatedRegion<SystemUiOverlayStyle>(
@@ -2014,103 +2036,85 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                   : 0.0,
                             ),
                             actions: [
-                              Builder(
-                                builder: (context) {
-                                  return IconButton(
-                                    icon: Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        Positioned(
-                                            left: 1,
-                                            child: Icon(Icons.more_vert,
-                                                size: 24,
-                                                color: Color(0xFF111111))),
-                                        Positioned(
-                                            right: 1,
-                                            child: Icon(Icons.more_vert,
-                                                size: 24,
-                                                color: Color(0xFF111111))),
-                                        Positioned(
-                                            top: 1,
-                                            child: Icon(Icons.more_vert,
-                                                size: 24,
-                                                color: Color(0xFF111111))),
-                                        Positioned(
-                                            bottom: 1,
-                                            child: Icon(Icons.more_vert,
-                                                size: 24,
-                                                color: Color(0xFF111111))),
-                                        Icon(Icons.more_vert,
-                                            size: 24, color: Colors.white),
-                                      ],
-                                    ),
-                                    onPressed: () async {
-                                      final RenderBox button = context
-                                          .findRenderObject() as RenderBox;
-                                      final RenderBox overlay =
-                                          Overlay.of(context)
-                                              .context
-                                              .findRenderObject() as RenderBox;
-                                      final RelativeRect position =
-                                          RelativeRect.fromRect(
-                                        Rect.fromPoints(
-                                          button.localToGlobal(
-                                              const Offset(0, 0),
-                                              ancestor: overlay),
-                                          button.localToGlobal(
-                                              Offset(
-                                                  0, button.size.height + 10),
-                                              ancestor: overlay),
-                                        ),
-                                        Offset.zero & overlay.size,
-                                      );
-
-                                      List<PopupMenuEntry<String>> menuItems = [
-                                        const PopupMenuItem<String>(
-                                          value: 'report',
-                                          child: Text('Report'),
-                                        ),
-                                        if (!isOwnProfile)
-                                          PopupMenuItem<String>(
-                                            value: 'block_unblock',
-                                            child: Text(isBlocked
-                                                ? 'Unblock author'
-                                                : 'Block author'),
-                                          ),
-                                        const PopupMenuItem<String>(
-                                          value: 'copy_link',
-                                          child: Text('Copy link'),
-                                        ),
-                                      ];
-
-                                      _suppressNextRouteDetach = true;
-                                      final selected = await showMenu<String>(
-                                        context: context,
-                                        position: position,
-                                        items: menuItems,
-                                      ).whenComplete(() {
-                                        _suppressNextRouteDetach = false;
-                                      });
-
-                                      switch (selected) {
-                                        case 'report':
-                                          launchUrlString(
-                                              'https://www.furaffinity.net/controls/troubletickets/');
-                                          break;
-                                        case 'block_unblock':
-                                          if (!isOwnProfile) {
-                                            await _handleBlockUnblock();
-                                          }
-                                          break;
-                                        case 'copy_link':
-                                          _copyProfileLinkToClipboard();
-                                          break;
-                                        default:
-                                          break;
-                                      }
-                                    },
-                                  );
+                              PopupMenuButton<String>(
+                                position: PopupMenuPosition.under,
+                                offset: const Offset(0, 8),
+                                icon: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Positioned(
+                                        left: 1,
+                                        child: Icon(Icons.more_vert,
+                                            size: 24,
+                                            color: Color(0xFF111111))),
+                                    Positioned(
+                                        right: 1,
+                                        child: Icon(Icons.more_vert,
+                                            size: 24,
+                                            color: Color(0xFF111111))),
+                                    Positioned(
+                                        top: 1,
+                                        child: Icon(Icons.more_vert,
+                                            size: 24,
+                                            color: Color(0xFF111111))),
+                                    Positioned(
+                                        bottom: 1,
+                                        child: Icon(Icons.more_vert,
+                                            size: 24,
+                                            color: Color(0xFF111111))),
+                                    Icon(Icons.more_vert,
+                                        size: 24, color: Colors.white),
+                                  ],
+                                ),
+                                onOpened: () {
+                                  _suppressNextRouteDetach = true;
                                 },
+                                onCanceled: () {
+                                  _suppressNextRouteDetach = false;
+                                },
+                                onSelected: (selected) async {
+                                  _suppressNextRouteDetach = false;
+                                  switch (selected) {
+                                    case 'report':
+                                      launchUrlString(
+                                          'https://www.furaffinity.net/controls/troubletickets/');
+                                      break;
+                                    case 'block_unblock':
+                                      if (!isOwnProfile) {
+                                        await _handleBlockUnblock();
+                                      }
+                                      break;
+                                    case 'copy_link':
+                                      _copyProfileLinkToClipboard();
+                                      break;
+                                    case 'translate':
+                                      await _openProfileTranslation(
+                                        translatorSettings,
+                                      );
+                                      break;
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem<String>(
+                                    value: 'report',
+                                    child: Text('Report'),
+                                  ),
+                                  if (!isOwnProfile)
+                                    PopupMenuItem<String>(
+                                      value: 'block_unblock',
+                                      child: Text(isBlocked
+                                          ? 'Unblock author'
+                                          : 'Block author'),
+                                    ),
+                                  const PopupMenuItem<String>(
+                                    value: 'copy_link',
+                                    child: Text('Copy link'),
+                                  ),
+                                  const PopupMenuItem<String>(
+                                    value: 'translate',
+                                    child: Text('Translate'),
+                                  ),
+                                ],
                               ),
                             ],
                             flexibleSpace: LayoutBuilder(

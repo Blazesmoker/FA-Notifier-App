@@ -3,6 +3,7 @@ import 'package:FANotifier/features/profile/presentation/user_profile_screen.dar
 import 'package:extended_text/extended_text.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:provider/provider.dart';
@@ -1151,6 +1152,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   @override
   void dispose() {
     _tabController?.dispose();
+    FaActivitiesPollingService().setNotificationsScreenVisible(false);
     super.dispose();
   }
 
@@ -1260,13 +1262,19 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<FANotificationService>(
-      builder: (context, service, child) {
-        final isLoading = service.isLoading;
-        final hasFetched = service.hasFetched;
-        final sections = service.sections;
-        if (isLoading || !hasFetched) {
-          return Scaffold(
+    return VisibilityDetector(
+      key: const Key('notifications_screen_visibility'),
+      onVisibilityChanged: (info) {
+        FaActivitiesPollingService()
+            .setNotificationsScreenVisible(info.visibleFraction > 0.01);
+      },
+      child: Consumer<FANotificationService>(
+        builder: (context, service, child) {
+          final isLoading = service.isLoading;
+          final hasFetched = service.hasFetched;
+          final sections = service.sections;
+          if (isLoading || !hasFetched) {
+            return Scaffold(
             appBar: AppBar(
               title: const Text('Notifications'),
               centerTitle: true,
@@ -1288,66 +1296,66 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                 child: PulsatingLoadingIndicator(
                     size: 88.0, assetPath: 'assets/icons/fathemed.png')),
           );
-        }
-        if (sections.isEmpty) {
-          if (!_didAutoRefetch) {
-            _didAutoRefetch = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              FaActivitiesPollingService().triggerNow(
-                resetTimer: false,
-                source: 'notifications_empty_autorefresh',
-              );
-            });
           }
-          return Scaffold(
-            appBar: AppBar(
-              title: const Text('Notifications'),
-              centerTitle: true,
-              backgroundColor: Colors.black,
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.block, color: Color(0xFFE09321)),
-                  onPressed: () async {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('No notifications to remove.')),
-                    );
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.settings),
-                  onPressed: () {
-                    _showNotificationSettingsDialog(service);
-                  },
-                ),
-              ],
-            ),
-            body: RefreshIndicator(
-              onRefresh: () => FaActivitiesPollingService().triggerNow(
-                resetTimer: true,
-                source: 'notifications_empty_refresh_indicator',
-              ),
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: const [
-                  SizedBox(
-                      height: 200,
-                      child: Center(child: Text('No notifications.'))),
+          if (sections.isEmpty) {
+            if (!_didAutoRefetch) {
+              _didAutoRefetch = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                FaActivitiesPollingService().triggerNow(
+                  resetTimer: false,
+                  source: 'notifications_empty_autorefresh',
+                );
+              });
+            }
+            return Scaffold(
+              appBar: AppBar(
+                title: const Text('Notifications'),
+                centerTitle: true,
+                backgroundColor: Colors.black,
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.block, color: Color(0xFFE09321)),
+                    onPressed: () async {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('No notifications to remove.')),
+                      );
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings),
+                    onPressed: () {
+                      _showNotificationSettingsDialog(service);
+                    },
+                  ),
                 ],
               ),
-            ),
-          );
-        }
-        if (sections.length != _previousSectionCount) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _initializeTabController(sections.length, service);
-          });
-        }
-        if (_tabController == null ||
-            _tabController!.length != sections.length) {
-          return const Scaffold(body: SizedBox.shrink());
-        }
-        return Scaffold(
+              body: RefreshIndicator(
+                onRefresh: () => FaActivitiesPollingService().triggerNow(
+                  resetTimer: true,
+                  source: 'notifications_empty_refresh_indicator',
+                ),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: const [
+                    SizedBox(
+                        height: 200,
+                        child: Center(child: Text('No notifications.'))),
+                  ],
+                ),
+              ),
+            );
+          }
+          if (sections.length != _previousSectionCount) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _initializeTabController(sections.length, service);
+            });
+          }
+          if (_tabController == null ||
+              _tabController!.length != sections.length) {
+            return const Scaffold(body: SizedBox.shrink());
+          }
+          return Scaffold(
           appBar: AppBar(
             title: const Text('Notifications'),
             centerTitle: true,
@@ -1703,7 +1711,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             ],
           ),
         );
-      },
+        },
+      ),
     );
   }
 }

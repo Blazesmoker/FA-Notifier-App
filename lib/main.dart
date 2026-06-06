@@ -11,7 +11,6 @@ import 'package:FANotifier/features/notifications/data/pending_navigation.dart';
 import 'package:FANotifier/shared/utils/notes_notifications_text_edit.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:flutter_app_badge_control/flutter_app_badge_control.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -28,6 +27,8 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:FANotifier/app/analytics_privacy.dart';
 import 'package:FANotifier/core/cache/custom_cache_manager.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
+import 'package:FANotifier/features/drawer/data/app_update_service.dart';
+import 'package:FANotifier/features/drawer/presentation/update_screen.dart';
 import 'package:FANotifier/features/notifications/data/activities_notification_state.dart';
 import 'package:FANotifier/features/notifications/data/notification_service.dart';
 import 'package:FANotifier/core/utils/utils.dart';
@@ -36,6 +37,7 @@ import 'package:FANotifier/features/home/presentation/home_screen.dart';
 import 'package:FANotifier/app/app_theme.dart';
 import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
 import 'package:FANotifier/features/settings/data/thumbnail_display_settings_provider.dart';
+import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
 import 'package:html/dom.dart' as dom;
@@ -66,6 +68,31 @@ final GlobalKey<DrawerUserControllerState> drawerKey =
 const String fetchBackgroundTask = "fetchBackgroundTask";
 const String iOSWorkInitTask = "com.blazesmoker.FANotifier.refresh";
 bool _workmanagerInitialized = false;
+const String _appActiveKey = 'isAppActive';
+const String _appActiveAtMsKey = 'isAppActiveAtMs';
+const Duration _appActiveLease = Duration(minutes: 2);
+const bool _forceShowUpdateScreen = false;
+
+bool _isAppForegroundActive(SharedPreferences prefs) {
+  if (!(prefs.getBool(_appActiveKey) ?? false)) return false;
+  final activeAtMs = prefs.getInt(_appActiveAtMsKey);
+  if (activeAtMs == null) return false;
+  final ageMs = DateTime.now().millisecondsSinceEpoch - activeAtMs;
+  return ageMs >= 0 && ageMs <= _appActiveLease.inMilliseconds;
+}
+
+Future<void> _persistAppForegroundState(bool active) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(_appActiveKey, active);
+  if (active) {
+    await prefs.setInt(
+      _appActiveAtMsKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+  } else {
+    await prefs.remove(_appActiveAtMsKey);
+  }
+}
 
 Future<void> ensureWorkmanagerInitialized() async {
   if (_workmanagerInitialized) return;
@@ -100,7 +127,7 @@ void callbackDispatcher() {
         appLog('[BG ERROR] Failed to load SharedPreferences: $e');
         return Future.value(false);
       }
-      bool isAppActive = prefs.getBool("isAppActive") ?? false;
+      final bool isAppActive = _isAppForegroundActive(prefs);
       appLog('[BG] App active status: $isAppActive');
       if (isAppActive) {
         appLog('[BG] App is ACTIVE - skipping background fetch');
@@ -114,13 +141,17 @@ void callbackDispatcher() {
           task == Workmanager.iOSBackgroundTask) {
         appLog('[BG] Valid background task detected: $task');
         try {
+          final currentVersionAllowed = await isCurrentAppVersionAllowed();
+          if (currentVersionAllowed == false) {
+            appLog('[BG] Current app version is not allowed - skipping fetch');
+            return Future.value(true);
+          }
           bool didFirstRunSkip = prefs.getBool('did_first_run_skip') ?? false;
           appLog('[BG] First run skip status: $didFirstRunSkip');
           if (!didFirstRunSkip) {
             appLog('[BG] First run not complete - skipping notifications');
             return Future.value(true);
           }
-          int shownNewNoteNotifications = 0;
           NotificationCounts? currentCounts;
 
           appLog('[BG] === Starting UNREAD NOTES CHECK ===');
@@ -134,6 +165,10 @@ void callbackDispatcher() {
             );
             final List<Message> fetchedInbox = snapshot.messages;
             currentCounts = snapshot.topbarCounts;
+            await prefs.reload();
+            if (_isAppForegroundActive(prefs)) {
+              return Future.value(true);
+            }
             kDebugPrint(
               '[BG] Fetched ${fetchedInbox.length} messages from inbox '
               '(page2=${snapshot.fetchedPage2})',
@@ -161,6 +196,10 @@ void callbackDispatcher() {
                       '[BG] Processing message: ${msg.id} from ${msg.sender}');
                   final String content =
                       await _fetchMessageContentInBackground(msg.link);
+                  await prefs.reload();
+                  if (_isAppForegroundActive(prefs)) {
+                    return Future.value(true);
+                  }
                   final String payload = 'note_${msg.id}';
                   final int? badgeNumber =
                       await nextIOSBadgeNumberForNotification();
@@ -173,7 +212,6 @@ void callbackDispatcher() {
                     badgeNumber: badgeNumber,
                   );
                   await commitIOSBadgeNumber(badgeNumber);
-                  shownNewNoteNotifications++;
                   shownNewNoteIds.add(msg.id);
                   kDebugPrint('[BG] Notification shown for message ${msg.id}');
                   if (badgeNumber != null) {
@@ -222,13 +260,12 @@ void callbackDispatcher() {
 
               final activitiesStateStore = ActivitiesNotificationStateStore();
               final ActivitiesDiff diff = await activitiesStateStore
-                  .diffAndUpdateLastSeen(currentCounts: counts);
+                  .diffFromAcknowledged(currentCounts: counts);
               kDebugPrint(
                   '[BG] Last-seen counts: S:${diff.previous.submissions} W:${diff.previous.watches} C:${diff.previous.comments} F:${diff.previous.favorites} J:${diff.previous.journals} N:${diff.previous.notes}');
               kDebugPrint(
                   '[BG] Increased by:     S:${diff.increasedBy.submissions} W:${diff.increasedBy.watches} C:${diff.increasedBy.comments} F:${diff.increasedBy.favorites} J:${diff.increasedBy.journals} N:${diff.increasedBy.notes}');
 
-              // Notify based on per-category increases, but only for enabled categories.
               final NotificationCounts enabledIncreases = NotificationCounts(
                 submissions:
                     submissionsEnabled ? diff.increasedBy.submissions : 0,
@@ -236,11 +273,7 @@ void callbackDispatcher() {
                 comments: commentsEnabled ? diff.increasedBy.comments : 0,
                 favorites: favoritesEnabled ? diff.increasedBy.favorites : 0,
                 journals: journalsEnabled ? diff.increasedBy.journals : 0,
-                notes: notesEnabled
-                    ? (diff.increasedBy.notes > shownNewNoteNotifications
-                        ? diff.increasedBy.notes
-                        : shownNewNoteNotifications)
-                    : 0,
+                notes: notesEnabled ? diff.increasedBy.notes : 0,
               );
 
               final bool hasEnabledIncrease =
@@ -265,7 +298,6 @@ void callbackDispatcher() {
                 enabledIncreases,
               );
 
-              // Only show a system notification on an increase.
               if (shouldNotify) {
                 final bool soundActivitiesEnabled =
                     prefs.getBool('sound_new_activities_enabled') ?? true;
@@ -273,26 +305,36 @@ void callbackDispatcher() {
                     prefs.getBool('vibration_new_activities_enabled') ?? true;
                 if (soundActivitiesEnabled || vibrationActivitiesEnabled) {
                   final bool isDuplicate =
-                      await activitiesStateStore.isDuplicateShownNotification(
+                      await activitiesStateStore.areCurrentCountsLastShown(
                     currentCounts: counts,
-                    body: messageBody,
                   );
                   if (isDuplicate) {
                     appLog(
                         '[BG] Duplicate activity notification skipped: $messageBody');
+                  } else if (!messageBody.contains('(+')) {
+                    await activitiesStateStore.acknowledgeCurrentCounts(
+                      currentCounts: counts,
+                    );
                   } else {
-                    final int activityNotificationId = await notificationService
-                        .allocateActivityNotificationId();
+                    await prefs.reload();
+                    if (_isAppForegroundActive(prefs)) {
+                      return Future.value(true);
+                    }
                     final int? badgeNumber =
                         await nextIOSBadgeNumberForNotification();
                     await notificationService.showNotification(
-                      activityNotificationId,
+                      NotificationService.activityNotificationId,
                       'New FA Activity',
                       messageBody,
                       'activity_fa_activity',
                       'activities',
                       badgeNumber: badgeNumber,
                     );
+                    await prefs.reload();
+                    if (_isAppForegroundActive(prefs)) {
+                      await notificationService.cancelActivityNotification();
+                      return Future.value(true);
+                    }
                     await commitIOSBadgeNumber(badgeNumber);
                     await activitiesStateStore.markActivityNotificationShown(
                       currentCounts: counts,
@@ -305,9 +347,17 @@ void callbackDispatcher() {
                 } else {
                   appLog(
                       '[BG] Activities sound+vibration disabled; not showing notification.');
+                  await activitiesStateStore.acknowledgeCurrentCounts(
+                    currentCounts: counts,
+                  );
                 }
               } else {
                 appLog('[BG] No enabled category increased; not notifying.');
+                if (diff.hasAnyIncrease) {
+                  await activitiesStateStore.acknowledgeCurrentCounts(
+                    currentCounts: counts,
+                  );
+                }
               }
             } else {
               appLog('[BG] No notification data received from FA');
@@ -348,8 +398,7 @@ String _formatNotificationPart({
   required String suffix,
 }) {
   if (current <= 0) return '';
-  final int previous = current - increasedBy;
-  if (increasedBy > 0 && previous > 0) {
+  if (increasedBy > 0) {
     return '$current$suffix(+$increasedBy)';
   }
   return '$current$suffix';
@@ -896,9 +945,6 @@ Future<void> _afterFirstFrameBoot(TimezoneProvider timezoneProvider) async {
     } else if (Platform.isIOS) {
       debugPrint("iOS background task handler registered");
     }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool("isAppActive", true);
-    debugPrint("App initial state set to ACTIVE");
   } catch (e, st) {
     debugPrint('[BOOT] afterFirstFrame error: $e');
     debugPrint(st as String?);
@@ -929,6 +975,9 @@ class AppLifecycleNetworkReset with WidgetsBindingObserver {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   configureAppLogging();
+  await _persistAppForegroundState(true);
+  await ActivitiesNotificationStateStore()
+      .requestAcknowledgeOnNextForegroundFetch();
   await Firebase.initializeApp();
   await setupAnalyticsPrivacy();
   await FAHttp.init();
@@ -956,6 +1005,9 @@ void main() async {
         ),
         ChangeNotifierProvider<ThumbnailDisplaySettingsProvider>(
           create: (_) => ThumbnailDisplaySettingsProvider(),
+        ),
+        ChangeNotifierProvider<TranslatorSettingsProvider>(
+          create: (_) => TranslatorSettingsProvider(),
         ),
         ChangeNotifierProvider<FANotificationService>(
           create: (_) => FANotificationService(),
@@ -985,7 +1037,8 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   AppLinks? _appLinks;
   StreamSubscription<Uri>? _linkSub;
-  Timer? _stateDebugTimer;
+  Timer? _activeHeartbeatTimer;
+  bool _updateScreenOpened = false;
 
   @override
   void initState() {
@@ -993,13 +1046,47 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _setAppActive(true);
     _initDeepLinks();
-    if (kDebugMode) {
-      _stateDebugTimer = Timer.periodic(const Duration(minutes: 3), (_) async {
-        final prefs = await SharedPreferences.getInstance();
-        final isActive = prefs.getBool("isAppActive") ?? false;
-        kDebugPrint("[STATE CHECK] App active: $isActive at ${DateTime.now()}");
-      });
+    _startActiveHeartbeat();
+    _checkForUpdateOnAppStart();
+  }
+
+  Future<void> _checkForUpdateOnAppStart() async {
+    final updateInfo = await fetchLatestAppUpdateInfo();
+    if (!mounted ||
+        (updateInfo == null && !_forceShowUpdateScreen) ||
+        (!_forceShowUpdateScreen &&
+            !updateInfo!.updateAvailable &&
+            updateInfo.currentVersionAllowed) ||
+        _updateScreenOpened) {
+      return;
     }
+
+    final canDismiss =
+        _forceShowUpdateScreen || updateInfo?.currentVersionAllowed == true;
+    _updateScreenOpened = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      navigatorKey.currentState?.push(
+        MaterialPageRoute<void>(
+          builder: (_) => UpdateScreen(
+            canDismiss: canDismiss,
+          ),
+          fullscreenDialog: true,
+        ),
+      );
+    });
+  }
+
+  void _startActiveHeartbeat() {
+    _activeHeartbeatTimer?.cancel();
+    _activeHeartbeatTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      _setAppActive(true, resetBadge: false);
+    });
+  }
+
+  void _stopActiveHeartbeat() {
+    _activeHeartbeatTimer?.cancel();
+    _activeHeartbeatTimer = null;
   }
 
   @override
@@ -1011,6 +1098,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     switch (state) {
       case AppLifecycleState.resumed:
         _setAppActive(true);
+        _startActiveHeartbeat();
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           await processPendingNavigation(from: 'app_lifecycle_resumed');
         });
@@ -1020,14 +1108,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         appLog('→ App INACTIVE (transitional state)');
         break;
       case AppLifecycleState.paused:
+        _stopActiveHeartbeat();
         _setAppActive(false);
         appLog('→ App PAUSED - Background fetch ENABLED');
         break;
       case AppLifecycleState.detached:
+        _stopActiveHeartbeat();
         _setAppActive(false);
         appLog('→ App DETACHED - Background fetch ENABLED');
         break;
       case AppLifecycleState.hidden:
+        _stopActiveHeartbeat();
         _setAppActive(false);
         appLog('→ App HIDDEN - Background fetch ENABLED');
         break;
@@ -1036,7 +1127,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    _stateDebugTimer?.cancel();
+    _stopActiveHeartbeat();
     WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
     _setAppActive(false);
@@ -1052,13 +1143,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }, onError: (_) {});
   }
 
-  Future<void> _setAppActive(bool active) async {
+  Future<void> _setAppActive(bool active, {bool resetBadge = true}) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool("isAppActive", active);
-      await prefs.reload();
+      await _persistAppForegroundState(active);
       appLog("[APP STATE] Set to: ${active ? 'ACTIVE' : 'INACTIVE'}");
-      if (active) {
+      if (active && resetBadge) {
         await resetBadgeCounter();
       }
     } catch (e) {

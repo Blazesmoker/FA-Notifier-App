@@ -18,6 +18,7 @@ class MainActivity : FlutterActivity() {
     private var customEngine: FlutterEngine? = null
     private val iconChannel = "com.blazesmoker.fanotifier/icon"
     private val settingsChannel = "com.blazesmoker.fanotifier/settings"
+    private val translationChannel = "app.translation"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,6 +60,16 @@ class MainActivity : FlutterActivity() {
                         } catch (e: Exception) {
                             result.success(false)
                         }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, translationChannel)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "translation.showProcessText" -> {
+                        val text = call.argument<String>("text")?.trim().orEmpty()
+                        result.success(showProcessTextTranslation(text))
                     }
                     else -> result.notImplemented()
                 }
@@ -124,4 +135,38 @@ class MainActivity : FlutterActivity() {
             finishAffinity()
         }, 4000)
     }
+
+    private fun showProcessTextTranslation(text: String): Boolean {
+        if (text.isEmpty()) {
+            return false
+        }
+
+        return try {
+            val processTextIntent = Intent(Intent.ACTION_PROCESS_TEXT).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_PROCESS_TEXT, text)
+                putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true)
+            }
+            val activities = packageManager.queryIntentActivities(
+                processTextIntent,
+                PackageManager.MATCH_DEFAULT_ONLY
+            )
+            val translateActivity = activities.firstOrNull {
+                it.activityInfo.packageName == "com.google.android.apps.translate"
+            } ?: activities.firstOrNull {
+                it.activityInfo.packageName.contains("translate", ignoreCase = true)
+            } ?: return false
+
+            processTextIntent.setClassName(
+                translateActivity.activityInfo.packageName,
+                translateActivity.activityInfo.name
+            )
+            startActivity(processTextIntent)
+            true
+        } catch (error: Exception) {
+            Log.w("MainActivity", "PROCESS_TEXT translation failed", error)
+            false
+        }
+    }
+
 }

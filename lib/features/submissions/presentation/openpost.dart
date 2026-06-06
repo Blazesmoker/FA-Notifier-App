@@ -42,8 +42,12 @@ import 'package:FANotifier/features/profile/presentation/user_profile_screen.dar
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost_comments.dart';
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
+import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
 import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
 import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.dart';
+import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
+import 'package:FANotifier/shared/translation/translation_service.dart';
+import 'package:provider/provider.dart';
 
 class _TransparentOpenPostPageRoute<T> extends PageRoute<T> {
   _TransparentOpenPostPageRoute({
@@ -167,6 +171,7 @@ class _OpenPostState extends State<OpenPost>
   late final PostCommentService _postCommentService;
   final OpenPostImageService _openPostImageService =
       const OpenPostImageService();
+  final TranslationService _translationService = TranslationService.instance;
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _commentFocusNode = FocusNode();
   bool _commentComposerFocusRequestedByUser = false;
@@ -448,6 +453,69 @@ class _OpenPostState extends State<OpenPost>
       return;
     }
     _commentSelectedTexts[selectionId] = text;
+  }
+
+  String _postTranslationSourceText() {
+    final description = submissionDescription == null
+        ? ''
+        : _translationService.plainTextFromHtml(submissionDescription!);
+    return '${submissionTitle ?? ''}\n$description'.trim();
+  }
+
+  bool _shouldOfferPostTranslation(
+    TranslatorSettingsProvider settings, {
+    VoidCallback? onLanguageDetectionUpdated,
+  }) {
+    return _translationService.shouldOfferTranslation(
+      _postTranslationSourceText(),
+      settings,
+      onLanguageDetectionUpdated: onLanguageDetectionUpdated,
+    );
+  }
+
+  bool _shouldOfferCommentTranslation(
+    Map<String, dynamic> comment,
+    TranslatorSettingsProvider settings, {
+    VoidCallback? onLanguageDetectionUpdated,
+  }) {
+    if (comment['deleted'] == true) return false;
+    return _translationService.shouldOfferTranslation(
+      _commentTranslationSourceText(comment),
+      settings,
+      onLanguageDetectionUpdated: onLanguageDetectionUpdated,
+    );
+  }
+
+  String _commentTranslationSourceText(Map<String, dynamic> comment) {
+    final commentHtml = comment['commentHtml'] as String?;
+    if (commentHtml != null && commentHtml.trim().isNotEmpty) {
+      return _translationService.plainTextFromHtml(commentHtml);
+    }
+    return comment['text']?.toString() ?? '';
+  }
+
+  Future<void> _openPostTranslation(
+    TranslatorSettingsProvider settings,
+  ) async {
+    await NativeTranslateLauncher.open(
+      _postTranslationSourceText(),
+      targetLanguageCode: settings.targetLanguageCode,
+    );
+  }
+
+  Future<void> _openCommentTranslation(
+    Map<String, dynamic> comment,
+    TranslatorSettingsProvider settings,
+  ) async {
+    await NativeTranslateLauncher.open(
+      _commentTranslationSourceText(comment),
+      targetLanguageCode: settings.targetLanguageCode,
+    );
+  }
+
+  void _handleTranslationLanguageDetected() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   void _clearSelectionArea(GlobalKey<SelectionAreaState> key) {
@@ -2491,6 +2559,7 @@ class _OpenPostState extends State<OpenPost>
 
   @override
   Widget build(BuildContext context) {
+    final translatorSettings = context.watch<TranslatorSettingsProvider>();
     final bool showLoadingIndicator = !_detailsLoaded || !_webViewLoaded;
     final double viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
     return ExcludeSemantics(
@@ -2571,6 +2640,12 @@ class _OpenPostState extends State<OpenPost>
                       ),
                     );
                   }
+                  menuItems.add(
+                    const PopupMenuItem<String>(
+                      value: 'translate',
+                      child: Text('Translate'),
+                    ),
+                  );
 
                   return IconButton(
                     icon: const Icon(Icons.more_vert),
@@ -2631,6 +2706,9 @@ class _OpenPostState extends State<OpenPost>
                               backgroundColor: Colors.green,
                             ),
                           );
+                          break;
+                        case 'translate':
+                          await _openPostTranslation(translatorSettings);
                           break;
                         default:
                           break;
@@ -2861,6 +2939,7 @@ class _OpenPostState extends State<OpenPost>
                                     onLongPressStart: (details) async {
                                       final tapPosition =
                                           details.globalPosition;
+                                      _suppressNextRouteDetach = true;
                                       final selected = await showMenu<String>(
                                         context: context,
                                         position: RelativeRect.fromLTRB(
@@ -2879,7 +2958,9 @@ class _OpenPostState extends State<OpenPost>
                                             child: Text('Share image'),
                                           ),
                                         ],
-                                      );
+                                      ).whenComplete(() {
+                                        _suppressNextRouteDetach = false;
+                                      });
                                       if (selected == 'download') {
                                         debugPrint("$fullViewImageUrl image2");
                                         await _downloadImage(
@@ -3359,7 +3440,7 @@ class _OpenPostState extends State<OpenPost>
                             ],
                           ),
                         ),
-                        ..._buildCommentSlivers(),
+                        ..._buildCommentSlivers(translatorSettings),
                         SliverToBoxAdapter(
                           child: ListenableBuilder(
                             listenable: Listenable.merge([
@@ -3741,7 +3822,9 @@ class _OpenPostState extends State<OpenPost>
     );
   }
 
-  List<Widget> _buildCommentSlivers() {
+  List<Widget> _buildCommentSlivers(
+    TranslatorSettingsProvider translatorSettings,
+  ) {
     if (comments.isEmpty) {
       return const [
         SliverToBoxAdapter(
@@ -3844,6 +3927,15 @@ class _OpenPostState extends State<OpenPost>
                   selectedTextProvider: () =>
                       _selectedCommentTextFor(selectionId),
                   includeIosTranslate: true,
+                ),
+                showTranslateButton: _shouldOfferCommentTranslation(
+                  comment,
+                  translatorSettings,
+                  onLanguageDetectionUpdated: _handleTranslationLanguageDetected,
+                ),
+                onTranslateToggle: () => _openCommentTranslation(
+                  comment,
+                  translatorSettings,
                 ),
               );
             },

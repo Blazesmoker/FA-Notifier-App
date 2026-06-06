@@ -1,9 +1,13 @@
 import 'package:FANotifier/features/profile/domain/shout.dart';
 import 'package:FANotifier/features/profile/data/shout_text_parser.dart';
 import 'package:FANotifier/features/profile/presentation/shout_widget.dart';
+import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
+import 'package:FANotifier/shared/translation/translation_service.dart';
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 class UserProfileShoutsSection extends StatelessWidget {
   final List<Shout> shouts;
@@ -182,83 +186,132 @@ class UserProfileShoutsSection extends StatelessWidget {
                             ? () => onToggleShoutSelection(shout)
                             : () async {
                           final plainText = plainTextFromShoutHtml(shout.text);
+                          final translatorSettings =
+                              context.read<TranslatorSettingsProvider>();
+                          final translationService = TranslationService.instance;
+                          var dialogOpen = true;
+                          StateSetter? updateDialog;
                           final action = await showDialog<String>(
                             context: context,
                             builder: (context) {
-                              final maxHeight = MediaQuery.of(context).size.height * 0.6;
-                              return AlertDialog(
-                                scrollable: true,
-                                titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                                title: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(4.0),
-                                      child: FaNetworkImage(
-                                        shout.avatarUrl,
-                                        width: 40,
-                                        height: 40,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return Image.asset(
-                                            'assets/images/defaultpic.gif',
+                              return StatefulBuilder(
+                                builder: (context, setDialogState) {
+                                  updateDialog = setDialogState;
+                                  final showTranslateButton =
+                                      translationService.shouldOfferTranslation(
+                                    plainText,
+                                    translatorSettings,
+                                    onLanguageDetectionUpdated: () {
+                                      if (dialogOpen) {
+                                        updateDialog?.call(() {});
+                                      }
+                                    },
+                                  );
+                                  final maxHeight =
+                                      MediaQuery.of(context).size.height * 0.6;
+                                  return AlertDialog(
+                                    scrollable: true,
+                                    titlePadding:
+                                        const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                                    title: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(4.0),
+                                          child: FaNetworkImage(
+                                            shout.avatarUrl,
                                             width: 40,
                                             height: 40,
                                             fit: BoxFit.cover,
-                                          );
-                                        },
+                                            errorBuilder:
+                                                (context, error, stackTrace) {
+                                              return Image.asset(
+                                                'assets/images/defaultpic.gif',
+                                                width: 40,
+                                                height: 40,
+                                                fit: BoxFit.cover,
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                shout.username,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              Text(
+                                                '${shout.symbol} ${shout.profileNickname}',
+                                                style: const TextStyle(
+                                                  color: Color(0xFFE09321),
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.normal,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    content: ConstrainedBox(
+                                      constraints:
+                                          BoxConstraints(maxHeight: maxHeight),
+                                      child: SingleChildScrollView(
+                                        child: SelectableText(
+                                          plainText,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            shout.username,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
+                                    actions: [
+                                      if (showTranslateButton)
+                                        IconButton(
+                                          tooltip: 'Translate',
+                                          icon: const Icon(
+                                            Icons.g_translate,
+                                            color: Colors.white,
                                           ),
-                                          Text(
-                                            '${shout.symbol} ${shout.profileNickname}',
-                                            style: const TextStyle(
-                                              color: Color(0xFFE09321),
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.normal,
-                                            ),
+                                          onPressed: () =>
+                                              NativeTranslateLauncher.open(
+                                            plainText,
+                                            targetLanguageCode:
+                                                translatorSettings
+                                                    .targetLanguageCode,
                                           ),
-                                        ],
+                                        ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, 'copy'),
+                                        child: const Text('Copy text'),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                content: ConstrainedBox(
-                                  constraints: BoxConstraints(maxHeight: maxHeight),
-                                  child: SingleChildScrollView(
-                                    child: Text(
-                                      plainText,
-                                      style: const TextStyle(color: Colors.white),
-                                    ),
-                                  ),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context, 'copy'),
-                                    child: const Text('Copy text'),
-                                  ),
-                                  if (isOwnProfile)
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context, 'delete'),
-                                      style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                      child: const Text("Delete"),
-                                    ),
-                                ],
+                                      if (isOwnProfile)
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(context, 'delete'),
+                                          style: TextButton.styleFrom(
+                                            foregroundColor: Colors.red,
+                                          ),
+                                          child: const Text("Delete"),
+                                        ),
+                                    ],
+                                  );
+                                },
                               );
                             },
                           );
+                          dialogOpen = false;
                           if (action == 'copy') {
                             await Clipboard.setData(ClipboardData(text: plainText));
                             ScaffoldMessenger.of(context).showSnackBar(

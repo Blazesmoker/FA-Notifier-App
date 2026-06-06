@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
 import 'package:FANotifier/main.dart';
 import 'package:FANotifier/features/notifications/data/NotificationNavigationProvider.dart';
+import 'package:FANotifier/features/notifications/data/activities_notification_state.dart';
 import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:FANotifier/features/notifications/data/notification_refresh_service.dart';
 import 'package:FANotifier/core/logging/app_logging.dart';
@@ -41,6 +42,7 @@ class NotificationService {
       'next_activity_notification_id';
   static const int _kActivityNotificationIdBase = 1500000000;
   static const int _kActivityNotificationIdMax = 1999999999;
+  static const int activityNotificationId = _kActivityNotificationIdBase;
 
   Future<int> allocateActivityNotificationId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -60,6 +62,10 @@ class NotificationService {
     await prefs.setInt(_kNextActivityNotificationId, followingId);
 
     return allocatedId;
+  }
+
+  Future<void> cancelActivityNotification() {
+    return flutterLocalNotificationsPlugin.cancel(id: activityNotificationId);
   }
 
   Future<void> init({
@@ -123,6 +129,8 @@ class NotificationService {
         details?.notificationResponse != null) {
       final payload = details!.notificationResponse!.payload;
       if (payload != null && payload.isNotEmpty) {
+        await ActivitiesNotificationStateStore()
+            .requestAcknowledgeOnNextForegroundFetch();
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('pending_navigation', payload);
         await onLaunchPayloadSaved?.call();
@@ -225,6 +233,8 @@ class NotificationService {
     required String source,
   }) async {
     try {
+      await ActivitiesNotificationStateStore()
+          .requestAcknowledgeOnNextForegroundFetch();
       appLog('[NOTIF] Notification tap received (source=$source)');
       kDebugPrint(
         'NOTES REFRESH TRIGGERED_handletappayload (source=$source, payload=$payload)',
@@ -413,6 +423,8 @@ void notificationTapBackground(NotificationResponse response) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final payload = response.payload ?? '';
+  await ActivitiesNotificationStateStore()
+      .requestAcknowledgeOnNextForegroundFetch();
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString('pending_navigation', payload);
   appLog('[NOTIF_TAP_BG] saved pending notification payload.');

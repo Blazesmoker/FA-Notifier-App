@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 import 'dart:io' show Platform;
+import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 
 /// Cross-platform BBCode-aware context menu
 /// Safe for BOTH Android and iOS (no native crashes)
@@ -206,9 +206,6 @@ class BBCodeContextMenu {
 }
 
 class ReadOnlySelectionContextMenu {
-  static const MethodChannel _translationChannel =
-      MethodChannel('app.translation');
-
   static Widget Function(BuildContext, SelectableRegionState) builder({
     required String Function() selectedTextProvider,
     bool includeIosTranslate = false,
@@ -241,7 +238,10 @@ class ReadOnlySelectionContextMenu {
               selectableRegionState.hideToolbar(false);
               final text = selectedTextProvider().trim();
               if (text.isEmpty) return;
-              await _openTranslateApp(text, localeCode: localeCode);
+              await NativeTranslateLauncher.open(
+                text,
+                targetLanguageCode: localeCode,
+              );
             },
           ),
         );
@@ -252,58 +252,6 @@ class ReadOnlySelectionContextMenu {
         buttonItems: items,
       );
     };
-  }
-
-  static Future<void> _openTranslateApp(
-    String text, {
-    String? localeCode,
-  }) async {
-    if (Platform.isIOS) {
-      try {
-        final shownNativeSheet = await _translationChannel.invokeMethod<bool>(
-              'translation.showNativeSheet',
-              {'text': text},
-            ) ??
-            false;
-        if (shownNativeSheet) {
-          return;
-        }
-        debugPrint(
-          'ReadOnlySelectionContextMenu: native translation sheet was unavailable, falling back to app/web translation.',
-        );
-      } catch (error) {
-        debugPrint(
-          'ReadOnlySelectionContextMenu: native translation sheet failed: $error',
-        );
-      }
-    }
-
-    final normalizedLocaleCode = (localeCode?.trim().isNotEmpty ?? false)
-        ? localeCode!.trim()
-        : 'en';
-    final targetLanguage = normalizedLocaleCode;
-    final encodedText = Uri.encodeQueryComponent(text);
-    final appUrls = <String>[
-      'googletranslate://?sl=auto&tl=$targetLanguage&text=$encodedText',
-      'comgoogletranslate://?sl=auto&tl=$targetLanguage&text=$encodedText',
-    ];
-    final webUrl =
-        'https://translate.google.com/?sl=auto&tl=$targetLanguage&text=$encodedText&op=translate';
-
-    for (final appUrl in appUrls) {
-      try {
-        final launchedApp = await launchUrlString(
-          appUrl,
-          mode: LaunchMode.externalNonBrowserApplication,
-        );
-        if (launchedApp) return;
-      } catch (_) {}
-    }
-
-    await launchUrlString(
-      webUrl,
-      mode: LaunchMode.externalApplication,
-    );
   }
 
   static String _translateLabelForContext(BuildContext context) {

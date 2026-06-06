@@ -288,6 +288,7 @@ class NotesScreenState extends State<NotesScreen>
     _inboxScrollController.dispose();
     _sentScrollController.dispose();
     _notesRefreshSub?.cancel();
+    FaActivitiesPollingService().setNotesScreenVisible(false);
     super.dispose();
   }
 
@@ -420,10 +421,9 @@ class NotesScreenState extends State<NotesScreen>
         newFetched
             .addAll(await _notesApi.fetchNotesPage(folder: 'inbox', page: 2));
       }
-      final shownCount = await _handleNewUnreadMessages(newFetched);
+      await _handleNewUnreadMessages(newFetched);
       await _handleNotesPageTopbarCounts(
         page1.topbarCounts,
-        shownNewNoteNotifications: shownCount,
         source: 'notes_screen_two_page_refresh',
       );
       final fetchedIds = newFetched.map((m) => m.id).toList();
@@ -461,13 +461,11 @@ class NotesScreenState extends State<NotesScreen>
 
   Future<void> _handleNotesPageTopbarCounts(
     NotificationCounts? counts, {
-    required int shownNewNoteNotifications,
     required String source,
   }) async {
     if (counts == null) return;
     await FaActivitiesPollingService().handleExternalCounts(
       currentCounts: counts,
-      shownNewNoteNotifications: shownNewNoteNotifications,
       resetTimer: true,
       source: source,
     );
@@ -513,10 +511,9 @@ class NotesScreenState extends State<NotesScreen>
       }
 
       if (page == 1 && !suppressNewUnreadNotifications) {
-        final shownCount = await _handleNewUnreadMessages(newMessages);
+        await _handleNewUnreadMessages(newMessages);
         await _handleNotesPageTopbarCounts(
           snapshot.topbarCounts,
-          shownNewNoteNotifications: shownCount,
           source: 'notes_screen_inbox_refresh',
         );
       } else {
@@ -803,6 +800,8 @@ class NotesScreenState extends State<NotesScreen>
       key: const Key('notes_screen_visibility'),
       onVisibilityChanged: (info) {
         _isVisibleInHomeStack = info.visibleFraction > 0.01;
+        FaActivitiesPollingService()
+            .setNotesScreenVisible(_isVisibleInHomeStack);
       },
       child: _buildNotesScaffold(context),
     );

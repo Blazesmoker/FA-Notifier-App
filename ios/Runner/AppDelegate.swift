@@ -113,27 +113,31 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
                 return
             }
 
-            guard call.method == "translation.showNativeSheet" else {
+            switch call.method {
+            case "translation.showNativeSheet":
+                self.handleTranslationSheetCall(call, result: result)
+            default:
                 result(FlutterMethodNotImplemented)
-                return
             }
+        }
+    }
 
-            let rawText: String?
-            if let args = call.arguments as? [String: Any] {
-                rawText = args["text"] as? String
-            } else {
-                rawText = call.arguments as? String
-            }
+    private func handleTranslationSheetCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let rawText: String?
+        if let args = call.arguments as? [String: Any] {
+            rawText = args["text"] as? String
+        } else {
+            rawText = call.arguments as? String
+        }
 
-            let text = rawText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !text.isEmpty else {
-                result(false)
-                return
-            }
+        let text = rawText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !text.isEmpty else {
+            result(false)
+            return
+        }
 
-            DispatchQueue.main.async {
-                result(self.presentNativeTranslationSheetIfAvailable(text: text))
-            }
+        DispatchQueue.main.async {
+            result(self.presentNativeTranslationSheetIfAvailable(text: text))
         }
     }
 
