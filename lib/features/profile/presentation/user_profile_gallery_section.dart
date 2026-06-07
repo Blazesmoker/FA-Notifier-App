@@ -31,6 +31,7 @@ class UserProfileGallerySection extends StatelessWidget {
         : buildDefaultProfileGalleryUrl(sanitizedUsername);
 
     return CustomScrollView(
+      key: const PageStorageKey<String>('profile-gallery-scroll'),
       slivers: [
         SliverOverlapInjector(
           handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
@@ -86,4 +87,3 @@ class UserProfileGallerySection extends StatelessWidget {
     );
   }
 }
-

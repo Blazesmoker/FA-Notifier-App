@@ -100,6 +100,7 @@ class UserProfileHomeSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
+      key: const PageStorageKey<String>('profile-home-scroll'),
       physics: Platform.isIOS ? const ClampingScrollPhysics() : null,
       slivers: [
         SliverOverlapInjector(
@@ -109,122 +110,124 @@ class UserProfileHomeSection extends StatelessWidget {
           padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 8.0),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
-        if (hasRealUserProfile &&
-            userDescription != null &&
-            userDescription!.trim().isNotEmpty)
-          GestureDetector(
-            onLongPressStart: onDescriptionLongPressStart,
-            child: enableScrollPerformancePause
-                ? VisibilityDetector(
-                    key: ObjectKey(webViewKey),
-                    onVisibilityChanged: (info) {
-                      final state = webViewKey.currentState;
-                      if (state == null) {
-                        return;
-                      }
-                      if (info.visibleFraction > 0.15) {
-                        state.resumeWebView(
-                          reason: UserDescriptionWebViewPauseReason.visibility,
-                        );
-                      } else {
-                        state.pauseWebView(
-                          reason: UserDescriptionWebViewPauseReason.visibility,
-                        );
-                      }
-                    },
-                    child: UserDescriptionWebView(
-                      key: webViewKey,
-                      sanitizedUsername: sanitizedUsername,
-                      initialHtml: userDescription,
-                      forceHybridComposition: false,
-                      enableTextSelection: false,
-                      enableScrollPerformancePause:
-                          enableScrollPerformancePause,
-                      disableIosScrolling: true,
-                      onWebViewLoaded: onWebViewLoaded,
-                    ),
-                  )
-                : UserDescriptionWebView(
-                    key: webViewKey,
-                    sanitizedUsername: sanitizedUsername,
-                    initialHtml: userDescription,
-                    forceHybridComposition: false,
-                    enableTextSelection: false,
-                    enableScrollPerformancePause: false,
-                    disableIosScrolling: true,
-                    onWebViewLoaded: onWebViewLoaded,
-                  ),
-          ),
-        const SizedBox(height: 16.0),
-        if (featuredImageUrl != null &&
-            featuredImageUrl!.isNotEmpty &&
-            featuredImageTitle != null &&
-            featuredImageTitle!.isNotEmpty &&
-            featuredPostNumber != null &&
-            featuredPostNumber!.isNotEmpty) ...[
-          FeaturedSubmissionSection(
-            imageUrl: featuredImageUrl!,
-            title: featuredImageTitle!,
-            onTap: () {
-              onOpenPost(context, featuredImageUrl!, featuredPostNumber!);
-            },
-          ),
-          const SizedBox(height: 8.0),
-        ],
-        if (hasRealUserProfile &&
-            userProfileTexts != null &&
-            userProfileTexts!.isNotEmpty &&
-            userProfileTexts != 'No additional profile information.')
-          UserProfileAdditionalInfoSection(
-            userProfileImageUrl: userProfileImageUrl,
-            userProfilePostNumber: userProfilePostNumber,
-            userProfileTexts: userProfileTexts!,
-            isClassicMarkup: isClassicMarkup,
-            acceptingTrades: acceptingTrades,
-            acceptingCommissions: acceptingCommissions,
-            onOpenPost: onOpenPost,
-            onHandleFALink: onHandleFALink,
-          ),
-        const SizedBox(height: 8.0),
-        if (contactInformationLinks.isNotEmpty)
-          ContactInformationSection(
-            contacts: contactInformationLinks,
-            onLinkTap: onLaunchUrl,
-          ),
-        const SizedBox(height: 8.0),
-        if (recentWatchers.isNotEmpty || recentWatchersCount > 0)
-          UserGridSection(
-            title: 'Recent Watchers',
-            viewListText: 'Watched by $recentWatchersCount',
-            totalUsersCount: recentWatchersCount,
-            users: recentWatchers,
-            sanitizedUsername: sanitizedUsername,
-          ),
-        const SizedBox(height: 8.0),
-        if (recentlyWatched.isNotEmpty || recentlyWatchedCount > 0)
-          UserGridSection(
-            title: 'Recently Watched',
-            viewListText: 'Watching $recentlyWatchedCount',
-            totalUsersCount: recentlyWatchedCount,
-            users: recentlyWatched,
-            sanitizedUsername: sanitizedUsername,
-          ),
-        const SizedBox(height: 8.0),
-        UserProfileShoutsSection(
-          shouts: shouts,
-          isOwnProfile: isOwnProfile,
-          isSelectionMode: isShoutSelectionMode,
-          selectedShoutCount: selectedShoutCount,
-          currentShoutPage: currentShoutPage,
-          totalShoutPages: totalShoutPages,
-          isLoadingMoreShouts: isLoadingMoreShouts,
-          onOpenPostShout: onOpenPostShout,
-          onLoadMoreShouts: onLoadMoreShouts,
-          onConfirmDeleteShout: onConfirmDeleteShout,
-          onToggleSelectionMode: onToggleShoutSelectionMode,
-          onToggleShoutSelection: onToggleShoutSelection,
-        ),
-        const SizedBox(height: 8.0),
+              if (hasRealUserProfile &&
+                  userDescription != null &&
+                  userDescription!.trim().isNotEmpty)
+                GestureDetector(
+                  onLongPressStart: onDescriptionLongPressStart,
+                  child: enableScrollPerformancePause
+                      ? VisibilityDetector(
+                          key: ObjectKey(webViewKey),
+                          onVisibilityChanged: (info) {
+                            final state = webViewKey.currentState;
+                            if (state == null) {
+                              return;
+                            }
+                            if (info.visibleFraction > 0.15) {
+                              state.resumeWebView(
+                                reason: UserDescriptionWebViewPauseReason
+                                    .visibility,
+                              );
+                            } else {
+                              state.pauseWebView(
+                                reason: UserDescriptionWebViewPauseReason
+                                    .visibility,
+                              );
+                            }
+                          },
+                          child: UserDescriptionWebView(
+                            key: webViewKey,
+                            sanitizedUsername: sanitizedUsername,
+                            initialHtml: userDescription,
+                            forceHybridComposition: false,
+                            enableTextSelection: false,
+                            enableScrollPerformancePause:
+                                enableScrollPerformancePause,
+                            disableIosScrolling: true,
+                            onWebViewLoaded: onWebViewLoaded,
+                          ),
+                        )
+                      : UserDescriptionWebView(
+                          key: webViewKey,
+                          sanitizedUsername: sanitizedUsername,
+                          initialHtml: userDescription,
+                          forceHybridComposition: false,
+                          enableTextSelection: false,
+                          enableScrollPerformancePause: false,
+                          disableIosScrolling: true,
+                          onWebViewLoaded: onWebViewLoaded,
+                        ),
+                ),
+              const SizedBox(height: 16.0),
+              if (featuredImageUrl != null &&
+                  featuredImageUrl!.isNotEmpty &&
+                  featuredImageTitle != null &&
+                  featuredImageTitle!.isNotEmpty &&
+                  featuredPostNumber != null &&
+                  featuredPostNumber!.isNotEmpty) ...[
+                FeaturedSubmissionSection(
+                  imageUrl: featuredImageUrl!,
+                  title: featuredImageTitle!,
+                  onTap: () {
+                    onOpenPost(context, featuredImageUrl!, featuredPostNumber!);
+                  },
+                ),
+                const SizedBox(height: 8.0),
+              ],
+              if (hasRealUserProfile &&
+                  userProfileTexts != null &&
+                  userProfileTexts!.isNotEmpty &&
+                  userProfileTexts != 'No additional profile information.')
+                UserProfileAdditionalInfoSection(
+                  userProfileImageUrl: userProfileImageUrl,
+                  userProfilePostNumber: userProfilePostNumber,
+                  userProfileTexts: userProfileTexts!,
+                  isClassicMarkup: isClassicMarkup,
+                  acceptingTrades: acceptingTrades,
+                  acceptingCommissions: acceptingCommissions,
+                  onOpenPost: onOpenPost,
+                  onHandleFALink: onHandleFALink,
+                ),
+              const SizedBox(height: 8.0),
+              if (contactInformationLinks.isNotEmpty)
+                ContactInformationSection(
+                  contacts: contactInformationLinks,
+                  onLinkTap: onLaunchUrl,
+                ),
+              const SizedBox(height: 8.0),
+              if (recentWatchers.isNotEmpty || recentWatchersCount > 0)
+                UserGridSection(
+                  title: 'Recent Watchers',
+                  viewListText: 'Watched by $recentWatchersCount',
+                  totalUsersCount: recentWatchersCount,
+                  users: recentWatchers,
+                  sanitizedUsername: sanitizedUsername,
+                ),
+              const SizedBox(height: 8.0),
+              if (recentlyWatched.isNotEmpty || recentlyWatchedCount > 0)
+                UserGridSection(
+                  title: 'Recently Watched',
+                  viewListText: 'Watching $recentlyWatchedCount',
+                  totalUsersCount: recentlyWatchedCount,
+                  users: recentlyWatched,
+                  sanitizedUsername: sanitizedUsername,
+                ),
+              const SizedBox(height: 8.0),
+              UserProfileShoutsSection(
+                shouts: shouts,
+                isOwnProfile: isOwnProfile,
+                isSelectionMode: isShoutSelectionMode,
+                selectedShoutCount: selectedShoutCount,
+                currentShoutPage: currentShoutPage,
+                totalShoutPages: totalShoutPages,
+                isLoadingMoreShouts: isLoadingMoreShouts,
+                onOpenPostShout: onOpenPostShout,
+                onLoadMoreShouts: onLoadMoreShouts,
+                onConfirmDeleteShout: onConfirmDeleteShout,
+                onToggleSelectionMode: onToggleShoutSelectionMode,
+                onToggleShoutSelection: onToggleShoutSelection,
+              ),
+              const SizedBox(height: 8.0),
             ]),
           ),
         ),

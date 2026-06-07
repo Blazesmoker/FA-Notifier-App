@@ -2,6 +2,7 @@ import 'package:FANotifier/features/profile/domain/shout.dart';
 import 'package:FANotifier/features/profile/data/shout_text_parser.dart';
 import 'package:FANotifier/features/profile/presentation/shout_widget.dart';
 import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/shared/translation/translation_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
@@ -197,147 +198,160 @@ class UserProfileShoutsSection extends StatelessWidget {
                                 var dialogOpen = true;
                                 var selectedShoutText = '';
                                 StateSetter? updateDialog;
-                                final action = await showDialog<String>(
-                                  context: context,
-                                  builder: (context) {
-                                    return StatefulBuilder(
-                                      builder: (context, setDialogState) {
-                                        updateDialog = setDialogState;
-                                        final showTranslateButton =
-                                            translationService
-                                                .shouldOfferTranslation(
-                                          plainText,
-                                          translatorSettings,
-                                          onLanguageDetectionUpdated: () {
-                                            if (dialogOpen) {
-                                              updateDialog?.call(() {});
-                                            }
-                                          },
-                                        );
-                                        final maxHeight =
-                                            MediaQuery.of(context).size.height *
-                                                0.6;
-                                        return AlertDialog(
-                                          scrollable: true,
-                                          titlePadding:
-                                              const EdgeInsets.fromLTRB(
-                                                  24, 24, 24, 0),
-                                          title: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              ClipRRect(
-                                                borderRadius:
-                                                    BorderRadius.circular(4.0),
-                                                child: FaNetworkImage(
-                                                  shout.avatarUrl,
-                                                  width: 40,
-                                                  height: 40,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (context, error,
-                                                      stackTrace) {
-                                                    return Image.asset(
-                                                      'assets/images/defaultpic.gif',
-                                                      width: 40,
-                                                      height: 40,
-                                                      fit: BoxFit.cover,
-                                                    );
+                                final recoveryScope = IosScrollRecoveryScope();
+                                String? action;
+                                try {
+                                  action = await showDialog<String>(
+                                    context: context,
+                                    builder: (context) {
+                                      return StatefulBuilder(
+                                        builder: (context, setDialogState) {
+                                          updateDialog = setDialogState;
+                                          final showTranslateButton =
+                                              translationService
+                                                  .shouldOfferTranslation(
+                                            plainText,
+                                            translatorSettings,
+                                            onLanguageDetectionUpdated: () {
+                                              if (dialogOpen) {
+                                                updateDialog?.call(() {});
+                                              }
+                                            },
+                                          );
+                                          final maxHeight =
+                                              MediaQuery.of(context)
+                                                      .size
+                                                      .height *
+                                                  0.6;
+                                          return AlertDialog(
+                                            scrollable: true,
+                                            titlePadding:
+                                                const EdgeInsets.fromLTRB(
+                                                    24, 24, 24, 0),
+                                            title: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                ClipRRect(
+                                                  borderRadius:
+                                                      BorderRadius.circular(4.0),
+                                                  child: FaNetworkImage(
+                                                    shout.avatarUrl,
+                                                    width: 40,
+                                                    height: 40,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (context,
+                                                        error, stackTrace) {
+                                                      return Image.asset(
+                                                        'assets/images/defaultpic.gif',
+                                                        width: 40,
+                                                        height: 40,
+                                                        fit: BoxFit.cover,
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        shout.username,
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 16,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                      Text(
+                                                        '${shout.symbol} ${shout.profileNickname}',
+                                                        style: const TextStyle(
+                                                          color:
+                                                              Color(0xFFE09321),
+                                                          fontSize: 14,
+                                                          fontWeight:
+                                                              FontWeight.normal,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            content: ConstrainedBox(
+                                              constraints: BoxConstraints(
+                                                  maxHeight: maxHeight),
+                                              child:
+                                                  IosScrollRecoverySingleChildScrollView(
+                                                recoveryScope: recoveryScope,
+                                                child: SelectionArea(
+                                                  onSelectionChanged: (content) {
+                                                    selectedShoutText =
+                                                        content?.plainText ?? '';
                                                   },
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      shout.username,
-                                                      style: const TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 16,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
+                                                  contextMenuBuilder:
+                                                      ReadOnlySelectionContextMenu
+                                                          .builder(
+                                                    selectedTextProvider: () =>
+                                                        selectedShoutText,
+                                                    includeIosTranslate: true,
+                                                    recoveryScope: recoveryScope,
+                                                  ),
+                                                  child: Text(
+                                                    plainText,
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
                                                     ),
-                                                    Text(
-                                                      '${shout.symbol} ${shout.profileNickname}',
-                                                      style: const TextStyle(
-                                                        color:
-                                                            Color(0xFFE09321),
-                                                        fontSize: 14,
-                                                        fontWeight:
-                                                            FontWeight.normal,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          content: ConstrainedBox(
-                                            constraints: BoxConstraints(
-                                                maxHeight: maxHeight),
-                                            child: SingleChildScrollView(
-                                              child: SelectionArea(
-                                                onSelectionChanged: (content) {
-                                                  selectedShoutText =
-                                                      content?.plainText ?? '';
-                                                },
-                                                contextMenuBuilder:
-                                                    ReadOnlySelectionContextMenu
-                                                        .builder(
-                                                  selectedTextProvider: () =>
-                                                      selectedShoutText,
-                                                  includeIosTranslate: true,
-                                                ),
-                                                child: Text(
-                                                  plainText,
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
                                                   ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                          actions: [
-                                            if (showTranslateButton)
-                                              IconButton(
-                                                tooltip: 'Translate',
-                                                icon: const Icon(
-                                                  Icons.g_translate,
-                                                  color: Colors.white,
+                                            actions: [
+                                              if (showTranslateButton)
+                                                IconButton(
+                                                  tooltip: 'Translate',
+                                                  icon: const Icon(
+                                                    Icons.g_translate,
+                                                    color: Colors.white,
+                                                  ),
+                                                  onPressed: () =>
+                                                      NativeTranslateLauncher
+                                                          .open(
+                                                    plainText,
+                                                    targetLanguageCode:
+                                                        translatorSettings
+                                                            .targetLanguageCode,
+                                                    recoveryScope: recoveryScope,
+                                                  ),
                                                 ),
-                                                onPressed: () =>
-                                                    NativeTranslateLauncher
-                                                        .open(
-                                                  plainText,
-                                                  targetLanguageCode:
-                                                      translatorSettings
-                                                          .targetLanguageCode,
-                                                ),
-                                              ),
-                                            TextButton(
-                                              onPressed: () => Navigator.pop(
-                                                  context, 'copy'),
-                                              child: const Text('Copy text'),
-                                            ),
-                                            if (isOwnProfile)
                                               TextButton(
                                                 onPressed: () => Navigator.pop(
-                                                    context, 'delete'),
-                                                style: TextButton.styleFrom(
-                                                  foregroundColor: Colors.red,
-                                                ),
-                                                child: const Text("Delete"),
+                                                    context, 'copy'),
+                                                child: const Text('Copy text'),
                                               ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                  },
-                                );
-                                dialogOpen = false;
+                                              if (isOwnProfile)
+                                                TextButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(
+                                                          context, 'delete'),
+                                                  style: TextButton.styleFrom(
+                                                    foregroundColor: Colors.red,
+                                                  ),
+                                                  child: const Text("Delete"),
+                                                ),
+                                            ],
+                                          );
+                                        },
+                                      );
+                                    },
+                                  );
+                                } finally {
+                                  dialogOpen = false;
+                                  recoveryScope.dispose();
+                                }
                                 if (action == 'copy') {
                                   await Clipboard.setData(
                                       ClipboardData(text: plainText));

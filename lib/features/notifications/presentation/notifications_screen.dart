@@ -1270,32 +1270,32 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       },
       child: Consumer<FANotificationService>(
         builder: (context, service, child) {
-          final isLoading = service.isLoading;
           final hasFetched = service.hasFetched;
           final sections = service.sections;
-          if (isLoading || !hasFetched) {
+          final showInitialLoading = !hasFetched && sections.isEmpty;
+          if (showInitialLoading) {
             return Scaffold(
-            appBar: AppBar(
-              title: const Text('Notifications'),
-              centerTitle: true,
-              backgroundColor: Colors.black,
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.block, color: Color(0xFFE09321)),
-                  onPressed: null,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.settings),
-                  onPressed: () {
-                    _showNotificationSettingsDialog(service);
-                  },
-                ),
-              ],
-            ),
-            body: const Center(
+              appBar: AppBar(
+                title: const Text('Notifications'),
+                centerTitle: true,
+                backgroundColor: Colors.black,
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.block, color: Color(0xFFE09321)),
+                    onPressed: null,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings),
+                    onPressed: () {
+                      _showNotificationSettingsDialog(service);
+                    },
+                  ),
+                ],
+              ),
+              body: const Center(
                 child: PulsatingLoadingIndicator(
                     size: 88.0, assetPath: 'assets/icons/fathemed.png')),
-          );
+            );
           }
           if (sections.isEmpty) {
             if (!_didAutoRefetch) {

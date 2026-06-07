@@ -32,7 +32,8 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     private var notifChannel: FlutterMethodChannel?
     private var pendingNotificationPayload: [String: Any]?
     private var translationChannel: FlutterMethodChannel?
-    private var translationHostController: UIViewController?
+    private var translationHostWindow: UIWindow?
+    private weak var translationPreviousKeyWindow: UIWindow?
 
     private func configurePluginRegistrantCallbacks() {
         FlutterLocalNotificationsPlugin.setPluginRegistrantCallback { registry in
@@ -137,28 +138,46 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         }
 
         DispatchQueue.main.async {
-            result(self.presentNativeTranslationSheetIfAvailable(text: text))
+            var didComplete = false
+            let completeOnce = { (requiresScrollRecovery: Bool) in
+                guard !didComplete else { return }
+                didComplete = true
+                result([
+                    "shown": true,
+                    "requiresScrollRecovery": requiresScrollRecovery
+                ])
+            }
+            let didPresent = self.presentNativeTranslationSheetIfAvailable(text: text) { requiresScrollRecovery in
+                completeOnce(requiresScrollRecovery)
+            }
+            if !didPresent {
+                result(false)
+            }
         }
     }
 
     @MainActor
-    private func presentNativeTranslationSheetIfAvailable(text: String) -> Bool {
+    private func presentNativeTranslationSheetIfAvailable(text: String, onDismiss: @escaping (Bool) -> Void) -> Bool {
         guard #available(iOS 17.4, *) else {
             return false
         }
 
-        guard let anchorController = findFlutterViewController() else {
-            fLog("Translation sheet unavailable: FlutterViewController not found")
+        guard let windowScene = activeWindowScene() else {
+            fLog("Translation sheet unavailable: active UIWindowScene not found")
             return false
         }
 
-        guard translationHostController == nil else {
+        guard translationHostWindow == nil else {
             fLog("Translation sheet unavailable: translation host already active")
             return false
         }
 
         let bridge = NativeTranslationSheetBridge(text: text) { [weak self] in
-            self?.removeTranslationHostIfNeeded()
+            guard let self = self else {
+                onDismiss(true)
+                return
+            }
+            self.removeTranslationHostIfNeeded(onDismiss: onDismiss)
         }
 
         let hostingController = UIHostingController(
@@ -166,28 +185,46 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         )
         hostingController.view.backgroundColor = .clear
         hostingController.view.isOpaque = false
-        hostingController.modalPresentationStyle = .overFullScreen
-        hostingController.modalTransitionStyle = .crossDissolve
-        translationHostController = hostingController
+        hostingController.view.clipsToBounds = false
 
-        anchorController.present(hostingController, animated: false) {
-            self.fLog("Presented native translation host")
-        }
+        let hostWindow = UIWindow(windowScene: windowScene)
+        hostWindow.rootViewController = hostingController
+        hostWindow.backgroundColor = .clear
+        hostWindow.isOpaque = false
+        hostWindow.windowLevel = .alert + 1
+
+        translationPreviousKeyWindow = windowScene.windows.first(where: { $0.isKeyWindow })
+        translationHostWindow = hostWindow
+        hostWindow.makeKeyAndVisible()
+        fLog("Presented native translation host in isolated window")
         return true
     }
 
     @MainActor
-    private func removeTranslationHostIfNeeded() {
-        guard let host = translationHostController else { return }
-
-        guard host.presentingViewController != nil else {
-            translationHostController = nil
+    private func removeTranslationHostIfNeeded(onDismiss: @escaping (Bool) -> Void) {
+        guard let hostWindow = translationHostWindow else {
+            onDismiss(false)
             return
         }
-        host.dismiss(animated: false) { [weak self] in
-            self?.translationHostController = nil
-            self?.fLog("Dismissed native translation host")
+
+        hostWindow.isHidden = true
+        hostWindow.rootViewController = nil
+        translationHostWindow = nil
+        translationPreviousKeyWindow?.makeKey()
+        translationPreviousKeyWindow = nil
+        fLog("Dismissed native translation host")
+        onDismiss(false)
+    }
+
+    @MainActor
+    private func activeWindowScene() -> UIWindowScene? {
+        if let scene = window?.windowScene {
+            return scene
         }
+        let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return windowScenes.first(where: { $0.activationState == .foregroundActive })
+            ?? windowScenes.first(where: { $0.activationState == .foregroundInactive })
+            ?? windowScenes.first
     }
 
     private lazy var timeFmt: DateFormatter = {
@@ -491,6 +528,7 @@ final class NativeTranslationSheetBridge: ObservableObject {
     let text: String
     private let onDismiss: () -> Void
     private var didTriggerPresentation = false
+    private var didDismiss = false
 
     init(text: String, onDismiss: @escaping () -> Void) {
         self.text = text
@@ -506,9 +544,9 @@ final class NativeTranslationSheetBridge: ObservableObject {
     }
 
     func handlePresentationChange(_ nextValue: Bool) {
-        if !nextValue {
-            onDismiss()
-        }
+        guard !nextValue, !didDismiss else { return }
+        didDismiss = true
+        onDismiss()
     }
 }
 

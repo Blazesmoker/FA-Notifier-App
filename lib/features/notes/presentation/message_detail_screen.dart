@@ -9,6 +9,7 @@ import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/notes/presentation/note_reply_screen.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
+import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 
 class MessageDetailScreen extends StatefulWidget {
   final String messageLink;
@@ -46,6 +47,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
   bool isClassic = false;
   bool _shouldShowReplySuccess = false;
   bool _didTriggerRefreshOnExit = false;
+  String _selectedMessageText = '';
 
   @override
   void initState() {
@@ -150,6 +152,22 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
       // Generates a new key to force the selectable widget to rebuild without a selection.
       _selectableKey = GlobalKey();
     });
+    _selectedMessageText = '';
+  }
+
+  void _updatePlainMessageSelection(
+    TextSelection selection,
+    SelectionChangedCause? cause,
+  ) {
+    if (!selection.isValid || selection.isCollapsed) {
+      _selectedMessageText = '';
+      return;
+    }
+    final start =
+        selection.start < selection.end ? selection.start : selection.end;
+    final end =
+        selection.start < selection.end ? selection.end : selection.start;
+    _selectedMessageText = messageContent.substring(start, end);
   }
 
   @override
@@ -338,6 +356,16 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                         child: messageContentHtml.isNotEmpty
                             ? SelectionArea(
                                 key: _selectableKey,
+                                onSelectionChanged: (content) {
+                                  _selectedMessageText =
+                                      content?.plainText ?? '';
+                                },
+                                contextMenuBuilder:
+                                    ReadOnlySelectionContextMenu.builder(
+                                  selectedTextProvider: () =>
+                                      _selectedMessageText,
+                                  includeIosTranslate: true,
+                                ),
                                 child: html_pkg.Html(
                                   data: messageContentHtml,
                                   style: {
@@ -378,6 +406,14 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                               )
                             : SelectableLinkify(
                                 key: _selectableKey,
+                                onSelectionChanged:
+                                    _updatePlainMessageSelection,
+                                contextMenuBuilder:
+                                    ReadOnlyEditableTextContextMenu.builder(
+                                  selectedTextProvider: () =>
+                                      _selectedMessageText,
+                                  includeIosTranslate: true,
+                                ),
                                 onOpen: (link) async {
                                   await handleFALink(context, link.url);
                                 },

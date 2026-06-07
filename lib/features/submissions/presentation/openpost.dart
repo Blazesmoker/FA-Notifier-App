@@ -45,6 +45,7 @@ import 'package:FANotifier/features/profile/domain/profile_section.dart';
 import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
 import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
 import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.dart';
+import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/shared/translation/translation_service.dart';
 import 'package:provider/provider.dart';
@@ -251,6 +252,7 @@ class _OpenPostState extends State<OpenPost>
   bool _popAfterBackSwipeAnimation = false;
   bool _isDraggingBackFromEdge = false;
   bool _didTemporarilyRestorePreviousForSwipe = false;
+  int _iosScrollRecoveryKey = IosScrollRecovery.revision;
   double _backDragStartX = 0.0;
   double _backDragDistance = 0.0;
 
@@ -267,6 +269,7 @@ class _OpenPostState extends State<OpenPost>
     if (_webViewScrollOptimizationEnabled) {
       SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
     }
+    IosScrollRecovery.addListener(_handleIosScrollRecovery);
     _scrollController.addListener(_onScroll);
     _commentController.addListener(_onCommentDraftChanged);
     _commentFocusNode.addListener(_syncCommentComposerExpansion);
@@ -305,6 +308,7 @@ class _OpenPostState extends State<OpenPost>
     if (_webViewScrollOptimizationEnabled) {
       SchedulerBinding.instance.removeTimingsCallback(_handleFrameTimings);
     }
+    IosScrollRecovery.removeListener(_handleIosScrollRecovery);
     _backSwipeAnimationController.dispose();
     _backSwipeOffsetNotifier.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -320,6 +324,15 @@ class _OpenPostState extends State<OpenPost>
     _commentDraftHasText.dispose();
     _commentDraftCollapsedLines.dispose();
     super.dispose();
+  }
+
+  void _handleIosScrollRecovery() {
+    if (!mounted) return;
+    final offset = IosScrollRecovery.currentOffset(_scrollController);
+    setState(() {
+      _iosScrollRecoveryKey = IosScrollRecovery.revision;
+    });
+    IosScrollRecovery.restoreOffset(_scrollController, offset);
   }
 
   @override
@@ -631,8 +644,7 @@ class _OpenPostState extends State<OpenPost>
 
       if (!skipSfw) {
         if (hasMatureContentWarning(decodedBody) && !_nsfwAllowed) {
-          debugPrint(
-              'DETECTED: Mature/Adult content warning - showing dialog');
+          debugPrint('DETECTED: Mature/Adult content warning - showing dialog');
 
           final userAgreed = await _showNSFWConfirmationDialog();
           debugPrint('User response: $userAgreed');
@@ -1217,8 +1229,7 @@ class _OpenPostState extends State<OpenPost>
           );
           await _fetchPostDetails();
         } else {
-          debugPrint(
-              'Failed to hide comment. Status code: $statusCode');
+          debugPrint('Failed to hide comment. Status code: $statusCode');
         }
       } catch (e) {
         debugPrint('Error hiding comment: $e');
@@ -1896,8 +1907,7 @@ class _OpenPostState extends State<OpenPost>
           );
           await _fetchPostDetails();
         } else {
-          debugPrint(
-              'Failed to unhide comment. Status code: $statusCode');
+          debugPrint('Failed to unhide comment. Status code: $statusCode');
         }
       } catch (e) {
         debugPrint('Error un-hiding comment: $e');
@@ -2340,9 +2350,8 @@ class _OpenPostState extends State<OpenPost>
     }
 
     if (velocity > 0.0) {
-      final milliseconds = ((remaining / velocity) * 1000)
-          .round()
-          .clamp(90, 240);
+      final milliseconds =
+          ((remaining / velocity) * 1000).round().clamp(90, 240);
       return Duration(milliseconds: milliseconds);
     }
 
@@ -2432,8 +2441,7 @@ class _OpenPostState extends State<OpenPost>
     final screenWidth = MediaQuery.sizeOf(context).width;
     final closeDistanceThreshold =
         max(_edgeBackSwipeMinDistance, screenWidth * 0.25);
-    final shouldClose =
-        _backDragDistance >= closeDistanceThreshold ||
+    final shouldClose = _backDragDistance >= closeDistanceThreshold ||
         details.velocity.pixelsPerSecond.dx >= _edgeBackSwipeMinVelocity;
 
     _isDraggingBackFromEdge = false;
@@ -2563,312 +2571,347 @@ class _OpenPostState extends State<OpenPost>
     final bool showLoadingIndicator = !_detailsLoaded || !_webViewLoaded;
     final double viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
     return ExcludeSemantics(
-        child: AnnotatedRegion<SystemUiOverlayStyle>(
-          value: const SystemUiOverlayStyle(
-            systemNavigationBarColor: Colors.black,
-            systemNavigationBarIconBrightness: Brightness.light,
-            statusBarColor: Color(0xFF111111),
-            statusBarIconBrightness: Brightness.light,
-          ),
-      child: ValueListenableBuilder<bool>(
-        valueListenable: _commentDraftHasText,
-        builder: (context, hasDraft, child) {
-          return PopScope(
-            canPop: !hasDraft,
-            onPopInvokedWithResult: (didPop, result) {
-              if (!didPop) {
-                _closePost();
-              }
-            },
-            child: child!,
-          );
-        },
-        child: TickerMode(
-          enabled: !_isPostWebViewDetached,
-          child: _buildEdgeBackSwipeTransition(
-            child: Scaffold(
-              backgroundColor: Colors.black,
-              appBar: AppBar(
-            backgroundColor: Colors.black,
-            scrolledUnderElevation: 0,
-            title: const Text("Post"),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () {
-                _closePost();
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          systemNavigationBarColor: Colors.black,
+          systemNavigationBarIconBrightness: Brightness.light,
+          statusBarColor: Color(0xFF111111),
+          statusBarIconBrightness: Brightness.light,
+        ),
+        child: ValueListenableBuilder<bool>(
+          valueListenable: _commentDraftHasText,
+          builder: (context, hasDraft, child) {
+            return PopScope(
+              canPop: !hasDraft,
+              onPopInvokedWithResult: (didPop, result) {
+                if (!didPop) {
+                  _closePost();
+                }
               },
-            ),
-            actions: [
-              Builder(
-                builder: (context) {
-                  // Build the menu items.
-                  List<PopupMenuEntry<String>> menuItems = [
-                    const PopupMenuItem<String>(
-                      value: 'report',
-                      child: Text('Report'),
-                    ),
-                    if (currentUsername == null || currentUsername != username)
-                      PopupMenuItem<String>(
-                        value: 'block_unblock',
-                        child:
-                            Text(isBlocked ? 'Unblock author' : 'Block author'),
-                      ),
-                    const PopupMenuItem<String>(
-                      value: 'info',
-                      child: Text('Info'),
-                    ),
-                    const PopupMenuItem<String>(
-                      value: 'copy_link',
-                      child: Text('Copy link'),
-                    ),
-                  ];
-
-                  if (currentUsername != null && currentUsername == username) {
-                    menuItems.add(
-                      const PopupMenuItem<String>(
-                        value: 'edit',
-                        child: Text('Edit'),
-                      ),
-                    );
-                    menuItems.add(
-                      PopupMenuItem<String>(
-                        value: 'delete',
-                        child: Text(
-                          'Delete',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      ),
-                    );
-                  }
-                  menuItems.add(
-                    const PopupMenuItem<String>(
-                      value: 'translate',
-                      child: Text('Translate'),
-                    ),
-                  );
-
-                  return IconButton(
-                    icon: const Icon(Icons.more_vert),
-                    onPressed: () async {
-                      _dismissCommentComposerFocus();
-
-                      final RenderBox button =
-                          context.findRenderObject() as RenderBox;
-                      final RenderBox overlay = Overlay.of(context)
-                          .context
-                          .findRenderObject() as RenderBox;
-                      final RelativeRect position = RelativeRect.fromRect(
-                        Rect.fromPoints(
-                          button.localToGlobal(Offset(0, button.size.height),
-                              ancestor: overlay),
-                          button.localToGlobal(
-                            button.size.bottomRight(
-                                Offset(0, button.size.height + 10)),
-                            ancestor: overlay,
+              child: child!,
+            );
+          },
+          child: TickerMode(
+            enabled: !_isPostWebViewDetached,
+            child: _buildEdgeBackSwipeTransition(
+              child: Scaffold(
+                backgroundColor: Colors.black,
+                appBar: AppBar(
+                  backgroundColor: Colors.black,
+                  scrolledUnderElevation: 0,
+                  title: const Text("Post"),
+                  leading: IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () {
+                      _closePost();
+                    },
+                  ),
+                  actions: [
+                    Builder(
+                      builder: (context) {
+                        // Build the menu items.
+                        List<PopupMenuEntry<String>> menuItems = [
+                          const PopupMenuItem<String>(
+                            value: 'report',
+                            child: Text('Report'),
                           ),
-                        ),
-                        Offset.zero & overlay.size,
-                      );
+                          if (currentUsername == null ||
+                              currentUsername != username)
+                            PopupMenuItem<String>(
+                              value: 'block_unblock',
+                              child: Text(isBlocked
+                                  ? 'Unblock author'
+                                  : 'Block author'),
+                            ),
+                          const PopupMenuItem<String>(
+                            value: 'info',
+                            child: Text('Info'),
+                          ),
+                          const PopupMenuItem<String>(
+                            value: 'copy_link',
+                            child: Text('Copy link'),
+                          ),
+                        ];
 
-                      _suppressNextRouteDetach = true;
-                      final selected = await showMenu<String>(
-                        context: context,
-                        position: position,
-                        items: menuItems,
-                      ).whenComplete(() {
-                        _suppressNextRouteDetach = false;
-                      });
-
-                      switch (selected) {
-                        case 'report':
-                          launchUrlString(
-                              'https://www.furaffinity.net/controls/troubletickets/');
-                          break;
-                        case 'block_unblock':
-                          await _handleBlockUnblock();
-                          break;
-                        case 'info':
-                          _showInfoDialog();
-                          break;
-                        case 'edit':
-                          _showEditDialog();
-                          break;
-                        case 'delete':
-                          _handleDeletePost();
-                          break;
-                        case 'copy_link':
-                          final postUrl =
-                              buildSubmissionViewUrl(widget.uniqueNumber);
-                          await Clipboard.setData(ClipboardData(text: postUrl));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Link copied to clipboard'),
-                              backgroundColor: Colors.green,
+                        if (currentUsername != null &&
+                            currentUsername == username) {
+                          menuItems.add(
+                            const PopupMenuItem<String>(
+                              value: 'edit',
+                              child: Text('Edit'),
                             ),
                           );
-                          break;
-                        case 'translate':
-                          await _openPostTranslation(translatorSettings);
-                          break;
-                        default:
-                          break;
-                      }
-                    },
-                  );
-                },
-              ),
-            ],
-          ),
-          resizeToAvoidBottomInset: false,
-          // Build the main content in a Stack so it can overlay the loading indicator.
-          body: Listener(
-            behavior: HitTestBehavior.opaque,
-            onPointerDown: _handleSelectionClearPointerDown,
-            onPointerMove: _handleSelectionClearPointerMove,
-            onPointerUp: _handleSelectionClearPointerUp,
-            onPointerCancel: _handleSelectionClearPointerCancel,
-            child: Stack(
-              children: [
-                RepaintBoundary(
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: _handlePostScrollNotification,
-                    child: RefreshIndicator(
-                    onRefresh: () async {
-                      await _fetchPostDetails();
-                    },
-                    child: CustomScrollView(
-                      controller: _scrollController,
-                      physics: Platform.isIOS
-                          ? const AlwaysScrollableScrollPhysics(
-                              parent: BouncingScrollPhysics())
-                          : const AlwaysScrollableScrollPhysics(
-                              parent: ClampingScrollPhysics()),
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: [
-                              if (profileImageUrl != null && username != null)
-                                Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                          menuItems.add(
+                            PopupMenuItem<String>(
+                              value: 'delete',
+                              child: Text(
+                                'Delete',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ),
+                          );
+                        }
+                        menuItems.add(
+                          const PopupMenuItem<String>(
+                            value: 'translate',
+                            child: Text('Translate'),
+                          ),
+                        );
+
+                        return IconButton(
+                          icon: const Icon(Icons.more_vert),
+                          onPressed: () async {
+                            _dismissCommentComposerFocus();
+
+                            final RenderBox button =
+                                context.findRenderObject() as RenderBox;
+                            final RenderBox overlay = Overlay.of(context)
+                                .context
+                                .findRenderObject() as RenderBox;
+                            final RelativeRect position = RelativeRect.fromRect(
+                              Rect.fromPoints(
+                                button.localToGlobal(
+                                    Offset(0, button.size.height),
+                                    ancestor: overlay),
+                                button.localToGlobal(
+                                  button.size.bottomRight(
+                                      Offset(0, button.size.height + 10)),
+                                  ancestor: overlay,
+                                ),
+                              ),
+                              Offset.zero & overlay.size,
+                            );
+
+                            _suppressNextRouteDetach = true;
+                            final selected = await showMenu<String>(
+                              context: context,
+                              position: position,
+                              items: menuItems,
+                            ).whenComplete(() {
+                              _suppressNextRouteDetach = false;
+                            });
+
+                            switch (selected) {
+                              case 'report':
+                                launchUrlString(
+                                    'https://www.furaffinity.net/controls/troubletickets/');
+                                break;
+                              case 'block_unblock':
+                                await _handleBlockUnblock();
+                                break;
+                              case 'info':
+                                _showInfoDialog();
+                                break;
+                              case 'edit':
+                                _showEditDialog();
+                                break;
+                              case 'delete':
+                                _handleDeletePost();
+                                break;
+                              case 'copy_link':
+                                final postUrl =
+                                    buildSubmissionViewUrl(widget.uniqueNumber);
+                                await Clipboard.setData(
+                                    ClipboardData(text: postUrl));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Link copied to clipboard'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                                break;
+                              case 'translate':
+                                await _openPostTranslation(translatorSettings);
+                                break;
+                              default:
+                                break;
+                            }
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                resizeToAvoidBottomInset: false,
+                // Build the main content in a Stack so it can overlay the loading indicator.
+                body: Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: _handleSelectionClearPointerDown,
+                  onPointerMove: _handleSelectionClearPointerMove,
+                  onPointerUp: _handleSelectionClearPointerUp,
+                  onPointerCancel: _handleSelectionClearPointerCancel,
+                  child: Stack(
+                    children: [
+                      RepaintBoundary(
+                        child: NotificationListener<ScrollNotification>(
+                          onNotification: _handlePostScrollNotification,
+                          child: RefreshIndicator(
+                            onRefresh: () async {
+                              await _fetchPostDetails();
+                            },
+                            child: CustomScrollView(
+                              key: ValueKey<int>(_iosScrollRecoveryKey),
+                              controller: _scrollController,
+                              physics: Platform.isIOS
+                                  ? const AlwaysScrollableScrollPhysics(
+                                      parent: BouncingScrollPhysics())
+                                  : const AlwaysScrollableScrollPhysics(
+                                      parent: ClampingScrollPhysics()),
+                              slivers: [
+                                SliverToBoxAdapter(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.start,
                                     children: [
-                                      Flexible(
-                                        child: GestureDetector(
-                                          onTap: () {
-                                            Navigator.push(
-                                              context,
-                                              UserProfileScreen.route(
-                                                nickname:
-                                                    linkUsername ?? username!,
-                                              ),
-                                            );
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.only(
-                                                right: 6.0),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Container(
-                                                  width: 36,
-                                                  height: 36,
-                                                  decoration:
-                                                      const BoxDecoration(
-                                                    color: Colors.transparent,
-                                                    borderRadius:
-                                                        BorderRadius.zero,
-                                                  ),
-                                                  child: FaNetworkImage(
-                                                    profileImageUrl!,
-                                                    fit: BoxFit.cover,
-                                                    alignment: Alignment.center,
-
-                                                    // Shows while loading (no infinite spinner risk)
-                                                    loadingBuilder: (context,
-                                                        child,
-                                                        loadingProgress) {
-                                                      if (loadingProgress ==
-                                                          null) {
-                                                        return child;
-                                                      }
-                                                      return const Center(
-                                                        child:
-                                                            CircularProgressIndicator(
-                                                                strokeWidth: 2),
-                                                      );
-                                                    },
-
-                                                    // Handles errors safely
-                                                    errorBuilder: (context,
-                                                        error, stackTrace) {
-                                                      return Image.asset(
-                                                        'assets/images/defaultpic.gif',
-                                                        fit: BoxFit.cover,
-                                                      );
-                                                    },
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 10),
-                                                Flexible(
-                                                  child: FittedBox(
-                                                    fit: BoxFit.scaleDown,
-                                                    alignment:
-                                                        Alignment.centerLeft,
+                                      if (profileImageUrl != null &&
+                                          username != null)
+                                        Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Flexible(
+                                                child: GestureDetector(
+                                                  onTap: () {
+                                                    Navigator.push(
+                                                      context,
+                                                      UserProfileScreen.route(
+                                                        nickname:
+                                                            linkUsername ??
+                                                                username!,
+                                                      ),
+                                                    );
+                                                  },
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            right: 6.0),
                                                     child: Row(
                                                       mainAxisSize:
                                                           MainAxisSize.min,
                                                       children: [
-                                                        ...iconBeforeUrls.map(
-                                                          (url) => Padding(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .only(
-                                                                    right: 4.0),
-                                                            child:
-                                                                FaNetworkImage(
-                                                              url,
-                                                              width: 20,
-                                                              height: 20,
-                                                              errorBuilder: (context,
-                                                                      error,
-                                                                      stackTrace) =>
-                                                                  const Icon(
-                                                                Icons.error,
-                                                                size: 20,
-                                                              ),
-                                                            ),
+                                                        Container(
+                                                          width: 36,
+                                                          height: 36,
+                                                          decoration:
+                                                              const BoxDecoration(
+                                                            color: Colors
+                                                                .transparent,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .zero,
+                                                          ),
+                                                          child: FaNetworkImage(
+                                                            profileImageUrl!,
+                                                            fit: BoxFit.cover,
+                                                            alignment: Alignment
+                                                                .center,
+
+                                                            // Shows while loading (no infinite spinner risk)
+                                                            loadingBuilder:
+                                                                (context, child,
+                                                                    loadingProgress) {
+                                                              if (loadingProgress ==
+                                                                  null) {
+                                                                return child;
+                                                              }
+                                                              return const Center(
+                                                                child: CircularProgressIndicator(
+                                                                    strokeWidth:
+                                                                        2),
+                                                              );
+                                                            },
+
+                                                            // Handles errors safely
+                                                            errorBuilder:
+                                                                (context, error,
+                                                                    stackTrace) {
+                                                              return Image
+                                                                  .asset(
+                                                                'assets/images/defaultpic.gif',
+                                                                fit: BoxFit
+                                                                    .cover,
+                                                              );
+                                                            },
                                                           ),
                                                         ),
-                                                        Text(
-                                                          username!,
-                                                          style:
-                                                              const TextStyle(
-                                                            fontSize: 15,
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                          ),
-                                                        ),
-                                                        ...iconAfterUrls.map(
-                                                          (url) => Padding(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .only(
-                                                                    left: 4.0),
-                                                            child:
-                                                                FaNetworkImage(
-                                                              url,
-                                                              width: 20,
-                                                              height: 20,
-                                                              errorBuilder: (context,
-                                                                      error,
-                                                                      stackTrace) =>
-                                                                  const Icon(
-                                                                Icons.error,
-                                                                size: 20,
-                                                              ),
+                                                        const SizedBox(
+                                                            width: 10),
+                                                        Flexible(
+                                                          child: FittedBox(
+                                                            fit: BoxFit
+                                                                .scaleDown,
+                                                            alignment: Alignment
+                                                                .centerLeft,
+                                                            child: Row(
+                                                              mainAxisSize:
+                                                                  MainAxisSize
+                                                                      .min,
+                                                              children: [
+                                                                ...iconBeforeUrls
+                                                                    .map(
+                                                                  (url) =>
+                                                                      Padding(
+                                                                    padding: const EdgeInsets
+                                                                        .only(
+                                                                        right:
+                                                                            4.0),
+                                                                    child:
+                                                                        FaNetworkImage(
+                                                                      url,
+                                                                      width: 20,
+                                                                      height:
+                                                                          20,
+                                                                      errorBuilder: (context,
+                                                                              error,
+                                                                              stackTrace) =>
+                                                                          const Icon(
+                                                                        Icons
+                                                                            .error,
+                                                                        size:
+                                                                            20,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                Text(
+                                                                  username!,
+                                                                  style:
+                                                                      const TextStyle(
+                                                                    fontSize:
+                                                                        15,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold,
+                                                                  ),
+                                                                ),
+                                                                ...iconAfterUrls
+                                                                    .map(
+                                                                  (url) =>
+                                                                      Padding(
+                                                                    padding: const EdgeInsets
+                                                                        .only(
+                                                                        left:
+                                                                            4.0),
+                                                                    child:
+                                                                        FaNetworkImage(
+                                                                      url,
+                                                                      width: 20,
+                                                                      height:
+                                                                          20,
+                                                                      errorBuilder: (context,
+                                                                              error,
+                                                                              stackTrace) =>
+                                                                          const Icon(
+                                                                        Icons
+                                                                            .error,
+                                                                        size:
+                                                                            20,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ],
                                                             ),
                                                           ),
                                                         ),
@@ -2876,382 +2919,417 @@ class _OpenPostState extends State<OpenPost>
                                                     ),
                                                   ),
                                                 ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      if (!(currentUsername != null &&
-                                          currentUsername == username))
-                                        SizedBox(
-                                          width: 94,
-                                          height: 24,
-                                          child: ElevatedButton(
-                                            onPressed: _watchLinksLoading
-                                                ? null
-                                                : () =>
-                                                    _handleWatchButtonPressed(),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: isWatching
-                                                  ? Colors.black
-                                                  : const Color(0xFFE09321),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(2),
                                               ),
-                                              side: const BorderSide(
-                                                  color: Color(0xFFE09321)),
-                                            ),
-                                            child: FittedBox(
-                                              fit: BoxFit.scaleDown,
-                                              child: _watchLinksLoading
-                                                  ? const SizedBox(
-                                                      width: 14,
-                                                      height: 14,
-                                                      child:
-                                                          CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                        color: Colors.white,
+                                              if (!(currentUsername != null &&
+                                                  currentUsername == username))
+                                                SizedBox(
+                                                  width: 94,
+                                                  height: 24,
+                                                  child: ElevatedButton(
+                                                    onPressed: _watchLinksLoading
+                                                        ? null
+                                                        : () =>
+                                                            _handleWatchButtonPressed(),
+                                                    style: ElevatedButton
+                                                        .styleFrom(
+                                                      backgroundColor:
+                                                          isWatching
+                                                              ? Colors.black
+                                                              : const Color(
+                                                                  0xFFE09321),
+                                                      shape:
+                                                          RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(2),
                                                       ),
-                                                    )
-                                                  : Text(
-                                                      isWatching
-                                                          ? "-Watch"
-                                                          : "+Watch",
-                                                      style: TextStyle(
-                                                        color: isWatching
-                                                            ? Colors.white
-                                                            : Colors.white,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
+                                                      side: const BorderSide(
+                                                          color: Color(
+                                                              0xFFE09321)),
                                                     ),
-                                            ),
+                                                    child: FittedBox(
+                                                      fit: BoxFit.scaleDown,
+                                                      child: _watchLinksLoading
+                                                          ? const SizedBox(
+                                                              width: 14,
+                                                              height: 14,
+                                                              child:
+                                                                  CircularProgressIndicator(
+                                                                strokeWidth: 2,
+                                                                color: Colors
+                                                                    .white,
+                                                              ),
+                                                            )
+                                                          : Text(
+                                                              isWatching
+                                                                  ? "-Watch"
+                                                                  : "+Watch",
+                                                              style: TextStyle(
+                                                                color: isWatching
+                                                                    ? Colors
+                                                                        .white
+                                                                    : Colors
+                                                                        .white,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                              ),
+                                                            ),
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
                                           ),
                                         ),
-                                    ],
-                                  ),
-                                ),
-                              if (fullViewImageUrl != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 0.0),
-                                  child: GestureDetector(
-                                    onLongPressStart: (details) async {
-                                      final tapPosition =
-                                          details.globalPosition;
-                                      _suppressNextRouteDetach = true;
-                                      final selected = await showMenu<String>(
-                                        context: context,
-                                        position: RelativeRect.fromLTRB(
-                                          tapPosition.dx,
-                                          tapPosition.dy,
-                                          tapPosition.dx,
-                                          tapPosition.dy,
-                                        ),
-                                        items: [
-                                          const PopupMenuItem(
-                                            value: 'download',
-                                            child: Text('Download'),
-                                          ),
-                                          const PopupMenuItem(
-                                            value: 'share',
-                                            child: Text('Share image'),
-                                          ),
-                                        ],
-                                      ).whenComplete(() {
-                                        _suppressNextRouteDetach = false;
-                                      });
-                                      if (selected == 'download') {
-                                        debugPrint("$fullViewImageUrl image2");
-                                        await _downloadImage(
-                                            context, fullViewImageUrl!);
-                                      } else if (selected == 'share') {
-                                        await _shareImage(
-                                            context, fullViewImageUrl!);
-                                      }
-                                    },
-                                    onTap: () {
-                                      _openImageInspectScreen(
-                                          fullViewImageUrl!);
-                                    },
-                                    child: ClipRect(
-                                      child: LayoutBuilder(
-                                        builder: (context, constraints) {
-                                          final aspectRatio =
-                                              (imageWidth != null &&
-                                                      imageHeight != null)
-                                                  ? imageWidth! / imageHeight!
-                                                  : 16 / 9;
-                                          return AspectRatio(
-                                            aspectRatio: aspectRatio,
-                                            child: InteractiveViewer(
-                                              minScale: 1.0,
-                                              maxScale: 10.0,
-                                              child: FaNetworkImage(
-                                                fullViewImageUrl!,
-                                                fit: BoxFit.contain,
-                                                loadingBuilder: (
-                                                  BuildContext context,
-                                                  Widget child,
-                                                  ImageChunkEvent?
-                                                      loadingProgress,
-                                                ) {
-                                                  if (loadingProgress == null) {
-                                                    return child;
-                                                  }
-                                                  return Container(
-                                                    color: Colors.black,
-                                                    child: Center(
-                                                      child:
-                                                          CircularProgressIndicator(
-                                                        value: loadingProgress
-                                                                    .expectedTotalBytes !=
-                                                                null
-                                                            ? loadingProgress
-                                                                    .cumulativeBytesLoaded /
-                                                                (loadingProgress
-                                                                        .expectedTotalBytes ??
-                                                                    1)
-                                                            : null,
-                                                        valueColor:
-                                                            const AlwaysStoppedAnimation<
-                                                                Color>(
-                                                          Color(0xFFE09321),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                                errorBuilder: (context, error,
-                                                    stackTrace) {
-                                                  return Container(
-                                                    color: Colors.black,
-                                                    child: const Center(
-                                                      child: Icon(
-                                                        Icons.error_outline,
-                                                        color: Colors.red,
-                                                        size: 40,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              const Divider(
-                                height: 5.0,
-                                color: Color(0xFF111111),
-                                thickness: 5.0,
-                              ),
-                              const Divider(
-                                height: 3.0,
-                                color: Colors.black,
-                                thickness: 3.0,
-                              ),
-                              const Divider(
-                                height: 3.0,
-                                color: Color(0xFF111111),
-                                thickness: 3.0,
-                              ),
-                              if (submissionTitle != null ||
-                                  publicationTime != null)
-                                SelectionArea(
-                                  key: _titleSelectionKey,
-                                  onSelectionChanged: _updateTitleSelectedText,
-                                  contextMenuBuilder:
-                                      ReadOnlySelectionContextMenu.builder(
-                                    selectedTextProvider: () =>
-                                        _titleSelectedText,
-                                    includeIosTranslate: true,
-                                  ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (submissionTitle != null)
+                                      if (fullViewImageUrl != null)
                                         Padding(
                                           padding: const EdgeInsets.only(
-                                              bottom: 4.0, top: 4.0),
-                                          child: Text(
-                                            submissionTitle!,
-                                            style: const TextStyle(
-                                              fontSize: 23,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                      if (publicationTime != null)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                              bottom: 8.0),
+                                              bottom: 0.0),
                                           child: GestureDetector(
-                                            onTap: () {
-                                              setState(() {
-                                                _showFullPublicationDate =
-                                                    !_showFullPublicationDate;
+                                            onLongPressStart: (details) async {
+                                              final tapPosition =
+                                                  details.globalPosition;
+                                              _suppressNextRouteDetach = true;
+                                              final selected =
+                                                  await showMenu<String>(
+                                                context: context,
+                                                position: RelativeRect.fromLTRB(
+                                                  tapPosition.dx,
+                                                  tapPosition.dy,
+                                                  tapPosition.dx,
+                                                  tapPosition.dy,
+                                                ),
+                                                items: [
+                                                  const PopupMenuItem(
+                                                    value: 'download',
+                                                    child: Text('Download'),
+                                                  ),
+                                                  const PopupMenuItem(
+                                                    value: 'share',
+                                                    child: Text('Share image'),
+                                                  ),
+                                                ],
+                                              ).whenComplete(() {
+                                                _suppressNextRouteDetach =
+                                                    false;
                                               });
+                                              if (selected == 'download') {
+                                                debugPrint(
+                                                    "$fullViewImageUrl image2");
+                                                await _downloadImage(
+                                                    context, fullViewImageUrl!);
+                                              } else if (selected == 'share') {
+                                                await _shareImage(
+                                                    context, fullViewImageUrl!);
+                                              }
                                             },
-                                            child: Text(
-                                              '${getFormattedPublicationTime()}',
-                                              style: const TextStyle(
-                                                  fontSize: 13,
-                                                  color: Colors.grey),
+                                            onTap: () {
+                                              _openImageInspectScreen(
+                                                  fullViewImageUrl!);
+                                            },
+                                            child: ClipRect(
+                                              child: LayoutBuilder(
+                                                builder:
+                                                    (context, constraints) {
+                                                  final aspectRatio =
+                                                      (imageWidth != null &&
+                                                              imageHeight !=
+                                                                  null)
+                                                          ? imageWidth! /
+                                                              imageHeight!
+                                                          : 16 / 9;
+                                                  return AspectRatio(
+                                                    aspectRatio: aspectRatio,
+                                                    child: InteractiveViewer(
+                                                      minScale: 1.0,
+                                                      maxScale: 10.0,
+                                                      child: FaNetworkImage(
+                                                        fullViewImageUrl!,
+                                                        fit: BoxFit.contain,
+                                                        loadingBuilder: (
+                                                          BuildContext context,
+                                                          Widget child,
+                                                          ImageChunkEvent?
+                                                              loadingProgress,
+                                                        ) {
+                                                          if (loadingProgress ==
+                                                              null) {
+                                                            return child;
+                                                          }
+                                                          return Container(
+                                                            color: Colors.black,
+                                                            child: Center(
+                                                              child:
+                                                                  CircularProgressIndicator(
+                                                                value: loadingProgress
+                                                                            .expectedTotalBytes !=
+                                                                        null
+                                                                    ? loadingProgress
+                                                                            .cumulativeBytesLoaded /
+                                                                        (loadingProgress.expectedTotalBytes ??
+                                                                            1)
+                                                                    : null,
+                                                                valueColor:
+                                                                    const AlwaysStoppedAnimation<
+                                                                        Color>(
+                                                                  Color(
+                                                                      0xFFE09321),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          );
+                                                        },
+                                                        errorBuilder: (context,
+                                                            error, stackTrace) {
+                                                          return Container(
+                                                            color: Colors.black,
+                                                            child: const Center(
+                                                              child: Icon(
+                                                                Icons
+                                                                    .error_outline,
+                                                                color:
+                                                                    Colors.red,
+                                                                size: 40,
+                                                              ),
+                                                            ),
+                                                          );
+                                                        },
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
                                             ),
                                           ),
                                         ),
-                                    ],
-                                  ),
-                                ),
-                              const Divider(
-                                height: 5.0,
-                                color: Color(0xFF111111),
-                                thickness: 5.0,
-                              ),
-                              const Divider(
-                                height: 2.0,
-                                color: Colors.black,
-                                thickness: 2.0,
-                              ),
-                              const Divider(
-                                height: 3.0,
-                                color: Color(0xFF111111),
-                                thickness: 3.0,
-                              ),
-                              if (submissionDescription != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      right: 16.0, left: 16.0, top: 16.0),
-                                  child: GestureDetector(
-                                    onLongPressStart:
-                                        (LongPressStartDetails details) async {
-                                      final RenderBox overlay =
-                                          Overlay.of(context)
-                                              .context
-                                              .findRenderObject() as RenderBox;
-                                      final RelativeRect position =
-                                          RelativeRect.fromRect(
-                                        details.globalPosition &
-                                            const Size(40, 40),
-                                        Offset.zero & overlay.size,
-                                      );
-                                      _suppressNextRouteDetach = true;
-                                      final selected = await showMenu<String>(
-                                        context: context,
-                                        position: position,
-                                        items: const [
-                                          PopupMenuItem<String>(
-                                            value: 'copy',
-                                            child: Text('Copy'),
-                                          ),
-                                          PopupMenuItem<String>(
-                                            value: 'select',
-                                            child: Text('Select Text'),
-                                          ),
-                                        ],
-                                      ).whenComplete(() {
-                                        _suppressNextRouteDetach = false;
-                                      });
-                                      if (selected == 'copy') {
-                                        String? plainText =
-                                            await _submissionWebViewKey
-                                                .currentState
-                                                ?.getPlainText();
-                                        if (plainText != null) {
-                                          await Clipboard.setData(
-                                              ClipboardData(text: plainText));
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            const SnackBar(
-                                                content: Text(
-                                                    'Text copied to clipboard')),
-                                          );
-                                        }
-                                      } else if (selected == 'select') {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                SubmissionDescriptionWebViewScreen(
-                                              submissionId: widget.uniqueNumber,
-                                              initialHtml:
-                                                  submissionDescription,
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                    },
-                                    child: SubmissionDescriptionWebView(
-                                      key: _submissionWebViewKey,
-                                      submissionId: widget.uniqueNumber,
-                                      initialHtml: submissionDescription,
-                                      enableTextSelection: false,
-                                      forceHybridComposition: false,
-                                      routeDetached: _isPostWebViewDetached,
-                                      enableScrollPerformancePause:
-                                          _webViewScrollOptimizationEnabled &&
-                                              _enableScrollWebViewPause,
-                                      onHeightChanged: (double height) {
-                                        if (!_webViewLoaded) {
-                                          Future.delayed(
-                                              const Duration(milliseconds: 25),
-                                              () {
-                                            if (mounted) {
-                                              setState(() {
-                                                _webViewLoaded = true;
-                                              });
-                                            }
-                                          });
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                ),
-                              const Divider(
-                                height: 2.0,
-                                color: Color(0xFF111111),
-                                thickness: 2.0,
-                              ),
-                              const Divider(
-                                height: 3.0,
-                                color: Colors.black,
-                                thickness: 3.0,
-                              ),
-                              const Divider(
-                                height: 4.0,
-                                color: Color(0xFF111111),
-                                thickness: 4.0,
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                    right: 0.0,
-                                    left: 0.0,
-                                    top: 11.0,
-                                    bottom: 0.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    _buildPublicationAndViewsRow(),
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                          bottom: 0.0, top: 11.0),
-                                      child: const Divider(
+                                      const Divider(
+                                        height: 5.0,
+                                        color: Color(0xFF111111),
+                                        thickness: 5.0,
+                                      ),
+                                      const Divider(
+                                        height: 3.0,
+                                        color: Colors.black,
+                                        thickness: 3.0,
+                                      ),
+                                      const Divider(
                                         height: 3.0,
                                         color: Color(0xFF111111),
                                         thickness: 3.0,
                                       ),
-                                    ),
-                                    SizedBox(
-                                      height: 50,
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceEvenly,
-                                        children: [
-                                          /*
+                                      if (submissionTitle != null ||
+                                          publicationTime != null)
+                                        SelectionArea(
+                                          key: _titleSelectionKey,
+                                          onSelectionChanged:
+                                              _updateTitleSelectedText,
+                                          contextMenuBuilder:
+                                              ReadOnlySelectionContextMenu
+                                                  .builder(
+                                            selectedTextProvider: () =>
+                                                _titleSelectedText,
+                                            includeIosTranslate: true,
+                                          ),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (submissionTitle != null)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          bottom: 4.0,
+                                                          top: 4.0),
+                                                  child: Text(
+                                                    submissionTitle!,
+                                                    style: const TextStyle(
+                                                      fontSize: 23,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                ),
+                                              if (publicationTime != null)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          bottom: 8.0),
+                                                  child: GestureDetector(
+                                                    onTap: () {
+                                                      setState(() {
+                                                        _showFullPublicationDate =
+                                                            !_showFullPublicationDate;
+                                                      });
+                                                    },
+                                                    child: Text(
+                                                      '${getFormattedPublicationTime()}',
+                                                      style: const TextStyle(
+                                                          fontSize: 13,
+                                                          color: Colors.grey),
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      const Divider(
+                                        height: 5.0,
+                                        color: Color(0xFF111111),
+                                        thickness: 5.0,
+                                      ),
+                                      const Divider(
+                                        height: 2.0,
+                                        color: Colors.black,
+                                        thickness: 2.0,
+                                      ),
+                                      const Divider(
+                                        height: 3.0,
+                                        color: Color(0xFF111111),
+                                        thickness: 3.0,
+                                      ),
+                                      if (submissionDescription != null)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                              right: 16.0,
+                                              left: 16.0,
+                                              top: 16.0),
+                                          child: GestureDetector(
+                                            onLongPressStart:
+                                                (LongPressStartDetails
+                                                    details) async {
+                                              final RenderBox overlay =
+                                                  Overlay.of(context)
+                                                          .context
+                                                          .findRenderObject()
+                                                      as RenderBox;
+                                              final RelativeRect position =
+                                                  RelativeRect.fromRect(
+                                                details.globalPosition &
+                                                    const Size(40, 40),
+                                                Offset.zero & overlay.size,
+                                              );
+                                              _suppressNextRouteDetach = true;
+                                              final selected =
+                                                  await showMenu<String>(
+                                                context: context,
+                                                position: position,
+                                                items: const [
+                                                  PopupMenuItem<String>(
+                                                    value: 'copy',
+                                                    child: Text('Copy'),
+                                                  ),
+                                                  PopupMenuItem<String>(
+                                                    value: 'select',
+                                                    child: Text('Select Text'),
+                                                  ),
+                                                ],
+                                              ).whenComplete(() {
+                                                _suppressNextRouteDetach =
+                                                    false;
+                                              });
+                                              if (selected == 'copy') {
+                                                String? plainText =
+                                                    await _submissionWebViewKey
+                                                        .currentState
+                                                        ?.getPlainText();
+                                                if (plainText != null) {
+                                                  await Clipboard.setData(
+                                                      ClipboardData(
+                                                          text: plainText));
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    const SnackBar(
+                                                        content: Text(
+                                                            'Text copied to clipboard')),
+                                                  );
+                                                }
+                                              } else if (selected == 'select') {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        SubmissionDescriptionWebViewScreen(
+                                                      submissionId:
+                                                          widget.uniqueNumber,
+                                                      initialHtml:
+                                                          submissionDescription,
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                            child: SubmissionDescriptionWebView(
+                                              key: _submissionWebViewKey,
+                                              submissionId: widget.uniqueNumber,
+                                              initialHtml:
+                                                  submissionDescription,
+                                              enableTextSelection: false,
+                                              forceHybridComposition: false,
+                                              routeDetached:
+                                                  _isPostWebViewDetached,
+                                              enableScrollPerformancePause:
+                                                  _webViewScrollOptimizationEnabled &&
+                                                      _enableScrollWebViewPause,
+                                              onHeightChanged: (double height) {
+                                                if (!_webViewLoaded) {
+                                                  Future.delayed(
+                                                      const Duration(
+                                                          milliseconds: 25),
+                                                      () {
+                                                    if (mounted) {
+                                                      setState(() {
+                                                        _webViewLoaded = true;
+                                                      });
+                                                    }
+                                                  });
+                                                }
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      const Divider(
+                                        height: 2.0,
+                                        color: Color(0xFF111111),
+                                        thickness: 2.0,
+                                      ),
+                                      const Divider(
+                                        height: 3.0,
+                                        color: Colors.black,
+                                        thickness: 3.0,
+                                      ),
+                                      const Divider(
+                                        height: 4.0,
+                                        color: Color(0xFF111111),
+                                        thickness: 4.0,
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                            right: 0.0,
+                                            left: 0.0,
+                                            top: 11.0,
+                                            bottom: 0.0),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          children: [
+                                            _buildPublicationAndViewsRow(),
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 0.0, top: 11.0),
+                                              child: const Divider(
+                                                height: 3.0,
+                                                color: Color(0xFF111111),
+                                                thickness: 3.0,
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              height: 50,
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .spaceEvenly,
+                                                children: [
+                                                  /*
                               Expanded(
                                 child: IconButton(
                                   icon: const Icon(
@@ -3280,443 +3358,483 @@ class _OpenPostState extends State<OpenPost>
                               ),
 
                                */
-                                          Expanded(
-                                            child: IconButton(
-                                              icon: const Icon(
-                                                Icons.mail_outline,
-                                                size: 26,
-                                                color: Colors.grey,
-                                              ),
-                                              onPressed: () {
-                                                if (linkUsername != null) {
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) =>
-                                                          NewMessageScreen(
-                                                        recipient:
-                                                            linkUsername!,
+                                                  Expanded(
+                                                    child: IconButton(
+                                                      icon: const Icon(
+                                                        Icons.mail_outline,
+                                                        size: 26,
+                                                        color: Colors.grey,
                                                       ),
-                                                    ),
-                                                  );
-                                                } else {
-                                                  ScaffoldMessenger.of(context)
-                                                      .showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                          'Recipient username is unavailable.'),
-                                                      backgroundColor:
-                                                          Colors.red,
-                                                    ),
-                                                  );
-                                                }
-                                              },
-                                              splashRadius: 24,
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: IconButton(
-                                              icon: const Icon(
-                                                Icons.photo_library_outlined,
-                                                size: 26,
-                                                color: Colors.grey,
-                                              ),
-                                              onPressed: () {
-                                                if (linkUsername != null) {
-                                                  Navigator.push(
-                                                    context,
-                                                    UserProfileScreen.route(
-                                                      nickname: linkUsername!,
-                                                      initialSection:
-                                                          ProfileSection
-                                                              .Gallery,
-                                                    ),
-                                                  );
-                                                } else {
-                                                  ScaffoldMessenger.of(context)
-                                                      .showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                          'Username is unavailable.'),
-                                                      backgroundColor:
-                                                          Colors.red,
-                                                    ),
-                                                  );
-                                                }
-                                              },
-                                              splashRadius: 24,
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: IconButton(
-                                              icon: LikeButton(
-                                                isLiked: isFavorited,
-                                                size: 26,
-                                                circleColor: const CircleColor(
-                                                  start: Colors.red,
-                                                  end: Colors.redAccent,
-                                                ),
-                                                bubblesColor:
-                                                    const BubblesColor(
-                                                  dotPrimaryColor: Colors.red,
-                                                  dotSecondaryColor:
-                                                      Colors.redAccent,
-                                                ),
-                                                likeBuilder: (bool isLiked) {
-                                                  return Icon(
-                                                    isLiked
-                                                        ? Icons.favorite
-                                                        : Icons.favorite_border,
-                                                    color: isLiked
-                                                        ? Colors.red
-                                                        : Colors.grey,
-                                                    size: 26,
-                                                  );
-                                                },
-                                                animationDuration:
-                                                    const Duration(
-                                                        milliseconds: 500),
-                                                onTap: _toggleFavorite,
-                                              ),
-                                              onPressed: () {
-                                                _toggleFavorite(isFavorited);
-                                              },
-                                              splashRadius: 24,
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: IconButton(
-                                              icon: Icon(
-                                                Icons.numbers,
-                                                size: 26,
-                                                color: _showTagsSection
-                                                    ? const Color(0xFFE09321)
-                                                    : Colors.grey,
-                                              ),
-                                              onPressed: () {
-                                                setState(() {
-                                                  _showTagsSection =
-                                                      !_showTagsSection;
-                                                });
-                                              },
-                                              splashRadius: 24,
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: IconButton(
-                                              icon: const Icon(
-                                                Icons.share_outlined,
-                                                size: 26,
-                                                color: Colors.grey,
-                                              ),
-                                              onPressed: _sharePost,
-                                              splashRadius: 24,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    AnimatedSize(
-                                      duration:
-                                          const Duration(milliseconds: 250),
-                                      curve: Curves.easeInOut,
-                                      child: _showTagsSection
-                                          ? _buildTagsPanel()
-                                          : const SizedBox.shrink(),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Divider(
-                                height: 3.0,
-                                color: Color(0xFF111111),
-                                thickness: 3.0,
-                              ),
-                              const Divider(
-                                height: 4.0,
-                                color: Colors.black,
-                                thickness: 4.0,
-                              ),
-                            ],
-                          ),
-                        ),
-                        ..._buildCommentSlivers(translatorSettings),
-                        SliverToBoxAdapter(
-                          child: ListenableBuilder(
-                            listenable: Listenable.merge([
-                              _isCommentComposerExpanded,
-                              _commentDraftCollapsedLines,
-                            ]),
-                            builder: (context, _) {
-                              final isExpanded =
-                                  _isCommentComposerExpanded.value;
-                              final collapsedPreviewLines =
-                                  _commentDraftCollapsedLines.value;
-                              final composerSpacerHeight = isExpanded
-                                  ? 198.0
-                                  : (72.0 +
-                                      ((collapsedPreviewLines - 1) * 24.0));
-                              return SizedBox(height: composerSpacerHeight);
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    ),
-                  ),
-                ),
-                Positioned.fill(
-                  child: ValueListenableBuilder<bool>(
-                    valueListenable: _isCommentComposerExpanded,
-                    builder: (context, isExpanded, _) {
-                      if (!isExpanded) {
-                        return const SizedBox.shrink();
-                      }
-                      return GestureDetector(
-                        onTap: () => FocusScope.of(context).unfocus(),
-                        child: Container(
-                          color: Colors.black.withValues(alpha: 0.24),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                if (showLoadingIndicator)
-                  Container(
-                    color: const Color(0xFF000000),
-                    child: const Center(
-                      child: PulsatingLoadingIndicator(
-                        size: 78.0,
-                        assetPath: 'assets/icons/fathemed.png',
-                      ),
-                    ),
-                  ),
-                _buildEdgeBackSwipeOverlay(),
-              ],
-            ),
-          ),
-          bottomNavigationBar: showLoadingIndicator
-              ? null
-              : RepaintBoundary(
-                  child: Container(
-                    color: Colors.black,
-                    child: SafeArea(
-                      bottom: true,
-                      child: ListenableBuilder(
-                        listenable: Listenable.merge([
-                          _keyboardInset,
-                          _isCommentComposerExpanded,
-                        ]),
-                        builder: (context, _) {
-                          final keyboardInset = _keyboardInset.value;
-                          return Padding(
-                            padding: EdgeInsets.only(
-                              left: 8,
-                              right: 8,
-                              bottom: keyboardInset > 0
-                                  ? (keyboardInset - viewPaddingBottom + 8)
-                                      .clamp(0.0, double.infinity)
-                                  : 0.0,
-                              top: 8,
-                            ),
-                            child: ListenableBuilder(
-                              listenable: Listenable.merge([
-                                _isCommentComposerExpanded,
-                                _commentDraftCollapsedLines,
-                                _commentDraftHasText,
-                                _showScrollToTopNotifier,
-                                _isSendingInlineComment,
-                              ]),
-                              builder: (context, _) {
-                                final isExpanded =
-                                    _isCommentComposerExpanded.value;
-                                final collapsedLines =
-                                    _commentDraftCollapsedLines.value;
-                                final hasText = _commentDraftHasText.value;
-                                final isSending = _isSendingInlineComment.value;
-                                final canSend = !isSending && hasText;
-                                final minLines =
-                                    isExpanded ? 6 : collapsedLines;
-                                final maxLines =
-                                    isExpanded ? 6 : collapsedLines;
-                                final isCollapsedSingleLine =
-                                    !isExpanded && collapsedLines == 1;
-
-                                const compactSingleLineVerticalPadding = 8.0;
-                                final topPadding = isExpanded
-                                    ? 12.0
-                                    : (isCollapsedSingleLine
-                                        ? compactSingleLineVerticalPadding
-                                        : 8.0);
-                                final bottomPadding = isExpanded
-                                    ? 8.0
-                                    : (isCollapsedSingleLine
-                                        ? compactSingleLineVerticalPadding
-                                        : 8.0);
-
-                                return Row(
-                                  crossAxisAlignment: isCollapsedSingleLine
-                                      ? CrossAxisAlignment.center
-                                      : CrossAxisAlignment.end,
-                                  children: [
-                                    ClipRect(
-                                      child: AnimatedSize(
-                                        duration:
-                                            const Duration(milliseconds: 210),
-                                        curve: Curves.easeInOut,
-                                        alignment: Alignment.centerLeft,
-                                        child: ValueListenableBuilder<bool>(
-                                          valueListenable:
-                                              _showScrollToTopNotifier,
-                                          builder: (context, show, _) {
-                                            return Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                if (show && !isExpanded)
-                                                  SizedBox(
-                                                    width: 36,
-                                                    height: 36,
-                                                    child: FloatingActionButton
-                                                        .small(
-                                                      heroTag: 'scroll_top',
-                                                      backgroundColor:
-                                                          const Color(
-                                                              0xFFE09321),
-                                                      elevation: 0,
                                                       onPressed: () {
-                                                        _scrollController
-                                                            .animateTo(
-                                                          0,
-                                                          duration:
-                                                              const Duration(
-                                                                  milliseconds:
-                                                                      300),
-                                                          curve: Curves.easeOut,
-                                                        );
+                                                        if (linkUsername !=
+                                                            null) {
+                                                          Navigator.push(
+                                                            context,
+                                                            MaterialPageRoute(
+                                                              builder: (context) =>
+                                                                  NewMessageScreen(
+                                                                recipient:
+                                                                    linkUsername!,
+                                                              ),
+                                                            ),
+                                                          );
+                                                        } else {
+                                                          ScaffoldMessenger.of(
+                                                                  context)
+                                                              .showSnackBar(
+                                                            const SnackBar(
+                                                              content: Text(
+                                                                  'Recipient username is unavailable.'),
+                                                              backgroundColor:
+                                                                  Colors.red,
+                                                            ),
+                                                          );
+                                                        }
                                                       },
-                                                      child: const Icon(
-                                                        Icons.arrow_upward,
-                                                        size: 18,
-                                                      ),
+                                                      splashRadius: 24,
                                                     ),
                                                   ),
-                                                if (show && !isExpanded)
-                                                  const SizedBox(width: 8),
-                                              ],
-                                            );
-                                          },
+                                                  Expanded(
+                                                    child: IconButton(
+                                                      icon: const Icon(
+                                                        Icons
+                                                            .photo_library_outlined,
+                                                        size: 26,
+                                                        color: Colors.grey,
+                                                      ),
+                                                      onPressed: () {
+                                                        if (linkUsername !=
+                                                            null) {
+                                                          Navigator.push(
+                                                            context,
+                                                            UserProfileScreen
+                                                                .route(
+                                                              nickname:
+                                                                  linkUsername!,
+                                                              initialSection:
+                                                                  ProfileSection
+                                                                      .Gallery,
+                                                            ),
+                                                          );
+                                                        } else {
+                                                          ScaffoldMessenger.of(
+                                                                  context)
+                                                              .showSnackBar(
+                                                            const SnackBar(
+                                                              content: Text(
+                                                                  'Username is unavailable.'),
+                                                              backgroundColor:
+                                                                  Colors.red,
+                                                            ),
+                                                          );
+                                                        }
+                                                      },
+                                                      splashRadius: 24,
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    child: IconButton(
+                                                      icon: LikeButton(
+                                                        isLiked: isFavorited,
+                                                        size: 26,
+                                                        circleColor:
+                                                            const CircleColor(
+                                                          start: Colors.red,
+                                                          end: Colors.redAccent,
+                                                        ),
+                                                        bubblesColor:
+                                                            const BubblesColor(
+                                                          dotPrimaryColor:
+                                                              Colors.red,
+                                                          dotSecondaryColor:
+                                                              Colors.redAccent,
+                                                        ),
+                                                        likeBuilder:
+                                                            (bool isLiked) {
+                                                          return Icon(
+                                                            isLiked
+                                                                ? Icons.favorite
+                                                                : Icons
+                                                                    .favorite_border,
+                                                            color: isLiked
+                                                                ? Colors.red
+                                                                : Colors.grey,
+                                                            size: 26,
+                                                          );
+                                                        },
+                                                        animationDuration:
+                                                            const Duration(
+                                                                milliseconds:
+                                                                    500),
+                                                        onTap: _toggleFavorite,
+                                                      ),
+                                                      onPressed: () {
+                                                        _toggleFavorite(
+                                                            isFavorited);
+                                                      },
+                                                      splashRadius: 24,
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    child: IconButton(
+                                                      icon: Icon(
+                                                        Icons.numbers,
+                                                        size: 26,
+                                                        color: _showTagsSection
+                                                            ? const Color(
+                                                                0xFFE09321)
+                                                            : Colors.grey,
+                                                      ),
+                                                      onPressed: () {
+                                                        setState(() {
+                                                          _showTagsSection =
+                                                              !_showTagsSection;
+                                                        });
+                                                      },
+                                                      splashRadius: 24,
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    child: IconButton(
+                                                      icon: const Icon(
+                                                        Icons.share_outlined,
+                                                        size: 26,
+                                                        color: Colors.grey,
+                                                      ),
+                                                      onPressed: _sharePost,
+                                                      splashRadius: 24,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            AnimatedSize(
+                                              duration: const Duration(
+                                                  milliseconds: 250),
+                                              curve: Curves.easeInOut,
+                                              child: _showTagsSection
+                                                  ? _buildTagsPanel()
+                                                  : const SizedBox.shrink(),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    ),
-                                    Expanded(
-                                      child: Stack(
+                                      const Divider(
+                                        height: 3.0,
+                                        color: Color(0xFF111111),
+                                        thickness: 3.0,
+                                      ),
+                                      const Divider(
+                                        height: 4.0,
+                                        color: Colors.black,
+                                        thickness: 4.0,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ..._buildCommentSlivers(translatorSettings),
+                                SliverToBoxAdapter(
+                                  child: ListenableBuilder(
+                                    listenable: Listenable.merge([
+                                      _isCommentComposerExpanded,
+                                      _commentDraftCollapsedLines,
+                                    ]),
+                                    builder: (context, _) {
+                                      final isExpanded =
+                                          _isCommentComposerExpanded.value;
+                                      final collapsedPreviewLines =
+                                          _commentDraftCollapsedLines.value;
+                                      final composerSpacerHeight = isExpanded
+                                          ? 198.0
+                                          : (72.0 +
+                                              ((collapsedPreviewLines - 1) *
+                                                  24.0));
+                                      return SizedBox(
+                                          height: composerSpacerHeight);
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: ValueListenableBuilder<bool>(
+                          valueListenable: _isCommentComposerExpanded,
+                          builder: (context, isExpanded, _) {
+                            if (!isExpanded) {
+                              return const SizedBox.shrink();
+                            }
+                            return GestureDetector(
+                              onTap: () => FocusScope.of(context).unfocus(),
+                              child: Container(
+                                color: Colors.black.withValues(alpha: 0.24),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      if (showLoadingIndicator)
+                        Container(
+                          color: const Color(0xFF000000),
+                          child: const Center(
+                            child: PulsatingLoadingIndicator(
+                              size: 78.0,
+                              assetPath: 'assets/icons/fathemed.png',
+                            ),
+                          ),
+                        ),
+                      _buildEdgeBackSwipeOverlay(),
+                    ],
+                  ),
+                ),
+                bottomNavigationBar: showLoadingIndicator
+                    ? null
+                    : RepaintBoundary(
+                        child: Container(
+                          color: Colors.black,
+                          child: SafeArea(
+                            bottom: true,
+                            child: ListenableBuilder(
+                              listenable: Listenable.merge([
+                                _keyboardInset,
+                                _isCommentComposerExpanded,
+                              ]),
+                              builder: (context, _) {
+                                final keyboardInset = _keyboardInset.value;
+                                return Padding(
+                                  padding: EdgeInsets.only(
+                                    left: 8,
+                                    right: 8,
+                                    bottom: keyboardInset > 0
+                                        ? (keyboardInset -
+                                                viewPaddingBottom +
+                                                8)
+                                            .clamp(0.0, double.infinity)
+                                        : 0.0,
+                                    top: 8,
+                                  ),
+                                  child: ListenableBuilder(
+                                    listenable: Listenable.merge([
+                                      _isCommentComposerExpanded,
+                                      _commentDraftCollapsedLines,
+                                      _commentDraftHasText,
+                                      _showScrollToTopNotifier,
+                                      _isSendingInlineComment,
+                                    ]),
+                                    builder: (context, _) {
+                                      final isExpanded =
+                                          _isCommentComposerExpanded.value;
+                                      final collapsedLines =
+                                          _commentDraftCollapsedLines.value;
+                                      final hasText =
+                                          _commentDraftHasText.value;
+                                      final isSending =
+                                          _isSendingInlineComment.value;
+                                      final canSend = !isSending && hasText;
+                                      final minLines =
+                                          isExpanded ? 6 : collapsedLines;
+                                      final maxLines =
+                                          isExpanded ? 6 : collapsedLines;
+                                      final isCollapsedSingleLine =
+                                          !isExpanded && collapsedLines == 1;
+
+                                      const compactSingleLineVerticalPadding =
+                                          8.0;
+                                      final topPadding = isExpanded
+                                          ? 12.0
+                                          : (isCollapsedSingleLine
+                                              ? compactSingleLineVerticalPadding
+                                              : 8.0);
+                                      final bottomPadding = isExpanded
+                                          ? 8.0
+                                          : (isCollapsedSingleLine
+                                              ? compactSingleLineVerticalPadding
+                                              : 8.0);
+
+                                      return Row(
+                                        crossAxisAlignment:
+                                            isCollapsedSingleLine
+                                                ? CrossAxisAlignment.center
+                                                : CrossAxisAlignment.end,
                                         children: [
-                                          Listener(
-                                            behavior:
-                                                HitTestBehavior.translucent,
-                                            onPointerDown:
-                                                _handleCommentComposerPointerDown,
-                                            child: TextField(
-                                              controller: _commentController,
-                                              focusNode: _commentFocusNode,
-                                              style: const TextStyle(
-                                                  color: Colors.white),
-                                              keyboardType:
-                                                  TextInputType.multiline,
-                                              textInputAction:
-                                                  TextInputAction.newline,
-                                              minLines: minLines,
-                                              maxLines: maxLines,
-                                              scrollPadding:
-                                                  const EdgeInsets.only(
-                                                      bottom: 8),
-                                              decoration: InputDecoration(
-                                                hintText: 'Add a comment...',
-                                                hintStyle: const TextStyle(
-                                                    color: Colors.white54),
-                                                contentPadding:
-                                                    EdgeInsets.fromLTRB(
-                                                  12,
-                                                  topPadding,
-                                                  56,
-                                                  bottomPadding,
-                                                ),
-                                                filled: true,
-                                                isDense: isCollapsedSingleLine,
-                                                fillColor:
-                                                    const Color(0xFF151515),
-                                                border: OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(10),
-                                                  borderSide: BorderSide.none,
-                                                ),
-                                              ),
-                                              contextMenuBuilder:
-                                                  BBCodeContextMenu.builder(
-                                                      _commentController),
-                                            ),
-                                          ),
-                                          if (isCollapsedSingleLine)
-                                            Positioned.fill(
-                                              child: Align(
-                                                alignment:
-                                                    Alignment.centerRight,
-                                                child: Padding(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                          right: 4),
-                                                  child:
-                                                      _buildComposerSendButton(
-                                                    canSend: canSend,
-                                                    isSending: isSending,
-                                                    compact: true,
-                                                  ),
-                                                ),
-                                              ),
-                                            )
-                                          else
-                                            Positioned(
-                                              top: 4,
-                                              right: 4,
-                                              child: _buildComposerSendButton(
-                                                canSend: canSend,
-                                                isSending: isSending,
-                                              ),
-                                            ),
-                                          if (isExpanded &&
-                                              hasText &&
-                                              !isSending)
-                                            Positioned(
-                                              right: 4,
-                                              bottom: 4,
-                                              child: IconButton(
-                                                icon: const Icon(
-                                                  Icons.clear,
-                                                  color: Colors.white54,
-                                                ),
-                                                onPressed: () {
-                                                  _commentController.clear();
+                                          ClipRect(
+                                            child: AnimatedSize(
+                                              duration: const Duration(
+                                                  milliseconds: 210),
+                                              curve: Curves.easeInOut,
+                                              alignment: Alignment.centerLeft,
+                                              child:
+                                                  ValueListenableBuilder<bool>(
+                                                valueListenable:
+                                                    _showScrollToTopNotifier,
+                                                builder: (context, show, _) {
+                                                  return Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      if (show && !isExpanded)
+                                                        SizedBox(
+                                                          width: 36,
+                                                          height: 36,
+                                                          child:
+                                                              FloatingActionButton
+                                                                  .small(
+                                                            heroTag:
+                                                                'scroll_top',
+                                                            backgroundColor:
+                                                                const Color(
+                                                                    0xFFE09321),
+                                                            elevation: 0,
+                                                            onPressed: () {
+                                                              _scrollController
+                                                                  .animateTo(
+                                                                0,
+                                                                duration:
+                                                                    const Duration(
+                                                                        milliseconds:
+                                                                            300),
+                                                                curve: Curves
+                                                                    .easeOut,
+                                                              );
+                                                            },
+                                                            child: const Icon(
+                                                              Icons
+                                                                  .arrow_upward,
+                                                              size: 18,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      if (show && !isExpanded)
+                                                        const SizedBox(
+                                                            width: 8),
+                                                    ],
+                                                  );
                                                 },
                                               ),
                                             ),
+                                          ),
+                                          Expanded(
+                                            child: Stack(
+                                              children: [
+                                                Listener(
+                                                  behavior: HitTestBehavior
+                                                      .translucent,
+                                                  onPointerDown:
+                                                      _handleCommentComposerPointerDown,
+                                                  child: TextField(
+                                                    controller:
+                                                        _commentController,
+                                                    focusNode:
+                                                        _commentFocusNode,
+                                                    style: const TextStyle(
+                                                        color: Colors.white),
+                                                    keyboardType:
+                                                        TextInputType.multiline,
+                                                    textInputAction:
+                                                        TextInputAction.newline,
+                                                    minLines: minLines,
+                                                    maxLines: maxLines,
+                                                    scrollPadding:
+                                                        const EdgeInsets.only(
+                                                            bottom: 8),
+                                                    decoration: InputDecoration(
+                                                      hintText:
+                                                          'Add a comment...',
+                                                      hintStyle:
+                                                          const TextStyle(
+                                                              color: Colors
+                                                                  .white54),
+                                                      contentPadding:
+                                                          EdgeInsets.fromLTRB(
+                                                        12,
+                                                        topPadding,
+                                                        56,
+                                                        bottomPadding,
+                                                      ),
+                                                      filled: true,
+                                                      isDense:
+                                                          isCollapsedSingleLine,
+                                                      fillColor: const Color(
+                                                          0xFF151515),
+                                                      border:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(10),
+                                                        borderSide:
+                                                            BorderSide.none,
+                                                      ),
+                                                    ),
+                                                    contextMenuBuilder:
+                                                        BBCodeContextMenu.builder(
+                                                            _commentController),
+                                                  ),
+                                                ),
+                                                if (isCollapsedSingleLine)
+                                                  Positioned.fill(
+                                                    child: Align(
+                                                      alignment:
+                                                          Alignment.centerRight,
+                                                      child: Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(right: 4),
+                                                        child:
+                                                            _buildComposerSendButton(
+                                                          canSend: canSend,
+                                                          isSending: isSending,
+                                                          compact: true,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  )
+                                                else
+                                                  Positioned(
+                                                    top: 4,
+                                                    right: 4,
+                                                    child:
+                                                        _buildComposerSendButton(
+                                                      canSend: canSend,
+                                                      isSending: isSending,
+                                                    ),
+                                                  ),
+                                                if (isExpanded &&
+                                                    hasText &&
+                                                    !isSending)
+                                                  Positioned(
+                                                    right: 4,
+                                                    bottom: 4,
+                                                    child: IconButton(
+                                                      icon: const Icon(
+                                                        Icons.clear,
+                                                        color: Colors.white54,
+                                                      ),
+                                                      onPressed: () {
+                                                        _commentController
+                                                            .clear();
+                                                      },
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
                                         ],
-                                      ),
-                                    ),
-                                  ],
+                                      );
+                                    },
+                                  ),
                                 );
                               },
                             ),
-                          );
-                        },
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
+              ),
             ),
           ),
         ),
       ),
-        ),
     );
   }
 
@@ -3931,7 +4049,8 @@ class _OpenPostState extends State<OpenPost>
                 showTranslateButton: _shouldOfferCommentTranslation(
                   comment,
                   translatorSettings,
-                  onLanguageDetectionUpdated: _handleTranslationLanguageDetected,
+                  onLanguageDetectionUpdated:
+                      _handleTranslationLanguageDetected,
                 ),
                 onTranslateToggle: () => _openCommentTranslation(
                   comment,

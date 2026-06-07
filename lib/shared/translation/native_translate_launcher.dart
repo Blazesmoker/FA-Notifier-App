@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 class NativeTranslateLauncher {
@@ -13,6 +14,7 @@ class NativeTranslateLauncher {
   static Future<void> open(
     String text, {
     required String targetLanguageCode,
+    IosScrollRecoveryScope? recoveryScope,
   }) async {
     final normalizedText = text.trim();
     if (normalizedText.isEmpty) return;
@@ -39,12 +41,17 @@ class NativeTranslateLauncher {
 
     if (Platform.isIOS) {
       try {
-        final shownNativeSheet = await _translationChannel.invokeMethod<bool>(
-              'translation.showNativeSheet',
-              {'text': normalizedText},
-            ) ??
-            false;
+        final nativeSheetResult = await _translationChannel.invokeMethod(
+          'translation.showNativeSheet',
+          {'text': normalizedText},
+        );
+        final shownNativeSheet = _nativeSheetWasShown(nativeSheetResult);
         if (shownNativeSheet) {
+          if (_nativeSheetRequiresScrollRecovery(nativeSheetResult)) {
+            IosScrollRecovery.notifyTranslationSheetDismissed(
+              scope: recoveryScope,
+            );
+          }
           return;
         }
         debugPrint(
@@ -57,9 +64,8 @@ class NativeTranslateLauncher {
       }
     }
 
-    final targetLanguage = targetLanguageCode.trim().isNotEmpty
-        ? targetLanguageCode.trim()
-        : 'en';
+    final targetLanguage =
+        targetLanguageCode.trim().isNotEmpty ? targetLanguageCode.trim() : 'en';
     final encodedText = Uri.encodeQueryComponent(normalizedText);
     final appUrls = Platform.isAndroid
         ? const <String>[]
@@ -84,5 +90,18 @@ class NativeTranslateLauncher {
       webUrl,
       mode: LaunchMode.externalApplication,
     );
+  }
+
+  static bool _nativeSheetWasShown(Object? result) {
+    if (result is bool) return result;
+    if (result is Map) return result['shown'] == true;
+    return false;
+  }
+
+  static bool _nativeSheetRequiresScrollRecovery(Object? result) {
+    if (result is Map) {
+      return result['requiresScrollRecovery'] != false;
+    }
+    return true;
   }
 }

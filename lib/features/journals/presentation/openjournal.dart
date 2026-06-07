@@ -22,6 +22,7 @@ import 'package:FANotifier/features/journals/data/openjournal_api_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/shared/translation/translation_service.dart';
 import 'package:FANotifier/main.dart';
@@ -124,6 +125,7 @@ class _OpenJournalState extends State<OpenJournal>
   final Map<Object, String> _commentSelectedTexts = <Object, String>{};
   String _titleSelectedText = '';
   String _journalBodySelectedText = '';
+  int _iosScrollRecoveryKey = IosScrollRecovery.revision;
   int? _selectionClearPointerId;
   Offset? _selectionClearPointerDownPosition;
   DateTime? _selectionClearPointerDownTime;
@@ -143,6 +145,7 @@ class _OpenJournalState extends State<OpenJournal>
     _api = OpenJournalApiService();
     _journalActionService = const JournalActionService();
     _journalCommentService = JournalCommentService();
+    IosScrollRecovery.addListener(_handleIosScrollRecovery);
     // Only fetch the journal itself on open.
     // Extra "helper" fetches (user-page links, delete key) are done *on-demand*
     // when the user taps the relevant action, to avoid spammy requests.
@@ -163,6 +166,7 @@ class _OpenJournalState extends State<OpenJournal>
   void dispose() {
     routeObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
+    IosScrollRecovery.removeListener(_handleIosScrollRecovery);
     _commentController.removeListener(_onCommentDraftChanged);
     _commentController.dispose();
     _commentFocusNode.dispose();
@@ -175,6 +179,15 @@ class _OpenJournalState extends State<OpenJournal>
     _commentDraftHasText.dispose();
     _commentDraftCollapsedLines.dispose();
     super.dispose();
+  }
+
+  void _handleIosScrollRecovery() {
+    if (!mounted) return;
+    final offset = IosScrollRecovery.currentOffset(_scrollController);
+    setState(() {
+      _iosScrollRecoveryKey = IosScrollRecovery.revision;
+    });
+    IosScrollRecovery.restoreOffset(_scrollController, offset);
   }
 
   @override
@@ -664,8 +677,7 @@ class _OpenJournalState extends State<OpenJournal>
               backgroundColor: Colors.green);
           await _fetchPostDetailsNew();
         } else {
-          debugPrint(
-              'Failed to hide comment. Status code: $statusCode');
+          debugPrint('Failed to hide comment. Status code: $statusCode');
         }
       } catch (e) {
         debugPrint('Error hiding comment: $e');
@@ -703,8 +715,7 @@ class _OpenJournalState extends State<OpenJournal>
               backgroundColor: Colors.green);
           await _fetchPostDetailsNew();
         } else {
-          debugPrint(
-              'Failed to unhide comment. Status code: $statusCode');
+          debugPrint('Failed to unhide comment. Status code: $statusCode');
         }
       } catch (e) {
         debugPrint('Error un-hiding comment: $e');
@@ -1009,6 +1020,7 @@ class _OpenJournalState extends State<OpenJournal>
                       child: RefreshIndicator(
                         onRefresh: _fetchPostDetailsNew,
                         child: CustomScrollView(
+                          key: ValueKey<int>(_iosScrollRecoveryKey),
                           controller: _scrollController,
                           physics: const AlwaysScrollableScrollPhysics(),
                           slivers: [
@@ -1156,28 +1168,28 @@ class _OpenJournalState extends State<OpenJournal>
                                             thickness: 1.5,
                                             height: 24),
                                         Theme(
-                                            data: Theme.of(context).copyWith(
-                                              textSelectionTheme:
-                                                  TextSelectionThemeData(
-                                                selectionColor:
-                                                    const Color(0xFFE09321)
-                                                        .withValues(alpha: 0.4),
-                                                selectionHandleColor:
-                                                    const Color(0xFFE09321),
-                                              ),
+                                          data: Theme.of(context).copyWith(
+                                            textSelectionTheme:
+                                                TextSelectionThemeData(
+                                              selectionColor:
+                                                  const Color(0xFFE09321)
+                                                      .withValues(alpha: 0.4),
+                                              selectionHandleColor:
+                                                  const Color(0xFFE09321),
                                             ),
-                                            child: SelectionArea(
-                                              key: _journalBodySelectionKey,
-                                              onSelectionChanged:
-                                                  _updateJournalBodySelectedText,
-                                              contextMenuBuilder:
-                                                  ReadOnlySelectionContextMenu
-                                                      .builder(
-                                                selectedTextProvider: () =>
-                                                    _journalBodySelectedText,
-                                                includeIosTranslate: true,
-                                              ),
-                                              child: html_pkg.Html(
+                                          ),
+                                          child: SelectionArea(
+                                            key: _journalBodySelectionKey,
+                                            onSelectionChanged:
+                                                _updateJournalBodySelectedText,
+                                            contextMenuBuilder:
+                                                ReadOnlySelectionContextMenu
+                                                    .builder(
+                                              selectedTextProvider: () =>
+                                                  _journalBodySelectedText,
+                                              includeIosTranslate: true,
+                                            ),
+                                            child: html_pkg.Html(
                                               data: submissionDescription ?? '',
                                               style: {
                                                 "body": html_pkg.Style(
@@ -1486,8 +1498,8 @@ class _OpenJournalState extends State<OpenJournal>
                                                   },
                                                 ),
                                               ],
-                                              ),
                                             ),
+                                          ),
                                         )
                                       ],
                                     ),
@@ -1824,8 +1836,7 @@ class _OpenJournalState extends State<OpenJournal>
                                     child: Stack(
                                       children: [
                                         Listener(
-                                          behavior:
-                                              HitTestBehavior.translucent,
+                                          behavior: HitTestBehavior.translucent,
                                           onPointerDown:
                                               _handleCommentComposerPointerDown,
                                           child: TextField(

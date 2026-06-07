@@ -32,6 +32,7 @@ class _UserProfileJournalsSectionState extends State<UserProfileJournalsSection>
   Widget build(BuildContext context) {
     super.build(context);
     return CustomScrollView(
+      key: const PageStorageKey<String>('profile-journals-scroll'),
       physics: Platform.isIOS ? const ClampingScrollPhysics() : null,
       slivers: [
         SliverOverlapInjector(

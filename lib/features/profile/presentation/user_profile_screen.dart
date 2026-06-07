@@ -40,6 +40,7 @@ import 'package:FANotifier/features/profile/presentation/user_profile_home_secti
 import 'package:FANotifier/features/profile/presentation/user_profile_journals_section.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_scraps_section.dart';
 import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/shared/translation/translation_service.dart';
 import 'package:provider/provider.dart';
@@ -115,11 +116,13 @@ class _ProfileTabScrollScope extends StatefulWidget {
     super.key,
     required this.tabController,
     required this.tabIndex,
+    required this.recoveryKey,
     required this.child,
   });
 
   final TabController tabController;
   final int tabIndex;
+  final int recoveryKey;
   final Widget child;
 
   @override
@@ -175,7 +178,9 @@ class _ProfileTabScrollScopeState extends State<_ProfileTabScrollScope> {
     return PrimaryScrollController(
       controller: scrollController,
       child: KeyedSubtree(
-        key: ValueKey<ScrollController>(scrollController),
+        key: ValueKey<(ScrollController, int)>(
+          (scrollController, widget.recoveryKey),
+        ),
         child: widget.child,
       ),
     );
@@ -240,6 +245,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     if (_webViewScrollOptimizationEnabled) {
       SchedulerBinding.instance.removeTimingsCallback(_handleFrameTimings);
     }
+    IosScrollRecovery.removeListener(_handleIosScrollRecovery);
     _backSwipeAnimationController.dispose();
     _tabController.dispose();
     _scrollController.removeListener(_onProfileScroll);
@@ -249,6 +255,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
     DetachableWebViewRouteRegistry.unregister(this);
     routeObserver.unsubscribe(this);
     super.dispose();
+  }
+
+  void _handleIosScrollRecovery() {
+    if (!mounted) return;
+    final offset = IosScrollRecovery.currentOffset(_scrollController);
+    setState(() {
+      _iosScrollRecoveryKey = IosScrollRecovery.revision;
+    });
+    IosScrollRecovery.restoreOffset(_scrollController, offset);
   }
 
   final GlobalKey<ProfileJournalsState> _journalsKey =
@@ -484,6 +499,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   bool _enableScrollWebViewPause = false;
   int _frameTimingCount = 0;
   int _frameTimingTotalMicros = 0;
+  int _iosScrollRecoveryKey = IosScrollRecovery.revision;
   bool _shouldShowProfileAvatarBorder = false;
   String? _profileAvatarTransparencyCheckedUrl;
   int _profileAvatarTransparencyCheckGeneration = 0;
@@ -502,6 +518,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     if (_webViewScrollOptimizationEnabled) {
       SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
     }
+    IosScrollRecovery.addListener(_handleIosScrollRecovery);
 
     if (widget.initialFolderUrl != null &&
         widget.initialFolderUrl!.isNotEmpty) {
@@ -2013,6 +2030,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                           child: NotificationListener<ScrollNotification>(
                             onNotification: _handleProfileScrollNotification,
                             child: NestedScrollView(
+                              key: ValueKey<int>(_iosScrollRecoveryKey),
                               controller: _scrollController,
                               physics: Platform.isIOS
                                   ? const ClampingScrollPhysics()
@@ -2611,6 +2629,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                     key: ValueKey(section),
                                     tabController: _tabController,
                                     tabIndex: section.index,
+                                    recoveryKey: _iosScrollRecoveryKey,
                                     child: _buildLazySection(section),
                                   );
                                 }).toList(),
@@ -2960,11 +2979,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   /// Builds the Scraps section content.
   Widget _buildScrapsSection() {
-    return UserProfileScrapsSection(sanitizedUsername: sanitizedUsername);
+    return UserProfileScrapsSection(
+      sanitizedUsername: sanitizedUsername,
+    );
   }
 
   Widget _buildFavoritesSection() {
-    return UserProfileFavoritesSection(sanitizedUsername: sanitizedUsername);
+    return UserProfileFavoritesSection(
+      sanitizedUsername: sanitizedUsername,
+    );
   }
 
   void _refreshJournalsList() {

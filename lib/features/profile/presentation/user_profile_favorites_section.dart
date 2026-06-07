@@ -13,19 +13,24 @@ class UserProfileFavoritesSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
+      key: const PageStorageKey<String>('profile-favorites-scroll'),
       slivers: [
         SliverOverlapInjector(
           handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
         ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   'Favs',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
                 ),
               ],
             ),
@@ -36,4 +41,3 @@ class UserProfileFavoritesSection extends StatelessWidget {
     );
   }
 }
-

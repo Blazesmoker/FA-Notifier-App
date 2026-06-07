@@ -6,6 +6,7 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:FANotifier/features/notes/data/note_message_service.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
+import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 
 /// Dialog content for previewing a note/message.
 class PreviewDialogContent extends StatefulWidget {
@@ -42,6 +43,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
   String senderUsername = '';
   int pageNumber = 1;
   bool _isClassic = false;
+  String _selectedMessageText = '';
 
   @override
   void initState() {
@@ -97,6 +99,21 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
         isLoading = false;
       });
     }
+  }
+
+  void _updatePlainMessageSelection(
+    TextSelection selection,
+    SelectionChangedCause? cause,
+  ) {
+    if (!selection.isValid || selection.isCollapsed) {
+      _selectedMessageText = '';
+      return;
+    }
+    final start =
+        selection.start < selection.end ? selection.start : selection.end;
+    final end =
+        selection.start < selection.end ? selection.end : selection.start;
+    _selectedMessageText = messageContent.substring(start, end);
   }
 
   @override
@@ -238,6 +255,13 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
                     ),
                   ),
                   child: SelectionArea(
+                    onSelectionChanged: (content) {
+                      _selectedMessageText = content?.plainText ?? '';
+                    },
+                    contextMenuBuilder: ReadOnlySelectionContextMenu.builder(
+                      selectedTextProvider: () => _selectedMessageText,
+                      includeIosTranslate: true,
+                    ),
                     child: html_pkg.Html(
                       data: messageContentHtml,
                       style: {
@@ -279,6 +303,11 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
                 )
               else
                 SelectableLinkify(
+                  onSelectionChanged: _updatePlainMessageSelection,
+                  contextMenuBuilder: ReadOnlyEditableTextContextMenu.builder(
+                    selectedTextProvider: () => _selectedMessageText,
+                    includeIosTranslate: true,
+                  ),
                   onOpen: (link) async {
                     await handleFALink(context, link.url);
                   },

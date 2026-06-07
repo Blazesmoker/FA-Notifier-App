@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:io' show Platform;
+import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -209,6 +210,7 @@ class ReadOnlySelectionContextMenu {
   static Widget Function(BuildContext, SelectableRegionState) builder({
     required String Function() selectedTextProvider,
     bool includeIosTranslate = false,
+    IosScrollRecoveryScope? recoveryScope,
   }) {
     return (BuildContext context, SelectableRegionState selectableRegionState) {
       if (!Platform.isIOS || !includeIosTranslate) {
@@ -241,6 +243,7 @@ class ReadOnlySelectionContextMenu {
               await NativeTranslateLauncher.open(
                 text,
                 targetLanguageCode: localeCode,
+                recoveryScope: recoveryScope,
               );
             },
           ),
@@ -269,5 +272,57 @@ class ReadOnlySelectionContextMenu {
       default:
         return 'Translate';
     }
+  }
+}
+
+class ReadOnlyEditableTextContextMenu {
+  static Widget Function(BuildContext, EditableTextState) builder({
+    required String Function() selectedTextProvider,
+    bool includeIosTranslate = false,
+  }) {
+    return (BuildContext context, EditableTextState editableTextState) {
+      if (!Platform.isIOS || !includeIosTranslate) {
+        return AdaptiveTextSelectionToolbar.editableText(
+          editableTextState: editableTextState,
+        );
+      }
+
+      final items = List<ContextMenuButtonItem>.from(
+        editableTextState.contextMenuButtonItems,
+      );
+      final selectedText = selectedTextProvider().trim();
+
+      if (selectedText.isNotEmpty) {
+        items.add(
+          ContextMenuButtonItem(
+            label: ReadOnlySelectionContextMenu._translateLabelForContext(
+              context,
+            ),
+            onPressed: () async {
+              final systemLocales =
+                  WidgetsBinding.instance.platformDispatcher.locales;
+              final localeCode =
+                  Localizations.maybeLocaleOf(context)?.languageCode ??
+                      (systemLocales.isNotEmpty
+                          ? systemLocales.first.languageCode
+                          : null) ??
+                      'en';
+              editableTextState.hideToolbar();
+              final text = selectedTextProvider().trim();
+              if (text.isEmpty) return;
+              await NativeTranslateLauncher.open(
+                text,
+                targetLanguageCode: localeCode,
+              );
+            },
+          ),
+        );
+      }
+
+      return AdaptiveTextSelectionToolbar.buttonItems(
+        anchors: editableTextState.contextMenuAnchors,
+        buttonItems: items,
+      );
+    };
   }
 }
