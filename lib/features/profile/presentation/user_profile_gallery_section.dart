@@ -32,6 +32,9 @@ class UserProfileGallerySection extends StatelessWidget {
 
     return CustomScrollView(
       slivers: [
+        SliverOverlapInjector(
+          handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+        ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -83,5 +86,4 @@ class UserProfileGallerySection extends StatelessWidget {
     );
   }
 }
-
 

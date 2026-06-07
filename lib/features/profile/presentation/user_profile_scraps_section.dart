@@ -14,6 +14,9 @@ class UserProfileScrapsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomScrollView(
       slivers: [
+        SliverOverlapInjector(
+          handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+        ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -33,5 +36,4 @@ class UserProfileScrapsSection extends StatelessWidget {
     );
   }
 }
-
 

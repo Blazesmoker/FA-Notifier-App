@@ -99,10 +99,16 @@ class UserProfileHomeSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
+    return CustomScrollView(
       physics: Platform.isIOS ? const ClampingScrollPhysics() : null,
-      padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 8.0),
-      children: [
+      slivers: [
+        SliverOverlapInjector(
+          handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 8.0),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
         if (hasRealUserProfile &&
             userDescription != null &&
             userDescription!.trim().isNotEmpty)
@@ -219,6 +225,9 @@ class UserProfileHomeSection extends StatelessWidget {
           onToggleShoutSelection: onToggleShoutSelection,
         ),
         const SizedBox(height: 8.0),
+            ]),
+          ),
+        ),
       ],
     );
   }

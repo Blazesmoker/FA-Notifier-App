@@ -4,6 +4,7 @@ import 'package:FANotifier/features/profile/presentation/shout_widget.dart';
 import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/shared/translation/translation_service.dart';
+import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
@@ -53,7 +54,8 @@ class UserProfileShoutsSection extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(8.0),
         ),
-        padding: const EdgeInsets.only(top: 16.0, bottom: 64.0, right: 0.0, left: 0.0),
+        padding: const EdgeInsets.only(
+            top: 16.0, bottom: 64.0, right: 0.0, left: 0.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -174,7 +176,8 @@ class UserProfileShoutsSection extends StatelessWidget {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: shouts.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 8.0),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 8.0),
                     itemBuilder: (context, index) {
                       final shout = shouts[index];
                       return GestureDetector(
@@ -185,145 +188,169 @@ class UserProfileShoutsSection extends StatelessWidget {
                         onLongPress: isSelectionMode
                             ? () => onToggleShoutSelection(shout)
                             : () async {
-                          final plainText = plainTextFromShoutHtml(shout.text);
-                          final translatorSettings =
-                              context.read<TranslatorSettingsProvider>();
-                          final translationService = TranslationService.instance;
-                          var dialogOpen = true;
-                          StateSetter? updateDialog;
-                          final action = await showDialog<String>(
-                            context: context,
-                            builder: (context) {
-                              return StatefulBuilder(
-                                builder: (context, setDialogState) {
-                                  updateDialog = setDialogState;
-                                  final showTranslateButton =
-                                      translationService.shouldOfferTranslation(
-                                    plainText,
-                                    translatorSettings,
-                                    onLanguageDetectionUpdated: () {
-                                      if (dialogOpen) {
-                                        updateDialog?.call(() {});
-                                      }
-                                    },
-                                  );
-                                  final maxHeight =
-                                      MediaQuery.of(context).size.height * 0.6;
-                                  return AlertDialog(
-                                    scrollable: true,
-                                    titlePadding:
-                                        const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                                    title: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(4.0),
-                                          child: FaNetworkImage(
-                                            shout.avatarUrl,
-                                            width: 40,
-                                            height: 40,
-                                            fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (context, error, stackTrace) {
-                                              return Image.asset(
-                                                'assets/images/defaultpic.gif',
-                                                width: 40,
-                                                height: 40,
-                                                fit: BoxFit.cover,
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Column(
+                                final plainText =
+                                    plainTextFromShoutHtml(shout.text);
+                                final translatorSettings =
+                                    context.read<TranslatorSettingsProvider>();
+                                final translationService =
+                                    TranslationService.instance;
+                                var dialogOpen = true;
+                                var selectedShoutText = '';
+                                StateSetter? updateDialog;
+                                final action = await showDialog<String>(
+                                  context: context,
+                                  builder: (context) {
+                                    return StatefulBuilder(
+                                      builder: (context, setDialogState) {
+                                        updateDialog = setDialogState;
+                                        final showTranslateButton =
+                                            translationService
+                                                .shouldOfferTranslation(
+                                          plainText,
+                                          translatorSettings,
+                                          onLanguageDetectionUpdated: () {
+                                            if (dialogOpen) {
+                                              updateDialog?.call(() {});
+                                            }
+                                          },
+                                        );
+                                        final maxHeight =
+                                            MediaQuery.of(context).size.height *
+                                                0.6;
+                                        return AlertDialog(
+                                          scrollable: true,
+                                          titlePadding:
+                                              const EdgeInsets.fromLTRB(
+                                                  24, 24, 24, 0),
+                                          title: Row(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                shout.username,
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.bold,
+                                              ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(4.0),
+                                                child: FaNetworkImage(
+                                                  shout.avatarUrl,
+                                                  width: 40,
+                                                  height: 40,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (context, error,
+                                                      stackTrace) {
+                                                    return Image.asset(
+                                                      'assets/images/defaultpic.gif',
+                                                      width: 40,
+                                                      height: 40,
+                                                      fit: BoxFit.cover,
+                                                    );
+                                                  },
                                                 ),
                                               ),
-                                              Text(
-                                                '${shout.symbol} ${shout.profileNickname}',
-                                                style: const TextStyle(
-                                                  color: Color(0xFFE09321),
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.normal,
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      shout.username,
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 16,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      '${shout.symbol} ${shout.profileNickname}',
+                                                      style: const TextStyle(
+                                                        color:
+                                                            Color(0xFFE09321),
+                                                        fontSize: 14,
+                                                        fontWeight:
+                                                            FontWeight.normal,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
                                             ],
                                           ),
-                                        ),
-                                      ],
+                                          content: ConstrainedBox(
+                                            constraints: BoxConstraints(
+                                                maxHeight: maxHeight),
+                                            child: SingleChildScrollView(
+                                              child: SelectionArea(
+                                                onSelectionChanged: (content) {
+                                                  selectedShoutText =
+                                                      content?.plainText ?? '';
+                                                },
+                                                contextMenuBuilder:
+                                                    ReadOnlySelectionContextMenu
+                                                        .builder(
+                                                  selectedTextProvider: () =>
+                                                      selectedShoutText,
+                                                  includeIosTranslate: true,
+                                                ),
+                                                child: Text(
+                                                  plainText,
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          actions: [
+                                            if (showTranslateButton)
+                                              IconButton(
+                                                tooltip: 'Translate',
+                                                icon: const Icon(
+                                                  Icons.g_translate,
+                                                  color: Colors.white,
+                                                ),
+                                                onPressed: () =>
+                                                    NativeTranslateLauncher
+                                                        .open(
+                                                  plainText,
+                                                  targetLanguageCode:
+                                                      translatorSettings
+                                                          .targetLanguageCode,
+                                                ),
+                                              ),
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(
+                                                  context, 'copy'),
+                                              child: const Text('Copy text'),
+                                            ),
+                                            if (isOwnProfile)
+                                              TextButton(
+                                                onPressed: () => Navigator.pop(
+                                                    context, 'delete'),
+                                                style: TextButton.styleFrom(
+                                                  foregroundColor: Colors.red,
+                                                ),
+                                                child: const Text("Delete"),
+                                              ),
+                                          ],
+                                        );
+                                      },
+                                    );
+                                  },
+                                );
+                                dialogOpen = false;
+                                if (action == 'copy') {
+                                  await Clipboard.setData(
+                                      ClipboardData(text: plainText));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Shout text copied'),
+                                      backgroundColor: Colors.green,
                                     ),
-                                    content: ConstrainedBox(
-                                      constraints:
-                                          BoxConstraints(maxHeight: maxHeight),
-                                      child: SingleChildScrollView(
-                                        child: SelectableText(
-                                          plainText,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    actions: [
-                                      if (showTranslateButton)
-                                        IconButton(
-                                          tooltip: 'Translate',
-                                          icon: const Icon(
-                                            Icons.g_translate,
-                                            color: Colors.white,
-                                          ),
-                                          onPressed: () =>
-                                              NativeTranslateLauncher.open(
-                                            plainText,
-                                            targetLanguageCode:
-                                                translatorSettings
-                                                    .targetLanguageCode,
-                                          ),
-                                        ),
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(context, 'copy'),
-                                        child: const Text('Copy text'),
-                                      ),
-                                      if (isOwnProfile)
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context, 'delete'),
-                                          style: TextButton.styleFrom(
-                                            foregroundColor: Colors.red,
-                                          ),
-                                          child: const Text("Delete"),
-                                        ),
-                                    ],
                                   );
-                                },
-                              );
-                            },
-                          );
-                          dialogOpen = false;
-                          if (action == 'copy') {
-                            await Clipboard.setData(ClipboardData(text: plainText));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Shout text copied'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          } else if (action == 'delete') {
-                            await onConfirmDeleteShout(index, shout);
-                          }
-                        },
+                                } else if (action == 'delete') {
+                                  await onConfirmDeleteShout(index, shout);
+                                }
+                              },
                         child: AbsorbPointer(
                           absorbing: isSelectionMode,
                           child: ShoutWidget(
@@ -345,14 +372,16 @@ class UserProfileShoutsSection extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 16.0),
                       child: isLoadingMoreShouts
                           ? const CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE09321)),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFFE09321)),
                             )
                           : ElevatedButton(
                               onPressed: onLoadMoreShouts,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFE09321),
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 24.0, vertical: 12.0),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8.0),
                                 ),

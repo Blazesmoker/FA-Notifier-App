@@ -32,16 +32,24 @@ class _UserProfileJournalsSectionState extends State<UserProfileJournalsSection>
   Widget build(BuildContext context) {
     super.build(context);
     return CustomScrollView(
+      physics: Platform.isIOS ? const ClampingScrollPhysics() : null,
       slivers: [
+        SliverOverlapInjector(
+          handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+        ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   'Journals',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
                 ),
                 if (widget.isOwnProfile)
                   ElevatedButton(
@@ -68,4 +76,3 @@ class _UserProfileJournalsSectionState extends State<UserProfileJournalsSection>
     );
   }
 }
-

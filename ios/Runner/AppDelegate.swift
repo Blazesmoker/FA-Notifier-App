@@ -152,7 +152,10 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
             return false
         }
 
-        removeTranslationHostIfNeeded()
+        guard translationHostController == nil else {
+            fLog("Translation sheet unavailable: translation host already active")
+            return false
+        }
 
         let bridge = NativeTranslationSheetBridge(text: text) { [weak self] in
             self?.removeTranslationHostIfNeeded()
@@ -162,19 +165,14 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
             rootView: NativeTranslationSheetView(bridge: bridge)
         )
         hostingController.view.backgroundColor = .clear
-        hostingController.view.translatesAutoresizingMaskIntoConstraints = false
-
-        anchorController.addChild(hostingController)
-        anchorController.view.addSubview(hostingController.view)
-        NSLayoutConstraint.activate([
-            hostingController.view.leadingAnchor.constraint(equalTo: anchorController.view.leadingAnchor),
-            hostingController.view.trailingAnchor.constraint(equalTo: anchorController.view.trailingAnchor),
-            hostingController.view.topAnchor.constraint(equalTo: anchorController.view.topAnchor),
-            hostingController.view.bottomAnchor.constraint(equalTo: anchorController.view.bottomAnchor)
-        ])
-        hostingController.didMove(toParent: anchorController)
+        hostingController.view.isOpaque = false
+        hostingController.modalPresentationStyle = .overFullScreen
+        hostingController.modalTransitionStyle = .crossDissolve
         translationHostController = hostingController
-        fLog("Presenting native translation sheet")
+
+        anchorController.present(hostingController, animated: false) {
+            self.fLog("Presented native translation host")
+        }
         return true
     }
 
@@ -182,17 +180,14 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     private func removeTranslationHostIfNeeded() {
         guard let host = translationHostController else { return }
 
-        if host.presentingViewController != nil {
-            host.dismiss(animated: false)
+        guard host.presentingViewController != nil else {
+            translationHostController = nil
+            return
         }
-
-        if host.parent != nil {
-            host.willMove(toParent: nil)
-            host.view.removeFromSuperview()
-            host.removeFromParent()
+        host.dismiss(animated: false) { [weak self] in
+            self?.translationHostController = nil
+            self?.fLog("Dismissed native translation host")
         }
-
-        translationHostController = nil
     }
 
     private lazy var timeFmt: DateFormatter = {

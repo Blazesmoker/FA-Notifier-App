@@ -41,7 +41,7 @@ class ProfileJournalsService {
     );
 
     if (response.statusCode == 200) {
-      final parsed = parseProfileJournalsHtml(response.body);
+      final parsed = await compute(parseProfileJournalsHtml, response.body);
       return ProfileJournalsPageData(
         journals: parsed.journals,
         hasMore: parsed.hasMore,
