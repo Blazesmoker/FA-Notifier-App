@@ -7,6 +7,9 @@ import 'package:FANotifier/features/notes/data/note_message_service.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
+import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 /// Dialog content for previewing a note/message.
 class PreviewDialogContent extends StatefulWidget {
@@ -114,6 +117,16 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
     final end =
         selection.start < selection.end ? selection.end : selection.start;
     _selectedMessageText = messageContent.substring(start, end);
+  }
+
+  Future<void> _openMessageTranslation() async {
+    final text = messageContent.trim();
+    if (text.isEmpty) return;
+    final translatorSettings = context.read<TranslatorSettingsProvider>();
+    await NativeTranslateLauncher.open(
+      text,
+      targetLanguageCode: translatorSettings.targetLanguageCode,
+    );
   }
 
   @override
@@ -328,6 +341,15 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  IconButton(
+                    tooltip: 'Translate',
+                    icon: const Icon(
+                      Icons.g_translate,
+                      color: Colors.white,
+                    ),
+                    onPressed: _openMessageTranslation,
+                  ),
+                  const SizedBox(width: 8),
                   if (widget.folder != 'sent') const SizedBox(width: 8),
                   ElevatedButton(
                     onPressed: () => Navigator.of(context).pop(),

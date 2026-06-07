@@ -10,6 +10,9 @@ import 'package:FANotifier/features/notes/presentation/note_reply_screen.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
+import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 class MessageDetailScreen extends StatefulWidget {
   final String messageLink;
@@ -170,6 +173,16 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
     _selectedMessageText = messageContent.substring(start, end);
   }
 
+  Future<void> _openMessageTranslation() async {
+    final text = messageContent.trim();
+    if (text.isEmpty) return;
+    final translatorSettings = context.read<TranslatorSettingsProvider>();
+    await NativeTranslateLauncher.open(
+      text,
+      targetLanguageCode: translatorSettings.targetLanguageCode,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_shouldShowReplySuccess) {
@@ -214,6 +227,51 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
             appBar: AppBar(
               title: Text(subject),
               backgroundColor: Colors.black,
+              actions: [
+                Builder(
+                  builder: (context) {
+                    return IconButton(
+                      icon: const Icon(Icons.more_vert),
+                      onPressed: () async {
+                        final RenderBox button =
+                            context.findRenderObject() as RenderBox;
+                        final RenderBox overlay = Overlay.of(context)
+                            .context
+                            .findRenderObject() as RenderBox;
+                        final RelativeRect position = RelativeRect.fromRect(
+                          Rect.fromPoints(
+                            button.localToGlobal(
+                              Offset(0, button.size.height),
+                              ancestor: overlay,
+                            ),
+                            button.localToGlobal(
+                              button.size.bottomRight(
+                                Offset(0, button.size.height + 10),
+                              ),
+                              ancestor: overlay,
+                            ),
+                          ),
+                          Offset.zero & overlay.size,
+                        );
+
+                        final selected = await showMenu<String>(
+                          context: context,
+                          position: position,
+                          items: const [
+                            PopupMenuItem<String>(
+                              value: 'translate',
+                              child: Text('Translate'),
+                            ),
+                          ],
+                        );
+                        if (selected == 'translate') {
+                          await _openMessageTranslation();
+                        }
+                      },
+                    );
+                  },
+                ),
+              ],
             ),
             backgroundColor: Colors.black,
             body: isLoading

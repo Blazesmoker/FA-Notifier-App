@@ -28,6 +28,23 @@ class _ReplyScreenState extends State<ReplyScreen> {
   final TextEditingController _replyController = TextEditingController();
   final PostCommentService _commentService = PostCommentService();
   bool _isSending = false;
+  String _selectedCommentText = '';
+
+  void _updatePlainCommentSelection(
+    TextSelection selection,
+    SelectionChangedCause? cause,
+  ) {
+    if (!selection.isValid || selection.isCollapsed) {
+      _selectedCommentText = '';
+      return;
+    }
+    final plainText = widget.comment['text']?.toString() ?? '';
+    final start =
+        selection.start < selection.end ? selection.start : selection.end;
+    final end =
+        selection.start < selection.end ? selection.end : selection.start;
+    _selectedCommentText = plainText.substring(start, end);
+  }
 
   void _sendReply() async {
     final replyText = _replyController.text.trim();
@@ -163,32 +180,21 @@ class _ReplyScreenState extends State<ReplyScreen> {
                 const SizedBox(height: 8),
 
                 /// COMMENT PREVIEW (HTML)
-                GestureDetector(
-                  onLongPress: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        title: Text(widget.comment['username'] ?? 'Anonymous'),
-                        content: SingleChildScrollView(
-                          child: html.Html(
-                            data: htmlComment ?? plainText,
-                            extensions: [faHtmlImageExtension()],
-                          ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Close'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                  child: Container(
+                Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     child: htmlComment != null && htmlComment.trim().isNotEmpty
-                        ? html.Html(
+                        ? SelectionArea(
+                            onSelectionChanged: (content) {
+                              _selectedCommentText = content?.plainText ?? '';
+                            },
+                            contextMenuBuilder:
+                                ReadOnlySelectionContextMenu.builder(
+                              selectedTextProvider: () =>
+                                  _selectedCommentText,
+                              includeIosTranslate: true,
+                            ),
+                            child: html.Html(
                       data: htmlComment,
                       style: {
                         "body": html.Style(
@@ -219,13 +225,19 @@ class _ReplyScreenState extends State<ReplyScreen> {
                         ),
                       },
                       extensions: [faHtmlImageExtension()],
-                    )
-                        : Text(
+                    ),
+                          )
+                        : SelectableText(
                       plainText,
+                      onSelectionChanged: _updatePlainCommentSelection,
+                      contextMenuBuilder:
+                          ReadOnlyEditableTextContextMenu.builder(
+                        selectedTextProvider: () => _selectedCommentText,
+                        includeIosTranslate: true,
+                      ),
                       style: const TextStyle(fontSize: 14),
                     ),
                   ),
-                ),
 
                 const Divider(),
                 const SizedBox(height: 12),

@@ -56,6 +56,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   bool _showCloudflareMessage = true;
   bool _replySentSuccessfully = false;
   bool _hasPopped = false;
+  String _selectedOriginalText = '';
 
   @override
   void initState() {
@@ -180,6 +181,21 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
         _webViewController = controller;
       });
     }
+  }
+
+  void _updatePlainOriginalSelection(
+    TextSelection selection,
+    SelectionChangedCause? cause,
+  ) {
+    if (!selection.isValid || selection.isCollapsed) {
+      _selectedOriginalText = '';
+      return;
+    }
+    final start =
+        selection.start < selection.end ? selection.start : selection.end;
+    final end =
+        selection.start < selection.end ? selection.end : selection.start;
+    _selectedOriginalText = widget.originalContent.substring(start, end);
   }
 
   Future<void> _injectFormHandler(WebViewController controller) async {
@@ -493,6 +509,16 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
                                       ),
                                     ),
                                     child: SelectionArea(
+                                      onSelectionChanged: (content) {
+                                        _selectedOriginalText =
+                                            content?.plainText ?? '';
+                                      },
+                                      contextMenuBuilder:
+                                          ReadOnlySelectionContextMenu.builder(
+                                        selectedTextProvider: () =>
+                                            _selectedOriginalText,
+                                        includeIosTranslate: true,
+                                      ),
                                       child: html_pkg.Html(
                                         data: widget.originalContentHtml!,
                                         style: {
@@ -534,6 +560,14 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
                                   )
                                 : SelectableText(
                                     widget.originalContent,
+                                    onSelectionChanged:
+                                        _updatePlainOriginalSelection,
+                                    contextMenuBuilder:
+                                        ReadOnlyEditableTextContextMenu.builder(
+                                      selectedTextProvider: () =>
+                                          _selectedOriginalText,
+                                      includeIosTranslate: true,
+                                    ),
                                     style: const TextStyle(fontSize: 16, color: Colors.white),
                                   ),
                           ),

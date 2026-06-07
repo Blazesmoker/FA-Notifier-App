@@ -40,9 +40,26 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
   final JournalCommentService _commentService = JournalCommentService();
 
   bool _isSending = false;
+  String _selectedCommentText = '';
 
   bool get _hasHtml =>
       widget.commentHtml != null && widget.commentHtml!.trim().isNotEmpty;
+
+  void _updatePlainCommentSelection(
+    TextSelection selection,
+    SelectionChangedCause? cause,
+  ) {
+    if (!selection.isValid || selection.isCollapsed) {
+      _selectedCommentText = '';
+      return;
+    }
+    final text = widget.commentText ?? '';
+    final start =
+        selection.start < selection.end ? selection.start : selection.end;
+    final end =
+        selection.start < selection.end ? selection.end : selection.start;
+    _selectedCommentText = text.substring(start, end);
+  }
 
 
 
@@ -177,7 +194,16 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: _hasHtml
-                    ? html.Html(
+                    ? SelectionArea(
+                        onSelectionChanged: (content) {
+                          _selectedCommentText = content?.plainText ?? '';
+                        },
+                        contextMenuBuilder:
+                            ReadOnlySelectionContextMenu.builder(
+                          selectedTextProvider: () => _selectedCommentText,
+                          includeIosTranslate: true,
+                        ),
+                        child: html.Html(
                   data: widget.commentHtml!,
                   style: {
                     "body": html.Style(
@@ -221,10 +247,16 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
                     ),
                   },
                   extensions: [faHtmlImageExtension()],
-                )
+                ),
+                      )
 
-                    : Text(
+                    : SelectableText(
                   widget.commentText ?? '',
+                  onSelectionChanged: _updatePlainCommentSelection,
+                  contextMenuBuilder: ReadOnlyEditableTextContextMenu.builder(
+                    selectedTextProvider: () => _selectedCommentText,
+                    includeIosTranslate: true,
+                  ),
                   style: const TextStyle(
                     fontSize: 14,
                     color: Colors.white,
