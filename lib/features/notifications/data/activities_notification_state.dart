@@ -25,6 +25,9 @@ class ActivitiesNotificationStateStore {
   static const String _kLastShownBody = 'last_shown_activities_body';
   static const String _kAcknowledgeOnNextForegroundFetch =
       'acknowledge_activities_on_next_foreground_fetch';
+  static const String _kBaselineSchemaVersion =
+      'activities_baseline_schema_version';
+  static const int _baselineSchemaVersion = 1;
 
   static const String kLastSeenUpdatedAtMsKey = 'last_seen_activities_at_ms';
   static const String kLastShownUpdatedAtMsKey = 'last_shown_activities_at_ms';
@@ -57,7 +60,9 @@ class ActivitiesNotificationStateStore {
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
 
-      final hasBaseline = prefs.containsKey(_kSubmissions) &&
+      final hasBaseline =
+          prefs.getInt(_kBaselineSchemaVersion) == _baselineSchemaVersion &&
+          prefs.containsKey(_kSubmissions) &&
           prefs.containsKey(_kWatches) &&
           prefs.containsKey(_kComments) &&
           prefs.containsKey(_kFavorites) &&
@@ -168,6 +173,7 @@ class ActivitiesNotificationStateStore {
     await prefs.setInt(_kFavorites, counts.favorites);
     await prefs.setInt(_kJournals, counts.journals);
     await prefs.setInt(_kNotes, counts.notes);
+    await prefs.setInt(_kBaselineSchemaVersion, _baselineSchemaVersion);
     await prefs.setInt(
       kLastSeenUpdatedAtMsKey,
       DateTime.now().millisecondsSinceEpoch,

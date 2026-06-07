@@ -176,7 +176,7 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     } catch (_) {
       return;
     }
-    if (svc.errorMessage != null) return;
+    if (svc.errorMessage != null || !svc.hasValidLatestCountsSnapshot) return;
     await _maybeSendActivitiesNotification(svc.latestCounts, source: source);
   }
 

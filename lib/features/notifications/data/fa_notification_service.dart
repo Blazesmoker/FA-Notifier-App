@@ -212,6 +212,7 @@ class FANotificationService with ChangeNotifier {
 
   /// Stores counts from the message-bar (e.g., {"W": 1, "F": 2, "J": 3}).
   Map<String, int> messageBarCounts = {};
+  bool hasValidLatestCountsSnapshot = false;
   NotificationCounts latestCounts = NotificationCounts(
     submissions: 0,
     watches: 0,
@@ -231,6 +232,7 @@ class FANotificationService with ChangeNotifier {
   );
 
   void applyTopbarCounts(NotificationCounts counts) {
+    hasValidLatestCountsSnapshot = true;
     latestCounts = counts;
     _setMessageBarCount('S', counts.submissions);
     _setMessageBarCount('W', counts.watches);
@@ -417,6 +419,7 @@ class FANotificationService with ChangeNotifier {
   Future<void> fetchNotifications() async {
     isLoading = true;
     errorMessage = null;
+    hasValidLatestCountsSnapshot = false;
     notifyListeners();
 
     try {
@@ -447,20 +450,26 @@ class FANotificationService with ChangeNotifier {
       // Find message-bar in both modern and classic formats
       final messageBar = document.querySelector('li.message-bar-desktop') ??
           document.querySelector('li.noblock');
+      if (messageBar == null) {
+        throw Exception('Notification counters not found.');
+      }
       messageBarCounts.clear();
-      if (messageBar != null) {
-        final links = messageBar.querySelectorAll('a.notification-container');
-        for (final link in links) {
-          final href = link.attributes['href'] ?? '';
-          final text = link.text.trim();
-          final title = (link.attributes['title'] ?? '').trim();
-          final typeKey = _typeKeyFromHrefOrTitle(href: href, title: title);
-          if (typeKey == null) continue;
-          final int count = _extractAnyInt(title.isNotEmpty ? title : text);
-          if (count > 0) {
-            messageBarCounts[typeKey] = count;
-          }
+      final links = messageBar.querySelectorAll('a.notification-container');
+      bool foundNotificationCounter = false;
+      for (final link in links) {
+        final href = link.attributes['href'] ?? '';
+        final text = link.text.trim();
+        final title = (link.attributes['title'] ?? '').trim();
+        final typeKey = _typeKeyFromHrefOrTitle(href: href, title: title);
+        if (typeKey == null) continue;
+        foundNotificationCounter = true;
+        final int count = _extractAnyInt(title.isNotEmpty ? title : text);
+        if (count > 0) {
+          messageBarCounts[typeKey] = count;
         }
+      }
+      if (!foundNotificationCounter) {
+        throw Exception('Notification counters not found.');
       }
 
       final body = document.querySelector('body');
@@ -496,6 +505,7 @@ class FANotificationService with ChangeNotifier {
         journals: j,
         notes: n,
       );
+      hasValidLatestCountsSnapshot = true;
       latestTopBarNotifications = Notifications(
         submissions: '$s',
         watches: '$w',
