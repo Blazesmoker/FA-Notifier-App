@@ -24,7 +24,7 @@ class ActivitiesNotificationStateStore {
   static const String _kLastShownNotes = 'last_shown_activities_notes';
   static const String _kLastShownBody = 'last_shown_activities_body';
   static const String _kAcknowledgeOnNextForegroundFetch =
-      'acknowledge_activities_on_next_foreground_fetch';
+      'acknowledge_activities_on_next_foreground_fetch_v2';
   static const String _kBaselineSchemaVersion =
       'activities_baseline_schema_version';
   static const int _baselineSchemaVersion = 1;

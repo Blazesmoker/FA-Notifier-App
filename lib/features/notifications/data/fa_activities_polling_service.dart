@@ -284,10 +284,7 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
 
       final bool acknowledgeRequested =
           await activitiesStateStore.consumeAcknowledgeOnNextForegroundFetch();
-      final bool shouldAcknowledge = source == 'login_established' ||
-          source == 'lifecycle_resumed' ||
-          acknowledgeRequested;
-      if (shouldAcknowledge) {
+      if (acknowledgeRequested) {
         await activitiesStateStore.acknowledgeCurrentCounts(
           currentCounts: currentCounts,
         );

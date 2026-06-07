@@ -975,9 +975,6 @@ class AppLifecycleNetworkReset with WidgetsBindingObserver {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   configureAppLogging();
-  await _persistAppForegroundState(true);
-  await ActivitiesNotificationStateStore()
-      .requestAcknowledgeOnNextForegroundFetch();
   await Firebase.initializeApp();
   await setupAnalyticsPrivacy();
   await FAHttp.init();
@@ -1039,14 +1036,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   StreamSubscription<Uri>? _linkSub;
   Timer? _activeHeartbeatTimer;
   bool _updateScreenOpened = false;
+  bool _isLifecycleResumed = false;
+  bool _desiredAppActive = false;
+  Future<void> _appStateWriteQueue = Future<void>.value();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _setAppActive(true);
     _initDeepLinks();
-    _startActiveHeartbeat();
+    _isLifecycleResumed =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    if (_isLifecycleResumed) {
+      _setAppActive(true);
+      _startActiveHeartbeat();
+    }
     _checkForUpdateOnAppStart();
   }
 
@@ -1080,7 +1084,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void _startActiveHeartbeat() {
     _activeHeartbeatTimer?.cancel();
     _activeHeartbeatTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      _setAppActive(true, resetBadge: false);
+      if (_isLifecycleResumed) {
+        _setAppActive(true, resetBadge: false);
+      }
     });
   }
 
@@ -1097,6 +1103,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     appLog('===============================================');
     switch (state) {
       case AppLifecycleState.resumed:
+        _isLifecycleResumed = true;
         _setAppActive(true);
         _startActiveHeartbeat();
         WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -1108,16 +1115,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         appLog('→ App INACTIVE (transitional state)');
         break;
       case AppLifecycleState.paused:
+        _isLifecycleResumed = false;
         _stopActiveHeartbeat();
         _setAppActive(false);
         appLog('→ App PAUSED - Background fetch ENABLED');
         break;
       case AppLifecycleState.detached:
+        _isLifecycleResumed = false;
         _stopActiveHeartbeat();
         _setAppActive(false);
         appLog('→ App DETACHED - Background fetch ENABLED');
         break;
       case AppLifecycleState.hidden:
+        _isLifecycleResumed = false;
         _stopActiveHeartbeat();
         _setAppActive(false);
         appLog('→ App HIDDEN - Background fetch ENABLED');
@@ -1127,6 +1137,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _isLifecycleResumed = false;
     _stopActiveHeartbeat();
     WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
@@ -1143,16 +1154,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }, onError: (_) {});
   }
 
-  Future<void> _setAppActive(bool active, {bool resetBadge = true}) async {
-    try {
-      await _persistAppForegroundState(active);
-      appLog("[APP STATE] Set to: ${active ? 'ACTIVE' : 'INACTIVE'}");
-      if (active && resetBadge) {
-        await resetBadgeCounter();
+  Future<void> _setAppActive(bool active, {bool resetBadge = true}) {
+    _desiredAppActive = active;
+    final shouldResetBadge = active && resetBadge;
+    _appStateWriteQueue = _appStateWriteQueue.catchError((_) {}).then((_) async {
+      final stateToPersist = _desiredAppActive;
+      try {
+        await _persistAppForegroundState(stateToPersist);
+        appLog(
+            "[APP STATE] Set to: ${stateToPersist ? 'ACTIVE' : 'INACTIVE'}");
+        if (stateToPersist && shouldResetBadge && _desiredAppActive) {
+          await resetBadgeCounter();
+        }
+      } catch (e) {
+        appLog("[ERROR] Failed to set app state: $e");
       }
-    } catch (e) {
-      appLog("[ERROR] Failed to set app state: $e");
-    }
+    });
+    return _appStateWriteQueue;
   }
 
   @override
