@@ -330,11 +330,6 @@ void callbackDispatcher() {
                       'activities',
                       badgeNumber: badgeNumber,
                     );
-                    await prefs.reload();
-                    if (_isAppForegroundActive(prefs)) {
-                      await notificationService.cancelActivityNotification();
-                      return Future.value(true);
-                    }
                     await commitIOSBadgeNumber(badgeNumber);
                     await activitiesStateStore.markActivityNotificationShown(
                       currentCounts: counts,
