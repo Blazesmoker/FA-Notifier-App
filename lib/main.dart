@@ -70,6 +70,10 @@ const String iOSWorkInitTask = "com.blazesmoker.FANotifier.refresh";
 bool _workmanagerInitialized = false;
 const String _appActiveKey = 'isAppActive';
 const String _appActiveAtMsKey = 'isAppActiveAtMs';
+const String _currentActivityNotificationIdKey =
+    'currentActivityNotificationId';
+const String _currentActivityNotificationBadgeCountedKey =
+    'currentActivityNotificationBadgeCounted';
 const Duration _appActiveLease = Duration(minutes: 2);
 const bool _forceShowUpdateScreen = false;
 
@@ -320,6 +324,9 @@ void callbackDispatcher() {
                     if (_isAppForegroundActive(prefs)) {
                       return Future.value(true);
                     }
+                    await removePreviousIOSActivityNotification(
+                      notificationService,
+                    );
                     final int activityNotificationId =
                         await notificationService.allocateActivityNotificationId();
                     final int? badgeNumber =
@@ -333,6 +340,10 @@ void callbackDispatcher() {
                       badgeNumber: badgeNumber,
                     );
                     await commitIOSBadgeNumber(badgeNumber);
+                    await rememberIOSActivityNotification(
+                      activityNotificationId,
+                      badgeNumber,
+                    );
                     await activitiesStateStore.markActivityNotificationShown(
                       currentCounts: counts,
                       body: messageBody,
@@ -466,6 +477,43 @@ Future<void> commitIOSBadgeNumber(int? badgeNumber) async {
   await updateBadgeCounter(badgeNumber);
 }
 
+Future<void> removePreviousIOSActivityNotification(
+  NotificationService notificationService,
+) async {
+  if (!Platform.isIOS) return;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final previousActivityNotificationId =
+      prefs.getInt(_currentActivityNotificationIdKey);
+  if (previousActivityNotificationId == null) return;
+  await notificationService.cancelNotification(previousActivityNotificationId);
+  final badgeCounted =
+      prefs.getBool(_currentActivityNotificationBadgeCountedKey) ?? false;
+  if (badgeCounted) {
+    final currentBadge = prefs.getInt('badgeCounter') ?? 0;
+    final nextBadge = currentBadge > 0 ? currentBadge - 1 : 0;
+    await updateBadgeCounter(nextBadge);
+  }
+  await prefs.remove(_currentActivityNotificationIdKey);
+  await prefs.remove(_currentActivityNotificationBadgeCountedKey);
+}
+
+Future<void> rememberIOSActivityNotification(
+  int activityNotificationId,
+  int? badgeNumber,
+) async {
+  if (!Platform.isIOS) return;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setInt(
+    _currentActivityNotificationIdKey,
+    activityNotificationId,
+  );
+  await prefs.setBool(
+    _currentActivityNotificationBadgeCountedKey,
+    badgeNumber != null,
+  );
+}
+
 Future<void> updateBadgeCounter(int newCount) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt('badgeCounter', newCount);
@@ -481,6 +529,11 @@ Future<void> updateBadgeCounter(int newCount) async {
 Future<void> resetBadgeCounter() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt('badgeCounter', 0);
+  if (prefs.getInt(_currentActivityNotificationIdKey) == null) {
+    await prefs.remove(_currentActivityNotificationBadgeCountedKey);
+  } else {
+    await prefs.setBool(_currentActivityNotificationBadgeCountedKey, false);
+  }
   if (Platform.isIOS) {
     try {
       await FlutterAppBadgeControl.removeBadge();

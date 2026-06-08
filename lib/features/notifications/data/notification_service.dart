@@ -68,6 +68,10 @@ class NotificationService {
     return flutterLocalNotificationsPlugin.cancel(id: activityNotificationId);
   }
 
+  Future<void> cancelNotification(int id) {
+    return flutterLocalNotificationsPlugin.cancel(id: id);
+  }
+
   Future<void> init({
     Future<void> Function()? onLaunchPayloadSaved,
   }) async {
