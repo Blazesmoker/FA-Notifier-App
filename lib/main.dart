@@ -324,7 +324,7 @@ void callbackDispatcher() {
                     if (_isAppForegroundActive(prefs)) {
                       return Future.value(true);
                     }
-                    await removePreviousIOSActivityNotification(
+                    await removePreviousActivityNotification(
                       notificationService,
                     );
                     final int activityNotificationId =
@@ -340,7 +340,7 @@ void callbackDispatcher() {
                       badgeNumber: badgeNumber,
                     );
                     await commitIOSBadgeNumber(badgeNumber);
-                    await rememberIOSActivityNotification(
+                    await rememberActivityNotification(
                       activityNotificationId,
                       badgeNumber,
                     );
@@ -477,19 +477,22 @@ Future<void> commitIOSBadgeNumber(int? badgeNumber) async {
   await updateBadgeCounter(badgeNumber);
 }
 
-Future<void> removePreviousIOSActivityNotification(
+Future<void> removePreviousActivityNotification(
   NotificationService notificationService,
 ) async {
-  if (!Platform.isIOS) return;
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
   final previousActivityNotificationId =
       prefs.getInt(_currentActivityNotificationIdKey);
-  if (previousActivityNotificationId == null) return;
-  await notificationService.cancelNotification(previousActivityNotificationId);
+  if (previousActivityNotificationId != null) {
+    await notificationService.cancelNotification(previousActivityNotificationId);
+  }
+  if (Platform.isAndroid) {
+    await notificationService.cancelDeliveredActivityNotifications();
+  }
   final badgeCounted =
       prefs.getBool(_currentActivityNotificationBadgeCountedKey) ?? false;
-  if (badgeCounted) {
+  if (Platform.isIOS && badgeCounted) {
     final currentBadge = prefs.getInt('badgeCounter') ?? 0;
     final nextBadge = currentBadge > 0 ? currentBadge - 1 : 0;
     await updateBadgeCounter(nextBadge);
@@ -498,11 +501,10 @@ Future<void> removePreviousIOSActivityNotification(
   await prefs.remove(_currentActivityNotificationBadgeCountedKey);
 }
 
-Future<void> rememberIOSActivityNotification(
+Future<void> rememberActivityNotification(
   int activityNotificationId,
   int? badgeNumber,
 ) async {
-  if (!Platform.isIOS) return;
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt(
     _currentActivityNotificationIdKey,
@@ -510,7 +512,7 @@ Future<void> rememberIOSActivityNotification(
   );
   await prefs.setBool(
     _currentActivityNotificationBadgeCountedKey,
-    badgeNumber != null,
+    Platform.isIOS && badgeNumber != null,
   );
 }
 

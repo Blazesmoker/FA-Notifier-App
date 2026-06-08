@@ -72,6 +72,25 @@ class NotificationService {
     return flutterLocalNotificationsPlugin.cancel(id: id);
   }
 
+  Future<void> cancelDeliveredActivityNotifications() async {
+    List<ActiveNotification> activeNotifications;
+    try {
+      activeNotifications =
+          await flutterLocalNotificationsPlugin.getActiveNotifications();
+    } catch (_) {
+      return;
+    }
+    for (final notification in activeNotifications) {
+      final id = notification.id;
+      final payload = notification.payload ?? '';
+      if (id == null) continue;
+      if (payload == 'activity_fa_activity' ||
+          payload.startsWith('fa_activity_')) {
+        await cancelNotification(id);
+      }
+    }
+  }
+
   Future<void> init({
     Future<void> Function()? onLaunchPayloadSaved,
   }) async {
