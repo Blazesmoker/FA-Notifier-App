@@ -320,13 +320,15 @@ void callbackDispatcher() {
                     if (_isAppForegroundActive(prefs)) {
                       return Future.value(true);
                     }
+                    final int activityNotificationId =
+                        await notificationService.allocateActivityNotificationId();
                     final int? badgeNumber =
                         await nextIOSBadgeNumberForNotification();
                     await notificationService.showNotification(
-                      NotificationService.activityNotificationId,
+                      activityNotificationId,
                       'New FA Activity',
                       messageBody,
-                      'activity_fa_activity',
+                      'fa_activity_$activityNotificationId',
                       'activities',
                       badgeNumber: badgeNumber,
                     );

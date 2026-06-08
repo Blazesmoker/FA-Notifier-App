@@ -187,6 +187,7 @@ class _HomeScreenState extends State<HomeScreen> {
         pendingPayload.contains('DrawerIndex.Notes') ||
         pendingPayload == 'note_native';
     final bool isActivities = pendingPayload.startsWith('activity_') ||
+        pendingPayload.startsWith('fa_activity_') ||
         pendingPayload.contains('DrawerIndex.Notifications') ||
         pendingPayload == 'activity_native';
 
