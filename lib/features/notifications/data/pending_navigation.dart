@@ -23,6 +23,11 @@ Future<void> processPendingNavigation({String from = 'unknown'}) async {
     return;
   }
 
+  if (payload == appUpdateNotificationPayload) {
+    await pendingNavigationStore.clearPayload();
+    return;
+  }
+
   final ctx = navigatorKey.currentContext;
   debugPrint('[PENDING_NAV] handling "$payload" (from=$from) ctx=${ctx != null}');
 

@@ -74,6 +74,15 @@ const String _currentActivityNotificationIdKey =
     'currentActivityNotificationId';
 const String _currentActivityNotificationBadgeCountedKey =
     'currentActivityNotificationBadgeCounted';
+const String _iosNoteBadgeCountKey = 'iosNoteBadgeCount';
+const String _backgroundFetchNoNotificationStreakKey =
+    'backgroundFetchNoNotificationStreak';
+const String _backgroundFetchIntervalMinutesKey =
+    'backgroundFetchIntervalMinutes';
+const int _backgroundFetchFastIntervalMinutes = 15;
+const int _backgroundFetchSlowIntervalMinutes = 30;
+const MethodChannel _backgroundFetchChannel =
+    MethodChannel('app.background_fetch');
 const Duration _appActiveLease = Duration(minutes: 2);
 const bool _forceShowUpdateScreen = false;
 
@@ -116,6 +125,10 @@ void callbackDispatcher() {
     appLog("Time: ${DateTime.now()}");
     appLog("===============================================");
     final startTime = DateTime.now();
+    bool didShowBackgroundNotification = false;
+    bool didFindNewNotificationContent = false;
+    bool didCompleteNotesCheck = false;
+    bool didCompleteActivitiesCheck = false;
     try {
       final notificationService = NotificationService();
       await notificationService.init();
@@ -148,6 +161,10 @@ void callbackDispatcher() {
           final currentVersionAllowed = await isCurrentAppVersionAllowed();
           if (currentVersionAllowed == false) {
             appLog('[BG] Current app version is not allowed - skipping fetch');
+            await _showBackgroundUpdateNotificationIfNeeded(
+              notificationService,
+              prefs,
+            );
             return Future.value(true);
           }
           bool didFirstRunSkip = prefs.getBool('did_first_run_skip') ?? false;
@@ -192,8 +209,12 @@ void callbackDispatcher() {
             if (unread.isNotEmpty) {
               final List<Message> newNotes =
                   unread.where((m) => !shownSet.contains(m.id)).toList();
+              if (newNotes.isNotEmpty) {
+                didFindNewNotificationContent = true;
+              }
               kDebugPrint('[BG] New unread messages: ${newNotes.length}');
               final List<String> shownNewNoteIds = <String>[];
+              bool noteProcessingFailed = false;
               for (var msg in newNotes) {
                 try {
                   kDebugPrint(
@@ -206,7 +227,7 @@ void callbackDispatcher() {
                   }
                   final String payload = 'note_${msg.id}';
                   final int? badgeNumber =
-                      await nextIOSBadgeNumberForNotification();
+                      await nextIOSNoteBadgeNumberForNotification();
                   await notificationService.showNotification(
                     stableNotificationIdFromString(msg.id),
                     'New Note from ${msg.sender}',
@@ -215,7 +236,8 @@ void callbackDispatcher() {
                     'notes',
                     badgeNumber: badgeNumber,
                   );
-                  await commitIOSBadgeNumber(badgeNumber);
+                  didShowBackgroundNotification = true;
+                  await commitIOSNoteBadgeNumber(badgeNumber);
                   shownNewNoteIds.add(msg.id);
                   kDebugPrint('[BG] Notification shown for message ${msg.id}');
                   if (badgeNumber != null) {
@@ -225,6 +247,7 @@ void callbackDispatcher() {
                   kDebugPrint(
                       '[BG] Message ${msg.id} marked as unread on server');
                 } catch (e) {
+                  noteProcessingFailed = true;
                   kDebugPrint(
                       '[BG ERROR] Failed to process message ${msg.id}: $e');
                 }
@@ -234,6 +257,9 @@ void callbackDispatcher() {
                 kDebugPrint(
                     '[BG] Saved ${shownNewNoteIds.length} new message IDs');
               }
+              didCompleteNotesCheck = !noteProcessingFailed;
+            } else {
+              didCompleteNotesCheck = true;
             }
             final fetchedIds = fetchedInbox.map((m) => m.id).toList();
             if (fetchedIds.isNotEmpty) {
@@ -320,6 +346,7 @@ void callbackDispatcher() {
                       currentCounts: counts,
                     );
                   } else {
+                    didFindNewNotificationContent = true;
                     await prefs.reload();
                     if (_isAppForegroundActive(prefs)) {
                       return Future.value(true);
@@ -327,10 +354,11 @@ void callbackDispatcher() {
                     await removePreviousActivityNotification(
                       notificationService,
                     );
-                    final int activityNotificationId =
-                        await notificationService.allocateActivityNotificationId();
+                    final int activityNotificationId = Platform.isIOS
+                        ? await notificationService.allocateActivityNotificationId()
+                        : NotificationService.activityNotificationId;
                     final int? badgeNumber =
-                        await nextIOSBadgeNumberForNotification();
+                        await nextIOSActivityBadgeNumberForNotification();
                     await notificationService.showNotification(
                       activityNotificationId,
                       'New FA Activity',
@@ -339,7 +367,8 @@ void callbackDispatcher() {
                       'activities',
                       badgeNumber: badgeNumber,
                     );
-                    await commitIOSBadgeNumber(badgeNumber);
+                    didShowBackgroundNotification = true;
+                    await commitIOSActivityBadgeNumber(badgeNumber);
                     await rememberActivityNotification(
                       activityNotificationId,
                       badgeNumber,
@@ -367,12 +396,23 @@ void callbackDispatcher() {
                   );
                 }
               }
+              didCompleteActivitiesCheck = true;
             } else {
               appLog('[BG] No notification data received from FA');
             }
           } catch (e) {
             appLog('[BG ERROR] Notification counts check failed: $e');
           }
+          await updateAdaptiveBackgroundFetchAfterTask(
+            didShowNotification: didShowBackgroundNotification,
+            completedNoNewContentCheck: didCompleteNotesCheck &&
+                didCompleteActivitiesCheck &&
+                !didFindNewNotificationContent,
+          );
+          await _showBackgroundUpdateNotificationIfNeeded(
+            notificationService,
+            prefs,
+          );
           appLog('[BG] === Task completed successfully ===');
           appLog(
               '[BG] Total duration: ${DateTime.now().difference(startTime).inSeconds}s');
@@ -398,6 +438,38 @@ void callbackDispatcher() {
       return Future.value(false);
     }
   });
+}
+
+Future<void> _showBackgroundUpdateNotificationIfNeeded(
+  NotificationService notificationService,
+  SharedPreferences prefs,
+) async {
+  try {
+    final updateInfo = await fetchLatestAppUpdateInfo();
+    if (updateInfo == null || !updateInfo.updateAvailable) return;
+
+    final shownKey =
+        'shown_update_notification_for_${updateInfo.currentVersion}';
+    await prefs.reload();
+    if (prefs.getBool(shownKey) ?? false) return;
+    if (_isAppForegroundActive(prefs)) return;
+
+    await notificationService.showNotification(
+      NotificationService.appUpdateNotificationId,
+      'New Update Available!',
+      'Tap to open FA Notify.',
+      NotificationService.appUpdatePayload,
+      'updates',
+    );
+    await prefs.setBool(shownKey, true);
+    appLog(
+      '[BG] Update notification shown for installed version '
+      '${updateInfo.currentVersion}; latest version ${updateInfo.latestVersion}',
+    );
+  } catch (e, st) {
+    appLog('[BG ERROR] Update notification check failed: $e');
+    kDebugPrint('[BG ERROR] Update notification stack: $st');
+  }
 }
 
 String _formatNotificationPart({
@@ -461,18 +533,33 @@ Future<void> debugLogs(String message) async {
   debugPrint('[$timestamp] $message');
 }
 
-Future<int> getBadgeCounter() async {
+Future<int?> nextIOSNoteBadgeNumberForNotification() async {
+  if (!Platform.isIOS) return null;
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
-  return prefs.getInt('badgeCounter') ?? 0;
+  final noteCount = (prefs.getInt(_iosNoteBadgeCountKey) ?? 0) + 1;
+  final activityCounted =
+      prefs.getBool(_currentActivityNotificationBadgeCountedKey) ?? false;
+  return noteCount + (activityCounted ? 1 : 0);
 }
 
-Future<int?> nextIOSBadgeNumberForNotification() async {
+Future<void> commitIOSNoteBadgeNumber(int? badgeNumber) async {
+  if (badgeNumber == null) return;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final noteCount = (prefs.getInt(_iosNoteBadgeCountKey) ?? 0) + 1;
+  await prefs.setInt(_iosNoteBadgeCountKey, noteCount);
+  await updateBadgeCounter(badgeNumber);
+}
+
+Future<int?> nextIOSActivityBadgeNumberForNotification() async {
   if (!Platform.isIOS) return null;
-  return await getBadgeCounter() + 1;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  return (prefs.getInt(_iosNoteBadgeCountKey) ?? 0) + 1;
 }
 
-Future<void> commitIOSBadgeNumber(int? badgeNumber) async {
+Future<void> commitIOSActivityBadgeNumber(int? badgeNumber) async {
   if (badgeNumber == null) return;
   await updateBadgeCounter(badgeNumber);
 }
@@ -486,16 +573,6 @@ Future<void> removePreviousActivityNotification(
       prefs.getInt(_currentActivityNotificationIdKey);
   if (previousActivityNotificationId != null) {
     await notificationService.cancelNotification(previousActivityNotificationId);
-  }
-  if (Platform.isAndroid) {
-    await notificationService.cancelDeliveredActivityNotifications();
-  }
-  final badgeCounted =
-      prefs.getBool(_currentActivityNotificationBadgeCountedKey) ?? false;
-  if (Platform.isIOS && badgeCounted) {
-    final currentBadge = prefs.getInt('badgeCounter') ?? 0;
-    final nextBadge = currentBadge > 0 ? currentBadge - 1 : 0;
-    await updateBadgeCounter(nextBadge);
   }
   await prefs.remove(_currentActivityNotificationIdKey);
   await prefs.remove(_currentActivityNotificationBadgeCountedKey);
@@ -531,6 +608,7 @@ Future<void> updateBadgeCounter(int newCount) async {
 Future<void> resetBadgeCounter() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt('badgeCounter', 0);
+  await prefs.remove(_iosNoteBadgeCountKey);
   if (prefs.getInt(_currentActivityNotificationIdKey) == null) {
     await prefs.remove(_currentActivityNotificationBadgeCountedKey);
   } else {
@@ -541,6 +619,80 @@ Future<void> resetBadgeCounter() async {
       await FlutterAppBadgeControl.removeBadge();
     } catch (e) {
       appLog('[BADGE] Failed to clear iOS app badge: $e');
+    }
+  }
+}
+
+Future<void> updateAdaptiveBackgroundFetchAfterTask({
+  required bool didShowNotification,
+  required bool completedNoNewContentCheck,
+}) async {
+  if (!didShowNotification && !completedNoNewContentCheck) {
+    await resetAdaptiveBackgroundFetch();
+    return;
+  }
+
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  if (_isAppForegroundActive(prefs)) {
+    await prefs.setInt(_backgroundFetchNoNotificationStreakKey, 0);
+    await prefs.setInt(
+      _backgroundFetchIntervalMinutesKey,
+      _backgroundFetchFastIntervalMinutes,
+    );
+    await applyBackgroundFetchInterval(_backgroundFetchFastIntervalMinutes);
+    return;
+  }
+
+  final int streak;
+  if (didShowNotification) {
+    streak = 0;
+  } else {
+    final current = prefs.getInt(_backgroundFetchNoNotificationStreakKey) ?? 0;
+    streak = current >= 4 ? 4 : current + 1;
+  }
+
+  final intervalMinutes = streak >= 4
+      ? _backgroundFetchSlowIntervalMinutes
+      : _backgroundFetchFastIntervalMinutes;
+  await prefs.setInt(_backgroundFetchNoNotificationStreakKey, streak);
+  await prefs.setInt(_backgroundFetchIntervalMinutesKey, intervalMinutes);
+  await applyBackgroundFetchInterval(intervalMinutes);
+  appLog(
+      '[BG] Adaptive interval set to ${intervalMinutes}m '
+      '(empty streak: $streak, notification shown: $didShowNotification)');
+}
+
+Future<void> resetAdaptiveBackgroundFetch() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setInt(_backgroundFetchNoNotificationStreakKey, 0);
+  await prefs.setInt(
+    _backgroundFetchIntervalMinutesKey,
+    _backgroundFetchFastIntervalMinutes,
+  );
+  await applyBackgroundFetchInterval(_backgroundFetchFastIntervalMinutes);
+}
+
+Future<void> applyBackgroundFetchInterval(int intervalMinutes) async {
+  if (Platform.isAndroid) {
+    await ensureWorkmanagerInitialized();
+    await Workmanager().registerPeriodicTask(
+      "FANotify",
+      fetchBackgroundTask,
+      frequency: Duration(minutes: intervalMinutes),
+      constraints: Constraints(networkType: NetworkType.connected),
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
+    );
+    return;
+  }
+  if (Platform.isIOS) {
+    try {
+      await _backgroundFetchChannel.invokeMethod<void>(
+        'reschedule',
+        <String, int>{'minutes': intervalMinutes},
+      );
+    } catch (e) {
+      appLog('[BG] Failed to reschedule iOS background fetch: $e');
     }
   }
 }
@@ -987,12 +1139,7 @@ Future<void> _afterFirstFrameBoot(TimezoneProvider timezoneProvider) async {
     await cacheMonitorService.checkStorageUsage();
     await ensureWorkmanagerInitialized();
     if (Platform.isAndroid) {
-      await Workmanager().registerPeriodicTask(
-        "FANotify",
-        fetchBackgroundTask,
-        frequency: const Duration(minutes: 15),
-        constraints: Constraints(networkType: NetworkType.connected),
-      );
+      await applyBackgroundFetchInterval(_backgroundFetchFastIntervalMinutes);
       debugPrint("Android background task registered");
     } else if (Platform.isIOS) {
       debugPrint("iOS background task handler registered");
@@ -1217,6 +1364,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             "[APP STATE] Set to: ${stateToPersist ? 'ACTIVE' : 'INACTIVE'}");
         if (stateToPersist && shouldResetBadge && _desiredAppActive) {
           await resetBadgeCounter();
+          await resetAdaptiveBackgroundFetch();
         }
       } catch (e) {
         appLog("[ERROR] Failed to set app state: $e");

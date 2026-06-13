@@ -12,13 +12,13 @@
       "iconURL": "https://raw.githubusercontent.com/Blazesmoker/FA-Notifier-App/main/AppIcon.png",
       "tintColor": "#000000",
       "screenshots": [],
-      "downloadURL": "https://raw.githubusercontent.com/Blazesmoker/FA-Notifier-App/main/FA_Notifier_v129.ipa",
+      "downloadURL": "https://raw.githubusercontent.com/Blazesmoker/FA-Notifier-App/main/FA_Notifier_v130.ipa",
       "versions": [
         {
-          "version": "1.2.9",
-          "date": "2026-06-06T02:04:00+06:00",
+          "version": "1.3.0",
+          "date": "2026-06-14T02:04:00+06:00",
           "size": 14371840,
-          "downloadURL": "https://raw.githubusercontent.com/Blazesmoker/FA-Notifier-App/main/FA_Notifier_v129.ipa",
+          "downloadURL": "https://raw.githubusercontent.com/Blazesmoker/FA-Notifier-App/main/FA_Notifier_v130.ipa",
           "localizedDescription": "Latest version"
         }
       ],

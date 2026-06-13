@@ -738,28 +738,29 @@ class _FavImageTileState extends State<_FavImageTile> {
               borderRadius: 8.0,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8.0),
-                child: FaNetworkImage(
-                  imageUrl,
+                child: Container(
                   width: widget.width,
                   height: widget.height,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (ctx, child, progress) {
-                    if (progress == null) return child;
-                    return Container(
-                      width: widget.width,
-                      height: widget.height,
-                      color: Colors.grey[300],
-                    );
-                  },
-                  errorBuilder: (ctx, err, stack) {
-                    return Container(
-                      width: widget.width,
-                      height: widget.height,
-                      color: Colors.grey,
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.error, color: Colors.red),
-                    );
-                  },
+                  color: const Color(0xFF2C2C2C),
+                  child: FaNetworkImage(
+                    imageUrl,
+                    width: widget.width,
+                    height: widget.height,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (ctx, child, progress) {
+                      if (progress == null) return child;
+                      return const ColoredBox(color: Color(0xFF2C2C2C));
+                    },
+                    errorBuilder: (ctx, err, stack) {
+                      return Container(
+                        width: widget.width,
+                        height: widget.height,
+                        color: Colors.grey,
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.error, color: Colors.red),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),

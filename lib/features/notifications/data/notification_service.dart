@@ -14,6 +14,7 @@ import 'package:FANotifier/features/notifications/data/NotificationNavigationPro
 import 'package:FANotifier/features/notifications/data/activities_notification_state.dart';
 import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:FANotifier/features/notifications/data/notification_refresh_service.dart';
+import 'package:FANotifier/features/notifications/data/pending_navigation_store.dart';
 import 'package:FANotifier/core/logging/app_logging.dart';
 
 /// Manages notification channels, shows notifications, and handles taps.
@@ -35,6 +36,7 @@ class NotificationService {
     'journals',
     'notes',
     'activities',
+    'updates',
   ];
 
   static const MethodChannel _iosChannel = MethodChannel('app.notifications');
@@ -43,6 +45,8 @@ class NotificationService {
   static const int _kActivityNotificationIdBase = 1500000000;
   static const int _kActivityNotificationIdMax = 1999999999;
   static const int activityNotificationId = _kActivityNotificationIdBase;
+  static const int appUpdateNotificationId = 1400000000;
+  static const String appUpdatePayload = appUpdateNotificationPayload;
 
   Future<int> allocateActivityNotificationId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -70,25 +74,6 @@ class NotificationService {
 
   Future<void> cancelNotification(int id) {
     return flutterLocalNotificationsPlugin.cancel(id: id);
-  }
-
-  Future<void> cancelDeliveredActivityNotifications() async {
-    List<ActiveNotification> activeNotifications;
-    try {
-      activeNotifications =
-          await flutterLocalNotificationsPlugin.getActiveNotifications();
-    } catch (_) {
-      return;
-    }
-    for (final notification in activeNotifications) {
-      final id = notification.id;
-      final payload = notification.payload ?? '';
-      if (id == null) continue;
-      if (payload == 'activity_fa_activity' ||
-          payload.startsWith('fa_activity_')) {
-        await cancelNotification(id);
-      }
-    }
   }
 
   Future<void> init({
@@ -152,8 +137,10 @@ class NotificationService {
         details?.notificationResponse != null) {
       final payload = details!.notificationResponse!.payload;
       if (payload != null && payload.isNotEmpty) {
-        await ActivitiesNotificationStateStore()
-            .requestAcknowledgeOnNextForegroundFetch();
+        if (payload != appUpdatePayload) {
+          await ActivitiesNotificationStateStore()
+              .requestAcknowledgeOnNextForegroundFetch();
+        }
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('pending_navigation', payload);
         await onLaunchPayloadSaved?.call();
@@ -256,14 +243,18 @@ class NotificationService {
     required String source,
   }) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      if (payload == appUpdatePayload) {
+        await prefs.remove('pending_navigation');
+        return;
+      }
+
       await ActivitiesNotificationStateStore()
           .requestAcknowledgeOnNextForegroundFetch();
       appLog('[NOTIF] Notification tap received (source=$source)');
       kDebugPrint(
         'NOTES REFRESH TRIGGERED_handletappayload (source=$source, payload=$payload)',
       );
-
-      final prefs = await SharedPreferences.getInstance();
 
       final BuildContext? context = navigatorKey.currentContext;
       if (context == null) {
@@ -446,8 +437,10 @@ void notificationTapBackground(NotificationResponse response) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final payload = response.payload ?? '';
-  await ActivitiesNotificationStateStore()
-      .requestAcknowledgeOnNextForegroundFetch();
+  if (payload != NotificationService.appUpdatePayload) {
+    await ActivitiesNotificationStateStore()
+        .requestAcknowledgeOnNextForegroundFetch();
+  }
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString('pending_navigation', payload);
   appLog('[NOTIF_TAP_BG] saved pending notification payload.');

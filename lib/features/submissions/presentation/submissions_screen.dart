@@ -849,6 +849,7 @@ class _FavImageTile extends StatelessWidget {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
+                          const ColoredBox(color: Color(0xFF2C2C2C)),
                           Stack(
                             fit: StackFit.expand,
                             children: [

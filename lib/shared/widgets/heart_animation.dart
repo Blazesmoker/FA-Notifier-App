@@ -42,7 +42,7 @@ class HeartAnimationWidget extends StatefulWidget {
     required this.containerWidth,
     required this.containerHeight,
     this.onDebounceComplete,
-    this.animationDuration = const Duration(milliseconds: 300),
+    this.animationDuration = const Duration(milliseconds: 600),
     this.debounceDuration = const Duration(seconds: 3),
   }) : super(key: key);
 
@@ -77,7 +77,16 @@ class _HeartAnimationWidgetState extends State<HeartAnimationWidget>
 
     final curved = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
     _scaleAnim = Tween<double>(begin: 1.0, end: 1.4).animate(curved);
-    _opacityAnim = Tween<double>(begin: 0.0, end: 1.0).animate(curved);
+    _opacityAnim = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.0, end: 1.0),
+        weight: 1,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 0.0),
+        weight: 1,
+      ),
+    ]).animate(_controller);
   }
 
   @override

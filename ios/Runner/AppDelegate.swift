@@ -6,8 +6,68 @@ import workmanager_apple
 import BackgroundTasks
 import flutter_local_notifications
 
+private let adaptiveBackgroundTaskIdentifier = "com.blazesmoker.FANotifier.refresh"
+private let adaptiveBackgroundIntervalKey = "flutter.backgroundFetchIntervalMinutes"
+private let adaptiveBackgroundEmptyStreakKey = "flutter.backgroundFetchNoNotificationStreak"
+
+private func normalizedBackgroundFetchMinutes(_ minutes: Int) -> Int {
+    minutes >= 30 ? 30 : 15
+}
+
+private func storedBackgroundFetchMinutes() -> Int {
+    normalizedBackgroundFetchMinutes(UserDefaults.standard.integer(forKey: adaptiveBackgroundIntervalKey))
+}
+
+private func submitBackgroundFetch(minutes: Int, replacingPending: Bool) throws {
+    let normalizedMinutes = normalizedBackgroundFetchMinutes(minutes)
+    UserDefaults.standard.set(normalizedMinutes, forKey: adaptiveBackgroundIntervalKey)
+    UserDefaults.standard.synchronize()
+    if replacingPending {
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: adaptiveBackgroundTaskIdentifier)
+    }
+    let request = BGAppRefreshTaskRequest(identifier: adaptiveBackgroundTaskIdentifier)
+    request.earliestBeginDate = Date(timeIntervalSinceNow: TimeInterval(normalizedMinutes * 60))
+    try BGTaskScheduler.shared.submit(request)
+}
+
+final class AdaptiveBackgroundFetchPlugin: NSObject, FlutterPlugin {
+    static func register(with registrar: FlutterPluginRegistrar) {
+        let channel = FlutterMethodChannel(
+            name: "app.background_fetch",
+            binaryMessenger: registrar.messenger()
+        )
+        registrar.addMethodCallDelegate(AdaptiveBackgroundFetchPlugin(), channel: channel)
+    }
+
+    func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard call.method == "reschedule",
+              let arguments = call.arguments as? [String: Any],
+              let minutesNumber = arguments["minutes"] as? NSNumber
+        else {
+            result(FlutterMethodNotImplemented)
+            return
+        }
+        do {
+            try submitBackgroundFetch(
+                minutes: minutesNumber.intValue,
+                replacingPending: true
+            )
+            result(true)
+        } catch {
+            result(FlutterError(
+                code: "background_fetch_reschedule_failed",
+                message: error.localizedDescription,
+                details: nil
+            ))
+        }
+    }
+}
+
 func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     GeneratedPluginRegistrant.register(with: registry)
+    AdaptiveBackgroundFetchPlugin.register(
+        with: registry.registrar(forPlugin: "AdaptiveBackgroundFetchPlugin")
+    )
     NSLog("[AppDelegate] Background isolate plugins registered")
 }
 
@@ -16,7 +76,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 
     var flutterEngine: FlutterEngine?
 
-    private let backgroundTaskIdentifier = "com.blazesmoker.FANotifier.refresh"
+    private let backgroundTaskIdentifier = adaptiveBackgroundTaskIdentifier
 
     private func fLog(_ msg: String) {
         let line = "[AppDelegate] \(msg)"
@@ -263,6 +323,9 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
             fLog("Background launch detected - skipping FlutterEngine.run for UI entrypoint")
         }
         GeneratedPluginRegistrant.register(with: self)
+        AdaptiveBackgroundFetchPlugin.register(
+            with: registrar(forPlugin: "AdaptiveBackgroundFetchPlugin")
+        )
         setupNotificationChannelIfNeeded()
         setupTranslationChannelIfNeeded()
         UNUserNotificationCenter.current().delegate = self
@@ -303,6 +366,11 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
         configurePluginRegistrantCallbacks()
         GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+        AdaptiveBackgroundFetchPlugin.register(
+            with: engineBridge.pluginRegistry.registrar(
+                forPlugin: "AdaptiveBackgroundFetchPlugin"
+            )
+        )
     }
 
     override func applicationDidEnterBackground(_ application: UIApplication) {
@@ -331,6 +399,13 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     func handleDidBecomeActive(source: String) {
         fLog("App became active (\(source))")
         setFlutterSharedBool(true, forKey: "isAppActive")
+        UserDefaults.standard.set(0, forKey: adaptiveBackgroundEmptyStreakKey)
+        do {
+            try submitBackgroundFetch(minutes: 15, replacingPending: true)
+            fLog("Background fetch reset to 15m after app became active")
+        } catch {
+            fLog("Failed to reset background fetch after app became active: \(error.localizedDescription)")
+        }
         setupNotificationChannelIfNeeded()
         setupTranslationChannelIfNeeded()
         getPendingBackgroundTasks()
@@ -339,8 +414,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 
     private func handleBackgroundFetch(task: BGTask) {
         fLog("handleBackgroundFetch started")
-        scheduleBackgroundFetch()
-        logApproxNextFetch("after handle")
         var isTaskCompleted = false
         let taskStartTime = Date()
         task.expirationHandler = { [weak task] in
@@ -375,11 +448,10 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     }
 
     private func scheduleBackgroundFetch() {
-        let request = BGAppRefreshTaskRequest(identifier: backgroundTaskIdentifier)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        let minutes = storedBackgroundFetchMinutes()
         do {
-            try BGTaskScheduler.shared.submit(request)
-            fLog("✓ Background fetch scheduled for \(request.earliestBeginDate?.description ?? "unknown")")
+            try submitBackgroundFetch(minutes: minutes, replacingPending: false)
+            fLog("✓ Background fetch scheduled with \(minutes)m earliest interval")
             logApproxNextFetch("after submit")
         } catch {
             let errorString = error.localizedDescription

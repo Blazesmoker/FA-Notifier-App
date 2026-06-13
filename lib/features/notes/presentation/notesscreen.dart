@@ -772,7 +772,7 @@ class NotesScreenState extends State<NotesScreen>
 
     showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (_) {
         return Dialog(
           insetPadding:

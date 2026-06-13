@@ -342,7 +342,7 @@ class _FavImageTileFavsState extends State<_FavImageTileFavs> {
     return Container(
       width: width,
       height: height,
-      color: Colors.grey[300],
+      color: const Color(0xFF2C2C2C),
     );
   }
 
@@ -368,26 +368,31 @@ class _FavImageTileFavsState extends State<_FavImageTileFavs> {
               borderRadius: 8,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: FaNetworkImage(
-                  widget.imageUrl,
+                child: Container(
                   width: widget.width,
                   height: widget.height,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) {
-                      return child;
-                    }
-                    return _buildPlaceholder(widget.width, widget.height);
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      width: widget.width,
-                      height: widget.height,
-                      color: Colors.grey,
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.error, color: Colors.red),
-                    );
-                  },
+                  color: const Color(0xFF2C2C2C),
+                  child: FaNetworkImage(
+                    widget.imageUrl,
+                    width: widget.width,
+                    height: widget.height,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) {
+                        return child;
+                      }
+                      return _buildPlaceholder(widget.width, widget.height);
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: widget.width,
+                        height: widget.height,
+                        color: Colors.grey,
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.error, color: Colors.red),
+                      );
+                    },
+                  ),
                 ),
 
               ),

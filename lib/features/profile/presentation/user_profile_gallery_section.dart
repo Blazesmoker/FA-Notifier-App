@@ -51,6 +51,8 @@ class UserProfileGallerySection extends StatelessWidget {
                   ),
                 ),
                 PopupMenuButton<FaFolder>(
+                  position: PopupMenuPosition.under,
+                  offset: const Offset(0, 0),
                   onSelected: onFolderSelected,
                   itemBuilder: (context) {
                     return allFolders.map((folder) {
