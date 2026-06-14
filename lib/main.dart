@@ -9,10 +9,10 @@ import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
 import 'package:FANotifier/features/notifications/data/pending_navigation.dart';
 import 'package:FANotifier/shared/utils/notes_notifications_text_edit.dart';
+import 'package:app_badge_plus/app_badge_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_app_badge_control/flutter_app_badge_control.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:workmanager/workmanager.dart';
@@ -351,12 +351,13 @@ void callbackDispatcher() {
                     if (_isAppForegroundActive(prefs)) {
                       return Future.value(true);
                     }
+                    final int activityNotificationId =
+                        NotificationService.activityNotificationId;
                     await removePreviousActivityNotification(
                       notificationService,
+                      replacingWithId:
+                          Platform.isIOS ? activityNotificationId : null,
                     );
-                    final int activityNotificationId = Platform.isIOS
-                        ? await notificationService.allocateActivityNotificationId()
-                        : NotificationService.activityNotificationId;
                     final int? badgeNumber =
                         await nextIOSActivityBadgeNumberForNotification();
                     await notificationService.showNotification(
@@ -371,7 +372,6 @@ void callbackDispatcher() {
                     await commitIOSActivityBadgeNumber(badgeNumber);
                     await rememberActivityNotification(
                       activityNotificationId,
-                      badgeNumber,
                     );
                     await activitiesStateStore.markActivityNotificationShown(
                       currentCounts: counts,
@@ -540,7 +540,12 @@ Future<int?> nextIOSNoteBadgeNumberForNotification() async {
   final noteCount = (prefs.getInt(_iosNoteBadgeCountKey) ?? 0) + 1;
   final activityCounted =
       prefs.getBool(_currentActivityNotificationBadgeCountedKey) ?? false;
-  return noteCount + (activityCounted ? 1 : 0);
+  final badgeNumber = noteCount + (activityCounted ? 1 : 0);
+  appLog(
+    '[BADGE] producer=background_note notes=$noteCount '
+    'activitySlot=$activityCounted desired=$badgeNumber',
+  );
+  return badgeNumber;
 }
 
 Future<void> commitIOSNoteBadgeNumber(int? badgeNumber) async {
@@ -549,28 +554,53 @@ Future<void> commitIOSNoteBadgeNumber(int? badgeNumber) async {
   await prefs.reload();
   final noteCount = (prefs.getInt(_iosNoteBadgeCountKey) ?? 0) + 1;
   await prefs.setInt(_iosNoteBadgeCountKey, noteCount);
-  await updateBadgeCounter(badgeNumber);
+  await prefs.setInt('badgeCounter', badgeNumber);
+  appLog(
+    '[BADGE] producer=background_note committed notes=$noteCount '
+    'badge=$badgeNumber',
+  );
 }
 
 Future<int?> nextIOSActivityBadgeNumberForNotification() async {
   if (!Platform.isIOS) return null;
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
-  return (prefs.getInt(_iosNoteBadgeCountKey) ?? 0) + 1;
+  final noteCount = prefs.getInt(_iosNoteBadgeCountKey) ?? 0;
+  final badgeNumber = noteCount + 1;
+  appLog(
+    '[BADGE] producer=background_activity notes=$noteCount '
+    'activitySlot=true desired=$badgeNumber',
+  );
+  return badgeNumber;
 }
 
 Future<void> commitIOSActivityBadgeNumber(int? badgeNumber) async {
   if (badgeNumber == null) return;
-  await updateBadgeCounter(badgeNumber);
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  await prefs.setBool(_currentActivityNotificationBadgeCountedKey, true);
+  await prefs.setInt('badgeCounter', badgeNumber);
+  appLog(
+    '[BADGE] producer=background_activity committed activitySlot=true '
+    'badge=$badgeNumber',
+  );
 }
 
 Future<void> removePreviousActivityNotification(
-  NotificationService notificationService,
-) async {
+  NotificationService notificationService, {
+  int? replacingWithId,
+}) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
   final previousActivityNotificationId =
       prefs.getInt(_currentActivityNotificationIdKey);
+  if (Platform.isIOS) {
+    if (previousActivityNotificationId != null &&
+        previousActivityNotificationId != replacingWithId) {
+      await notificationService.cancelNotification(previousActivityNotificationId);
+    }
+    return;
+  }
   if (previousActivityNotificationId != null) {
     await notificationService.cancelNotification(previousActivityNotificationId);
   }
@@ -580,29 +610,34 @@ Future<void> removePreviousActivityNotification(
 
 Future<void> rememberActivityNotification(
   int activityNotificationId,
-  int? badgeNumber,
 ) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt(
     _currentActivityNotificationIdKey,
     activityNotificationId,
   );
-  await prefs.setBool(
-    _currentActivityNotificationBadgeCountedKey,
-    Platform.isIOS && badgeNumber != null,
-  );
+  if (!Platform.isIOS) {
+    await prefs.setBool(_currentActivityNotificationBadgeCountedKey, false);
+  }
 }
 
-Future<void> updateBadgeCounter(int newCount) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setInt('badgeCounter', newCount);
-  if (Platform.isIOS) {
-    try {
-      await FlutterAppBadgeControl.updateBadgeCount(newCount);
-    } catch (e) {
-      appLog('[BADGE] Failed to update iOS app badge: $e');
-    }
+Future<int?> syncIOSBadgeFromState({SharedPreferences? prefs}) async {
+  if (!Platform.isIOS) return null;
+  final badgePrefs = prefs ?? await SharedPreferences.getInstance();
+  if (prefs == null) {
+    await badgePrefs.reload();
   }
+  final noteCount = badgePrefs.getInt(_iosNoteBadgeCountKey) ?? 0;
+  final activityCounted =
+      badgePrefs.getBool(_currentActivityNotificationBadgeCountedKey) ?? false;
+  final badgeNumber = noteCount + (activityCounted ? 1 : 0);
+  await badgePrefs.setInt('badgeCounter', badgeNumber);
+  try {
+    await AppBadgePlus.updateBadge(badgeNumber);
+  } catch (e) {
+    appLog('[BADGE] Failed to update iOS app badge: $e');
+  }
+  return badgeNumber;
 }
 
 Future<void> resetBadgeCounter() async {
@@ -615,11 +650,7 @@ Future<void> resetBadgeCounter() async {
     await prefs.setBool(_currentActivityNotificationBadgeCountedKey, false);
   }
   if (Platform.isIOS) {
-    try {
-      await FlutterAppBadgeControl.removeBadge();
-    } catch (e) {
-      appLog('[BADGE] Failed to clear iOS app badge: $e');
-    }
+    await syncIOSBadgeFromState(prefs: prefs);
   }
 }
 

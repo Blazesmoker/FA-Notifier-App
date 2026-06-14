@@ -63,11 +63,17 @@ final class AdaptiveBackgroundFetchPlugin: NSObject, FlutterPlugin {
     }
 }
 
+func registerAdaptiveBackgroundFetchPlugin(registry: FlutterPluginRegistry) {
+    guard let registrar = registry.registrar(forPlugin: "AdaptiveBackgroundFetchPlugin") else {
+        NSLog("[AppDelegate] AdaptiveBackgroundFetchPlugin registrar unavailable")
+        return
+    }
+    AdaptiveBackgroundFetchPlugin.register(with: registrar)
+}
+
 func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     GeneratedPluginRegistrant.register(with: registry)
-    AdaptiveBackgroundFetchPlugin.register(
-        with: registry.registrar(forPlugin: "AdaptiveBackgroundFetchPlugin")
-    )
+    registerAdaptiveBackgroundFetchPlugin(registry: registry)
     NSLog("[AppDelegate] Background isolate plugins registered")
 }
 
@@ -91,6 +97,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 
     private var notifChannel: FlutterMethodChannel?
     private var pendingNotificationPayload: [String: Any]?
+    private var notificationsReady = false
     private var translationChannel: FlutterMethodChannel?
     private var translationHostWindow: UIWindow?
     private weak var translationPreviousKeyWindow: UIWindow?
@@ -137,11 +144,8 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
             guard let self = self else { return }
             if call.method == "notifications.ready" {
                 self.fLog("Dart confirmed notifications.ready")
-                if let pending = self.pendingNotificationPayload {
-                    self.fLog("Sending pending tapped notification to Dart")
-                    channel.invokeMethod("notificationTapped", arguments: pending)
-                    self.pendingNotificationPayload = nil
-                }
+                self.notificationsReady = true
+                self.flushPendingNotificationIfReady()
                 result(true)
             } else {
                 result(FlutterMethodNotImplemented)
@@ -149,11 +153,17 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         }
 
         self.fLog("MethodChannel 'app.notifications' initialized")
-        if let pending = pendingNotificationPayload {
-            self.fLog("Flushing previously pending tapped notification to Dart")
-            channel.invokeMethod("notificationTapped", arguments: pending)
-            pendingNotificationPayload = nil
-        }
+        flushPendingNotificationIfReady()
+    }
+
+    private func flushPendingNotificationIfReady() {
+        guard notificationsReady,
+              let channel = notifChannel,
+              let pending = pendingNotificationPayload
+        else { return }
+        fLog("Sending pending tapped notification to Dart")
+        channel.invokeMethod("notificationTapped", arguments: pending)
+        pendingNotificationPayload = nil
     }
 
     func setupTranslationChannelIfNeeded() {
@@ -323,9 +333,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
             fLog("Background launch detected - skipping FlutterEngine.run for UI entrypoint")
         }
         GeneratedPluginRegistrant.register(with: self)
-        AdaptiveBackgroundFetchPlugin.register(
-            with: registrar(forPlugin: "AdaptiveBackgroundFetchPlugin")
-        )
+        registerAdaptiveBackgroundFetchPlugin(registry: self)
         setupNotificationChannelIfNeeded()
         setupTranslationChannelIfNeeded()
         UNUserNotificationCenter.current().delegate = self
@@ -366,11 +374,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
         configurePluginRegistrantCallbacks()
         GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-        AdaptiveBackgroundFetchPlugin.register(
-            with: engineBridge.pluginRegistry.registrar(
-                forPlugin: "AdaptiveBackgroundFetchPlugin"
-            )
-        )
+        registerAdaptiveBackgroundFetchPlugin(registry: engineBridge.pluginRegistry)
     }
 
     override func applicationDidEnterBackground(_ application: UIApplication) {
@@ -508,7 +512,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         let content = response.notification.request.content
         fLog("Notification tapped: \(content.title) (action=\(response.actionIdentifier))")
         let payload = makePayload(from: response)
-        if let channel = notifChannel {
+        if notificationsReady, let channel = notifChannel {
             fLog("Forwarding tap to Dart via MethodChannel")
             channel.invokeMethod("notificationTapped", arguments: payload)
         } else {

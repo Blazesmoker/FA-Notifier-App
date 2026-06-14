@@ -45,15 +45,6 @@ subprojects {
             }
         }
     }
-    if (project.name == "flutter_app_badge_control") {
-        afterEvaluate {
-            plugins.withId("com.android.library") {
-                android {
-                    compileSdkVersion rootProject.ext.compileSdkVersion
-                }
-            }
-        }
-    }
 }
 
 tasks.register("clean", Delete) {

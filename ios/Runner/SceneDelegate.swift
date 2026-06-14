@@ -27,7 +27,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate, FlutterSceneLifeCyclePr
         pendingSession = session
         pendingConnectionOptions = connectionOptions
 
-        if UIApplication.shared.applicationState == .background {
+        if UIApplication.shared.applicationState == .background &&
+            connectionOptions.notificationResponse == nil {
             return
         }
 

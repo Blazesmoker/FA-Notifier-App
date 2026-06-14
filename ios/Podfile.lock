@@ -1,7 +1,5 @@
 PODS:
   - Flutter (1.0.0)
-  - flutter_app_badge_control (0.0.1):
-    - Flutter
   - google_mlkit_commons (0.11.1):
     - Flutter
     - MLKitVision (~> 10.0.0)
@@ -71,7 +69,6 @@ PODS:
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
-  - flutter_app_badge_control (from `.symlinks/plugins/flutter_app_badge_control/ios`)
   - google_mlkit_commons (from `.symlinks/plugins/google_mlkit_commons/ios`)
   - google_mlkit_language_id (from `.symlinks/plugins/google_mlkit_language_id/ios`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
@@ -96,8 +93,6 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   Flutter:
     :path: Flutter
-  flutter_app_badge_control:
-    :path: ".symlinks/plugins/flutter_app_badge_control/ios"
   google_mlkit_commons:
     :path: ".symlinks/plugins/google_mlkit_commons/ios"
   google_mlkit_language_id:
@@ -111,7 +106,6 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  flutter_app_badge_control: 1f0ac37334d1a2da72bde7e4d3c6c8675517a471
   google_mlkit_commons: a5e4ffae5bc59ea4c7b9025dc72cb6cb79dc1166
   google_mlkit_language_id: de6f5cc02967420549c3c3a1624b359217442db9
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7

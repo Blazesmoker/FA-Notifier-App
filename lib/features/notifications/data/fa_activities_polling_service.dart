@@ -347,6 +347,21 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       );
       if (isDuplicate) return;
 
+      if (Platform.isIOS &&
+          WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+        debugPrint(
+          '[ACTIVITY_NOTIF] producer=foreground_polling skipped '
+          'lifecycle=${WidgetsBinding.instance.lifecycleState}',
+        );
+        return;
+      }
+
+      if (Platform.isIOS) {
+        debugPrint(
+          '[ACTIVITY_NOTIF] producer=foreground_polling badge=unchanged '
+          'lifecycle=${WidgetsBinding.instance.lifecycleState}',
+        );
+      }
       await NotificationService().showNotification(
         NotificationService.activityNotificationId,
         'New FA Activity',
@@ -354,6 +369,14 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
         'activity_fa_activity',
         'activities',
       );
+      if (Platform.isIOS &&
+          WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+        debugPrint(
+          '[ACTIVITY_NOTIF] producer=foreground_polling not_committed '
+          'lifecycle=${WidgetsBinding.instance.lifecycleState}',
+        );
+        return;
+      }
       await activitiesStateStore.markActivityNotificationShown(
         currentCounts: currentCounts,
         body: messageBody,
