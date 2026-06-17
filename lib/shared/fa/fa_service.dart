@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:FANotifier/features/profile/domain/user_profile.dart';
 import 'package:FANotifier/features/notifications/domain/notifications.dart';
@@ -17,7 +16,10 @@ class FaService {
   );
 
   /// Fetches the user profile information (display name and profile picture).
-  Future<UserProfile?> fetchUserProfile({ BuildContext? context }) async {
+  Future<UserProfile?> fetchUserProfile({
+    BuildContext? context,
+    String? homeHtml,
+  }) async {
     String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     String? cfClearance = await _secureStorage.read(key: 'fa_cookie_cf_clearance');
@@ -36,21 +38,29 @@ class FaService {
     }
 
     const String url = 'https://www.furaffinity.net/';
-    debugPrint('[FaService] Making HTTP GET request to $url with cookies: $cookiesHeader');
+    if (homeHtml == null) {
+      debugPrint('[FaService] Making HTTP GET request to $url with cookies: $cookiesHeader');
+    } else {
+      debugPrint('[FaService] Parsing user profile from startup home HTML');
+    }
 
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Cookie': cookiesHeader,
-        'User-Agent': FAHttp.userAgent,
-      },
-    );
+    final response = homeHtml == null
+        ? await FAHttp.get(
+            Uri.parse(url),
+            headers: {
+              'Cookie': cookiesHeader,
+              'User-Agent': FAHttp.userAgent,
+            },
+          )
+        : null;
+    final statusCode = response?.statusCode ?? 200;
+    final body = homeHtml ?? response!.body;
 
-    debugPrint('[FaService] Response received: statusCode=${response.statusCode}');
-    debugPrint('[FaService] Response body snippet: ${response.body.substring(0, 100)}');
+    debugPrint('[FaService] Response received: statusCode=$statusCode');
+    debugPrint('[FaService] Response body snippet: ${body.substring(0, body.length < 100 ? body.length : 100)}');
 
-    if (response.statusCode == 200) {
-      final document = html_parser.parse(response.body);
+    if (statusCode == 200) {
+      final document = html_parser.parse(body);
 
       final bool isClassic = (document.querySelector('body')
           ?.attributes['data-static-path']
@@ -59,6 +69,12 @@ class FaService {
 
       final myUsernameAnchor = document.querySelector('a#my-username');
       if (myUsernameAnchor != null) {
+        final profilePath = myUsernameAnchor.attributes['href'];
+        final profileUrl = profilePath == null
+            ? null
+            : profilePath.startsWith('http')
+                ? profilePath
+                : 'https://www.furaffinity.net$profilePath';
         String displayName;
         if (!isClassic) {
 
@@ -77,14 +93,10 @@ class FaService {
           );
           profileImageUrl = normalizeFaUrl(avatarImg?.attributes['src']);
         } else {
-          final profilePath = myUsernameAnchor.attributes['href'];
           if (profilePath != null) {
-            final String profileUrl = profilePath.startsWith('http')
-                ? profilePath
-                : 'https://www.furaffinity.net$profilePath';
             debugPrint('[FaService] Fetching classic profile page: $profileUrl');
-            final profileResponse = await http.get(
-              Uri.parse(profileUrl),
+            final profileResponse = await FAHttp.get(
+              Uri.parse(profileUrl!),
               headers: {
                 'Cookie': cookiesHeader,
                 'User-Agent': FAHttp.userAgent,
@@ -106,19 +118,22 @@ class FaService {
 
         if (displayName.isNotEmpty && profileImageUrl != null) {
           debugPrint('[FaService] Parsed user profile: $displayName, avatar: $profileImageUrl');
-          return UserProfile(username: displayName, profileImageUrl: profileImageUrl);
+          return UserProfile(
+            username: displayName,
+            profileImageUrl: profileImageUrl,
+            profileUrl: profileUrl,
+          );
         }
       }
       debugPrint('[FaService] Could not parse user profile.');
       return null;
-    } else if (response.statusCode == 403 && response.body.contains('Just a moment')) {
+    } else if (statusCode == 403 && body.contains('Just a moment')) {
       debugPrint('[FaService] 403 with Cloudflare challenge for user profile.');
-      // No human verification dialog or retry logic, simply return null.
       return null;
     } else {
-      debugPrint('[FaService] fetchUserProfile received unexpected status code: ${response.statusCode}');
+      debugPrint('[FaService] fetchUserProfile received unexpected status code: $statusCode');
       debugPrint('URL: $url');
-      debugPrint('Body: ${response.body.substring(0, 100)}');
+      debugPrint('Body: ${body.substring(0, body.length < 100 ? body.length : 100)}');
     }
     return null;
   }
@@ -144,7 +159,7 @@ class FaService {
     debugPrint('[FaService] Sending notifications request with cookies: $cookies');
 
     const String notificationsUrl = 'https://www.furaffinity.net/';
-    final response = await http.get(
+    final response = await FAHttp.get(
       Uri.parse(notificationsUrl),
       headers: {
         'Cookie': cookies,

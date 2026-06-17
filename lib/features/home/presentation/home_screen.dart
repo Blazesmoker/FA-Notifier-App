@@ -33,6 +33,7 @@ import 'package:FANotifier/features/notifications/data/pending_navigation_store.
 import 'package:FANotifier/shared/fa/fa_service.dart';
 import 'package:FANotifier/features/auth/data/startup_cloudflare_check_service.dart';
 import 'package:FANotifier/features/home/data/home_auth_cookie_service.dart';
+import 'package:FANotifier/features/home/data/home_profile_cache.dart';
 import 'package:FANotifier/features/home/data/home_session_preference.dart';
 import 'package:FANotifier/features/home/data/home_login_html_detector.dart';
 import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
@@ -61,12 +62,18 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _sfwEnabled = true;
   final SfwModePreference _sfwModePreference = SfwModePreference();
   final HomeSessionPreference _homeSessionPreference = HomeSessionPreference();
+  final HomeProfileCache _homeProfileCache = const HomeProfileCache();
   final PendingNavigationStore _pendingNavigationStore =
       PendingNavigationStore();
   HomeStartScreenPreference _homeStartScreenPreference =
       HomeStartScreenPreference.browse;
+  Future<void>? _homeStartPreferenceFuture;
+  bool _homeStartPreferenceLoaded = false;
   bool _didOpenStartupProfile = false;
   bool _isOpeningStartupProfile = false;
+  String? _startupHomeHtml;
+  final Set<int> _loadedHomeIndexes = <int>{};
+  bool _startupWarmupScheduled = false;
 
   bool _profileFetched = false;
 
@@ -120,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
         Provider.of<NotificationNavigationProvider>(context, listen: false);
     _navProvider.addListener(_handleNavProviderChange);
 
-    _loadHomeStartScreenPreference();
+    _homeStartPreferenceFuture = _loadHomeStartScreenPreference();
     _initializeAndLoadLoginState();
     _handlePendingNavigation();
 
@@ -152,6 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() {
       _selectedIndex = next;
+      _loadedHomeIndexes.add(next);
       if (next == 4) _forceNotesRefresh = true;
     });
   }
@@ -168,6 +176,8 @@ class _HomeScreenState extends State<HomeScreen> {
           _selectedIndex == 0) {
         _selectedIndex = 2;
       }
+      _loadedHomeIndexes.add(_selectedIndex);
+      _homeStartPreferenceLoaded = true;
     });
 
     _maybeOpenStartupProfile();
@@ -215,6 +225,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _initializeAndLoadLoginState() async {
     await _loadSfwEnabled();
     await _loadLoginState();
+    await (_homeStartPreferenceFuture ?? Future<void>.value());
+    if (isLoggedIn) {
+      await _loadCachedUserProfile();
+    }
     final canProceed = await _runStartupCloudflareCheck();
     if (!canProceed) {
       setState(() {
@@ -226,15 +240,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (isLoggedIn) {
       await _setCookiesFromPrefs();
-      _startActivitiesPolling(triggerImmediate: true);
+      _startActivitiesPolling(triggerImmediate: false);
 
       setState(() {
         isCheckingLoginStatus = false;
       });
 
       if (!_profileFetched) {
-        await _fetchUserProfile();
         _profileFetched = true;
+        final profileFuture = _fetchUserProfile();
+        if (_homeStartScreenPreference == HomeStartScreenPreference.profile &&
+            _userProfile == null) {
+          await profileFuture;
+        } else {
+          unawaited(profileFuture);
+        }
       }
     } else {
       setState(() {
@@ -244,8 +264,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<bool> _runStartupCloudflareCheck() async {
-    final needsChallenge = await _startupCloudflareCheckService.needsChallenge();
-    if (!needsChallenge) {
+    final check = await _startupCloudflareCheckService.checkHome();
+    _startupHomeHtml = isLoggedIn ? check.homeHtml : null;
+    if (!check.needsChallenge) {
       return true;
     }
     if (!mounted) {
@@ -277,17 +298,38 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {}
   }
 
+  Future<void> _loadCachedUserProfile() async {
+    final cachedProfile = await _homeProfileCache.load();
+    if (!mounted || cachedProfile == null) return;
+    setState(() {
+      _userProfile = cachedProfile;
+      isLoadingProfile = false;
+    });
+    _maybeOpenStartupProfile();
+  }
+
   Future<void> _fetchUserProfile() async {
     try {
-      UserProfile? profile =
-          await _faService.fetchUserProfile(context: context);
+      final startupHomeHtml = _startupHomeHtml;
+      _startupHomeHtml = null;
+      UserProfile? profile = await _faService.fetchUserProfile(
+        context: context,
+        homeHtml: startupHomeHtml,
+      );
+      if (profile != null) {
+        await _homeProfileCache.save(profile);
+      }
+      if (!mounted) return;
       setState(() {
-        _userProfile = profile;
+        if (profile != null) {
+          _userProfile = profile;
+        }
         isLoadingProfile = false;
       });
       _maybeOpenStartupProfile();
     } catch (e) {
       debugPrint("Error fetching user profile: $e");
+      if (!mounted) return;
       setState(() {
         isLoadingProfile = false;
       });
@@ -322,6 +364,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void openNotificationsWithSection(String section) {
     setState(() {
       _selectedIndex = 3;
+      _loadedHomeIndexes.add(3);
       _notificationsInitialSection = section;
     });
   }
@@ -361,6 +404,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() {
       _selectedIndex = index;
+      _loadedHomeIndexes.add(index);
       if (index != 3) {
         _notificationsInitialSection = null;
       }
@@ -389,6 +433,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _triggerSearch(String query) {
     setState(() {
       _selectedIndex = 1;
+      _loadedHomeIndexes.add(1);
     });
   }
 
@@ -403,19 +448,12 @@ class _HomeScreenState extends State<HomeScreen> {
       return false;
     }
 
-    if (_isOpeningStartupProfile) {
-      return true;
-    }
-
     if (_didOpenStartupProfile) {
       return false;
     }
 
-    if (isLoadingProfile || _userProfile == null) {
-      return true;
-    }
-
-    return _userProfile!.profileImageUrl.isNotEmpty;
+    final profile = _userProfile;
+    return profile == null || userProfileRouteNickname(profile) == null;
   }
 
   void _maybeOpenStartupProfile() {
@@ -428,19 +466,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final profile = _userProfile;
-    if (profile == null || profile.profileImageUrl.isEmpty) {
+    if (profile == null) {
       return;
     }
 
-    final String imageUrl = profile.profileImageUrl;
-    final String filename = imageUrl.split('/').last;
-    final String nickname = filename.contains('.')
-        ? filename.substring(
-            0,
-            filename.lastIndexOf('.'),
-          )
-        : filename;
-    final String lowercaseNickname = nickname.toLowerCase();
+    final lowercaseNickname = userProfileRouteNickname(profile);
+    if (lowercaseNickname == null) return;
     debugPrint("Extracted nickname: $lowercaseNickname");
 
     setState(() {
@@ -517,7 +548,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isLoggedIn = true;
               _webViewController = null;
             });
-            _startActivitiesPolling(triggerImmediate: true);
+            _startActivitiesPolling(triggerImmediate: false);
 
             await _setSfwCookieToNSFW();
 
@@ -525,7 +556,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             if (!_profileFetched) {
               _profileFetched = true;
-              await _fetchUserProfile();
+              unawaited(_fetchUserProfile());
             }
 
             if (!wasLoggedIn && !_loginSnackShownThisRun && mounted) {
@@ -602,12 +633,12 @@ class _HomeScreenState extends State<HomeScreen> {
             final wasLoggedIn = await _homeSessionPreference.loadIsLoggedIn();
 
             await _saveLoginState(true);
-            _startActivitiesPolling(triggerImmediate: true);
+            _startActivitiesPolling(triggerImmediate: false);
             await _setSfwCookieToNSFW();
 
             if (!_profileFetched) {
               _profileFetched = true;
-              await _fetchUserProfile();
+              unawaited(_fetchUserProfile());
             }
 
             if (!wasLoggedIn && !_loginSnackShownThisRun && mounted) {
@@ -634,14 +665,57 @@ class _HomeScreenState extends State<HomeScreen> {
     _firstTimeElementFound = null;
   }
 
+  void _scheduleStartupWarmup() {
+    if (_startupWarmupScheduled || !isLoggedIn || !_homeStartPreferenceLoaded) {
+      return;
+    }
+    _startupWarmupScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_warmStartupScreens());
+    });
+  }
+
+  Future<void> _warmStartupScreens() async {
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!mounted || !isLoggedIn) return;
+
+    await FaActivitiesPollingService().triggerNow(
+      resetTimer: true,
+      source: 'startup_warmup',
+    );
+
+    final order = <int>[
+      _selectedIndex,
+      0,
+      2,
+      4,
+      3,
+    ];
+    final seen = <int>{};
+    for (final index in order) {
+      if (!seen.add(index)) continue;
+      if (!mounted || !isLoggedIn) return;
+      if (!_loadedHomeIndexes.contains(index)) {
+        setState(() {
+          _loadedHomeIndexes.add(index);
+        });
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+    }
+  }
+
   Widget _buildMainAppScreen(BuildContext context) {
-    if (_shouldHoldForStartupProfile ||
-        isLoadingProfile ||
-        _userProfile == null) {
+    if (!_homeStartPreferenceLoaded || _shouldHoldForStartupProfile) {
       return const Center(
           child: PulsatingLoadingIndicator(
               size: 108.0, assetPath: 'assets/icons/fathemed.png'));
     }
+    _scheduleStartupWarmup();
+    final userProfile = _userProfile ??
+        UserProfile(
+          username: 'Username',
+          profileImageUrl: '',
+        );
     return DrawerUserController(
       key: _drawerKey,
       screenIndex: drawerIndex,
@@ -651,7 +725,7 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       screenView: _buildSelectedScreen(),
       onLogout: _logout,
-      userProfile: _userProfile!,
+      userProfile: userProfile,
       onNoteCounterTap: _onNoteCounterTap,
       onNotesCountChanged: (int count) {
         setState(() {
@@ -668,6 +742,13 @@ class _HomeScreenState extends State<HomeScreen> {
     await _homeAuthCookieService.setStoredCookies();
   }
 
+  Widget _buildHomeStackChild(int index, Widget Function() builder) {
+    if (index == _selectedIndex || _loadedHomeIndexes.contains(index)) {
+      return builder();
+    }
+    return const SizedBox.shrink();
+  }
+
   Widget _buildSelectedScreen() {
     bool shouldForceRefresh = _forceNotesRefresh;
     if (_forceNotesRefresh && _selectedIndex == 4) {
@@ -682,73 +763,83 @@ class _HomeScreenState extends State<HomeScreen> {
     return IndexedStack(
       index: _selectedIndex,
       children: [
-        // 0: Browse
-        Scaffold(
-          appBar: AppBar(
-            title: const Text('Browse'),
-            centerTitle: true,
-            actions: [
-              Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: IconButton(
-                  icon: const Icon(Icons.filter_list),
-                  onPressed: () async {
-                    final updatedFilters =
-                        await Navigator.push<Map<String, String>>(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => FiltersScreen(
-                          selectedFilters: browseFilters,
-                          sfwEnabled: _sfwEnabled,
+        _buildHomeStackChild(
+          0,
+          () => Scaffold(
+            appBar: AppBar(
+              title: const Text('Browse'),
+              centerTitle: true,
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: IconButton(
+                    icon: const Icon(Icons.filter_list),
+                    onPressed: () async {
+                      final updatedFilters =
+                          await Navigator.push<Map<String, String>>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => FiltersScreen(
+                            selectedFilters: browseFilters,
+                            sfwEnabled: _sfwEnabled,
+                          ),
                         ),
-                      ),
-                    );
-                    if (updatedFilters != null) {
-                      setState(() {
-                        browseFilters =
-                            ContentRatingFilters.normalizeBrowseFilters(
-                          updatedFilters,
-                          sfwEnabled: _sfwEnabled,
-                        );
-                      });
-                    }
-                  },
+                      );
+                      if (updatedFilters != null) {
+                        setState(() {
+                          browseFilters =
+                              ContentRatingFilters.normalizeBrowseFilters(
+                            updatedFilters,
+                            sfwEnabled: _sfwEnabled,
+                          );
+                        });
+                      }
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
+            body: FAImageGrid(
+              key: _browseKey,
+              selectedFilters: browseFilters,
+            ),
           ),
-          body: FAImageGrid(
-            key: _browseKey,
-            selectedFilters: browseFilters,
+        ),
+        _buildHomeStackChild(
+          1,
+          () => SearchScreen(
+            key: _searchKey,
+            searchFilters: searchFilters,
+            sfwEnabled: _sfwEnabled,
+            onFilterUpdated: (updatedSearchFilters) {
+              setState(() {
+                searchFilters = ContentRatingFilters.normalizeSearchFilters(
+                  updatedSearchFilters,
+                  sfwEnabled: _sfwEnabled,
+                );
+              });
+            },
           ),
         ),
-        // 1: Search
-        SearchScreen(
-          key: _searchKey,
-          searchFilters: searchFilters,
-          sfwEnabled: _sfwEnabled,
-          onFilterUpdated: (updatedSearchFilters) {
-            setState(() {
-              searchFilters = ContentRatingFilters.normalizeSearchFilters(
-                updatedSearchFilters,
-                sfwEnabled: _sfwEnabled,
-              );
-            });
-          },
+        _buildHomeStackChild(
+          2,
+          () => SubmissionsScreen(key: _submissionsKey),
         ),
-        // 2: Submissions
-        SubmissionsScreen(key: _submissionsKey),
-        // 3: Notifications
-        NotificationsScreen(
-          drawerKey: _drawerKey,
-          key: ValueKey(_notificationsInitialSection),
-          initialSection: _notificationsInitialSection,
+        _buildHomeStackChild(
+          3,
+          () => NotificationsScreen(
+            drawerKey: _drawerKey,
+            key: ValueKey(_notificationsInitialSection),
+            initialSection: _notificationsInitialSection,
+          ),
         ),
-        // 4: Notes
-        NotesScreen(
-          drawerKey: _drawerKey,
-          forceRefresh: shouldForceRefresh,
-          key: _notesKey,
+        _buildHomeStackChild(
+          4,
+          () => NotesScreen(
+            drawerKey: _drawerKey,
+            forceRefresh: shouldForceRefresh,
+            key: _notesKey,
+          ),
         ),
       ],
     );
@@ -767,6 +858,7 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           drawerIndex = DrawerIndex.HOME;
           _selectedIndex = 0;
+          _loadedHomeIndexes.add(0);
         });
       });
     } else {
@@ -775,20 +867,25 @@ class _HomeScreenState extends State<HomeScreen> {
         switch (indexScreen) {
           case DrawerIndex.HOME:
             _selectedIndex = 0;
+            _loadedHomeIndexes.add(0);
             break;
           case DrawerIndex.Submissions:
             _selectedIndex = 2;
+            _loadedHomeIndexes.add(2);
             _submissionsKey.currentState?.refreshSubmissionsManually();
             break;
           case DrawerIndex.Notes:
             _selectedIndex = 4;
+            _loadedHomeIndexes.add(4);
             break;
           case DrawerIndex.Notifications:
             _selectedIndex = 3;
+            _loadedHomeIndexes.add(3);
             break;
           default:
             debugPrint("Unhandled DrawerIndex: $indexScreen");
             _selectedIndex = 0;
+            _loadedHomeIndexes.add(0);
             break;
         }
       });
@@ -820,6 +917,7 @@ class _HomeScreenState extends State<HomeScreen> {
       debugPrint('[Logout] FlutterSecureStorage cleared.');
 
       await _homeSessionPreference.clearAll();
+      await _homeProfileCache.clear();
 
       await DefaultCacheManager().emptyCache();
       debugPrint('[Logout] Image cache cleared.');
@@ -835,6 +933,11 @@ class _HomeScreenState extends State<HomeScreen> {
         isLoadingProfile = false;
         drawerIndex = DrawerIndex.HOME;
         _selectedIndex = 0;
+        _loadedHomeIndexes
+          ..clear()
+          ..add(0);
+        _startupWarmupScheduled = false;
+        _homeStartPreferenceLoaded = true;
         _didOpenStartupProfile = false;
         _isOpeningStartupProfile = false;
       });

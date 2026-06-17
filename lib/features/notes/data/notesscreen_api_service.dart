@@ -18,6 +18,8 @@ import 'package:FANotifier/core/utils/utils.dart';
 import 'package:FANotifier/shared/utils/notes_notifications_text_edit.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
+import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 
 class NotesPageSnapshot {
   const NotesPageSnapshot({
@@ -53,6 +55,9 @@ class NotesApiService {
       ..connectionTimeout = const Duration(seconds: 20);
     final client = IOClient(ioHttp);
     try {
+      await FaRequestCoordinator.instance.waitForTurn(
+        label: 'GET $url',
+      );
       final resp = await client.get(
         Uri.parse(url),
         headers: {
@@ -65,6 +70,10 @@ class NotesApiService {
               'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         },
       ).timeout(const Duration(seconds: 30));
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: resp.statusCode,
+        headers: resp.headers,
+      );
       return resp;
     } finally {
       client.close();
@@ -105,6 +114,17 @@ class NotesApiService {
 
         if (resp.statusCode == 200) {
           final decoded = utf8.decode(resp.bodyBytes, allowMalformed: true);
+          final faMessage = parseFaSystemMessage(decoded);
+          if (faMessage != null) {
+            if (faMessage.isMaintenanceOrUnavailable) {
+              FaRequestCoordinator.instance.recordMaintenanceOrUnavailable(
+                message: faMessage.message,
+                retryAfter: faMessage.retryAfter,
+              );
+              throw FaMaintenanceUnavailableException(faMessage.message);
+            }
+            throw Exception(faMessage.message);
+          }
           final doc = html_parser.parse(decoded);
           return NotesPageSnapshot(
             messages: _parseMessages(doc),
@@ -137,6 +157,8 @@ class NotesApiService {
         await Future.delayed(backoff);
         backoff *= 2;
         continue;
+      } on FaMaintenanceUnavailableException {
+        rethrow;
       } catch (e) {
         throw Exception('Error fetching page $page: $e');
       }
@@ -292,8 +314,10 @@ class NotesApiService {
         [Cookie('a', cookieA), Cookie('b', cookieB)],
       ),
     );
+    final url = 'https://www.furaffinity.net$link';
+    await FaRequestCoordinator.instance.waitForTurn(label: 'GET $url');
     final resp = await dio.get(
-      'https://www.furaffinity.net$link',
+      url,
       options: Options(
         responseType: ResponseType.plain,
         headers: {
@@ -305,6 +329,9 @@ class NotesApiService {
         validateStatus: (status) =>
             status != null && status >= 200 && status < 400,
       ),
+    );
+    FaRequestCoordinator.instance.recordHttpStatus(
+      statusCode: resp.statusCode,
     );
     if (resp.statusCode == 200) {
       final doc = html_parser.parse(resp.data);
@@ -390,36 +417,24 @@ class NotesApiService {
     }
     final body = 'manage_notes=1&move_to=$moveTo&'
         '${ids.map((id) => 'items[]=${Uri.encodeComponent(id)}').join('&')}';
-    final ioHttp = HttpClient()
-      ..idleTimeout = Duration.zero
-      ..connectionTimeout = const Duration(seconds: 20);
-    final client = IOClient(ioHttp);
-    try {
-      final resp = await client
-          .post(
-            Uri.parse('https://www.furaffinity.net/msg/pms/'),
-            headers: {
-              'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-                'a=$cookieA; b=$cookieB; folder=trash',
-              ),
-              'User-Agent': FAHttp.userAgent,
-              HttpHeaders.connectionHeader: 'close',
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'Accept':
-                  'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-              'Referer':
-                  'https://www.furaffinity.net/controls/switchbox/trash/',
-              'Origin': 'https://www.furaffinity.net',
-            },
-            body: body,
-          )
-          .timeout(const Duration(seconds: 30));
-      if (resp.statusCode != 200 && resp.statusCode != 302) {
-        throw Exception('$moveTo request failed: ${resp.statusCode}');
-      }
-    } finally {
-      client.close();
-      ioHttp.close(force: true);
+    final resp = await FAHttp.post(
+      Uri.parse('https://www.furaffinity.net/msg/pms/'),
+      headers: {
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=$cookieA; b=$cookieB; folder=trash',
+        ),
+        HttpHeaders.connectionHeader: 'close',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept':
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Referer': 'https://www.furaffinity.net/controls/switchbox/trash/',
+        'Origin': 'https://www.furaffinity.net',
+      },
+      body: body,
+      timeout: const Duration(seconds: 30),
+    );
+    if (resp.statusCode != 200 && resp.statusCode != 302) {
+      throw Exception('$moveTo request failed: ${resp.statusCode}');
     }
   }
 
@@ -437,35 +452,24 @@ class NotesApiService {
     }
     final body = 'manage_notes=1&move_to=trash&'
         '${ids.map((id) => 'items[]=${Uri.encodeComponent(id)}').join('&')}';
-    final ioHttp = HttpClient()
-      ..idleTimeout = Duration.zero
-      ..connectionTimeout = const Duration(seconds: 20);
-    final client = IOClient(ioHttp);
-    try {
-      final resp = await client
-          .post(
-            Uri.parse('https://www.furaffinity.net/msg/pms/'),
-            headers: {
-              'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-                'a=$cookieA; b=$cookieB; folder=$folder',
-              ),
-              'User-Agent': FAHttp.userAgent,
-              HttpHeaders.connectionHeader: 'close',
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'Accept':
-                  'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-              'Referer': 'https://www.furaffinity.net/msg/pms/',
-              'Origin': 'https://www.furaffinity.net',
-            },
-            body: body,
-          )
-          .timeout(const Duration(seconds: 30));
-      if (resp.statusCode != 200 && resp.statusCode != 302) {
-        throw Exception('Trash request failed: ${resp.statusCode}');
-      }
-    } finally {
-      client.close();
-      ioHttp.close(force: true);
+    final resp = await FAHttp.post(
+      Uri.parse('https://www.furaffinity.net/msg/pms/'),
+      headers: {
+        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+          'a=$cookieA; b=$cookieB; folder=$folder',
+        ),
+        HttpHeaders.connectionHeader: 'close',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept':
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Referer': 'https://www.furaffinity.net/msg/pms/',
+        'Origin': 'https://www.furaffinity.net',
+      },
+      body: body,
+      timeout: const Duration(seconds: 30),
+    );
+    if (resp.statusCode != 200 && resp.statusCode != 302) {
+      throw Exception('Trash request failed: ${resp.statusCode}');
     }
   }
 }

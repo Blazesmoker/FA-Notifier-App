@@ -6,6 +6,7 @@ import 'package:FANotifier/features/submissions/domain/finalize_submission_optio
 import 'package:FANotifier/features/submissions/domain/finalize_submission_request.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
@@ -49,8 +50,11 @@ class FinalizeSubmissionService {
   Future<FinalizeSubmissionOptions> fetchOptions() async {
     await _loadCookies();
 
-    final response = await _dio.get(
-      'https://www.furaffinity.net/submit/finalize/',
+    const url = 'https://www.furaffinity.net/submit/finalize/';
+    await FaRequestCoordinator.instance.waitForTurn(label: 'GET $url');
+    final response = await _dio.get(url);
+    FaRequestCoordinator.instance.recordHttpStatus(
+      statusCode: response.statusCode,
     );
 
     debugPrint("GET /submit/finalize/ Status Code: ${response.statusCode}");
@@ -86,8 +90,10 @@ class FinalizeSubmissionService {
       'Request Data: $data\nTimestamp: ${DateTime.now()}\n\n',
     );
 
+    const url = 'https://www.furaffinity.net/submit/finalize/';
+    await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
     final response = await _dio.post(
-      'https://www.furaffinity.net/submit/finalize/',
+      url,
       data: data,
       options: Options(
         contentType: Headers.formUrlEncodedContentType,
@@ -99,6 +105,9 @@ class FinalizeSubmissionService {
           return status != null && (status >= 200 && status < 400);
         },
       ),
+    );
+    FaRequestCoordinator.instance.recordHttpStatus(
+      statusCode: response.statusCode,
     );
 
     debugPrint("POST /submit/finalize/ Status Code: ${response.statusCode}");

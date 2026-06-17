@@ -1147,6 +1147,20 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final service = Provider.of<FANotificationService>(
+        context,
+        listen: false,
+      );
+      if (service.hasFetched) return;
+      unawaited(
+        FaActivitiesPollingService().triggerNow(
+          resetTimer: false,
+          source: 'notifications_first_open',
+        ),
+      );
+    });
   }
 
   @override

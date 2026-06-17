@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:FANotifier/features/profile/presentation/profilefavs.dart';
 
-class UserProfileFavoritesSection extends StatelessWidget {
+class UserProfileFavoritesSection extends StatefulWidget {
   const UserProfileFavoritesSection({
     super.key,
     required this.sanitizedUsername,
@@ -11,33 +11,62 @@ class UserProfileFavoritesSection extends StatelessWidget {
   final String sanitizedUsername;
 
   @override
+  State<UserProfileFavoritesSection> createState() =>
+      _UserProfileFavoritesSectionState();
+}
+
+class _UserProfileFavoritesSectionState
+    extends State<UserProfileFavoritesSection>
+    with AutomaticKeepAliveClientMixin<UserProfileFavoritesSection> {
+  final GlobalKey<ProfileFavsSliverState> _favsKey =
+      GlobalKey<ProfileFavsSliverState>();
+
+  @override
+  bool get wantKeepAlive => true;
+
+  Future<void> _refresh() async {
+    final favsState = _favsKey.currentState;
+    if (favsState == null) return;
+    await favsState.refresh();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      key: const PageStorageKey<String>('profile-favorites-scroll'),
-      slivers: [
-        SliverOverlapInjector(
-          handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Favs',
-                  style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white),
-                ),
-              ],
+    super.build(context);
+    return RefreshIndicator(
+      color: const Color(0xFFE09321),
+      onRefresh: _refresh,
+      child: CustomScrollView(
+        key: const PageStorageKey<String>('profile-favorites-scroll'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverOverlapInjector(
+            handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Favs',
+                    style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        ProfileFavsSliver(username: sanitizedUsername),
-      ],
+          ProfileFavsSliver(
+            key: _favsKey,
+            username: widget.sanitizedUsername,
+          ),
+        ],
+      ),
     );
   }
 }

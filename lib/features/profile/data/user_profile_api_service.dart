@@ -5,7 +5,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
-import 'package:FANotifier/shared/fa/network.dart';
 import 'package:FANotifier/features/profile/domain/shout.dart';
 import 'package:FANotifier/features/profile/domain/user_link.dart';
 import 'package:flutter/cupertino.dart';
@@ -271,7 +270,7 @@ class UserProfileApiService {
     final sfwValue = sfwEnabled ? '1' : '0';
     final profileUrl = 'https://www.furaffinity.net/user/$sanitizedUsername/';
 
-    final response = await httpClient.get(
+    final response = await FAHttp.get(
       Uri.parse(profileUrl),
       headers: {
         'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -316,7 +315,7 @@ class UserProfileApiService {
     final sfwValue = sfwEnabled ? '1' : '0';
     final url = 'https://www.furaffinity.net/user/$sanitizedUsername/';
 
-    final response = await http.post(
+    final response = await FAHttp.post(
       Uri.parse(url),
       headers: {
         'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -388,7 +387,7 @@ class UserProfileApiService {
 
     final fullUrl = 'https://www.furaffinity.net$urlPath';
     try {
-      final response = await httpClient.get(
+      final response = await FAHttp.get(
         Uri.parse(fullUrl),
         headers: {
           'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -475,7 +474,7 @@ class UserProfileApiService {
       late http.Response response;
 
       if (usePost) {
-        response = await http.post(
+        response = await FAHttp.post(
           uriTarget,
           headers: {
             ...headers,
@@ -484,7 +483,7 @@ class UserProfileApiService {
           body: {'key': keyValue},
         );
       } else {
-        response = await http.get(uriTarget, headers: headers);
+        response = await FAHttp.get(uriTarget, headers: headers);
       }
 
       response.headers.forEach((k, v) {
@@ -545,7 +544,7 @@ class UserProfileApiService {
 
     final url = "https://www.furaffinity.net/controls/shouts/";
     try {
-      final response = await http.post(
+      final response = await FAHttp.post(
         Uri.parse(url),
         headers: {
           'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -602,7 +601,7 @@ class UserProfileApiService {
       queryParameters: pageNumber == 1 ? null : {'page': pageNumber.toString()},
     );
 
-    final response = await httpClient.get(
+    final response = await FAHttp.get(
       uri,
       headers: {
         'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(

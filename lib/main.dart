@@ -6,6 +6,7 @@ import 'package:FANotifier/features/notes/domain/message_model.dart';
 import 'package:FANotifier/core/cache/CacheMonitorService.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
 import 'package:FANotifier/features/notifications/data/pending_navigation.dart';
 import 'package:FANotifier/shared/utils/notes_notifications_text_edit.dart';
@@ -19,7 +20,6 @@ import 'package:workmanager/workmanager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:http/http.dart' as http;
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
@@ -834,7 +834,7 @@ Future<_ParsedInboxPage> _fetchInboxPageBg({
   required String cookieB,
 }) async {
   final url = Uri.parse('https://www.furaffinity.net/msg/pms/$page/');
-  final resp = await http.get(
+  final resp = await FAHttp.get(
     url,
     headers: {
       'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -1009,8 +1009,10 @@ Future<String> _fetchMessageContentInBackground(String link) async {
       [Cookie('a', cookieA), Cookie('b', cookieB)],
     ),
   );
+  final url = 'https://www.furaffinity.net$link';
+  await FaRequestCoordinator.instance.waitForTurn(label: 'GET $url');
   final resp = await dio.get(
-    'https://www.furaffinity.net$link',
+    url,
     options: Options(
       responseType: ResponseType.plain,
       headers: {
@@ -1021,6 +1023,9 @@ Future<String> _fetchMessageContentInBackground(String link) async {
       validateStatus: (status) =>
           status != null && status >= 200 && status < 400,
     ),
+  );
+  FaRequestCoordinator.instance.recordHttpStatus(
+    statusCode: resp.statusCode,
   );
   if (resp.statusCode == 200) {
     final doc = html_parser.parse(resp.data);
@@ -1110,8 +1115,10 @@ Future<void> _markAsUnreadBackground(Message msg) async {
     'items[]': mId,
     'move_to': 'unread',
   };
-  await dio.post(
-    'https://www.furaffinity.net/msg/pms/$pNum/$mId/',
+  final url = 'https://www.furaffinity.net/msg/pms/$pNum/$mId/';
+  await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
+  final response = await dio.post(
+    url,
     data: formData,
     options: Options(
       headers: {
@@ -1123,6 +1130,9 @@ Future<void> _markAsUnreadBackground(Message msg) async {
       followRedirects: false,
       validateStatus: (s) => s != null && (s == 302 || (s >= 200 && s < 300)),
     ),
+  );
+  FaRequestCoordinator.instance.recordHttpStatus(
+    statusCode: response.statusCode,
   );
 }
 

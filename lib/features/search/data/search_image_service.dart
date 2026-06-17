@@ -5,6 +5,8 @@ import 'package:FANotifier/features/search/data/search_query_builder.dart';
 import 'package:FANotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
+import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:FANotifier/shared/utils/content_rating_filters.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -61,6 +63,17 @@ class SearchImageService {
     }
 
     if (response.statusCode == 200) {
+      final faMessage = parseFaSystemMessage(response.body);
+      if (faMessage != null) {
+        if (faMessage.isMaintenanceOrUnavailable) {
+          FaRequestCoordinator.instance.recordMaintenanceOrUnavailable(
+            message: faMessage.message,
+            retryAfter: faMessage.retryAfter,
+          );
+          throw FaMaintenanceUnavailableException(faMessage.message);
+        }
+        throw Exception(faMessage.message);
+      }
       return parseSearchImageHtml(response.body);
     }
 

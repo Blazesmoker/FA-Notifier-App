@@ -7,7 +7,6 @@ import 'package:FANotifier/features/settings/data/tag_blocklist_api_service.dart
 import 'package:FANotifier/features/settings/domain/tag_blocklist_parse_result.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/shared/fa/network.dart';
 import 'package:FANotifier/shared/fa/parsing_utils.dart';
 
 const tagBlocklistProfileUrl = 'https://www.furaffinity.net/controls/profile/';
@@ -51,13 +50,12 @@ Future<void> sendTagBlocklistRequest({
     throw Exception('Missing tag blocklist nonce.');
   }
 
-  final response = await httpClient.post(
+  final response = await FAHttp.post(
     Uri.parse(tagBlocklistRouteUrl),
     headers: <String, String>{
       'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
         'a=$cookieA; b=$cookieB; sfw=$sfwValue',
       ),
-      'User-Agent': FAHttp.userAgent,
       'Referer': tagBlocklistProfileUrl,
       'Origin': 'https://www.furaffinity.net',
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -86,13 +84,12 @@ Future<Response> _getWithCookie(
   }
 
   final sfwValue = sfwEnabled ? '1' : '0';
-  return httpClient.get(
+  return FAHttp.get(
     Uri.parse(url),
     headers: <String, String>{
       'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
         'a=$cookieA; b=$cookieB; sfw=$sfwValue',
       ),
-      'User-Agent': FAHttp.userAgent,
     },
   );
 }

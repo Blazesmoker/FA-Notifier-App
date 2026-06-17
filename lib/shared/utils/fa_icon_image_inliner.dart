@@ -1,8 +1,8 @@
 import 'dart:convert';
 
+import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/shared/fa/fa_media_auth.dart';
 import 'package:html/parser.dart' as html_parser;
-import 'package:http/http.dart' as http;
 
 Future<String> inlineFaIconUsernameImages(String html) async {
   final document = html_parser.parse(html);
@@ -48,7 +48,7 @@ Future<String> inlineFaIconUsernameImages(String html) async {
 Future<String?> _fetchDataUri(String url) async {
   try {
     final headers = await FaMediaAuth.headersForUrl(url);
-    final response = await http.get(
+    final response = await FAHttp.get(
       Uri.parse(url),
       headers: headers,
     );

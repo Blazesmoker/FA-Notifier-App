@@ -9,6 +9,7 @@ import 'package:FANotifier/features/notes/data/message_detail_parser.dart';
 import 'package:FANotifier/features/notes/domain/note_message_models.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
 
 class NoteMessageService {
   NoteMessageService({
@@ -37,8 +38,10 @@ class NoteMessageService {
     bool closeConnection = false,
   }) async {
     await _loadCookies(folder);
+    final url = 'https://www.furaffinity.net$messageLink';
+    await FaRequestCoordinator.instance.waitForTurn(label: 'GET $url');
     final response = await _dio.get(
-      'https://www.furaffinity.net$messageLink',
+      url,
       options: Options(
         responseType: ResponseType.plain,
         headers: {
@@ -51,6 +54,9 @@ class NoteMessageService {
           if (!closeConnection) 'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8',
         },
       ),
+    );
+    FaRequestCoordinator.instance.recordHttpStatus(
+      statusCode: response.statusCode,
     );
 
     if (response.statusCode == 302) {
@@ -83,8 +89,10 @@ class NoteMessageService {
       'move_to': 'unread',
     };
 
+    final url = 'https://www.furaffinity.net/msg/pms/$pageNumber/$messageId/';
+    await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
     final response = await _dio.post(
-      'https://www.furaffinity.net/msg/pms/$pageNumber/$messageId/',
+      url,
       data: formData,
       options: Options(
         headers: {
@@ -105,6 +113,9 @@ class NoteMessageService {
               (status >= 200 && status < 400 || status == 302);
         },
       ),
+    );
+    FaRequestCoordinator.instance.recordHttpStatus(
+      statusCode: response.statusCode,
     );
 
     return response.statusCode;

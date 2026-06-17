@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 
 import 'package:FANotifier/features/submissions/data/submission_description_parser.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
@@ -30,7 +29,7 @@ class SubmissionDescriptionService {
     }
 
     final url = 'https://www.furaffinity.net/view/$submissionId/';
-    final response = await http.get(
+    final response = await FAHttp.get(
       Uri.parse(url),
       headers: {
         'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(

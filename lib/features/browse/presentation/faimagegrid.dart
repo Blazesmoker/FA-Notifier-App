@@ -11,9 +11,11 @@ import 'package:FANotifier/features/submissions/data/submission_favorite_details
 import 'package:FANotifier/features/submissions/data/favorite_service.dart';
 import 'package:FANotifier/shared/fa/fa_thumbnail_processing.dart';
 import 'package:FANotifier/core/logging/app_logging.dart';
+import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
+import 'package:FANotifier/shared/widgets/fa_unavailable_screen.dart';
 import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 
@@ -478,6 +480,16 @@ class FAImageGridState extends State<FAImageGrid> {
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final maxHeight = screenHeight * 0.4;
+    final errorMessage = _errorMessage;
+
+    if (!isLoading &&
+        errorMessage != null &&
+        isFaMaintenanceOrUnavailableText(errorMessage)) {
+      return FaUnavailableScreen(
+        message: errorMessage,
+        onRefresh: _refreshImages,
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: _refreshImages,

@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/profile/data/profile_journals_parser.dart';
@@ -31,7 +30,7 @@ class ProfileJournalsService {
         ? 'https://www.furaffinity.net/journals/$username/'
         : 'https://www.furaffinity.net/journals/$username/$pageNumber/';
 
-    final response = await http.get(
+    final response = await FAHttp.get(
       Uri.parse(url),
       headers: {
         'Cookie': cookieHeader,

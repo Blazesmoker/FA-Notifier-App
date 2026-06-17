@@ -129,9 +129,13 @@ class _ProfileTabScrollScope extends StatefulWidget {
   State<_ProfileTabScrollScope> createState() => _ProfileTabScrollScopeState();
 }
 
-class _ProfileTabScrollScopeState extends State<_ProfileTabScrollScope> {
+class _ProfileTabScrollScopeState extends State<_ProfileTabScrollScope>
+    with AutomaticKeepAliveClientMixin<_ProfileTabScrollScope> {
   late final ScrollController _inactiveScrollController;
   late bool _isActive;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -168,19 +172,14 @@ class _ProfileTabScrollScopeState extends State<_ProfileTabScrollScope> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final nestedScrollController = PrimaryScrollController.of(context);
     final scrollController =
         _isActive ? nestedScrollController : _inactiveScrollController;
-    // TabBarView keeps neighboring pages mounted. Only the visible page may
-    // participate in NestedScrollView's vertical coordinator. Recreate the
-    // scroll subtree when its controller changes so Flutter creates the
-    // controller-specific ScrollPosition before attaching it.
     return PrimaryScrollController(
       controller: scrollController,
       child: KeyedSubtree(
-        key: ValueKey<(ScrollController, int)>(
-          (scrollController, widget.recoveryKey),
-        ),
+        key: ValueKey<int>(widget.recoveryKey),
         child: widget.child,
       ),
     );

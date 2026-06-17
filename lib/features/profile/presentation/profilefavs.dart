@@ -15,13 +15,14 @@ class ProfileFavsSliver extends StatefulWidget {
   const ProfileFavsSliver({required this.username, Key? key}) : super(key: key);
 
   @override
-  _ProfileFavsSliverState createState() => _ProfileFavsSliverState();
+  ProfileFavsSliverState createState() => ProfileFavsSliverState();
 }
 
-class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
+class ProfileFavsSliverState extends State<ProfileFavsSliver> {
   String? _nextPageUrl;
   bool _isLoading = false;
   bool _hasMore = true;
+  int _fetchGeneration = 0;
 
 
   final List<Map<String, dynamic>> _images = [];
@@ -44,18 +45,43 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
     super.initState();
 
     _nextPageUrl = 'https://www.furaffinity.net/favorites/${widget.username}/';
-    _fetchImages();
+    unawaited(_fetchImages());
   }
 
+  @override
+  void didUpdateWidget(ProfileFavsSliver oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.username != widget.username) {
+      unawaited(refresh());
+    }
+  }
 
-  /// Fetches a page of favorite images.
+  Future<void> refresh() async {
+    if (!mounted) return;
+    _fetchGeneration++;
+    setState(() {
+      _nextPageUrl = 'https://www.furaffinity.net/favorites/${widget.username}/';
+      _isLoading = false;
+      _hasMore = true;
+      _images.clear();
+      _imageRows.clear();
+      _normalImagesQueue.clear();
+      _favoritedImages.clear();
+      _favUrls.clear();
+      _unfavUrls.clear();
+    });
+    await _fetchImages();
+  }
+
   Future<void> _fetchImages() async {
-    if (_isLoading || _nextPageUrl == null) return;
+    if (!mounted || _isLoading || _nextPageUrl == null) return;
+    final fetchGeneration = _fetchGeneration;
     setState(() => _isLoading = true);
 
     try {
       final parseResult =
           await _profileFavoritesService.fetchFavoritesPage(_nextPageUrl!);
+      if (!mounted || fetchGeneration != _fetchGeneration) return;
       setState(() {
         _images.addAll(parseResult.posts);
         appendProfileImagesIntoRows(
@@ -69,6 +95,7 @@ class _ProfileFavsSliverState extends State<ProfileFavsSliver> {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted || fetchGeneration != _fetchGeneration) return;
       setState(() => _isLoading = false);
       debugPrint("Error fetching favorites: $e");
     }

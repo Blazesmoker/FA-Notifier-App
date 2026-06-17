@@ -11,9 +11,11 @@ import 'package:FANotifier/features/submissions/data/submission_favorite_details
 import 'package:FANotifier/features/submissions/data/favorite_service.dart';
 import 'package:FANotifier/shared/fa/fa_thumbnail_processing.dart';
 import 'package:FANotifier/core/logging/app_logging.dart';
+import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
+import 'package:FANotifier/shared/widgets/fa_unavailable_screen.dart';
 import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 
@@ -39,6 +41,8 @@ class FASearchImageState extends State<FASearchImage> {
   int currentPage = 1;
   bool isLoading = false;
   bool hasMore = true;
+  bool _isError = false;
+  String? _errorMessage;
   List<Map<String, dynamic>> images = [];
   List<List<Map<String, dynamic>>> imageRows = [];
   List<Map<String, dynamic>> normalImagesQueue = [];
@@ -122,6 +126,8 @@ class FASearchImageState extends State<FASearchImage> {
       _favoritedImages.clear();
       _favUrls.clear();
       _unfavUrls.clear();
+      _isError = false;
+      _errorMessage = null;
     });
     await _fetchImages(currentPage, isRefresh: true);
   }
@@ -192,9 +198,13 @@ class FASearchImageState extends State<FASearchImage> {
     if (shouldRebuildImmediately) {
       setState(() {
         isLoading = true;
+        _isError = false;
+        _errorMessage = null;
       });
     } else {
       isLoading = true;
+      _isError = false;
+      _errorMessage = null;
     }
     try {
       if (isRefresh) {
@@ -269,6 +279,8 @@ class FASearchImageState extends State<FASearchImage> {
         _pendingNextPageFetch = false;
         _isNextPageFetchQueued = false;
         isLoading = false;
+        _isError = true;
+        _errorMessage = e.toString();
       });
       _nextPageTriggerOffset = _scrollController.hasClients
           ? _scrollController.position.pixels + 1
@@ -532,6 +544,37 @@ class FASearchImageState extends State<FASearchImage> {
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final maxHeight = screenHeight * 0.4;
+    final errorMessage = _errorMessage;
+
+    if (!isLoading &&
+        errorMessage != null &&
+        isFaMaintenanceOrUnavailableText(errorMessage)) {
+      return FaUnavailableScreen(
+        message: errorMessage,
+        onRefresh: _refreshImages,
+      );
+    }
+
+    if (imageRows.isEmpty && !isLoading && _isError) {
+      return RefreshIndicator(
+        onRefresh: _refreshImages,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            SizedBox(height: screenHeight * 0.25),
+            const Center(child: Text('Network error. Pull to retry.')),
+            if (errorMessage != null) const SizedBox(height: 8),
+            if (errorMessage != null)
+              Text(
+                errorMessage,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12),
+              ),
+          ],
+        ),
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: _refreshImages,

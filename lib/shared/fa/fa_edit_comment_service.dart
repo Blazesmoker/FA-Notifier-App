@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_edit_comment_parser.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
 
 class EditCommentLoadResult {
   const EditCommentLoadResult({
@@ -164,6 +165,7 @@ Future<EditCommentLoadResult> loadEditCommentTextWithClient({
   required String? cookieB,
 }) async {
   try {
+    await FaRequestCoordinator.instance.waitForTurn(label: 'GET $editLink');
     final response = await client.get(
       Uri.parse(editLink),
       headers: await _editCommentHeaders(
@@ -171,6 +173,10 @@ Future<EditCommentLoadResult> loadEditCommentTextWithClient({
         cookieA: cookieA,
         cookieB: cookieB,
       ),
+    );
+    FaRequestCoordinator.instance.recordHttpStatus(
+      statusCode: response.statusCode,
+      headers: response.headers,
     );
 
     if (response.statusCode != 200) {
@@ -206,6 +212,7 @@ Future<EditCommentSubmitResult> submitEditCommentWithClient({
   bool logFormDebug = false,
 }) async {
   try {
+    await FaRequestCoordinator.instance.waitForTurn(label: 'GET $editLink');
     final getResponse = await client.get(
       Uri.parse(editLink),
       headers: await _editCommentHeaders(
@@ -213,6 +220,10 @@ Future<EditCommentSubmitResult> submitEditCommentWithClient({
         cookieA: cookieA,
         cookieB: cookieB,
       ),
+    );
+    FaRequestCoordinator.instance.recordHttpStatus(
+      statusCode: getResponse.statusCode,
+      headers: getResponse.headers,
     );
 
     if (getResponse.statusCode != 200) {
@@ -258,6 +269,7 @@ Future<EditCommentSubmitResult> submitEditCommentWithClient({
     body['message'] = updatedText;
     body['mysubmit'] = 'Save';
 
+    await FaRequestCoordinator.instance.waitForTurn(label: 'POST $postUri');
     final postResponse = await client.post(
       postUri,
       headers: await _editCommentHeaders(
@@ -267,6 +279,10 @@ Future<EditCommentSubmitResult> submitEditCommentWithClient({
         includeContentType: true,
       ),
       body: body,
+    );
+    FaRequestCoordinator.instance.recordHttpStatus(
+      statusCode: postResponse.statusCode,
+      headers: postResponse.headers,
     );
 
     if (postResponse.statusCode == 302) {

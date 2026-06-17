@@ -1,14 +1,13 @@
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:http/http.dart' as http;
 
 import 'package:FANotifier/features/profile/domain/avatar_image_data.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/shared/fa/fa_media_auth.dart';
 
 Future<AvatarImageData> fetchAvatarImageData(String imageUrl) async {
-  final response = await http.get(
+  final response = await FAHttp.get(
     Uri.parse(imageUrl),
     headers: await FaMediaAuth.headersForUrl(imageUrl) ??
         {'User-Agent': FAHttp.userAgent},

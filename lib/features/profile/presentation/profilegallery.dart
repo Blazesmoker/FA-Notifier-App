@@ -31,10 +31,10 @@ class ProfileGallerySliver extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _ProfileGallerySliverState createState() => _ProfileGallerySliverState();
+  ProfileGallerySliverState createState() => ProfileGallerySliverState();
 }
 
-class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
+class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   late final ProfileGalleryService _profileGalleryService =
       ProfileGalleryService();
 
@@ -42,6 +42,7 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
   bool _isLoading = false;
   bool _hasMore = true;
   String? _nextPageUrl;
+  int _fetchGeneration = 0;
 
   String _selectedFolderUrl = '';
 
@@ -68,18 +69,19 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
           _profileGalleryService.buildDefaultGalleryUrl(widget.username);
     }
     _nextPageUrl = _buildInitialUrl();
-    _refresh();
+    unawaited(refresh());
   }
 
   @override
   void didUpdateWidget(ProfileGallerySliver oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedFolderUrl != widget.selectedFolderUrl) {
+    if (oldWidget.username != widget.username ||
+        oldWidget.selectedFolderUrl != widget.selectedFolderUrl) {
       _selectedFolderUrl = (widget.selectedFolderUrl == null || widget.selectedFolderUrl!.isEmpty)
           ? _profileGalleryService.buildDefaultGalleryUrl(widget.username)
           : _profileGalleryService.normalizeFolderUrl(widget.selectedFolderUrl!);
       _nextPageUrl = _buildInitialUrl();
-      _refresh();
+      unawaited(refresh());
     }
   }
 
@@ -97,11 +99,14 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
     );
   }
 
-  Future<void> _refresh() async {
+  Future<void> refresh() async {
     if (_isDisposed) return;
+    _fetchGeneration++;
     setState(() {
       _images.clear();
       _hasMore = true;
+      _isLoading = false;
+      _nextPageUrl = _buildInitialUrl();
       _submissionQueue.clear();
       _activeFetches = 0;
       _visibleTileIndices.clear();
@@ -113,6 +118,7 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
     if (_isDisposed) return;
     if (_isLoading || !_hasMore || _nextPageUrl == null) return;
 
+    final fetchGeneration = _fetchGeneration;
     setState(() => _isLoading = true);
 
     try {
@@ -120,16 +126,18 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
         url: _nextPageUrl!,
         selectedFolderUrl: widget.selectedFolderUrl,
       );
-      if (_isDisposed) return;
+      if (_isDisposed || fetchGeneration != _fetchGeneration) return;
 
       _images.addAll(result.posts);
       widget.onFoldersParsed(result.folders);
 
-      // Pre-cache thumbnail images
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_isDisposed || fetchGeneration != _fetchGeneration) return;
         for (var post in result.posts) {
           faNetworkImageProvider(post['thumbnailUrl']).then((provider) {
-            if (!_isDisposed) precacheImage(provider, context);
+            if (!_isDisposed && fetchGeneration == _fetchGeneration) {
+              precacheImage(provider, context);
+            }
           });
         }
       });
@@ -140,7 +148,7 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
         _isLoading = false;
       });
     } catch (e) {
-      if (_isDisposed) return;
+      if (_isDisposed || fetchGeneration != _fetchGeneration) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error loading gallery: $e')),
@@ -156,8 +164,9 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
       final index = _submissionQueue.removeFirst();
       _activeFetches++;
       final postUrl = _images[index]['postUrl'] as String;
+      final fetchGeneration = _fetchGeneration;
       _profileGalleryService.fetchSubmissionData(postUrl).then((data) {
-        if (_isDisposed) return;
+        if (_isDisposed || fetchGeneration != _fetchGeneration) return;
         setState(() {
           _images[index]['hqUrl'] = data.hqUrl;
           _images[index]['isFav'] = data.isFav;
@@ -170,6 +179,7 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
       }).catchError((err) {
         debugPrint('Error fetching submission data: $err');
       }).whenComplete(() {
+        if (_isDisposed || fetchGeneration != _fetchGeneration) return;
         _activeFetches--;
         _processSubmissionQueue();
       });
@@ -215,9 +225,10 @@ class _ProfileGallerySliverState extends State<ProfileGallerySliver> {
     if (idx < 0) return;
 
     final postUrl = _images[idx]['postUrl'] as String;
+    final fetchGeneration = _fetchGeneration;
     try {
       final data = await _profileGalleryService.fetchSubmissionData(postUrl);
-      if (_isDisposed) return;
+      if (_isDisposed || fetchGeneration != _fetchGeneration) return;
       setState(() {
         _images[idx]['isFav'] = data.isFav;
         _images[idx]['favUrl'] = data.favUrl;

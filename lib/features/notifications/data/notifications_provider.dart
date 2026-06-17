@@ -5,6 +5,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
 
 /// Model representing a single notification item.
 class NotificationItem {
@@ -105,8 +106,10 @@ class NotificationsProvider with ChangeNotifier {
       }
 
 
+      const url = 'https://www.furaffinity.net/msg/others/';
+      await FaRequestCoordinator.instance.waitForTurn(label: 'GET $url');
       final response = await _dio.get(
-        'https://www.furaffinity.net/msg/others/',
+        url,
         options: Options(
           headers: {
             'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -115,6 +118,9 @@ class NotificationsProvider with ChangeNotifier {
             'Referer': 'https://www.furaffinity.net/msg/others/',
           },
         ),
+      );
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: response.statusCode,
       );
 
       debugPrint("[fetchNotifications] Response code: ${response.statusCode}");
@@ -401,6 +407,7 @@ class NotificationsProvider with ChangeNotifier {
 
       final profileUrl = 'https://www.furaffinity.net/user/$currentUsername/';
       debugPrint("[_fetchProfileShouts] GET $profileUrl");
+      await FaRequestCoordinator.instance.waitForTurn(label: 'GET $profileUrl');
       final resp = await _dio.get(
         profileUrl,
         options: Options(
@@ -411,6 +418,9 @@ class NotificationsProvider with ChangeNotifier {
             'Referer': profileUrl,
           },
         ),
+      );
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: resp.statusCode,
       );
       debugPrint("[_fetchProfileShouts] code: ${resp.statusCode}");
       if (resp.statusCode != 200) return;
@@ -539,8 +549,11 @@ class NotificationsProvider with ChangeNotifier {
         }
       });
 
+      final url =
+          'https://www.furaffinity.net${sections[sectionIndex].formAction}';
+      await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
       final response = await _dio.post(
-        'https://www.furaffinity.net${sections[sectionIndex].formAction}',
+        url,
         data: dioFormData,
         options: Options(
           headers: {
@@ -551,6 +564,9 @@ class NotificationsProvider with ChangeNotifier {
             ),
           },
         ),
+      );
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: response.statusCode,
       );
 
       if (titleLower.contains('shouts')) {
@@ -665,8 +681,11 @@ class NotificationsProvider with ChangeNotifier {
         dioFormData.fields.add(MapEntry(k, v));
       });
 
+      final url =
+          'https://www.furaffinity.net${sections[sectionIndex].formAction}';
+      await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
       final response = await _dio.post(
-        'https://www.furaffinity.net${sections[sectionIndex].formAction}',
+        url,
         data: dioFormData,
         options: Options(
           headers: {
@@ -677,6 +696,9 @@ class NotificationsProvider with ChangeNotifier {
             ),
           },
         ),
+      );
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: response.statusCode,
       );
       if (response.statusCode == 302) {
         sections[sectionIndex].items.clear();
@@ -746,8 +768,10 @@ class NotificationsProvider with ChangeNotifier {
           }
         });
 
+        final url = 'https://www.furaffinity.net${sections[i].formAction}';
+        await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
         final resp = await _dio.post(
-          'https://www.furaffinity.net${sections[i].formAction}',
+          url,
           data: dioFormData,
           options: Options(
             headers: {
@@ -758,6 +782,9 @@ class NotificationsProvider with ChangeNotifier {
               ),
             },
           ),
+        );
+        FaRequestCoordinator.instance.recordHttpStatus(
+          statusCode: resp.statusCode,
         );
         if (resp.statusCode == 302) {
           sections[i].items.clear();

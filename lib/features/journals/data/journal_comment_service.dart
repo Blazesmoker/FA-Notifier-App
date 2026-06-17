@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
-import 'package:http/http.dart' as http;
 
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
@@ -58,7 +57,7 @@ Future<bool> submitJournalCommentOrReply({
     return false;
   }
 
-  final response = await http.post(
+  final response = await FAHttp.post(
     Uri.parse('https://www.furaffinity.net/journal/$journalId/'),
     headers: {
       'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -110,7 +109,7 @@ Future<bool> submitJournalReplyToComment({
 
   final postUrl = 'https://www.furaffinity.net/journal/$submissionId/';
 
-  final resp = await http.post(
+  final resp = await FAHttp.post(
     Uri.parse(postUrl),
     headers: {
       'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(

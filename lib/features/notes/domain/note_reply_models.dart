@@ -12,8 +12,10 @@ class NoteReplySendResult {
   const NoteReplySendResult({
     required this.success,
     this.errorMessage,
+    this.retryAfterSeconds,
   });
 
   final bool success;
   final String? errorMessage;
+  final int? retryAfterSeconds;
 }

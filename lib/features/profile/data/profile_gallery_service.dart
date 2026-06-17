@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
-import 'package:http/http.dart' as http;
 
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/profile/data/profile_posts_parser.dart';
@@ -63,7 +62,7 @@ class ProfileGalleryService {
   }) async {
     debugPrint("Fetching URL: $url");
     final cookieHeader = await _buildCookieHeader();
-    final response = await http.get(
+    final response = await FAHttp.get(
       Uri.parse(url),
       headers: {
         'Cookie': cookieHeader,
@@ -104,7 +103,7 @@ class ProfileGalleryService {
         Uri.parse('https://www.furaffinity.net').resolve(postUrl).toString();
 
     final cookieHeader = await _buildCookieHeader();
-    final resp = await http.get(
+    final resp = await FAHttp.get(
       Uri.parse(absolute),
       headers: {
         'Cookie': cookieHeader,

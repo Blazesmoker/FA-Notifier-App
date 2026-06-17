@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
+import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
+import 'package:FANotifier/shared/widgets/fa_unavailable_screen.dart';
 
 class MessageList extends StatelessWidget {
   static const Color _accent = Color(0xFFE09321);
@@ -56,6 +58,13 @@ class MessageList extends StatelessWidget {
       }
     };
 
+    if (errorMessage.isNotEmpty &&
+        isFaMaintenanceOrUnavailableText(errorMessage)) {
+      return FaUnavailableScreen(
+        message: errorMessage,
+        onRefresh: onRefresh,
+      );
+    }
 
     if (isLoading && messages.isEmpty) {
       return RefreshIndicator(

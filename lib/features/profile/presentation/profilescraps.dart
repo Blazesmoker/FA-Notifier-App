@@ -15,13 +15,14 @@ class ProfileScrapsSliver extends StatefulWidget {
   const ProfileScrapsSliver({required this.username, Key? key}) : super(key: key);
 
   @override
-  _ProfileScrapsSliverState createState() => _ProfileScrapsSliverState();
+  ProfileScrapsSliverState createState() => ProfileScrapsSliverState();
 }
 
-class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
+class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   String? _nextPageUrl;
   bool _isLoading = false;
   bool _hasMore = true;
+  int _fetchGeneration = 0;
 
 
   final List<Map<String, dynamic>> _images = [];
@@ -40,18 +41,43 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   @override
   void initState() {
     super.initState();
-    // Set the initial URL for scraps pagination:
     _nextPageUrl = 'https://www.furaffinity.net/scraps/${widget.username}/';
-    _fetchImages();
+    unawaited(_fetchImages());
   }
 
+  @override
+  void didUpdateWidget(ProfileScrapsSliver oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.username != widget.username) {
+      unawaited(refresh());
+    }
+  }
+
+  Future<void> refresh() async {
+    if (!mounted) return;
+    _fetchGeneration++;
+    setState(() {
+      _nextPageUrl = 'https://www.furaffinity.net/scraps/${widget.username}/';
+      _isLoading = false;
+      _hasMore = true;
+      _images.clear();
+      _imageRows.clear();
+      _normalImagesQueue.clear();
+      _favoritedImages.clear();
+      _favUrls.clear();
+      _unfavUrls.clear();
+    });
+    await _fetchImages();
+  }
 
   Future<void> _fetchImages() async {
-    if (_isLoading || _nextPageUrl == null) return;
+    if (!mounted || _isLoading || _nextPageUrl == null) return;
+    final fetchGeneration = _fetchGeneration;
     setState(() => _isLoading = true);
 
     try {
       final result = await _profileScrapsService.fetchScrapsPage(_nextPageUrl!);
+      if (!mounted || fetchGeneration != _fetchGeneration) return;
       setState(() {
         _images.addAll(result.posts);
         appendProfileImagesIntoRows(
@@ -66,6 +92,7 @@ class _ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted || fetchGeneration != _fetchGeneration) return;
       setState(() => _isLoading = false);
       debugPrint("Error fetching scraps: $e");
     }

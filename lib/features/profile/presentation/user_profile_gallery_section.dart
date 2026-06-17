@@ -4,7 +4,7 @@ import 'package:FANotifier/features/profile/data/profile_gallery_service.dart';
 import 'package:FANotifier/features/profile/domain/fa_folder.dart';
 import 'package:FANotifier/features/profile/presentation/profilegallery.dart';
 
-class UserProfileGallerySection extends StatelessWidget {
+class UserProfileGallerySection extends StatefulWidget {
   const UserProfileGallerySection({
     super.key,
     required this.nickname,
@@ -25,67 +25,93 @@ class UserProfileGallerySection extends StatelessWidget {
   final void Function(List<FaFolder> folders) onFoldersParsed;
 
   @override
-  Widget build(BuildContext context) {
-    final galleryUrl = selectedFolderUrl.isNotEmpty
-        ? selectedFolderUrl
-        : buildDefaultProfileGalleryUrl(sanitizedUsername);
+  State<UserProfileGallerySection> createState() =>
+      _UserProfileGallerySectionState();
+}
 
-    return CustomScrollView(
-      key: const PageStorageKey<String>('profile-gallery-scroll'),
-      slivers: [
-        SliverOverlapInjector(
-          handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Gallery',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                PopupMenuButton<FaFolder>(
-                  position: PopupMenuPosition.under,
-                  offset: const Offset(0, 0),
-                  onSelected: onFolderSelected,
-                  itemBuilder: (context) {
-                    return allFolders.map((folder) {
-                      return PopupMenuItem<FaFolder>(
-                        value: folder,
-                        child: Text(folder.name),
-                      );
-                    }).toList();
-                  },
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFE09321),
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: const Color(0xFFE09321),
-                      disabledForegroundColor: Colors.white,
+class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
+    with AutomaticKeepAliveClientMixin<UserProfileGallerySection> {
+  final GlobalKey<ProfileGallerySliverState> _galleryKey =
+      GlobalKey<ProfileGallerySliverState>();
+
+  @override
+  bool get wantKeepAlive => true;
+
+  Future<void> _refresh() async {
+    final galleryState = _galleryKey.currentState;
+    if (galleryState == null) return;
+    await galleryState.refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final galleryUrl = widget.selectedFolderUrl.isNotEmpty
+        ? widget.selectedFolderUrl
+        : buildDefaultProfileGalleryUrl(widget.sanitizedUsername);
+
+    return RefreshIndicator(
+      color: const Color(0xFFE09321),
+      onRefresh: _refresh,
+      child: CustomScrollView(
+        key: const PageStorageKey<String>('profile-gallery-scroll'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverOverlapInjector(
+            handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Gallery',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
-                    onPressed: null,
-                    child: Text(
-                      'Folder: $selectedFolderName',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  PopupMenuButton<FaFolder>(
+                    position: PopupMenuPosition.under,
+                    offset: const Offset(0, 0),
+                    onSelected: widget.onFolderSelected,
+                    itemBuilder: (context) {
+                      return widget.allFolders.map((folder) {
+                        return PopupMenuItem<FaFolder>(
+                          value: folder,
+                          child: Text(folder.name),
+                        );
+                      }).toList();
+                    },
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE09321),
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: const Color(0xFFE09321),
+                        disabledForegroundColor: Colors.white,
+                      ),
+                      onPressed: null,
+                      child: Text(
+                        'Folder: ${widget.selectedFolderName}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-        ProfileGallerySliver(
-          username: nickname,
-          selectedFolderUrl: galleryUrl,
-          onFoldersParsed: onFoldersParsed,
-        ),
-      ],
+          ProfileGallerySliver(
+            key: _galleryKey,
+            username: widget.nickname,
+            selectedFolderUrl: galleryUrl,
+            onFoldersParsed: widget.onFoldersParsed,
+          ),
+        ],
+      ),
     );
   }
 }

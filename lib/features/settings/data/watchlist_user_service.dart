@@ -1,4 +1,3 @@
-import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:FANotifier/features/profile/domain/user_link.dart';
@@ -48,7 +47,7 @@ Future<List<UserLink>?> fetchWatchlistUsersPage({
     }
 
     try {
-      final response = await http.get(
+      final response = await FAHttp.get(
         Uri.parse(
           buildWatchlistPageUrl(
             title: title,

@@ -1,6 +1,5 @@
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/shared/fa/network.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class JournalActionService {
@@ -51,7 +50,7 @@ class JournalActionService {
       headers['Referer'] = referer;
     }
 
-    final response = await httpClient.get(
+    final response = await FAHttp.get(
       Uri.parse(url),
       headers: headers,
     );

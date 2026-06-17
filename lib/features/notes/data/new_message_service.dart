@@ -7,6 +7,8 @@ import 'package:FANotifier/features/notes/data/note_form_parser.dart';
 import 'package:FANotifier/features/notes/domain/new_message_send_result.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
+import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 
 class NewMessageService {
   NewMessageService({
@@ -73,10 +75,14 @@ class NewMessageService {
 
       final encodedFormData = Uri(queryParameters: formData).query;
 
+      await FaRequestCoordinator.instance.waitForTurn(
+        label: 'POST https://www.furaffinity.net/msg/send/',
+      );
       final response = await _dio.post(
         'https://www.furaffinity.net/msg/send/',
         data: encodedFormData,
         options: Options(
+          responseType: ResponseType.plain,
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             'Origin': 'https://www.furaffinity.net',
@@ -91,9 +97,25 @@ class NewMessageService {
       );
 
       if (response.statusCode == 302) {
+        FaRequestCoordinator.instance.recordSuccess();
         return const NewMessageSendResult(
           success: true,
           message: 'Message sent successfully!',
+        );
+      }
+
+      final faMessage = parseFaSystemMessage(response.data);
+      if (faMessage != null) {
+        if (faMessage.isMaintenanceOrUnavailable) {
+          FaRequestCoordinator.instance.recordMaintenanceOrUnavailable(
+            message: faMessage.message,
+            retryAfter: faMessage.retryAfter,
+          );
+        }
+        return NewMessageSendResult(
+          success: false,
+          message: faMessage.message,
+          retryAfterSeconds: faMessage.retryAfter?.inSeconds,
         );
       }
 
@@ -166,9 +188,13 @@ class NewMessageService {
       throw Exception('Authentication cookies not found. Please log in again.');
     }
 
+    await FaRequestCoordinator.instance.waitForTurn(
+      label: 'GET https://www.furaffinity.net/msg/pms/',
+    );
     final response = await _dio.get(
       'https://www.furaffinity.net/msg/pms/',
       options: Options(
+        responseType: ResponseType.plain,
         headers: {
           'Referer': 'https://www.furaffinity.net/msg/pms/',
           'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -179,6 +205,9 @@ class NewMessageService {
     );
 
     if (response.statusCode == 302) throw Exception('Authentication required');
+    FaRequestCoordinator.instance.recordHttpStatus(
+      statusCode: response.statusCode,
+    );
 
     return parseNewMessageKey(response.data);
   }

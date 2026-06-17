@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -10,6 +12,7 @@ import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
+import 'package:FANotifier/shared/widgets/cooldown_send_icon.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 
 class NoteReplyScreen extends StatefulWidget {
@@ -37,6 +40,9 @@ class NoteReplyScreen extends StatefulWidget {
 class _NoteReplyScreenState extends State<NoteReplyScreen> {
   final TextEditingController _replyController = TextEditingController();
   bool _isSending = false;
+  Timer? _cooldownTimer;
+  int _cooldownRemaining = 0;
+  int _cooldownTotal = 0;
   bool _useWebView = false;
   bool _isClassicTheme = false;
 
@@ -71,6 +77,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
   @override
   void dispose() {
+    _cooldownTimer?.cancel();
     _noteReplyService.close();
     _replyController.dispose();
     super.dispose();
@@ -213,6 +220,8 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   }
 
   Future<void> _sendReplyModern() async {
+    if (_isSending || _cooldownRemaining > 0) return;
+
     final replyText = _replyController.text.trim();
     if (replyText.isEmpty) {
       if (mounted) {
@@ -255,6 +264,10 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
             ),
           );
         }
+        final retryAfter = result.retryAfterSeconds;
+        if (retryAfter != null && retryAfter > 0) {
+          _startCooldown(retryAfter);
+        }
       }
     } catch (e) {
       errorMessage = 'Error sending reply: $e';
@@ -277,6 +290,8 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   }
 
   Future<void> _sendReply() async {
+    if (_isSending || _cooldownRemaining > 0) return;
+
     final replyText = _replyController.text.trim();
     if (replyText.isEmpty) {
       if (mounted) {
@@ -300,6 +315,52 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     } else {
       await _sendReplyModern();
     }
+  }
+
+  void _startCooldown(int seconds) {
+    if (!mounted) return;
+    _cooldownTimer?.cancel();
+    setState(() {
+      _cooldownTotal = seconds;
+      _cooldownRemaining = seconds;
+    });
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_cooldownRemaining <= 1) {
+        timer.cancel();
+        setState(() {
+          _cooldownRemaining = 0;
+          _cooldownTotal = 0;
+        });
+      } else {
+        setState(() {
+          _cooldownRemaining--;
+        });
+      }
+    });
+  }
+
+  Widget _buildSendIcon() {
+    if (_isSending) {
+      return const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          strokeWidth: 2.0,
+        ),
+      );
+    }
+    if (_cooldownRemaining > 0) {
+      return CooldownSendIcon(
+        remainingSeconds: _cooldownRemaining,
+        totalSeconds: _cooldownTotal,
+      );
+    }
+    return const Icon(Icons.send);
   }
 
   @override
@@ -414,17 +475,9 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
           title: const Text("Reply to Note"),
           actions: [
             IconButton(
-              icon: _isSending
-                  ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  strokeWidth: 2.0,
-                ),
-              )
-                  : const Icon(Icons.send),
-              onPressed: _isSending ? null : _sendReply,
+              icon: _buildSendIcon(),
+              onPressed:
+                  (_isSending || _cooldownRemaining > 0) ? null : _sendReply,
             ),
           ],
         ),

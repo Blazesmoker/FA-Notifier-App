@@ -7,6 +7,8 @@ import 'package:http/io_client.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
+
 typedef _Call<T> = Future<T> Function();
 
 class FAHttp {
@@ -127,7 +129,7 @@ class FAHttp {
     } catch (e) {
       if (_isRecoverable(e)) {
         reset();
-        await Future.delayed(const Duration(milliseconds: 250));
+        FaRequestCoordinator.instance.recordRecoverableFailure();
         return await call();
       }
       rethrow;
@@ -141,8 +143,17 @@ class FAHttp {
       }) async {
     final t = timeout ?? defaultTimeout;
     return _withOneRetry(() async {
+      await FaRequestCoordinator.instance.waitForTurn(
+        label: 'GET $uri',
+      );
       final c = _ensureClient(timeout: t);
-      return await c.get(uri, headers: _mergeHeaders(headers)).timeout(t);
+      final response =
+          await c.get(uri, headers: _mergeHeaders(headers)).timeout(t);
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: response.statusCode,
+        headers: response.headers,
+      );
+      return response;
     });
   }
 
@@ -155,10 +166,18 @@ class FAHttp {
       }) async {
     final t = timeout ?? defaultTimeout;
     return _withOneRetry(() async {
+      await FaRequestCoordinator.instance.waitForTurn(
+        label: 'POST $uri',
+      );
       final c = _ensureClient(timeout: t);
-      return await c
+      final response = await c
           .post(uri, headers: _mergeHeaders(headers), body: body, encoding: encoding)
           .timeout(t);
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: response.statusCode,
+        headers: response.headers,
+      );
+      return response;
     });
   }
 }

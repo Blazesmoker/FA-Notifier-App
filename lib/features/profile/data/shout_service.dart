@@ -7,6 +7,7 @@ import 'package:FANotifier/features/profile/data/shout_form_parser.dart';
 import 'package:FANotifier/features/profile/domain/post_shout_result.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
 
 class ShoutService {
   ShoutService({
@@ -88,8 +89,10 @@ class ShoutService {
 
       final encodedFormData = Uri(queryParameters: formData).query;
 
+      final url = 'https://www.furaffinity.net/user/$username/';
+      await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
       final response = await _dio.post(
-        'https://www.furaffinity.net/user/$username/',
+        url,
         data: encodedFormData,
         options: Options(
           headers: {
@@ -103,6 +106,9 @@ class ShoutService {
           },
           followRedirects: false,
         ),
+      );
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: response.statusCode,
       );
 
       if (response.statusCode == 302) {
@@ -149,8 +155,10 @@ class ShoutService {
       throw Exception('Authentication cookies not found. Please log in again.');
     }
 
+    final url = 'https://www.furaffinity.net/user/$username/';
+    await FaRequestCoordinator.instance.waitForTurn(label: 'GET $url');
     final response = await _dio.get(
-      'https://www.furaffinity.net/user/$username/',
+      url,
       options: Options(
         headers: {
           'Referer': 'https://www.furaffinity.net/user/$username/',
@@ -159,6 +167,9 @@ class ShoutService {
           ),
         },
       ),
+    );
+    FaRequestCoordinator.instance.recordHttpStatus(
+      statusCode: response.statusCode,
     );
 
     if (response.statusCode == 302) throw Exception('Authentication required');

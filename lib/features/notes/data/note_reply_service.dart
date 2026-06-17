@@ -8,6 +8,8 @@ import 'package:FANotifier/core/utils/utils.dart';
 import 'package:FANotifier/features/notes/domain/note_reply_models.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
+import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 
 class NoteReplyService {
   NoteReplyService({
@@ -32,6 +34,9 @@ class NoteReplyService {
 
   Future<NoteReplyContext> fetchReplyContext(String messageLink) async {
     await _loadCookies();
+    await FaRequestCoordinator.instance.waitForTurn(
+      label: 'GET https://www.furaffinity.net$messageLink',
+    );
     final response = await _dio.get(
       'https://www.furaffinity.net$messageLink',
       options: Options(
@@ -46,6 +51,7 @@ class NoteReplyService {
     if (response.statusCode != 200) {
       throw Exception('Failed to fetch details: status ${response.statusCode}');
     }
+    FaRequestCoordinator.instance.recordSuccess();
 
     final doc = html_parser.parse(response.data);
 
@@ -142,9 +148,13 @@ class NoteReplyService {
       }
 
       final getUrl = 'https://www.furaffinity.net/msg/pms/$pageNo/$msgId/#message';
+      await FaRequestCoordinator.instance.waitForTurn(
+        label: 'GET $getUrl',
+      );
       final getResp = await _dio.get(
         getUrl,
         options: Options(
+          responseType: ResponseType.plain,
           headers: {
             'Referer': getUrl,
             'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -158,6 +168,9 @@ class NoteReplyService {
       if (getResp.statusCode == 302) {
         throw Exception("GET request was redirected (auth issue?)");
       }
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: getResp.statusCode,
+      );
 
       final doc = html_parser.parse(getResp.data);
       final keyInput = doc.querySelector('form#note-form input[name="key"]');
@@ -175,10 +188,14 @@ class NoteReplyService {
       final encodedFormData = Uri(queryParameters: formData).query;
       const sendMessageUrl = 'https://www.furaffinity.net/msg/send/';
 
+      await FaRequestCoordinator.instance.waitForTurn(
+        label: 'POST $sendMessageUrl',
+      );
       final postResp = await _dio.post(
         sendMessageUrl,
         data: encodedFormData,
         options: Options(
+          responseType: ResponseType.plain,
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             'Origin': 'https://www.furaffinity.net',
@@ -192,7 +209,23 @@ class NoteReplyService {
       );
 
       if (postResp.statusCode == 302) {
+        FaRequestCoordinator.instance.recordSuccess();
         return const NoteReplySendResult(success: true);
+      }
+
+      final faMessage = parseFaSystemMessage(postResp.data);
+      if (faMessage != null) {
+        if (faMessage.isMaintenanceOrUnavailable) {
+          FaRequestCoordinator.instance.recordMaintenanceOrUnavailable(
+            message: faMessage.message,
+            retryAfter: faMessage.retryAfter,
+          );
+        }
+        return NoteReplySendResult(
+          success: false,
+          errorMessage: faMessage.message,
+          retryAfterSeconds: faMessage.retryAfter?.inSeconds,
+        );
       }
 
       return NoteReplySendResult(

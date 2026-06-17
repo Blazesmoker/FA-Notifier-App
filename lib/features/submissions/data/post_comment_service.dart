@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
@@ -82,7 +81,7 @@ Future<bool> submitPostCommentOrReply({
     return false;
   }
 
-  final response = await http.post(
+  final response = await FAHttp.post(
     Uri.parse(postUrl),
     headers: {
       'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -133,7 +132,7 @@ Future<bool> submitSubmissionReply({
     };
   }
 
-  final response = await http.post(
+  final response = await FAHttp.post(
     Uri.parse(postUrl),
     headers: {
       'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(

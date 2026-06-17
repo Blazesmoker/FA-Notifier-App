@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
 
 class NoteUnreadService {
   NoteUnreadService({
@@ -49,8 +50,10 @@ class NoteUnreadService {
         'move_to': 'unread',
       };
 
+      final url = 'https://www.furaffinity.net/msg/pms/$pageNum/$msgId/';
+      await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
       final response = await dio.post(
-        'https://www.furaffinity.net/msg/pms/$pageNum/$msgId/',
+        url,
         data: formData,
         options: Options(
           headers: {
@@ -70,6 +73,9 @@ class NoteUnreadService {
           validateStatus: (s) =>
               s != null && ((s >= 200 && s < 400) || s == 302),
         ),
+      );
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: response.statusCode,
       );
 
       if (response.statusCode != 302 && response.statusCode != 200) {

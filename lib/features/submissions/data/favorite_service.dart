@@ -4,7 +4,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 
@@ -34,7 +33,7 @@ class FavoriteService {
           return false;
         }
 
-        final response = await http.post(
+        final response = await FAHttp.post(
           Uri.parse(url),
           headers: {
             HttpHeaders.cookieHeader: cookieHeader,

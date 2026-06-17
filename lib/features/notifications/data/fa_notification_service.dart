@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 import 'package:dio/dio.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
@@ -11,6 +10,7 @@ import 'package:FANotifier/features/notifications/domain/notifications.dart';
 import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
 
 /// A semaphore to limit concurrent network requests.
 class SimpleSemaphore {
@@ -207,7 +207,6 @@ class FANotificationService with ChangeNotifier {
   }
   FANotificationService() {
     _initializeDio();
-    fetchNotifications();
   }
 
   /// Stores counts from the message-bar (e.g., {"W": 1, "F": 2, "J": 3}).
@@ -430,8 +429,10 @@ class FANotificationService with ChangeNotifier {
       }
 
 
+      const url = 'https://www.furaffinity.net/msg/others/';
+      await FaRequestCoordinator.instance.waitForTurn(label: 'GET $url');
       final response = await _dio.get(
-        'https://www.furaffinity.net/msg/others/',
+        url,
         options: Options(
           headers: {
             'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -440,6 +441,9 @@ class FANotificationService with ChangeNotifier {
             'Referer': 'https://www.furaffinity.net/msg/others/',
           },
         ),
+      );
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: response.statusCode,
       );
       if (response.statusCode != 200) {
         throw Exception('Failed to load notifications.');
@@ -855,10 +859,9 @@ class FANotificationService with ChangeNotifier {
     await _semaphore.acquire();
     try {
       String? cookieHeader = await _getCookieHeader();
-      final resp = await http.get(
+      final resp = await FAHttp.get(
         Uri.parse(url),
         headers: {
-          'User-Agent': FAHttp.userAgent,
           if (cookieHeader != null) 'Cookie': cookieHeader,
         },
       );
@@ -976,10 +979,9 @@ class FANotificationService with ChangeNotifier {
     final url = 'https://www.furaffinity.net/msg/others/';
     try {
       String? cookieHeader = await _getCookieHeader();
-      final resp = await http.get(
+      final resp = await FAHttp.get(
         Uri.parse(url),
         headers: {
-          'User-Agent': FAHttp.userAgent,
           if (cookieHeader != null) 'Cookie': cookieHeader,
         },
       );
@@ -1279,10 +1281,9 @@ class FANotificationService with ChangeNotifier {
     debugPrint("[fetchMsgOthersShouts] Checking $url...");
     try {
       String? cookieHeader = await _getCookieHeader();
-      final resp = await http.get(
+      final resp = await FAHttp.get(
         Uri.parse(url),
         headers: {
-          'User-Agent': FAHttp.userAgent,
           if (cookieHeader != null) 'Cookie': cookieHeader,
         },
       );
@@ -1341,8 +1342,11 @@ class FANotificationService with ChangeNotifier {
           dioFormData.fields.add(MapEntry(k, v));
         }
       });
+      final url =
+          'https://www.furaffinity.net${sections[sectionIndex].formAction}';
+      await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
       final response = await _dio.post(
-        'https://www.furaffinity.net${sections[sectionIndex].formAction}',
+        url,
         data: dioFormData,
         options: Options(
           headers: {
@@ -1353,6 +1357,9 @@ class FANotificationService with ChangeNotifier {
             ),
           },
         ),
+      );
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: response.statusCode,
       );
       if (tLower.contains('shouts')) {
         if (response.statusCode == 200 || response.statusCode == 302) {
@@ -1416,8 +1423,11 @@ class FANotificationService with ChangeNotifier {
       formData.forEach((k, v) {
         dioFormData.fields.add(MapEntry(k, v));
       });
+      final url =
+          'https://www.furaffinity.net${sections[sectionIndex].formAction}';
+      await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
       final response = await _dio.post(
-        'https://www.furaffinity.net${sections[sectionIndex].formAction}',
+        url,
         data: dioFormData,
         options: Options(
           headers: {
@@ -1428,6 +1438,9 @@ class FANotificationService with ChangeNotifier {
             ),
           },
         ),
+      );
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: response.statusCode,
       );
       if (response.statusCode == 302) {
         sections[sectionIndex].items.clear();
@@ -1494,8 +1507,10 @@ class FANotificationService with ChangeNotifier {
             dioFormData.fields.add(MapEntry(k, val));
           }
         });
+        final url = 'https://www.furaffinity.net${sections[i].formAction}';
+        await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
         final resp = await _dio.post(
-          'https://www.furaffinity.net${sections[i].formAction}',
+          url,
           data: dioFormData,
           options: Options(
             headers: {
@@ -1506,6 +1521,9 @@ class FANotificationService with ChangeNotifier {
               ),
             },
           ),
+        );
+        FaRequestCoordinator.instance.recordHttpStatus(
+          statusCode: resp.statusCode,
         );
         if (resp.statusCode == 302) {
           sections[i].items.clear();
@@ -1713,10 +1731,9 @@ class FANotificationService with ChangeNotifier {
     await _semaphore.acquire();
     try {
       String? cookieHeader = await _getCookieHeader();
-      final response = await http.get(
+      final response = await FAHttp.get(
         Uri.parse(fullUrl),
         headers: {
-          'User-Agent': FAHttp.userAgent,
           if (cookieHeader != null) 'Cookie': cookieHeader,
         },
       );
@@ -1769,10 +1786,9 @@ class FANotificationService with ChangeNotifier {
 
         String? cookieHeader = await _getCookieHeader();
         final url = 'https://www.furaffinity.net/view/$submissionId/';
-        final response = await http.get(
+        final response = await FAHttp.get(
           Uri.parse(url),
           headers: {
-            'User-Agent': FAHttp.userAgent,
             if (cookieHeader != null) 'Cookie': cookieHeader,
           },
         );

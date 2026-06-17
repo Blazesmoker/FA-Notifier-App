@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/profile/domain/profile_posts_parse_result.dart';
@@ -25,7 +24,7 @@ class ProfileFavoritesService {
 
   Future<ProfilePostsParseResult> fetchFavoritesPage(String url) async {
     final cookieHeader = await _getAllCookies();
-    final response = await http.get(
+    final response = await FAHttp.get(
       Uri.parse(url),
       headers: {
         'Cookie': cookieHeader,
@@ -46,7 +45,7 @@ class ProfileFavoritesService {
   ) async {
     final postUrl = 'https://www.furaffinity.net/view/$uniqueNumber/';
     final cookieHeader = await _getAllCookies();
-    final response = await http.get(
+    final response = await FAHttp.get(
       Uri.parse(postUrl),
       headers: {
         'Cookie': cookieHeader,

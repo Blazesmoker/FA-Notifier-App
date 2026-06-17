@@ -28,15 +28,19 @@ class ProfileJournalsState extends State<ProfileJournals> {
   @override
   void initState() {
     super.initState();
-    _fetchJournals(currentPage);
+    unawaited(_fetchJournals(currentPage));
   }
 
   @override
-  void dispose() {
-    super.dispose();
+  void didUpdateWidget(ProfileJournals oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.username != widget.username) {
+      unawaited(refreshJournals());
+    }
   }
 
   Future<void> refreshJournals() async {
+    if (!mounted) return;
     _fetchGeneration++;
     setState(() {
       journals.clear();

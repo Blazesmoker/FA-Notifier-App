@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:FANotifier/features/submissions/data/submission_detail_parser.dart';
@@ -6,9 +7,10 @@ import 'package:FANotifier/features/submissions/domain/submission_fetch_models.d
 import 'package:FANotifier/features/submissions/domain/submissions_listing_parse_result.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
+import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 
 class SubmissionsService {
   SubmissionsService({
@@ -55,6 +57,18 @@ class SubmissionsService {
       throw HttpException('HTTP ${resp.statusCode}');
     }
 
+    final faMessage = parseFaSystemMessage(resp.body);
+    if (faMessage != null) {
+      if (faMessage.isMaintenanceOrUnavailable) {
+        FaRequestCoordinator.instance.recordMaintenanceOrUnavailable(
+          message: faMessage.message,
+          retryAfter: faMessage.retryAfter,
+        );
+        throw FaMaintenanceUnavailableException(faMessage.message);
+      }
+      throw HttpException(faMessage.message);
+    }
+
     return parseSubmissionsListing(resp.body);
   }
 
@@ -66,7 +80,7 @@ class SubmissionsService {
 
     final url =
         baseSubmissionsUrl ?? 'https://www.furaffinity.net/msg/submissions/new/';
-    final resp = await http.post(
+    final resp = await FAHttp.post(
       Uri.parse(url),
       headers: {
         'Cookie': cookieHeader,
@@ -92,7 +106,7 @@ class SubmissionsService {
     }
     final deleteUrl =
         baseSubmissionsUrl ?? 'https://www.furaffinity.net/msg/submissions/new/';
-    final resp = await http.post(
+    final resp = await FAHttp.post(
       Uri.parse(deleteUrl),
       headers: {
         'Cookie': cookieHeader,
@@ -125,6 +139,16 @@ class SubmissionsService {
 
     if (resp.statusCode != 200) {
       throw Exception('Submission detail fetch failed: ${resp.statusCode}');
+    }
+
+    final decoded = utf8.decode(resp.bodyBytes, allowMalformed: true);
+    final faMessage = parseFaSystemMessage(decoded);
+    if (faMessage != null && faMessage.isMaintenanceOrUnavailable) {
+      FaRequestCoordinator.instance.recordMaintenanceOrUnavailable(
+        message: faMessage.message,
+        retryAfter: faMessage.retryAfter,
+      );
+      throw FaMaintenanceUnavailableException(faMessage.message);
     }
 
     return parseSubmissionDetailData(resp.bodyBytes);

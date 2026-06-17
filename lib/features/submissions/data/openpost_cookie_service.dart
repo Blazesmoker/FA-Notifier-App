@@ -3,7 +3,6 @@ import 'package:http/http.dart';
 
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/shared/fa/network.dart';
 
 class OpenPostCookieService {
   const OpenPostCookieService({
@@ -64,6 +63,6 @@ class OpenPostCookieService {
     };
     if (additionalHeaders != null) headers.addAll(additionalHeaders);
 
-    return httpClient.get(Uri.parse(url), headers: headers);
+    return FAHttp.get(Uri.parse(url), headers: headers);
   }
 }

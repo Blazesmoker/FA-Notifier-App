@@ -700,19 +700,11 @@ class _HomeDrawerState extends State<HomeDrawer> {
                           // Avatar widget
                           GestureDetector(
                             onTap: () {
-                              if (widget.userProfile != null &&
-                                  widget.userProfile!.profileImageUrl
-                                      .isNotEmpty) {
-                                final String imageUrl =
-                                    widget.userProfile!.profileImageUrl;
-                                final String filename =
-                                    imageUrl.split('/').last;
-                                final String nickname = filename.contains('.')
-                                    ? filename.substring(
-                                        0, filename.lastIndexOf('.'))
-                                    : filename;
-                                final String lowercaseNickname =
-                                    nickname.toLowerCase();
+                              final profile = widget.userProfile;
+                              final lowercaseNickname = profile == null
+                                  ? null
+                                  : userProfileRouteNickname(profile);
+                              if (lowercaseNickname != null) {
                                 debugPrint(
                                     "Extracted nickname: $lowercaseNickname");
                                 Navigator.push(

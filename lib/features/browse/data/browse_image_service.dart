@@ -4,6 +4,8 @@ import 'package:FANotifier/features/browse/data/browse_image_parser.dart';
 import 'package:FANotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
+import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:FANotifier/shared/utils/content_rating_filters.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -90,6 +92,17 @@ class BrowseImageService {
     }
 
     if (resp.statusCode == 200) {
+      final faMessage = parseFaSystemMessage(resp.body);
+      if (faMessage != null) {
+        if (faMessage.isMaintenanceOrUnavailable) {
+          FaRequestCoordinator.instance.recordMaintenanceOrUnavailable(
+            message: faMessage.message,
+            retryAfter: faMessage.retryAfter,
+          );
+          throw FaMaintenanceUnavailableException(faMessage.message);
+        }
+        throw Exception(faMessage.message);
+      }
       return parseBrowseImageHtml(resp.body);
     }
 

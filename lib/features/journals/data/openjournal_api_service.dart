@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/shared/fa/network.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 
@@ -413,7 +412,7 @@ class OpenJournalApiService {
   Future<OpenJournalFetchResult> fetchJournal(String uniqueNumber) async {
     final cookies = await _getCookies();
     final journalUrl = 'https://www.furaffinity.net/journal/$uniqueNumber/';
-    final response = await httpClient.get(
+    final response = await FAHttp.get(
       Uri.parse(journalUrl),
       headers: {
         'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -746,7 +745,7 @@ class OpenJournalApiService {
     ];
 
     for (final url in candidateUrls) {
-      final resp = await httpClient.get(
+      final resp = await FAHttp.get(
         Uri.parse(url),
         headers: {
           'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -775,7 +774,7 @@ class OpenJournalApiService {
 
   Future<bool> isJournalDeleted(String uniqueNumber) async {
     final cookies = await _getCookies();
-    final response = await httpClient.get(
+    final response = await FAHttp.get(
       Uri.parse('https://www.furaffinity.net/journal/$uniqueNumber/'),
       headers: {
         'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
@@ -810,7 +809,7 @@ class OpenJournalApiService {
       };
     }
     final url = 'https://www.furaffinity.net/user/$authorSlug/';
-    final response = await httpClient.get(
+    final response = await FAHttp.get(
       Uri.parse(url),
       headers: {
         'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(

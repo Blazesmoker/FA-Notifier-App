@@ -13,7 +13,9 @@ import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation_optimized.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 import 'package:FANotifier/features/submissions/domain/submission_list_item.dart';
+import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
+import 'package:FANotifier/shared/widgets/fa_unavailable_screen.dart';
 
 class SubmissionsScreen extends StatefulWidget {
   const SubmissionsScreen({Key? key}) : super(key: key);
@@ -437,6 +439,16 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   }
 
   Widget _buildRefreshableBody() {
+    final errorMessage = _errorMessage;
+    if (_isError &&
+        errorMessage != null &&
+        isFaMaintenanceOrUnavailableText(errorMessage)) {
+      return FaUnavailableScreen(
+        message: errorMessage,
+        onRefresh: _refreshSubmissions,
+      );
+    }
+
     if (_isLoading && _listItems.isEmpty) {
       return ListView(
         physics: AlwaysScrollableScrollPhysics(),
