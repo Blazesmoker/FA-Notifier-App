@@ -42,6 +42,8 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
   Matrix4 _zoomAnimationStart = Matrix4.identity();
   Matrix4 _zoomAnimationEnd = Matrix4.identity();
   Offset? _tapDownPosition;
+  Offset? _doubleTapCandidateDownPosition;
+  Matrix4? _doubleTapCandidateStartTransform;
   Offset? _lastTapUpPosition;
   DateTime? _lastTapUpTime;
   Timer? _tapToggleTimer;
@@ -54,6 +56,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
   bool _suppressDismissUntilPointersReleased = false;
   bool _isDraggingToDismiss = false;
   bool _isDismissing = false;
+  bool _isDoubleTapCandidate = false;
   bool _chromeVisible = true;
 
   static const double _dismissDistance = 250;
@@ -191,18 +194,48 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
     _lastTapUpTime = null;
   }
 
+  void _setDoubleTapCandidate(Offset? position) {
+    final isCandidate = position != null;
+    if (_isDoubleTapCandidate == isCandidate &&
+        _doubleTapCandidateDownPosition == position) {
+      return;
+    }
+    setState(() {
+      _isDoubleTapCandidate = isCandidate;
+      _doubleTapCandidateDownPosition = position;
+      _doubleTapCandidateStartTransform =
+          isCandidate ? _transformationController.value.clone() : null;
+    });
+  }
+
   void _handlePointerDown(PointerDownEvent event) {
     if (_isDismissing) {
       _tapDownPosition = null;
+      _setDoubleTapCandidate(null);
       return;
     }
     _doubleTapZoomAnimationController.stop();
+    final now = DateTime.now();
+    final lastTapUpPosition = _lastTapUpPosition;
+    final lastTapUpTime = _lastTapUpTime;
+    final isDoubleTapCandidate =
+        _activePointerCount == 0 &&
+        lastTapUpPosition != null &&
+        lastTapUpTime != null &&
+        now.difference(lastTapUpTime) <= _doubleTapTimeout &&
+        (event.position - lastTapUpPosition).distance <= _doubleTapSlop;
+    if (isDoubleTapCandidate) {
+      _setDoubleTapCandidate(event.position);
+    } else {
+      _setDoubleTapCandidate(null);
+    }
     _activePointerCount += 1;
     if (_activePointerCount > 1) {
       _hadMultiplePointers = true;
       _suppressDismissUntilPointersReleased = true;
       _verticalSwipeDistance = 0;
       _canDismissWithSwipe = false;
+      _setDoubleTapCandidate(null);
       if (_isDraggingToDismiss) {
         setState(() {
           _dragOffset = Offset.zero;
@@ -214,9 +247,29 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
     _tapDownPosition = event.position;
   }
 
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (!_isDoubleTapCandidate) {
+      return;
+    }
+    final candidateDownPosition = _doubleTapCandidateDownPosition;
+    if (candidateDownPosition == null) {
+      _setDoubleTapCandidate(null);
+      return;
+    }
+    if ((event.position - candidateDownPosition).distance > _tapSlop) {
+      _setDoubleTapCandidate(null);
+      return;
+    }
+    final startTransform = _doubleTapCandidateStartTransform;
+    if (startTransform != null) {
+      _transformationController.value = startTransform.clone();
+    }
+  }
+
   void _handlePointerUp(PointerUpEvent event) {
     if (_isDismissing) {
       _tapDownPosition = null;
+      _setDoubleTapCandidate(null);
       return;
     }
     final hadMultiplePointers =
@@ -232,29 +285,39 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
     final tapDownPosition = _tapDownPosition;
     _tapDownPosition = null;
     if (hadMultiplePointers) {
+      _setDoubleTapCandidate(null);
       return;
     }
     if (tapDownPosition == null) {
+      _setDoubleTapCandidate(null);
       return;
     }
     if ((event.position - tapDownPosition).distance > _tapSlop) {
+      _setDoubleTapCandidate(null);
       return;
     }
 
     final now = DateTime.now();
     final lastTapUpPosition = _lastTapUpPosition;
     final lastTapUpTime = _lastTapUpTime;
+    final doubleTapPosition = _doubleTapCandidateDownPosition ?? event.position;
     final isDoubleTap = lastTapUpPosition != null &&
         lastTapUpTime != null &&
         now.difference(lastTapUpTime) <= _doubleTapTimeout &&
-        (event.position - lastTapUpPosition).distance <= _doubleTapSlop;
+        (doubleTapPosition - lastTapUpPosition).distance <= _doubleTapSlop;
 
     if (isDoubleTap) {
+      final startTransform = _doubleTapCandidateStartTransform;
+      if (startTransform != null) {
+        _transformationController.value = startTransform.clone();
+      }
+      _setDoubleTapCandidate(null);
       _clearPendingTapToggle();
-      _toggleZoomAt(event.position);
+      _toggleZoomAt(doubleTapPosition);
       return;
     }
 
+    _setDoubleTapCandidate(null);
     _tapToggleTimer?.cancel();
     _lastTapUpPosition = event.position;
     _lastTapUpTime = now;
@@ -271,6 +334,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
 
   void _handlePointerCancel(PointerCancelEvent event) {
     _tapDownPosition = null;
+    _setDoubleTapCandidate(null);
     if (_activePointerCount > 0) {
       _activePointerCount -= 1;
     }
@@ -369,7 +433,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
         (_dragOffset.dy.abs() / _fadeDistance).clamp(0.0, 1.0).toDouble();
     final backgroundOpacity = 1.0 - dragProgress;
 
-    return Scaffold(
+    final content = Scaffold(
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       appBar: PreferredSize(
@@ -412,6 +476,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
       ),
       body: Listener(
         onPointerDown: _handlePointerDown,
+        onPointerMove: _handlePointerMove,
         onPointerUp: _handlePointerUp,
         onPointerCancel: _handlePointerCancel,
         child: Stack(
@@ -427,8 +492,15 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
               transformationController: _transformationController,
               minScale: 0.5,
               maxScale: 10.0,
+              panEnabled: !_isDoubleTapCandidate,
+              scaleEnabled: !_isDoubleTapCandidate,
               onInteractionStart: (details) {
                 if (_isDismissing) {
+                  return;
+                }
+                if (_isDoubleTapCandidate) {
+                  _verticalSwipeDistance = 0;
+                  _canDismissWithSwipe = false;
                   return;
                 }
                 _verticalSwipeDistance = 0;
@@ -441,6 +513,13 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
               },
               onInteractionUpdate: (details) {
                 if (_isDismissing) {
+                  return;
+                }
+                if (_isDoubleTapCandidate) {
+                  final startTransform = _doubleTapCandidateStartTransform;
+                  if (startTransform != null) {
+                    _transformationController.value = startTransform.clone();
+                  }
                   return;
                 }
                 if (details.pointerCount != 1) {
@@ -459,6 +538,9 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
               },
               onInteractionEnd: (details) {
                 if (_isDismissing) {
+                  return;
+                }
+                if (_isDoubleTapCandidate) {
                   return;
                 }
                 final verticalVelocity =
@@ -526,6 +608,23 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
           ],
         ),
       ),
+    );
+
+    if (!Platform.isAndroid) {
+      return content;
+    }
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarContrastEnforced: false,
+        systemStatusBarContrastEnforced: false,
+      ),
+      child: content,
     );
   }
 }

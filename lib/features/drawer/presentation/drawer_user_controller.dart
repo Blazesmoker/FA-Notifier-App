@@ -25,6 +25,7 @@ class DrawerUserController extends StatefulWidget {
     required this.onNotesCountChanged,
     required this.onNotificationsUpdated,
     required this.onBadgeTap,
+    this.isUserProfileLoading = false,
     this.enableSwipe = true,
   });
 
@@ -44,6 +45,7 @@ class DrawerUserController extends StatefulWidget {
 
   final Function(String) onBadgeTap;
 
+  final bool isUserProfileLoading;
 
   final bool enableSwipe;
 
@@ -210,6 +212,7 @@ class DrawerUserControllerState extends State<DrawerUserController>
 
                         onNotificationsUpdated: widget.onNotificationsUpdated,
                         onBadgeTap: widget.onBadgeTap,
+                        isUserProfileLoading: widget.isUserProfileLoading,
                       ),
                     );
                   },

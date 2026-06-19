@@ -35,6 +35,7 @@ class HomeDrawer extends StatefulWidget {
     required this.onNotesCountChanged,
     required this.onNotificationsUpdated,
     required this.onBadgeTap,
+    this.isUserProfileLoading = false,
   }) : super(key: key);
 
   final AnimationController? iconAnimationController;
@@ -46,6 +47,7 @@ class HomeDrawer extends StatefulWidget {
   final Function(int) onNotesCountChanged;
   final Function(Notifications) onNotificationsUpdated;
   final Function(String) onBadgeTap;
+  final bool isUserProfileLoading;
 
   @override
   _HomeDrawerState createState() => _HomeDrawerState();
@@ -721,9 +723,24 @@ class _HomeDrawerState extends State<HomeDrawer> {
                                 );
                               }
                             },
-                            child: widget.userProfile != null &&
-                                    widget
-                                        .userProfile!.profileImageUrl.isNotEmpty
+                            child: widget.isUserProfileLoading &&
+                                    (widget.userProfile == null ||
+                                        widget.userProfile!.profileImageUrl
+                                            .isEmpty)
+                                ? const SizedBox(
+                                    width: 120,
+                                    height: 120,
+                                    child: Center(
+                                      child: PulsatingLoadingIndicator(
+                                        size: 58.0,
+                                        assetPath:
+                                            'assets/icons/fathemed.png',
+                                      ),
+                                    ),
+                                  )
+                                : widget.userProfile != null &&
+                                        widget.userProfile!.profileImageUrl
+                                            .isNotEmpty
                                 ? AnimatedBuilder(
                                     animation: widget.iconAnimationController!,
                                     builder:

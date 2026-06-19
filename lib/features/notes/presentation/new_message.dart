@@ -56,16 +56,22 @@ class _NewMessageScreenState extends State<NewMessageScreen> {
       _isSending = false;
     });
 
+    final retryAfter = result.retryAfterSeconds;
+    final isWaitingToRetry =
+        !result.success && retryAfter != null && retryAfter > 0;
+
     if (result.message != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result.message!),
           backgroundColor: result.success ? Colors.green : Colors.red,
+          duration: isWaitingToRetry
+              ? const Duration(seconds: 6)
+              : const Duration(seconds: 4),
         ),
       );
     }
 
-    final retryAfter = result.retryAfterSeconds;
     if (!result.success && retryAfter != null && retryAfter > 0) {
       _startCooldown(retryAfter);
     }

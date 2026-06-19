@@ -255,26 +255,30 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
           Navigator.pop(context, true);
         }
       } else {
-        errorMessage = result.errorMessage ?? 'Failed to send reply.';
+        final message = result.errorMessage ?? 'Failed to send reply.';
+        final retryAfter = result.retryAfterSeconds;
+        final isWaitingToRetry = retryAfter != null && retryAfter > 0;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(errorMessage),
+              content: Text(message),
               backgroundColor: Colors.red,
+              duration: isWaitingToRetry
+                  ? const Duration(seconds: 6)
+                  : const Duration(seconds: 4),
             ),
           );
         }
-        final retryAfter = result.retryAfterSeconds;
         if (retryAfter != null && retryAfter > 0) {
           _startCooldown(retryAfter);
         }
       }
     } catch (e) {
-      errorMessage = 'Error sending reply: $e';
+      final message = 'Error sending reply: $e';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errorMessage),
+            content: Text(message),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),

@@ -111,78 +111,27 @@ class _TransparentUserProfilePageRoute<T> extends PageRoute<T> {
   }
 }
 
-class _ProfileTabScrollScope extends StatefulWidget {
-  const _ProfileTabScrollScope({
+class _ProfileTabKeepAlive extends StatefulWidget {
+  const _ProfileTabKeepAlive({
     super.key,
-    required this.tabController,
-    required this.tabIndex,
-    required this.recoveryKey,
     required this.child,
   });
 
-  final TabController tabController;
-  final int tabIndex;
-  final int recoveryKey;
   final Widget child;
 
   @override
-  State<_ProfileTabScrollScope> createState() => _ProfileTabScrollScopeState();
+  State<_ProfileTabKeepAlive> createState() => _ProfileTabKeepAliveState();
 }
 
-class _ProfileTabScrollScopeState extends State<_ProfileTabScrollScope>
-    with AutomaticKeepAliveClientMixin<_ProfileTabScrollScope> {
-  late final ScrollController _inactiveScrollController;
-  late bool _isActive;
-
+class _ProfileTabKeepAliveState extends State<_ProfileTabKeepAlive>
+    with AutomaticKeepAliveClientMixin<_ProfileTabKeepAlive> {
   @override
   bool get wantKeepAlive => true;
 
   @override
-  void initState() {
-    super.initState();
-    _inactiveScrollController = ScrollController();
-    _isActive = widget.tabController.index == widget.tabIndex;
-    widget.tabController.addListener(_handleTabChanged);
-  }
-
-  @override
-  void didUpdateWidget(_ProfileTabScrollScope oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.tabController != widget.tabController) {
-      oldWidget.tabController.removeListener(_handleTabChanged);
-      widget.tabController.addListener(_handleTabChanged);
-    }
-    _handleTabChanged();
-  }
-
-  void _handleTabChanged() {
-    final isActive = widget.tabController.index == widget.tabIndex;
-    if (!mounted || _isActive == isActive) return;
-    setState(() {
-      _isActive = isActive;
-    });
-  }
-
-  @override
-  void dispose() {
-    widget.tabController.removeListener(_handleTabChanged);
-    _inactiveScrollController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     super.build(context);
-    final nestedScrollController = PrimaryScrollController.of(context);
-    final scrollController =
-        _isActive ? nestedScrollController : _inactiveScrollController;
-    return PrimaryScrollController(
-      controller: scrollController,
-      child: KeyedSubtree(
-        key: ValueKey<int>(widget.recoveryKey),
-        child: widget.child,
-      ),
-    );
+    return widget.child;
   }
 }
 
@@ -2624,11 +2573,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
                               body: TabBarView(
                                 controller: _tabController,
                                 children: ProfileSection.values.map((section) {
-                                  return _ProfileTabScrollScope(
+                                  return _ProfileTabKeepAlive(
                                     key: ValueKey(section),
-                                    tabController: _tabController,
-                                    tabIndex: section.index,
-                                    recoveryKey: _iosScrollRecoveryKey,
                                     child: _buildLazySection(section),
                                   );
                                 }).toList(),

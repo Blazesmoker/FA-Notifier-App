@@ -52,6 +52,9 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
 
     return RefreshIndicator(
       color: const Color(0xFFE09321),
+      backgroundColor: Colors.black,
+      edgeOffset: 30.0,
+      displacement: 85.0,
       onRefresh: _refresh,
       child: CustomScrollView(
         key: const PageStorageKey<String>('profile-gallery-scroll'),

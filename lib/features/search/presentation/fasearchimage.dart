@@ -557,6 +557,8 @@ class FASearchImageState extends State<FASearchImage> {
 
     if (imageRows.isEmpty && !isLoading && _isError) {
       return RefreshIndicator(
+        color: const Color(0xFFE09321),
+        backgroundColor: Colors.black,
         onRefresh: _refreshImages,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -577,6 +579,8 @@ class FASearchImageState extends State<FASearchImage> {
     }
 
     return RefreshIndicator(
+      color: const Color(0xFFE09321),
+      backgroundColor: Colors.black,
       onRefresh: _refreshImages,
       child: NotificationListener<ScrollNotification>(
         onNotification: _handleScrollNotification,

@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-class CooldownSendIcon extends StatelessWidget {
+class CooldownSendIcon extends StatefulWidget {
   const CooldownSendIcon({
     super.key,
     required this.remainingSeconds,
@@ -13,17 +13,67 @@ class CooldownSendIcon extends StatelessWidget {
   final int totalSeconds;
 
   @override
+  State<CooldownSendIcon> createState() => _CooldownSendIconState();
+}
+
+class _CooldownSendIconState extends State<CooldownSendIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late Animation<double> _progressAnimation;
+
+  double get _targetProgress => widget.totalSeconds <= 0
+      ? 0.0
+      : (widget.remainingSeconds / widget.totalSeconds).clamp(0.0, 1.0);
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this);
+    _progressAnimation = AlwaysStoppedAnimation<double>(_targetProgress);
+  }
+
+  @override
+  void didUpdateWidget(CooldownSendIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final begin = _progressAnimation.value;
+    final target = _targetProgress;
+    _controller.stop();
+    _controller.reset();
+    if (target >= begin) {
+      _progressAnimation = AlwaysStoppedAnimation<double>(target);
+      return;
+    }
+    _controller.duration = const Duration(seconds: 1);
+    _progressAnimation = Tween<double>(
+      begin: begin,
+      end: target,
+    ).animate(_controller);
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final progress = totalSeconds <= 0
-        ? 0.0
-        : (remainingSeconds / totalSeconds).clamp(0.0, 1.0);
-    final text = remainingSeconds > 99 ? '99+' : remainingSeconds.toString();
+    final text = widget.remainingSeconds > 99
+        ? '99+'
+        : widget.remainingSeconds.toString();
 
     return SizedBox(
       width: 28,
       height: 28,
-      child: CustomPaint(
-        painter: _CooldownRingPainter(progress: progress),
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return CustomPaint(
+            painter: _CooldownRingPainter(progress: _progressAnimation.value),
+            child: child,
+          );
+        },
         child: Center(
           child: Text(
             text,

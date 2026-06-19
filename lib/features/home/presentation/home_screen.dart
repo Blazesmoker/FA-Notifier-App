@@ -734,6 +734,7 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       onNotificationsUpdated: _onNotificationsUpdated,
       onBadgeTap: openNotificationsWithSection,
+      isUserProfileLoading: isLoadingProfile,
       enableSwipe: _selectedIndex != 9,
     );
   }

@@ -123,13 +123,18 @@ class FAHttp {
     return out;
   }
 
-  static Future<R> _withOneRetry<R>(_Call<R> call) async {
+  static Future<R> _withOneRetry<R>(
+    _Call<R> call, {
+    bool recordRecoverableFailure = true,
+  }) async {
     try {
       return await call();
     } catch (e) {
       if (_isRecoverable(e)) {
         reset();
-        FaRequestCoordinator.instance.recordRecoverableFailure();
+        if (recordRecoverableFailure) {
+          FaRequestCoordinator.instance.recordRecoverableFailure();
+        }
         return await call();
       }
       rethrow;
@@ -155,6 +160,21 @@ class FAHttp {
       );
       return response;
     });
+  }
+
+  static Future<http.Response> getMedia(
+      Uri uri, {
+        Map<String, String>? headers,
+        Duration? timeout,
+      }) async {
+    final t = timeout ?? defaultTimeout;
+    return _withOneRetry(
+      () async {
+        final c = _ensureClient(timeout: t);
+        return c.get(uri, headers: _mergeHeaders(headers)).timeout(t);
+      },
+      recordRecoverableFailure: false,
+    );
   }
 
   static Future<http.Response> post(

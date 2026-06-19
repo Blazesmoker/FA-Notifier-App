@@ -1,65 +1,23 @@
-import 'dart:convert';
-
-import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/shared/fa/fa_media_auth.dart';
 import 'package:html/parser.dart' as html_parser;
 
-Future<String> inlineFaIconUsernameImages(String html) async {
+Future<String> inlineFaIconUsernameImages(String html) {
   final document = html_parser.parse(html);
   final images = document.querySelectorAll('a.iconusername img[src]');
   if (images.isEmpty) {
-    return html;
-  }
-
-  final srcToDataUri = <String, String>{};
-  final uniqueSources = images
-      .map((image) => image.attributes['src'])
-      .whereType<String>()
-      .toSet();
-
-  await Future.wait(
-    uniqueSources.map((src) async {
-      final resolvedUrl = FaMediaAuth.normalizeUrl(src);
-      if (!FaMediaAuth.isFaUrl(resolvedUrl)) {
-        return;
-      }
-      final dataUri = await _fetchDataUri(resolvedUrl);
-      if (dataUri != null) {
-        srcToDataUri[src] = dataUri;
-      }
-    }),
-  );
-
-  if (srcToDataUri.isEmpty) {
-    return html;
+    return Future.value(html);
   }
 
   for (final image in images) {
     final src = image.attributes['src'];
-    final dataUri = src == null ? null : srcToDataUri[src];
-    if (dataUri != null) {
-      image.attributes['src'] = dataUri;
+    if (src == null) {
+      continue;
+    }
+    final resolvedUrl = FaMediaAuth.normalizeUrl(src);
+    if (FaMediaAuth.isFaUrl(resolvedUrl)) {
+      image.attributes['src'] = resolvedUrl;
     }
   }
 
-  return document.body?.innerHtml ?? html;
-}
-
-Future<String?> _fetchDataUri(String url) async {
-  try {
-    final headers = await FaMediaAuth.headersForUrl(url);
-    final response = await FAHttp.get(
-      Uri.parse(url),
-      headers: headers,
-    );
-    final contentType = response.headers['content-type']?.split(';').first;
-    if (response.statusCode != 200 ||
-        contentType == null ||
-        !contentType.startsWith('image/')) {
-      return null;
-    }
-    return 'data:$contentType;base64,${base64Encode(response.bodyBytes)}';
-  } catch (_) {
-    return null;
-  }
+  return Future.value(document.body?.innerHtml ?? html);
 }

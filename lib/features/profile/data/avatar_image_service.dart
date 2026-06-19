@@ -7,7 +7,7 @@ import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/shared/fa/fa_media_auth.dart';
 
 Future<AvatarImageData> fetchAvatarImageData(String imageUrl) async {
-  final response = await FAHttp.get(
+  final response = await FAHttp.getMedia(
     Uri.parse(imageUrl),
     headers: await FaMediaAuth.headersForUrl(imageUrl) ??
         {'User-Agent': FAHttp.userAgent},

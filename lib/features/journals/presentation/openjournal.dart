@@ -1018,6 +1018,8 @@ class _OpenJournalState extends State<OpenJournal>
                         FocusScope.of(context).unfocus();
                       },
                       child: RefreshIndicator(
+                        color: const Color(0xFFE09321),
+                        backgroundColor: Colors.black,
                         onRefresh: _fetchPostDetailsNew,
                         child: CustomScrollView(
                           key: ValueKey<int>(_iosScrollRecoveryKey),

@@ -550,6 +550,8 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
           ],
         ),
         body: RefreshIndicator(
+          color: const Color(0xFFE09321),
+          backgroundColor: Colors.black,
           onRefresh: _refreshSubmissions,
           child: _buildRefreshableBody(),
         ),

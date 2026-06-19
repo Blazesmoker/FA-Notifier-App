@@ -2746,6 +2746,8 @@ class _OpenPostState extends State<OpenPost>
                         child: NotificationListener<ScrollNotification>(
                           onNotification: _handlePostScrollNotification,
                           child: RefreshIndicator(
+                            color: const Color(0xFFE09321),
+                            backgroundColor: Colors.black,
                             onRefresh: () async {
                               await _fetchPostDetails();
                             },
@@ -3040,61 +3042,57 @@ class _OpenPostState extends State<OpenPost>
                                                           : 16 / 9;
                                                   return AspectRatio(
                                                     aspectRatio: aspectRatio,
-                                                    child: InteractiveViewer(
-                                                      minScale: 1.0,
-                                                      maxScale: 10.0,
-                                                      child: FaNetworkImage(
-                                                        fullViewImageUrl!,
-                                                        fit: BoxFit.contain,
-                                                        loadingBuilder: (
-                                                          BuildContext context,
-                                                          Widget child,
-                                                          ImageChunkEvent?
-                                                              loadingProgress,
-                                                        ) {
-                                                          if (loadingProgress ==
-                                                              null) {
-                                                            return child;
-                                                          }
-                                                          return Container(
-                                                            color: Colors.black,
-                                                            child: Center(
-                                                              child:
-                                                                  CircularProgressIndicator(
-                                                                value: loadingProgress
-                                                                            .expectedTotalBytes !=
-                                                                        null
-                                                                    ? loadingProgress
-                                                                            .cumulativeBytesLoaded /
-                                                                        (loadingProgress.expectedTotalBytes ??
-                                                                            1)
-                                                                    : null,
-                                                                valueColor:
-                                                                    const AlwaysStoppedAnimation<
-                                                                        Color>(
-                                                                  Color(
-                                                                      0xFFE09321),
-                                                                ),
+                                                    child: FaNetworkImage(
+                                                      fullViewImageUrl!,
+                                                      fit: BoxFit.contain,
+                                                      loadingBuilder: (
+                                                        BuildContext context,
+                                                        Widget child,
+                                                        ImageChunkEvent?
+                                                            loadingProgress,
+                                                      ) {
+                                                        if (loadingProgress ==
+                                                            null) {
+                                                          return child;
+                                                        }
+                                                        return Container(
+                                                          color: Colors.black,
+                                                          child: Center(
+                                                            child:
+                                                                CircularProgressIndicator(
+                                                              value: loadingProgress
+                                                                          .expectedTotalBytes !=
+                                                                      null
+                                                                  ? loadingProgress
+                                                                          .cumulativeBytesLoaded /
+                                                                      (loadingProgress.expectedTotalBytes ??
+                                                                          1)
+                                                                  : null,
+                                                              valueColor:
+                                                                  const AlwaysStoppedAnimation<
+                                                                      Color>(
+                                                                Color(
+                                                                    0xFFE09321),
                                                               ),
                                                             ),
-                                                          );
-                                                        },
-                                                        errorBuilder: (context,
-                                                            error, stackTrace) {
-                                                          return Container(
-                                                            color: Colors.black,
-                                                            child: const Center(
-                                                              child: Icon(
-                                                                Icons
-                                                                    .error_outline,
-                                                                color:
-                                                                    Colors.red,
-                                                                size: 40,
-                                                              ),
+                                                          ),
+                                                        );
+                                                      },
+                                                      errorBuilder: (context,
+                                                          error, stackTrace) {
+                                                        return Container(
+                                                          color: Colors.black,
+                                                          child: const Center(
+                                                            child: Icon(
+                                                              Icons
+                                                                  .error_outline,
+                                                              color:
+                                                                  Colors.red,
+                                                              size: 40,
                                                             ),
-                                                          );
-                                                        },
-                                                      ),
+                                                          ),
+                                                        );
+                                                      },
                                                     ),
                                                   );
                                                 },

@@ -326,6 +326,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
   Widget build(BuildContext context) {
     super.build(context);
     return RefreshIndicator(
+      color: const Color(0xFFE09321),
+      backgroundColor: Colors.black,
       onRefresh: _refreshShouts,
       child: Column(
         children: [
@@ -624,6 +626,8 @@ class NotificationSectionWidget extends StatelessWidget {
       builder: (context, service, child) {
         final section = service.sections[sectionIndex];
         return RefreshIndicator(
+          color: const Color(0xFFE09321),
+          backgroundColor: Colors.black,
           onRefresh: () => FaActivitiesPollingService().triggerNow(
             resetTimer: true,
             source: 'notifications_refresh_indicator',
@@ -1345,6 +1349,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                 ],
               ),
               body: RefreshIndicator(
+                color: const Color(0xFFE09321),
+                backgroundColor: Colors.black,
                 onRefresh: () => FaActivitiesPollingService().triggerNow(
                   resetTimer: true,
                   source: 'notifications_empty_refresh_indicator',

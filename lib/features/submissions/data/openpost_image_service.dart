@@ -7,7 +7,7 @@ class OpenPostImageService {
   const OpenPostImageService();
 
   Future<Uint8List?> fetchImageBytes(String imageUrl) async {
-    final response = await FAHttp.get(
+    final response = await FAHttp.getMedia(
       Uri.parse(imageUrl),
       headers: await FaMediaAuth.headersForUrl(imageUrl) ??
           {'User-Agent': FAHttp.userAgent},

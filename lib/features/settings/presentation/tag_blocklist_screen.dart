@@ -334,6 +334,8 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
       body: Stack(
         children: [
           RefreshIndicator(
+            color: const Color(0xFFE09321),
+            backgroundColor: Colors.black,
             onRefresh: _fetchBlocklist,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),

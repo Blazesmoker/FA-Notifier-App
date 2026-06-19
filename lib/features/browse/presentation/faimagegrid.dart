@@ -492,6 +492,8 @@ class FAImageGridState extends State<FAImageGrid> {
     }
 
     return RefreshIndicator(
+      color: const Color(0xFFE09321),
+      backgroundColor: Colors.black,
       onRefresh: _refreshImages,
       child: NotificationListener<ScrollNotification>(
         onNotification: _handleScrollNotification,
