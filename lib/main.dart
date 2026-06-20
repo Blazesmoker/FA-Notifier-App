@@ -157,6 +157,7 @@ void callbackDispatcher() {
           task == iOSWorkInitTask ||
           task == Workmanager.iOSBackgroundTask) {
         appLog('[BG] Valid background task detected: $task');
+        kDebugPrint('[BG] Headless background worker is running.');
         try {
           final currentVersionAllowed = await isCurrentAppVersionAllowed();
           if (currentVersionAllowed == false) {
@@ -349,37 +350,45 @@ void callbackDispatcher() {
                     didFindNewNotificationContent = true;
                     await prefs.reload();
                     if (_isAppForegroundActive(prefs)) {
-                      return Future.value(true);
+                      await activitiesStateStore.deferActivityNotification(
+                        currentCounts: counts,
+                        body: messageBody,
+                      );
+                      appLog(
+                          '[BG] Activity notification deferred for foreground: $messageBody');
+                      kDebugPrint(
+                          '[BG] Activity notification deferred for foreground: $messageBody');
+                    } else {
+                      final int activityNotificationId =
+                          NotificationService.activityNotificationId;
+                      await removePreviousActivityNotification(
+                        notificationService,
+                        replacingWithId:
+                            Platform.isIOS ? activityNotificationId : null,
+                      );
+                      final int? badgeNumber =
+                          await nextIOSActivityBadgeNumberForNotification();
+                      await notificationService.showNotification(
+                        activityNotificationId,
+                        'New FA Activity',
+                        messageBody,
+                        'fa_activity_$activityNotificationId',
+                        'activities',
+                        badgeNumber: badgeNumber,
+                      );
+                      didShowBackgroundNotification = true;
+                      await commitIOSActivityBadgeNumber(badgeNumber);
+                      await rememberActivityNotification(
+                        activityNotificationId,
+                      );
+                      await activitiesStateStore.markActivityNotificationShown(
+                        currentCounts: counts,
+                        body: messageBody,
+                      );
+                      appLog('[BG] Activity notification shown.');
+                      kDebugPrint(
+                          '[BG] Activity notification shown: $messageBody');
                     }
-                    final int activityNotificationId =
-                        NotificationService.activityNotificationId;
-                    await removePreviousActivityNotification(
-                      notificationService,
-                      replacingWithId:
-                          Platform.isIOS ? activityNotificationId : null,
-                    );
-                    final int? badgeNumber =
-                        await nextIOSActivityBadgeNumberForNotification();
-                    await notificationService.showNotification(
-                      activityNotificationId,
-                      'New FA Activity',
-                      messageBody,
-                      'fa_activity_$activityNotificationId',
-                      'activities',
-                      badgeNumber: badgeNumber,
-                    );
-                    didShowBackgroundNotification = true;
-                    await commitIOSActivityBadgeNumber(badgeNumber);
-                    await rememberActivityNotification(
-                      activityNotificationId,
-                    );
-                    await activitiesStateStore.markActivityNotificationShown(
-                      currentCounts: counts,
-                      body: messageBody,
-                    );
-                    appLog('[BG] Activity notification shown.');
-                    kDebugPrint(
-                        '[BG] Activity notification shown: $messageBody');
                   }
                 } else {
                   appLog(
@@ -409,6 +418,7 @@ void callbackDispatcher() {
                 didCompleteActivitiesCheck &&
                 !didFindNewNotificationContent,
           );
+          appLog('[BG] Adaptive background scheduler update completed.');
           await _showBackgroundUpdateNotificationIfNeeded(
             notificationService,
             prefs,
@@ -721,9 +731,28 @@ Future<void> applyBackgroundFetchInterval(int intervalMinutes) async {
   }
   if (Platform.isIOS) {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final nextApprox =
+          DateTime.now().add(Duration(minutes: intervalMinutes));
+      if (_isAppForegroundActive(prefs)) {
+        appLog(
+          '[BG] iOS foreground active; stored ${intervalMinutes}m interval. '
+          'Native will schedule ASAP on next background entry.',
+        );
+        return;
+      }
+      appLog(
+        '[BG] Requesting iOS background fetch reschedule: '
+        '${intervalMinutes}m, next approx >= $nextApprox',
+      );
       await _backgroundFetchChannel.invokeMethod<void>(
         'reschedule',
         <String, int>{'minutes': intervalMinutes},
+      );
+      appLog(
+        '[BG] iOS background fetch reschedule request sent: '
+        '${intervalMinutes}m, next approx >= $nextApprox',
       );
     } catch (e) {
       appLog('[BG] Failed to reschedule iOS background fetch: $e');

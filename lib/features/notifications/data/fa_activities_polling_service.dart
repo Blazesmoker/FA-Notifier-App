@@ -36,6 +36,7 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
   bool _pendingStartTrigger = false;
   bool _pendingStartResetTimer = false;
   String? _pendingStartSource;
+  bool _pendingResumeActivityNotification = false;
 
   bool get _acknowledgingScreenVisible =>
       _notesScreenVisible ||
@@ -101,6 +102,7 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     _pendingStartTrigger = false;
     _pendingStartResetTimer = false;
     _pendingStartSource = null;
+    _pendingResumeActivityNotification = false;
     _foregroundEntryCheckPending = true;
     _notesScreenVisible = false;
     _submissionsScreenVisible = false;
@@ -379,6 +381,7 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     final activitiesStateStore = ActivitiesNotificationStateStore();
     final foregroundEntryCheck =
         _foregroundEntryCheckPending || _isForegroundEntrySource(source);
+    var deferredForResume = false;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
@@ -468,9 +471,15 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
 
       if (Platform.isIOS &&
           WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+        await activitiesStateStore.deferActivityNotification(
+          currentCounts: currentCounts,
+          body: messageBody,
+        );
+        _pendingResumeActivityNotification = true;
+        deferredForResume = true;
         debugPrint(
-          '[ACTIVITY_NOTIF] producer=foreground_polling skipped '
-          'lifecycle=${WidgetsBinding.instance.lifecycleState}',
+          '[ACTIVITY_NOTIF] producer=foreground_polling deferred '
+          'lifecycle=${WidgetsBinding.instance.lifecycleState} body=$messageBody',
         );
         return;
       }
@@ -492,21 +501,17 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
         'activity_fa_activity',
         'activities',
       );
-      if (Platform.isIOS &&
-          WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
-        debugPrint(
-          '[ACTIVITY_NOTIF] producer=foreground_polling not_committed '
-          'lifecycle=${WidgetsBinding.instance.lifecycleState}',
-        );
-        return;
-      }
       await activitiesStateStore.markActivityNotificationShown(
         currentCounts: currentCounts,
         body: messageBody,
       );
+      _pendingResumeActivityNotification = false;
+      debugPrint(
+        '[ACTIVITY_NOTIF] producer=foreground_polling shown body=$messageBody',
+      );
     } catch (_) {
     } finally {
-      if (foregroundEntryCheck) {
+      if (foregroundEntryCheck && !deferredForResume) {
         try {
           await _acknowledgeVisibleCounts(
             activitiesStateStore,
@@ -528,8 +533,9 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
           prev == AppLifecycleState.hidden ||
           prev == AppLifecycleState.detached;
       _ensureTimer();
-      if (realResume) {
+      if (realResume || _pendingResumeActivityNotification) {
         _foregroundEntryCheckPending = true;
+        _pendingResumeActivityNotification = false;
         final existing = _inFlight;
         if (existing == null) {
           triggerNow(resetTimer: true, source: 'lifecycle_resumed');

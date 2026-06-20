@@ -23,6 +23,15 @@ class ActivitiesNotificationStateStore {
   static const String _kLastShownJournals = 'last_shown_activities_journals';
   static const String _kLastShownNotes = 'last_shown_activities_notes';
   static const String _kLastShownBody = 'last_shown_activities_body';
+  static const String _kDeferredSubmissions =
+      'deferred_activities_submissions';
+  static const String _kDeferredWatches = 'deferred_activities_watches';
+  static const String _kDeferredComments = 'deferred_activities_comments';
+  static const String _kDeferredFavorites = 'deferred_activities_favorites';
+  static const String _kDeferredJournals = 'deferred_activities_journals';
+  static const String _kDeferredNotes = 'deferred_activities_notes';
+  static const String _kDeferredBody = 'deferred_activities_body';
+  static const String _kDeferredUpdatedAtMs = 'deferred_activities_at_ms';
   static const String _kAcknowledgeOnNextForegroundFetch =
       'acknowledge_activities_on_next_foreground_fetch_v2';
   static const String _kBaselineSchemaVersion =
@@ -140,6 +149,27 @@ class ActivitiesNotificationStateStore {
       final prefs = await SharedPreferences.getInstance();
       await _saveLastSeenCounts(prefs, currentCounts);
       await _clearLastShownNotification(prefs);
+      await _clearDeferredActivityNotification(prefs);
+    });
+  }
+
+  Future<void> deferActivityNotification({
+    required NotificationCounts currentCounts,
+    required String body,
+  }) {
+    return _withMutex(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_kDeferredSubmissions, currentCounts.submissions);
+      await prefs.setInt(_kDeferredWatches, currentCounts.watches);
+      await prefs.setInt(_kDeferredComments, currentCounts.comments);
+      await prefs.setInt(_kDeferredFavorites, currentCounts.favorites);
+      await prefs.setInt(_kDeferredJournals, currentCounts.journals);
+      await prefs.setInt(_kDeferredNotes, currentCounts.notes);
+      await prefs.setString(_kDeferredBody, body);
+      await prefs.setInt(
+        _kDeferredUpdatedAtMs,
+        DateTime.now().millisecondsSinceEpoch,
+      );
     });
   }
 
@@ -300,6 +330,19 @@ class ActivitiesNotificationStateStore {
     await prefs.remove(kLastShownUpdatedAtMsKey);
   }
 
+  Future<void> _clearDeferredActivityNotification(
+    SharedPreferences prefs,
+  ) async {
+    await prefs.remove(_kDeferredSubmissions);
+    await prefs.remove(_kDeferredWatches);
+    await prefs.remove(_kDeferredComments);
+    await prefs.remove(_kDeferredFavorites);
+    await prefs.remove(_kDeferredJournals);
+    await prefs.remove(_kDeferredNotes);
+    await prefs.remove(_kDeferredBody);
+    await prefs.remove(_kDeferredUpdatedAtMs);
+  }
+
   Future<bool> areCurrentCountsLastShown({
     required NotificationCounts currentCounts,
   }) {
@@ -358,6 +401,7 @@ class ActivitiesNotificationStateStore {
         kLastShownUpdatedAtMsKey,
         DateTime.now().millisecondsSinceEpoch,
       );
+      await _clearDeferredActivityNotification(prefs);
     });
   }
 }
@@ -390,4 +434,3 @@ class ActivitiesDiff {
         (enabledIncreases.notes > 0 && previous.notes > 0);
   }
 }
-

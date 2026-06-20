@@ -9,25 +9,56 @@ import flutter_local_notifications
 private let adaptiveBackgroundTaskIdentifier = "com.blazesmoker.FANotifier.refresh"
 private let adaptiveBackgroundIntervalKey = "flutter.backgroundFetchIntervalMinutes"
 private let adaptiveBackgroundEmptyStreakKey = "flutter.backgroundFetchNoNotificationStreak"
+private let adaptiveBackgroundAsapSeconds: TimeInterval = 1
 
 private func normalizedBackgroundFetchMinutes(_ minutes: Int) -> Int {
     minutes >= 30 ? 30 : 15
+}
+
+private func backgroundFetchLog(_ msg: String) {
+    let line = "[AppDelegate] \(msg)"
+    NSLog("%@", line)
+    debugPrint("flutter: \(line)")
+}
+
+private func isAlreadyScheduledBackgroundFetchError(_ error: Error) -> Bool {
+    let nsError = error as NSError
+    let text = "\(nsError.domain) \(nsError.code) \(nsError.localizedDescription)".lowercased()
+    return text.contains("already") &&
+        (text.contains("scheduled") || text.contains("submitted"))
 }
 
 private func storedBackgroundFetchMinutes() -> Int {
     normalizedBackgroundFetchMinutes(UserDefaults.standard.integer(forKey: adaptiveBackgroundIntervalKey))
 }
 
-private func submitBackgroundFetch(minutes: Int, replacingPending: Bool) throws {
+@discardableResult
+private func submitBackgroundFetch(
+    minutes: Int,
+    replacingPending: Bool,
+    earliestBeginInSeconds: TimeInterval? = nil
+) throws -> Date {
     let normalizedMinutes = normalizedBackgroundFetchMinutes(minutes)
     UserDefaults.standard.set(normalizedMinutes, forKey: adaptiveBackgroundIntervalKey)
     UserDefaults.standard.synchronize()
     if replacingPending {
-        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: adaptiveBackgroundTaskIdentifier)
+        backgroundFetchLog("Replacement requested; keeping any pending BGTask until a new one is accepted")
     }
     let request = BGAppRefreshTaskRequest(identifier: adaptiveBackgroundTaskIdentifier)
-    request.earliestBeginDate = Date(timeIntervalSinceNow: TimeInterval(normalizedMinutes * 60))
-    try BGTaskScheduler.shared.submit(request)
+    let delaySeconds = earliestBeginInSeconds ?? TimeInterval(normalizedMinutes * 60)
+    let earliestBeginDate = Date(timeIntervalSinceNow: max(1, delaySeconds))
+    request.earliestBeginDate = earliestBeginDate
+    do {
+        try BGTaskScheduler.shared.submit(request)
+        backgroundFetchLog("Submitted BGTask earliest at \(earliestBeginDate) (~\(Int(max(0, earliestBeginDate.timeIntervalSinceNow)))s)")
+    } catch {
+        if isAlreadyScheduledBackgroundFetchError(error) {
+            backgroundFetchLog("BGTask already scheduled; keeping existing request")
+            return earliestBeginDate
+        }
+        throw error
+    }
+    return earliestBeginDate
 }
 
 final class AdaptiveBackgroundFetchPlugin: NSObject, FlutterPlugin {
@@ -48,10 +79,11 @@ final class AdaptiveBackgroundFetchPlugin: NSObject, FlutterPlugin {
             return
         }
         do {
-            try submitBackgroundFetch(
+            let scheduledAt = try submitBackgroundFetch(
                 minutes: minutesNumber.intValue,
                 replacingPending: true
             )
+            backgroundFetchLog("Dart requested BGTask reschedule for ~\(scheduledAt)")
             result(true)
         } catch {
             result(FlutterError(
@@ -359,7 +391,10 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
             self.handleBackgroundFetch(task: task)
         }
 
-        scheduleBackgroundFetch()
+        scheduleBackgroundFetch(
+            asSoonAsPossible: false,
+            source: "didFinishLaunching"
+        )
         getPendingBackgroundTasks()
         logApproxNextFetch("didFinishLaunching")
 
@@ -388,7 +423,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     func handleDidEnterBackground(source: String) {
         fLog("App entering background (\(source))")
         setFlutterSharedBool(false, forKey: "isAppActive")
-        scheduleBackgroundFetch()
+        scheduleBackgroundFetch(asSoonAsPossible: true, source: "didEnterBackground:\(source)")
         logApproxNextFetch("didEnterBackground:\(source)")
     }
 
@@ -396,12 +431,10 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         fLog("App became active (\(source))")
         setFlutterSharedBool(true, forKey: "isAppActive")
         UserDefaults.standard.set(0, forKey: adaptiveBackgroundEmptyStreakKey)
-        do {
-            try submitBackgroundFetch(minutes: 15, replacingPending: true)
-            fLog("Background fetch reset to 15m after app became active")
-        } catch {
-            fLog("Failed to reset background fetch after app became active: \(error.localizedDescription)")
-        }
+        UserDefaults.standard.set(15, forKey: adaptiveBackgroundIntervalKey)
+        UserDefaults.standard.synchronize()
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: backgroundTaskIdentifier)
+        fLog("Background fetch interval reset to 15m; pending request cleared while app is active")
         setupNotificationChannelIfNeeded()
         setupTranslationChannelIfNeeded()
         getPendingBackgroundTasks()
@@ -410,32 +443,17 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 
     private func handleBackgroundFetch(task: BGTask) {
         fLog("handleBackgroundFetch started")
-        var isTaskCompleted = false
-        let taskStartTime = Date()
-        task.expirationHandler = { [weak task] in
-            let duration = Date().timeIntervalSince(taskStartTime)
-            self.fLog("Task expiration handler called after \(duration)s")
-            if !isTaskCompleted {
-                isTaskCompleted = true
-                task?.setTaskCompleted(success: false)
-                self.fLog("Task marked as failed due to expiration")
-            }
-        }
         if let refreshTask = task as? BGAppRefreshTask {
             self.fLog("Task is BGAppRefreshTask, passing to WorkmanagerPlugin")
+            let minutes = storedBackgroundFetchMinutes()
+            self.fLog("Workmanager will request next BGTask at ~\(minutes)m")
             WorkmanagerPlugin.handlePeriodicTask(
                 identifier: backgroundTaskIdentifier,
                 task: refreshTask,
-                earliestBeginInSeconds: nil
+                earliestBeginInSeconds: Double(minutes * 60)
             )
-            DispatchQueue.global().asyncAfter(deadline: .now() + 28.0) { [weak task] in
-                if !isTaskCompleted {
-                    let duration = Date().timeIntervalSince(taskStartTime)
-                    self.fLog("Safety timeout reached after \(duration)s")
-                    isTaskCompleted = true
-                    task?.setTaskCompleted(success: false)
-                    self.fLog("Task force-completed due to timeout")
-                }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                self.logApproxNextFetch("after Workmanager handlePeriodicTask")
             }
         } else {
             fLog("Task is not BGAppRefreshTask type")
@@ -443,11 +461,19 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         }
     }
 
-    private func scheduleBackgroundFetch() {
+    private func scheduleBackgroundFetch(
+        asSoonAsPossible: Bool = false,
+        source: String
+    ) {
         let minutes = storedBackgroundFetchMinutes()
         do {
-            try submitBackgroundFetch(minutes: minutes, replacingPending: false)
-            fLog("✓ Background fetch scheduled with \(minutes)m earliest interval")
+            let scheduledAt = try submitBackgroundFetch(
+                minutes: minutes,
+                replacingPending: false,
+                earliestBeginInSeconds: asSoonAsPossible ? adaptiveBackgroundAsapSeconds : nil
+            )
+            let mode = asSoonAsPossible ? "ASAP" : "\(minutes)m"
+            fLog("Background fetch scheduled from \(source) with \(mode) earliest request: \(scheduledAt)")
             logApproxNextFetch("after submit")
         } catch {
             let errorString = error.localizedDescription

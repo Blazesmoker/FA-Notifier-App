@@ -17,6 +17,19 @@ import 'package:FANotifier/features/notifications/data/notification_refresh_serv
 import 'package:FANotifier/features/notifications/data/pending_navigation_store.dart';
 import 'package:FANotifier/core/logging/app_logging.dart';
 
+bool isActivityNotificationPayload(String payload) {
+  return payload.startsWith('fa_activity_') ||
+      payload.startsWith('activity_') ||
+      payload.contains('DrawerIndex.Notifications') ||
+      payload == 'activity_native';
+}
+
+bool isNoteNotificationPayload(String payload) {
+  return payload.startsWith('note_') ||
+      payload.contains('DrawerIndex.Notes') ||
+      payload == 'note_native';
+}
+
 /// Manages notification channels, shows notifications, and handles taps.
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -137,7 +150,7 @@ class NotificationService {
         details?.notificationResponse != null) {
       final payload = details!.notificationResponse!.payload;
       if (payload != null && payload.isNotEmpty) {
-        if (payload != appUpdatePayload) {
+        if (isActivityNotificationPayload(payload)) {
           await ActivitiesNotificationStateStore()
               .requestAcknowledgeOnNextForegroundFetch();
         }
@@ -249,8 +262,10 @@ class NotificationService {
         return;
       }
 
-      await ActivitiesNotificationStateStore()
-          .requestAcknowledgeOnNextForegroundFetch();
+      if (isActivityNotificationPayload(payload)) {
+        await ActivitiesNotificationStateStore()
+            .requestAcknowledgeOnNextForegroundFetch();
+      }
       appLog('[NOTIF] Notification tap received (source=$source)');
       kDebugPrint(
         'NOTES REFRESH TRIGGERED_handletappayload (source=$source, payload=$payload)',
@@ -283,9 +298,7 @@ class NotificationService {
         final navProvider =
             Provider.of<NotificationNavigationProvider>(ctx, listen: false);
 
-        final bool isNotes = payload.startsWith('note_') ||
-            payload.contains('DrawerIndex.Notes') ||
-            payload == 'note_native';
+        final bool isNotes = isNoteNotificationPayload(payload);
 
         navProvider.setTargetIndex(isNotes ? 4 : 3);
 
@@ -437,7 +450,7 @@ void notificationTapBackground(NotificationResponse response) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final payload = response.payload ?? '';
-  if (payload != NotificationService.appUpdatePayload) {
+  if (isActivityNotificationPayload(payload)) {
     await ActivitiesNotificationStateStore()
         .requestAcknowledgeOnNextForegroundFetch();
   }
