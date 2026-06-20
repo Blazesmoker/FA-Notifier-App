@@ -20,6 +20,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:FANotifier/shared/utils/content_rating_filters.dart';
 import 'package:FANotifier/shared/utils/external_link_launcher.dart';
@@ -52,6 +53,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const AssetImage _submissionsIconImage =
+      AssetImage('assets/icons/submissions.png');
+  static const String _loginWebViewLastLoadAtMsKey =
+      'login_webview.last_load_at_ms';
+  static const Duration _loginWebViewMinSpacing = Duration(seconds: 1);
+  static Future<void> _loginWebViewLoadQueue = Future<void>.value();
+
   UserProfile? _userProfile;
   bool isLoadingProfile = true;
   DrawerIndex drawerIndex = DrawerIndex.HOME;
@@ -137,6 +145,12 @@ class _HomeScreenState extends State<HomeScreen> {
         _triggerSearch(widget.initialSearchQuery!);
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    unawaited(precacheImage(_submissionsIconImage, context));
   }
 
   @override
@@ -501,7 +515,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildWebView() {
     return InAppWebView(
-      initialUrlRequest: URLRequest(url: WebUri(loginUrl)),
+      initialData: InAppWebViewInitialData(
+        data: '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#000;"></body></html>',
+        baseUrl: WebUri('about:blank'),
+      ),
       initialSettings: InAppWebViewSettings(
         javaScriptEnabled: true,
         useShouldOverrideUrlLoading: true,
@@ -510,6 +527,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       onWebViewCreated: (InAppWebViewController controller) {
         _webViewController = controller;
+        unawaited(_loadInitialLoginUrl(controller));
       },
       onLoadStart: (InAppWebViewController controller, WebUri? url) async {
         debugPrint(
@@ -603,6 +621,32 @@ class _HomeScreenState extends State<HomeScreen> {
         debugPrint("WebView Console Message: ${consoleMessage.message}");
       },
     );
+  }
+
+  Future<void> _loadInitialLoginUrl(InAppWebViewController controller) {
+    final next = _loginWebViewLoadQueue.catchError((_) {}).then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final lastLoadMs = prefs.getInt(_loginWebViewLastLoadAtMsKey) ?? 0;
+      final waitMs = _loginWebViewMinSpacing.inMilliseconds -
+          (nowMs - lastLoadMs);
+      if (waitMs > 0) {
+        await Future<void>.delayed(Duration(milliseconds: waitMs));
+      }
+      if (!mounted || isLoggedIn || _webViewController != controller) {
+        return;
+      }
+      await prefs.setInt(
+        _loginWebViewLastLoadAtMsKey,
+        DateTime.now().millisecondsSinceEpoch,
+      );
+      await controller.loadUrl(
+        urlRequest: URLRequest(url: WebUri(loginUrl)),
+      );
+    });
+    _loginWebViewLoadQueue = next.catchError((_) {});
+    return next;
   }
 
   void _startElementStabilityCheck() {
@@ -1072,17 +1116,19 @@ class _HomeScreenState extends State<HomeScreen> {
                               backgroundColor: AppTheme.background,
                             ),
                             BottomNavigationBarItem(
-                              icon: Image.asset(
-                                'assets/icons/submissions.png',
+                              icon: Image(
+                                image: _submissionsIconImage,
                                 width: 27,
                                 height: 27,
                                 color: Colors.grey,
+                                gaplessPlayback: true,
                               ),
-                              activeIcon: Image.asset(
-                                'assets/icons/submissions.png',
+                              activeIcon: Image(
+                                image: _submissionsIconImage,
                                 width: 27,
                                 height: 27,
                                 color: const Color(0xFFE09321),
+                                gaplessPlayback: true,
                               ),
                               label: 'Submissions',
                               backgroundColor: AppTheme.background,

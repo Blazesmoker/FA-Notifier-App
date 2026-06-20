@@ -118,6 +118,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate, FlutterSceneLifeCyclePr
             engine.run()
             appDelegate?.flutterEngine = engine
             GeneratedPluginRegistrant.register(with: engine)
+            registerAdaptiveBackgroundFetchPlugin(registry: engine)
             sceneLifeCycleDelegate.registerSceneLifeCycle(with: engine)
             flutterVC = FlutterViewController(engine: engine, nibName: nil, bundle: nil)
         }

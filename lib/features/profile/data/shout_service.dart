@@ -47,7 +47,7 @@ class ShoutService {
     _dio.options.headers['User-Agent'] = FAHttp.userAgent;
     _dio.options.followRedirects = false;
     _dio.options.validateStatus = (status) {
-      return status != null && (status >= 200 && status < 400);
+      return status != null && status >= 200 && status < 600;
     };
     await _loadCookies();
     _initialized = true;

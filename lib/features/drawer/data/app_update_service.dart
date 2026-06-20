@@ -16,7 +16,26 @@ class AppUpdateInfo {
   final bool currentVersionAllowed;
 }
 
-Future<AppUpdateInfo?> fetchLatestAppUpdateInfo() async {
+AppUpdateInfo? _cachedUpdateInfo;
+Future<AppUpdateInfo?>? _inFlightUpdateInfoFuture;
+
+Future<AppUpdateInfo?> fetchLatestAppUpdateInfo({bool forceRefresh = false}) {
+  if (!forceRefresh && _cachedUpdateInfo != null) {
+    return Future.value(_cachedUpdateInfo);
+  }
+  if (!forceRefresh && _inFlightUpdateInfoFuture != null) {
+    return _inFlightUpdateInfoFuture!;
+  }
+
+  _inFlightUpdateInfoFuture = _fetchLatestAppUpdateInfoImpl().then((value) {
+    _cachedUpdateInfo = value;
+    _inFlightUpdateInfoFuture = null;
+    return value;
+  });
+  return _inFlightUpdateInfoFuture!;
+}
+
+Future<AppUpdateInfo?> _fetchLatestAppUpdateInfoImpl() async {
   try {
     final info = await PackageInfo.fromPlatform();
     final current = info.version.trim();

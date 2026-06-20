@@ -109,8 +109,7 @@ class NoteMessageService {
         },
         followRedirects: false,
         validateStatus: (status) {
-          return status != null &&
-              (status >= 200 && status < 400 || status == 302);
+          return status != null && status >= 200 && status < 600;
         },
       ),
     );
@@ -126,7 +125,7 @@ class NoteMessageService {
     _dio.options.headers['User-Agent'] = FAHttp.userAgent;
     _dio.options.followRedirects = true;
     _dio.options.validateStatus = (status) {
-      return status != null && (status >= 200 && status < 400);
+      return status != null && status >= 200 && status < 600;
     };
   }
 

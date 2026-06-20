@@ -46,6 +46,7 @@ class FaRequestCoordinator {
   String? _blockedMessage;
   int _recoverableFailureCount = 0;
   int _unavailableFailureCount = 0;
+  int _http503FailureCount = 0;
   int _requestSequence = 0;
 
   Future<void> waitForTurn({String? label}) {
@@ -100,6 +101,7 @@ class FaRequestCoordinator {
   void recordSuccess() {
     _recoverableFailureCount = 0;
     _unavailableFailureCount = 0;
+    _http503FailureCount = 0;
     if (_blockedUntil == null || !_blockedUntil!.isAfter(DateTime.now())) {
       _blockedUntil = null;
       _blockedMessage = null;
@@ -122,9 +124,26 @@ class FaRequestCoordinator {
       return;
     }
 
+    if (statusCode == 503) {
+      recordHttp503();
+      return;
+    }
+
     if (statusCode != null && statusCode >= 200 && statusCode < 500) {
       recordSuccess();
     }
+  }
+
+  void recordHttp503() {
+    _http503FailureCount++;
+    final seconds = math.min<int>(
+      300,
+      5 * math.pow(2, _http503FailureCount - 1).toInt(),
+    );
+    recordWait(
+      retryAfter: Duration(seconds: seconds),
+      message: 'FA returned 503. Waiting before retrying.',
+    );
   }
 
   void recordRecoverableFailure() {

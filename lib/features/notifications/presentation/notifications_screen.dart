@@ -1174,6 +1174,19 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     super.dispose();
   }
 
+  String? _currentSectionTitle(FANotificationService service) {
+    final controller = _tabController;
+    if (controller == null || service.sections.isEmpty) return null;
+    final index = controller.index;
+    if (index < 0 || index >= service.sections.length) return null;
+    return service.sections[index].title;
+  }
+
+  void _syncActiveNotificationSection(FANotificationService service) {
+    FaActivitiesPollingService()
+        .setNotificationsScreenActiveSection(_currentSectionTitle(service));
+  }
+
   void _showNotificationSettingsDialog(FANotificationService service) {
     showDialog(
       context: context,
@@ -1266,11 +1279,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     _tabController = TabController(
         length: sectionCount, vsync: this, initialIndex: _initialTabIndex);
     _lastTabIndex = _tabController!.index;
+    _syncActiveNotificationSection(service);
     _tabController!.addListener(() {
       if (!mounted) return;
       final idx = _tabController!.index;
       if (idx != _lastTabIndex) {
         _lastTabIndex = idx;
+        _syncActiveNotificationSection(service);
         setState(() {});
       }
     });
@@ -1283,8 +1298,14 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     return VisibilityDetector(
       key: const Key('notifications_screen_visibility'),
       onVisibilityChanged: (info) {
-        FaActivitiesPollingService()
-            .setNotificationsScreenVisible(info.visibleFraction > 0.01);
+        final service = Provider.of<FANotificationService>(
+          context,
+          listen: false,
+        );
+        FaActivitiesPollingService().setNotificationsScreenVisible(
+          info.visibleFraction > 0.01,
+          activeSectionTitle: _currentSectionTitle(service),
+        );
       },
       child: Consumer<FANotificationService>(
         builder: (context, service, child) {
@@ -1316,6 +1337,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             );
           }
           if (sections.isEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              FaActivitiesPollingService()
+                  .setNotificationsScreenActiveSection(null);
+            });
             if (!_didAutoRefetch) {
               _didAutoRefetch = true;
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1375,6 +1401,10 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               _tabController!.length != sections.length) {
             return const Scaffold(body: SizedBox.shrink());
           }
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _syncActiveNotificationSection(service);
+          });
           return Scaffold(
           appBar: AppBar(
             title: const Text('Notifications'),

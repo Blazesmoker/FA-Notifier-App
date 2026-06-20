@@ -78,7 +78,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 }
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+@objc class AppDelegate: FlutterAppDelegate {
 
     var flutterEngine: FlutterEngine?
 
@@ -332,8 +332,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         if application.applicationState == .background {
             fLog("Background launch detected - skipping FlutterEngine.run for UI entrypoint")
         }
-        GeneratedPluginRegistrant.register(with: self)
-        registerAdaptiveBackgroundFetchPlugin(registry: self)
         setupNotificationChannelIfNeeded()
         setupTranslationChannelIfNeeded()
         UNUserNotificationCenter.current().delegate = self
@@ -369,12 +367,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         self.fLog("Background task identifier: \(backgroundTaskIdentifier)")
 
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
-    }
-
-    func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-        configurePluginRegistrantCallbacks()
-        GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-        registerAdaptiveBackgroundFetchPlugin(registry: engineBridge.pluginRegistry)
     }
 
     override func applicationDidEnterBackground(_ application: UIApplication) {

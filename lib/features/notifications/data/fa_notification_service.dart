@@ -397,7 +397,7 @@ class FANotificationService with ChangeNotifier {
     _dio.options.headers['Accept-Language'] = 'en-US,en;q=0.9,ru;q=0.8';
     _dio.options.followRedirects = false;
     _dio.options.validateStatus = (status) =>
-    status != null && (status >= 200 && status < 400);
+        status != null && status >= 200 && status < 600;
   }
 
 

@@ -41,7 +41,7 @@ class FinalizeSubmissionService {
     _dio.options.headers['Accept-Language'] = 'en-US,en;q=0.9';
     _dio.options.followRedirects = true;
     _dio.options.validateStatus = (status) {
-      return status != null && (status >= 200 && status < 400);
+      return status != null && status >= 200 && status < 600;
     };
 
     _dio.interceptors.add(CookieManager(_cookieJar));
@@ -102,7 +102,7 @@ class FinalizeSubmissionService {
         },
         followRedirects: false,
         validateStatus: (status) {
-          return status != null && (status >= 200 && status < 400);
+          return status != null && status >= 200 && status < 600;
         },
       ),
     );

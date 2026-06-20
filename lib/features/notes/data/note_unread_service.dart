@@ -71,7 +71,7 @@ class NoteUnreadService {
           },
           followRedirects: false,
           validateStatus: (s) =>
-              s != null && ((s >= 200 && s < 400) || s == 302),
+              s != null && s >= 200 && s < 600,
         ),
       );
       FaRequestCoordinator.instance.recordHttpStatus(

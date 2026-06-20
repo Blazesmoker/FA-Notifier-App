@@ -143,6 +143,36 @@ class ActivitiesNotificationStateStore {
     });
   }
 
+  Future<void> acknowledgeVisibleCounts({
+    required NotificationCounts currentCounts,
+    bool acknowledgeSubmissions = false,
+    bool acknowledgeWatches = false,
+    bool acknowledgeComments = false,
+    bool acknowledgeFavorites = false,
+    bool acknowledgeJournals = false,
+    bool acknowledgeNotes = false,
+  }) async {
+    return _withMutex(() async {
+      final prefs = await SharedPreferences.getInstance();
+      final changed = await _saveSelectedLastSeenCounts(
+        prefs,
+        currentCounts,
+        acknowledgeSubmissions: acknowledgeSubmissions,
+        acknowledgeWatches: acknowledgeWatches,
+        acknowledgeComments: acknowledgeComments,
+        acknowledgeFavorites: acknowledgeFavorites,
+        acknowledgeJournals: acknowledgeJournals,
+        acknowledgeNotes: acknowledgeNotes,
+      );
+      if (changed) {
+        await prefs.setInt(
+          kLastSeenUpdatedAtMsKey,
+          DateTime.now().millisecondsSinceEpoch,
+        );
+      }
+    });
+  }
+
   Future<void> requestAcknowledgeOnNextForegroundFetch() {
     return _withMutex(() async {
       final prefs = await SharedPreferences.getInstance();
@@ -178,6 +208,47 @@ class ActivitiesNotificationStateStore {
       kLastSeenUpdatedAtMsKey,
       DateTime.now().millisecondsSinceEpoch,
     );
+  }
+
+  Future<bool> _saveSelectedLastSeenCounts(
+    SharedPreferences prefs,
+    NotificationCounts counts, {
+    required bool acknowledgeSubmissions,
+    required bool acknowledgeWatches,
+    required bool acknowledgeComments,
+    required bool acknowledgeFavorites,
+    required bool acknowledgeJournals,
+    required bool acknowledgeNotes,
+  }) async {
+    var changed = false;
+    if (acknowledgeSubmissions) {
+      await prefs.setInt(_kSubmissions, counts.submissions);
+      changed = true;
+    }
+    if (acknowledgeWatches) {
+      await prefs.setInt(_kWatches, counts.watches);
+      changed = true;
+    }
+    if (acknowledgeComments) {
+      await prefs.setInt(_kComments, counts.comments);
+      changed = true;
+    }
+    if (acknowledgeFavorites) {
+      await prefs.setInt(_kFavorites, counts.favorites);
+      changed = true;
+    }
+    if (acknowledgeJournals) {
+      await prefs.setInt(_kJournals, counts.journals);
+      changed = true;
+    }
+    if (acknowledgeNotes) {
+      await prefs.setInt(_kNotes, counts.notes);
+      changed = true;
+    }
+    if (changed) {
+      await prefs.setInt(_kBaselineSchemaVersion, _baselineSchemaVersion);
+    }
+    return changed;
   }
 
   Future<void> _lowerBaselineForDecreases(
@@ -260,30 +331,17 @@ class ActivitiesNotificationStateStore {
   }) {
     return _withMutex(() async {
       final prefs = await SharedPreferences.getInstance();
-      if (acknowledgeSubmissions) {
-        await prefs.setInt(_kSubmissions, currentCounts.submissions);
-      }
-      if (acknowledgeWatches) {
-        await prefs.setInt(_kWatches, currentCounts.watches);
-      }
-      if (acknowledgeComments) {
-        await prefs.setInt(_kComments, currentCounts.comments);
-      }
-      if (acknowledgeFavorites) {
-        await prefs.setInt(_kFavorites, currentCounts.favorites);
-      }
-      if (acknowledgeJournals) {
-        await prefs.setInt(_kJournals, currentCounts.journals);
-      }
-      if (acknowledgeNotes) {
-        await prefs.setInt(_kNotes, currentCounts.notes);
-      }
-      if (acknowledgeSubmissions ||
-          acknowledgeWatches ||
-          acknowledgeComments ||
-          acknowledgeFavorites ||
-          acknowledgeJournals ||
-          acknowledgeNotes) {
+      final changed = await _saveSelectedLastSeenCounts(
+        prefs,
+        currentCounts,
+        acknowledgeSubmissions: acknowledgeSubmissions,
+        acknowledgeWatches: acknowledgeWatches,
+        acknowledgeComments: acknowledgeComments,
+        acknowledgeFavorites: acknowledgeFavorites,
+        acknowledgeJournals: acknowledgeJournals,
+        acknowledgeNotes: acknowledgeNotes,
+      );
+      if (changed) {
         await prefs.setInt(
           kLastSeenUpdatedAtMsKey,
           DateTime.now().millisecondsSinceEpoch,
@@ -332,5 +390,4 @@ class ActivitiesDiff {
         (enabledIncreases.notes > 0 && previous.notes > 0);
   }
 }
-
 

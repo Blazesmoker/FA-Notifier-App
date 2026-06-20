@@ -11,6 +11,7 @@ import 'package:FANotifier/features/submissions/domain/submission_image_group.da
 import 'package:FANotifier/features/submissions/domain/submissions_listing_parse_result.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation_optimized.dart';
+import 'package:FANotifier/features/notifications/data/fa_activities_polling_service.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 import 'package:FANotifier/features/submissions/domain/submission_list_item.dart';
 import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
@@ -79,6 +80,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   void dispose() {
     _scrollController.removeListener(_scrollListenerForPagination);
     _scrollController.dispose();
+    FaActivitiesPollingService().setSubmissionsScreenVisible(false);
     super.dispose();
   }
 
@@ -517,43 +519,50 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return PopScope(
-      canPop: !_selectionMode,
-      onPopInvokedWithResult: (bool didPop, dynamic result) {
-        if (didPop) return;
-        if (_selectionMode) {
-          _onWillPop();
-        }
+    return VisibilityDetector(
+      key: const Key('submissions_screen_visibility'),
+      onVisibilityChanged: (info) {
+        FaActivitiesPollingService()
+            .setSubmissionsScreenVisible(info.visibleFraction > 0.01);
       },
-      child: Scaffold(
-        drawerEnableOpenDragGesture: false,
-        appBar: AppBar(
-          centerTitle: true,
-          title: const Text('Submissions'),
-          actions: [
-            if (_selectionMode)
+      child: PopScope(
+        canPop: !_selectionMode,
+        onPopInvokedWithResult: (bool didPop, dynamic result) {
+          if (didPop) return;
+          if (_selectionMode) {
+            _onWillPop();
+          }
+        },
+        child: Scaffold(
+          drawerEnableOpenDragGesture: false,
+          appBar: AppBar(
+            centerTitle: true,
+            title: const Text('Submissions'),
+            actions: [
+              if (_selectionMode)
+                IconButton(
+                  icon: const Icon(Icons.library_add_check, size: 22),
+                  tooltip: 'Select All',
+                  onPressed: _toggleAllSelection,
+                ),
               IconButton(
-                icon: const Icon(Icons.library_add_check, size: 22),
-                tooltip: 'Select All',
-                onPressed: _toggleAllSelection,
+                icon: Icon(_selectionMode ? Icons.delete_forever : Icons.delete),
+                tooltip: 'Delete Selected',
+                onPressed: _onTrashIconPressed,
               ),
-            IconButton(
-              icon: Icon(_selectionMode ? Icons.delete_forever : Icons.delete),
-              tooltip: 'Delete Selected',
-              onPressed: _onTrashIconPressed,
-            ),
-            IconButton(
-              icon: const Icon(Icons.block, color: Color(0xFFE09321)),
-              tooltip: 'Nuke All',
-              onPressed: _onNukePressed,
-            ),
-          ],
-        ),
-        body: RefreshIndicator(
-          color: const Color(0xFFE09321),
-          backgroundColor: Colors.black,
-          onRefresh: _refreshSubmissions,
-          child: _buildRefreshableBody(),
+              IconButton(
+                icon: const Icon(Icons.block, color: Color(0xFFE09321)),
+                tooltip: 'Nuke All',
+                onPressed: _onNukePressed,
+              ),
+            ],
+          ),
+          body: RefreshIndicator(
+            color: const Color(0xFFE09321),
+            backgroundColor: Colors.black,
+            onRefresh: _refreshSubmissions,
+            child: _buildRefreshableBody(),
+          ),
         ),
       ),
     );

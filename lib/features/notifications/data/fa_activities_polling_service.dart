@@ -26,13 +26,47 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
   AppLifecycleState? _lastLifecycleState;
   bool _observerAttached = false;
   bool _notesScreenVisible = false;
+  bool _submissionsScreenVisible = false;
   bool _notificationsScreenVisible = false;
+  bool _foregroundEntryCheckPending = true;
+  String? _activeNotificationSectionTitle;
   NotificationCounts? _pendingExternalCounts;
   bool _pendingExternalResetTimer = false;
   String? _pendingExternalSource;
+  bool _pendingStartTrigger = false;
+  bool _pendingStartResetTimer = false;
+  String? _pendingStartSource;
 
   bool get _acknowledgingScreenVisible =>
-      _notesScreenVisible || _notificationsScreenVisible;
+      _notesScreenVisible ||
+      _submissionsScreenVisible ||
+      _notificationsActiveSectionAcknowledgesAny;
+
+  bool get _notificationsActiveSectionAcknowledgesAny =>
+      _acknowledgeWatchesVisible ||
+      _acknowledgeCommentsVisible ||
+      _acknowledgeFavoritesVisible ||
+      _acknowledgeJournalsVisible;
+
+  String get _activeNotificationSectionLower =>
+      _activeNotificationSectionTitle?.toLowerCase() ?? '';
+
+  bool get _acknowledgeWatchesVisible =>
+      _notificationsScreenVisible &&
+      _activeNotificationSectionLower.contains('watch');
+
+  bool get _acknowledgeCommentsVisible =>
+      _notificationsScreenVisible &&
+      _activeNotificationSectionLower.contains('comment');
+
+  bool get _acknowledgeFavoritesVisible =>
+      _notificationsScreenVisible &&
+      _activeNotificationSectionLower.contains('favorite');
+
+  bool get _acknowledgeJournalsVisible =>
+      _notificationsScreenVisible &&
+      _activeNotificationSectionLower.contains('journal') &&
+      !_activeNotificationSectionLower.contains('comment');
 
   void start({required FANotificationService faNotificationService}) {
     _faNotificationService = faNotificationService;
@@ -44,6 +78,14 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       triggerNow(resetTimer: true, source: 'notification_refresh_service');
     });
     _ensureTimer();
+    if (_pendingStartTrigger) {
+      final resetTimer = _pendingStartResetTimer;
+      final source = _pendingStartSource ?? 'pending_start';
+      _pendingStartTrigger = false;
+      _pendingStartResetTimer = false;
+      _pendingStartSource = null;
+      unawaited(triggerNow(resetTimer: resetTimer, source: source));
+    }
   }
 
   void stop() {
@@ -56,6 +98,14 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     _pendingExternalCounts = null;
     _pendingExternalResetTimer = false;
     _pendingExternalSource = null;
+    _pendingStartTrigger = false;
+    _pendingStartResetTimer = false;
+    _pendingStartSource = null;
+    _foregroundEntryCheckPending = true;
+    _notesScreenVisible = false;
+    _submissionsScreenVisible = false;
+    _notificationsScreenVisible = false;
+    _activeNotificationSectionTitle = null;
     if (_observerAttached) {
       WidgetsBinding.instance.removeObserver(this);
       _observerAttached = false;
@@ -69,26 +119,57 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
 
   void setNotesScreenVisible(bool visible) {
     if (_notesScreenVisible == visible) return;
-    final wasVisible = _acknowledgingScreenVisible;
     _notesScreenVisible = visible;
+    if (visible) {
+      _acknowledgeCurrentVisibleCountsWithoutFetch();
+    }
+  }
+
+  void setSubmissionsScreenVisible(bool visible) {
+    if (_submissionsScreenVisible == visible) return;
+    _submissionsScreenVisible = visible;
+    if (visible) {
+      _acknowledgeCurrentVisibleCountsWithoutFetch();
+    }
+  }
+
+  void setNotificationsScreenVisible(
+    bool visible, {
+    String? activeSectionTitle,
+  }) {
+    if (_notificationsScreenVisible == visible &&
+        (activeSectionTitle == null ||
+            _activeNotificationSectionTitle == activeSectionTitle)) {
+      return;
+    }
+    final wasVisible = _acknowledgingScreenVisible;
+    _notificationsScreenVisible = visible;
+    if (!visible) {
+      _activeNotificationSectionTitle = null;
+    } else if (activeSectionTitle != null) {
+      _activeNotificationSectionTitle = activeSectionTitle;
+    }
     _handleAcknowledgingScreenVisibilityChange(wasVisible);
   }
 
-  void setNotificationsScreenVisible(bool visible) {
-    if (_notificationsScreenVisible == visible) return;
+  void setNotificationsScreenActiveSection(String? sectionTitle) {
+    if (_activeNotificationSectionTitle == sectionTitle) return;
     final wasVisible = _acknowledgingScreenVisible;
-    _notificationsScreenVisible = visible;
+    _activeNotificationSectionTitle = sectionTitle;
     _handleAcknowledgingScreenVisibilityChange(wasVisible);
   }
 
   void _handleAcknowledgingScreenVisibilityChange(bool wasVisible) {
     if (wasVisible || !_acknowledgingScreenVisible) return;
 
+    final source = _foregroundEntryCheckPending
+        ? 'foreground_entry_visible'
+        : 'acknowledging_screen_visible';
     final existing = _inFlight;
     if (existing == null) {
       unawaited(triggerNow(
         resetTimer: true,
-        source: 'acknowledging_screen_visible',
+        source: source,
       ));
       return;
     }
@@ -97,9 +178,42 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       if (!_acknowledgingScreenVisible) return;
       await triggerNow(
         resetTimer: true,
-        source: 'acknowledging_screen_visible',
+        source: _foregroundEntryCheckPending
+            ? 'foreground_entry_visible'
+            : 'acknowledging_screen_visible',
       );
     }));
+  }
+
+  void _acknowledgeCurrentVisibleCountsWithoutFetch() {
+    final svc = _faNotificationService;
+    if (svc == null || !svc.hasValidLatestCountsSnapshot) return;
+    unawaited(_acknowledgeVisibleCounts(
+      ActivitiesNotificationStateStore(),
+      svc.latestCounts,
+    ));
+  }
+
+  bool _isForegroundEntrySource(String source) {
+    return source == 'startup_warmup' ||
+        source == 'lifecycle_resumed' ||
+        source == 'foreground_entry_visible' ||
+        source == 'login_established';
+  }
+
+  Future<void> _acknowledgeVisibleCounts(
+    ActivitiesNotificationStateStore activitiesStateStore,
+    NotificationCounts currentCounts,
+  ) {
+    return activitiesStateStore.acknowledgeVisibleCounts(
+      currentCounts: currentCounts,
+      acknowledgeSubmissions: _submissionsScreenVisible,
+      acknowledgeWatches: _acknowledgeWatchesVisible,
+      acknowledgeComments: _acknowledgeCommentsVisible,
+      acknowledgeFavorites: _acknowledgeFavoritesVisible,
+      acknowledgeJournals: _acknowledgeJournalsVisible,
+      acknowledgeNotes: _notesScreenVisible,
+    );
   }
 
   Future<void> triggerNow({required bool resetTimer, required String source}) {
@@ -110,7 +224,12 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     if (existing != null) return existing;
 
     final svc = _faNotificationService;
-    if (svc == null) return Future.value();
+    if (svc == null) {
+      _pendingStartTrigger = true;
+      _pendingStartResetTimer = _pendingStartResetTimer || resetTimer;
+      _pendingStartSource = source;
+      return Future.value();
+    }
 
     final future = _runOnce(svc, source: source).whenComplete(() {
       _inFlight = null;
@@ -257,6 +376,9 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
     bool triggerNotesRefreshOnNotesIncrease = true,
     required String source,
   }) async {
+    final activitiesStateStore = ActivitiesNotificationStateStore();
+    final foregroundEntryCheck =
+        _foregroundEntryCheckPending || _isForegroundEntrySource(source);
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
@@ -274,7 +396,12 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       final bool notesEnabled =
           prefs.getBool('drawer_notif_notes_enabled') ?? true;
 
-      final activitiesStateStore = ActivitiesNotificationStateStore();
+      if (!foregroundEntryCheck) {
+        await _acknowledgeVisibleCounts(
+          activitiesStateStore,
+          currentCounts,
+        );
+      }
       final ActivitiesDiff diff = await activitiesStateStore
           .diffFromAcknowledged(currentCounts: currentCounts);
 
@@ -308,11 +435,6 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
           enabledIncreases.journals > 0 ||
           enabledIncreases.notes > 0;
       if (!hasEnabledIncrease) {
-        if (diff.hasAnyIncrease) {
-          await activitiesStateStore.acknowledgeCurrentCounts(
-            currentCounts: currentCounts,
-          );
-        }
         return;
       }
 
@@ -321,9 +443,6 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       final bool vibrationActivitiesEnabled =
           prefs.getBool('vibration_new_activities_enabled') ?? true;
       if (!soundActivitiesEnabled && !vibrationActivitiesEnabled) {
-        await activitiesStateStore.acknowledgeCurrentCounts(
-          currentCounts: currentCounts,
-        );
         return;
       }
 
@@ -362,7 +481,11 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
           'lifecycle=${WidgetsBinding.instance.lifecycleState}',
         );
       }
-      await NotificationService().showNotification(
+      final notificationService = NotificationService();
+      if (Platform.isIOS) {
+        await notificationService.cancelActivityNotification();
+      }
+      await notificationService.showNotification(
         NotificationService.activityNotificationId,
         'New FA Activity',
         messageBody,
@@ -380,14 +503,19 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       await activitiesStateStore.markActivityNotificationShown(
         currentCounts: currentCounts,
         body: messageBody,
-        acknowledgeSubmissions: _notificationsScreenVisible,
-        acknowledgeWatches: _notificationsScreenVisible,
-        acknowledgeComments: _notificationsScreenVisible,
-        acknowledgeFavorites: _notificationsScreenVisible,
-        acknowledgeJournals: _notificationsScreenVisible,
-        acknowledgeNotes: _notesScreenVisible,
       );
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      if (foregroundEntryCheck) {
+        try {
+          await _acknowledgeVisibleCounts(
+            activitiesStateStore,
+            currentCounts,
+          );
+        } catch (_) {}
+        _foregroundEntryCheckPending = false;
+      }
+    }
   }
 
   @override
@@ -401,6 +529,7 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
           prev == AppLifecycleState.detached;
       _ensureTimer();
       if (realResume) {
+        _foregroundEntryCheckPending = true;
         final existing = _inFlight;
         if (existing == null) {
           triggerNow(resetTimer: true, source: 'lifecycle_resumed');

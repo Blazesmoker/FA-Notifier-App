@@ -327,7 +327,7 @@ class NotesApiService {
           HttpHeaders.connectionHeader: 'close',
         },
         validateStatus: (status) =>
-            status != null && status >= 200 && status < 400,
+            status != null && status >= 200 && status < 600,
       ),
     );
     FaRequestCoordinator.instance.recordHttpStatus(

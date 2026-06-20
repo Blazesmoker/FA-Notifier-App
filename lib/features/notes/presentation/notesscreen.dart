@@ -73,6 +73,7 @@ class NotesScreenState extends State<NotesScreen>
   final ScrollController _sentScrollController = ScrollController();
 
   bool _didFirstRunSkip = false;
+  NotesPageSnapshot? _pendingFirstRunPage1;
 
   bool _isDraggingFromEdge = false;
 
@@ -366,8 +367,10 @@ class NotesScreenState extends State<NotesScreen>
   Future<void> _fetchTwoPagesAndSkip() async {
     try {
       final combined = <Message>[];
-      final page1 = await _notesApi.fetchNotesPage(folder: 'inbox', page: 1);
-      combined.addAll(page1);
+      final page1Snapshot =
+          await _notesApi.fetchNotesPageSnapshot(folder: 'inbox', page: 1);
+      _pendingFirstRunPage1 = page1Snapshot;
+      combined.addAll(page1Snapshot.messages);
       final page2 = await _notesApi.fetchNotesPage(folder: 'inbox', page: 2);
       combined.addAll(page2);
 
@@ -486,8 +489,14 @@ class NotesScreenState extends State<NotesScreen>
     }
 
     try {
-      final snapshot =
-          await _notesApi.fetchNotesPageSnapshot(folder: 'inbox', page: page);
+      NotesPageSnapshot snapshot;
+      if (page == 1 && _pendingFirstRunPage1 != null) {
+        snapshot = _pendingFirstRunPage1!;
+        _pendingFirstRunPage1 = null;
+      } else {
+        snapshot =
+            await _notesApi.fetchNotesPageSnapshot(folder: 'inbox', page: page);
+      }
       final newMessages = snapshot.messages;
 
       if (page == 1) {

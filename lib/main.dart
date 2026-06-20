@@ -595,9 +595,12 @@ Future<void> removePreviousActivityNotification(
   final previousActivityNotificationId =
       prefs.getInt(_currentActivityNotificationIdKey);
   if (Platform.isIOS) {
-    if (previousActivityNotificationId != null &&
-        previousActivityNotificationId != replacingWithId) {
-      await notificationService.cancelNotification(previousActivityNotificationId);
+    final idsToCancel = <int>{
+      if (previousActivityNotificationId != null) previousActivityNotificationId,
+      if (replacingWithId != null) replacingWithId,
+    };
+    for (final id in idsToCancel) {
+      await notificationService.cancelNotification(id);
     }
     return;
   }
@@ -1021,7 +1024,7 @@ Future<String> _fetchMessageContentInBackground(String link) async {
             'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
       validateStatus: (status) =>
-          status != null && status >= 200 && status < 400,
+          status != null && status >= 200 && status < 600,
     ),
   );
   FaRequestCoordinator.instance.recordHttpStatus(
@@ -1128,7 +1131,7 @@ Future<void> _markAsUnreadBackground(Message msg) async {
         'Origin': 'https://www.furaffinity.net',
       },
       followRedirects: false,
-      validateStatus: (s) => s != null && (s == 302 || (s >= 200 && s < 300)),
+      validateStatus: (s) => s != null && s >= 200 && s < 600,
     ),
   );
   FaRequestCoordinator.instance.recordHttpStatus(

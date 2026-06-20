@@ -48,10 +48,13 @@ class NoteReplyService {
       ),
     );
 
+    FaRequestCoordinator.instance.recordHttpStatus(
+      statusCode: response.statusCode,
+    );
+
     if (response.statusCode != 200) {
       throw Exception('Failed to fetch details: status ${response.statusCode}');
     }
-    FaRequestCoordinator.instance.recordSuccess();
 
     final doc = html_parser.parse(response.data);
 
@@ -165,12 +168,13 @@ class NoteReplyService {
         ),
       );
 
-      if (getResp.statusCode == 302) {
-        throw Exception("GET request was redirected (auth issue?)");
-      }
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: getResp.statusCode,
       );
+
+      if (getResp.statusCode == 302) {
+        throw Exception("GET request was redirected (auth issue?)");
+      }
 
       final doc = html_parser.parse(getResp.data);
       final keyInput = doc.querySelector('form#note-form input[name="key"]');
@@ -208,8 +212,11 @@ class NoteReplyService {
         ),
       );
 
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: postResp.statusCode,
+      );
+
       if (postResp.statusCode == 302) {
-        FaRequestCoordinator.instance.recordSuccess();
         return const NoteReplySendResult(success: true);
       }
 
@@ -245,7 +252,7 @@ class NoteReplyService {
     _dio.options.headers['User-Agent'] = FAHttp.userAgent;
     _dio.options.followRedirects = false;
     _dio.options.validateStatus = (status) =>
-        status != null && status >= 200 && status < 400;
+        status != null && status >= 200 && status < 600;
   }
 
   Future<void> _loadCookies() async {
