@@ -4,6 +4,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
+import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
+
 enum FaRequestCoordinatorState {
   normal,
   waitingToRetry,
@@ -114,12 +116,29 @@ class FaRequestCoordinator {
   void recordHttpStatus({
     required int? statusCode,
     Map<String, String>? headers,
+    Object? responseBody,
   }) {
     if (statusCode == 429) {
       recordWait(
         retryAfter: parseRetryAfterHeader(_headerValue(headers, 'retry-after')) ??
             const Duration(seconds: 30),
         message: 'FA is asking FANotifier to wait before retrying.',
+      );
+      return;
+    }
+
+    if (statusCode == 403) {
+      final body = responseBody?.toString() ?? '';
+      if (body.isNotEmpty &&
+          FaCookieHelper.isCloudflareChallengePage(
+            body: body,
+            statusCode: statusCode,
+          )) {
+        return;
+      }
+      recordMaintenanceOrUnavailable(
+        message:
+            'Fur Affinity returned HTTP 403 and is temporarily unavailable.',
       );
       return;
     }

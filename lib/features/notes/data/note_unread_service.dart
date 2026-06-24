@@ -76,6 +76,7 @@ class NoteUnreadService {
       );
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,
+        responseBody: response.statusCode == 403 ? response.data : null,
       );
 
       if (response.statusCode != 302 && response.statusCode != 200) {

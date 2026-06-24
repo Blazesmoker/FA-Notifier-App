@@ -1058,6 +1058,7 @@ Future<String> _fetchMessageContentInBackground(String link) async {
   );
   FaRequestCoordinator.instance.recordHttpStatus(
     statusCode: resp.statusCode,
+    responseBody: resp.statusCode == 403 ? resp.data : null,
   );
   if (resp.statusCode == 200) {
     final doc = html_parser.parse(resp.data);
@@ -1165,6 +1166,7 @@ Future<void> _markAsUnreadBackground(Message msg) async {
   );
   FaRequestCoordinator.instance.recordHttpStatus(
     statusCode: response.statusCode,
+    responseBody: response.statusCode == 403 ? response.data : null,
   );
 }
 

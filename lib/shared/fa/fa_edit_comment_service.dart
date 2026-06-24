@@ -177,6 +177,7 @@ Future<EditCommentLoadResult> loadEditCommentTextWithClient({
     FaRequestCoordinator.instance.recordHttpStatus(
       statusCode: response.statusCode,
       headers: response.headers,
+      responseBody: response.statusCode == 403 ? response.body : null,
     );
 
     if (response.statusCode != 200) {
@@ -224,6 +225,7 @@ Future<EditCommentSubmitResult> submitEditCommentWithClient({
     FaRequestCoordinator.instance.recordHttpStatus(
       statusCode: getResponse.statusCode,
       headers: getResponse.headers,
+      responseBody: getResponse.statusCode == 403 ? getResponse.body : null,
     );
 
     if (getResponse.statusCode != 200) {
@@ -283,6 +285,7 @@ Future<EditCommentSubmitResult> submitEditCommentWithClient({
     FaRequestCoordinator.instance.recordHttpStatus(
       statusCode: postResponse.statusCode,
       headers: postResponse.headers,
+      responseBody: postResponse.statusCode == 403 ? postResponse.body : null,
     );
 
     if (postResponse.statusCode == 302) {

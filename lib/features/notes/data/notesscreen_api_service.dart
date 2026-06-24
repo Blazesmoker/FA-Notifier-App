@@ -73,6 +73,7 @@ class NotesApiService {
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: resp.statusCode,
         headers: resp.headers,
+        responseBody: resp.statusCode == 403 ? resp.body : null,
       );
       return resp;
     } finally {
@@ -332,6 +333,7 @@ class NotesApiService {
     );
     FaRequestCoordinator.instance.recordHttpStatus(
       statusCode: resp.statusCode,
+      responseBody: resp.statusCode == 403 ? resp.data : null,
     );
     if (resp.statusCode == 200) {
       final doc = html_parser.parse(resp.data);

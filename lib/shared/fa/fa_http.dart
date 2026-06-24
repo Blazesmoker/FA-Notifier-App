@@ -157,6 +157,7 @@ class FAHttp {
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,
         headers: response.headers,
+        responseBody: response.statusCode == 403 ? response.body : null,
       );
       return response;
     });
@@ -196,6 +197,7 @@ class FAHttp {
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,
         headers: response.headers,
+        responseBody: response.statusCode == 403 ? response.body : null,
       );
       return response;
     });

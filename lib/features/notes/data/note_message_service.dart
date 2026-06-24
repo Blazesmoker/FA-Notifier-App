@@ -57,6 +57,7 @@ class NoteMessageService {
     );
     FaRequestCoordinator.instance.recordHttpStatus(
       statusCode: response.statusCode,
+      responseBody: response.statusCode == 403 ? response.data : null,
     );
 
     if (response.statusCode == 302) {
@@ -115,6 +116,7 @@ class NoteMessageService {
     );
     FaRequestCoordinator.instance.recordHttpStatus(
       statusCode: response.statusCode,
+      responseBody: response.statusCode == 403 ? response.data : null,
     );
 
     return response.statusCode;

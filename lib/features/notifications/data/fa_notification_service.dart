@@ -444,6 +444,7 @@ class FANotificationService with ChangeNotifier {
       );
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,
+        responseBody: response.statusCode == 403 ? response.data : null,
       );
       if (response.statusCode != 200) {
         throw Exception('Failed to load notifications.');
@@ -1360,6 +1361,7 @@ class FANotificationService with ChangeNotifier {
       );
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,
+        responseBody: response.statusCode == 403 ? response.data : null,
       );
       if (tLower.contains('shouts')) {
         if (response.statusCode == 200 || response.statusCode == 302) {
@@ -1441,6 +1443,7 @@ class FANotificationService with ChangeNotifier {
       );
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,
+        responseBody: response.statusCode == 403 ? response.data : null,
       );
       if (response.statusCode == 302) {
         sections[sectionIndex].items.clear();
@@ -1524,6 +1527,7 @@ class FANotificationService with ChangeNotifier {
         );
         FaRequestCoordinator.instance.recordHttpStatus(
           statusCode: resp.statusCode,
+          responseBody: resp.statusCode == 403 ? resp.data : null,
         );
         if (resp.statusCode == 302) {
           sections[i].items.clear();

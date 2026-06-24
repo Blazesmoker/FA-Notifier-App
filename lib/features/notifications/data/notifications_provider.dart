@@ -121,6 +121,7 @@ class NotificationsProvider with ChangeNotifier {
       );
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,
+        responseBody: response.statusCode == 403 ? response.data : null,
       );
 
       debugPrint("[fetchNotifications] Response code: ${response.statusCode}");
@@ -421,6 +422,7 @@ class NotificationsProvider with ChangeNotifier {
       );
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: resp.statusCode,
+        responseBody: resp.statusCode == 403 ? resp.data : null,
       );
       debugPrint("[_fetchProfileShouts] code: ${resp.statusCode}");
       if (resp.statusCode != 200) return;
@@ -567,6 +569,7 @@ class NotificationsProvider with ChangeNotifier {
       );
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,
+        responseBody: response.statusCode == 403 ? response.data : null,
       );
 
       if (titleLower.contains('shouts')) {
@@ -699,6 +702,7 @@ class NotificationsProvider with ChangeNotifier {
       );
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,
+        responseBody: response.statusCode == 403 ? response.data : null,
       );
       if (response.statusCode == 302) {
         sections[sectionIndex].items.clear();
@@ -785,6 +789,7 @@ class NotificationsProvider with ChangeNotifier {
         );
         FaRequestCoordinator.instance.recordHttpStatus(
           statusCode: resp.statusCode,
+          responseBody: resp.statusCode == 403 ? resp.data : null,
         );
         if (resp.statusCode == 302) {
           sections[i].items.clear();

@@ -50,6 +50,7 @@ class NoteReplyService {
 
     FaRequestCoordinator.instance.recordHttpStatus(
       statusCode: response.statusCode,
+      responseBody: response.statusCode == 403 ? response.data : null,
     );
 
     if (response.statusCode != 200) {
@@ -170,6 +171,7 @@ class NoteReplyService {
 
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: getResp.statusCode,
+        responseBody: getResp.statusCode == 403 ? getResp.data : null,
       );
 
       if (getResp.statusCode == 302) {
@@ -214,6 +216,7 @@ class NoteReplyService {
 
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: postResp.statusCode,
+        responseBody: postResp.statusCode == 403 ? postResp.data : null,
       );
 
       if (postResp.statusCode == 302) {

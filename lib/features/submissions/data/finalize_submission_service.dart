@@ -55,6 +55,7 @@ class FinalizeSubmissionService {
     final response = await _dio.get(url);
     FaRequestCoordinator.instance.recordHttpStatus(
       statusCode: response.statusCode,
+      responseBody: response.statusCode == 403 ? response.data : null,
     );
 
     debugPrint("GET /submit/finalize/ Status Code: ${response.statusCode}");
@@ -108,6 +109,7 @@ class FinalizeSubmissionService {
     );
     FaRequestCoordinator.instance.recordHttpStatus(
       statusCode: response.statusCode,
+      responseBody: response.statusCode == 403 ? response.data : null,
     );
 
     debugPrint("POST /submit/finalize/ Status Code: ${response.statusCode}");

@@ -109,6 +109,7 @@ class ShoutService {
       );
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,
+        responseBody: response.statusCode == 403 ? response.data : null,
       );
 
       if (response.statusCode == 302) {
@@ -170,6 +171,7 @@ class ShoutService {
     );
     FaRequestCoordinator.instance.recordHttpStatus(
       statusCode: response.statusCode,
+      responseBody: response.statusCode == 403 ? response.data : null,
     );
 
     if (response.statusCode == 302) throw Exception('Authentication required');

@@ -138,6 +138,7 @@ Duration? parseFaRetryAfter(String text) {
 bool isFaMaintenanceOrUnavailableText(String text) {
   final lower = text.toLowerCase();
   if (parseFaRetryAfter(text) != null) return false;
+  if (RegExp(r'\b403\b').hasMatch(lower)) return true;
   if (lower.contains('under maintenance')) return true;
   if (lower.contains('maintenance') &&
       (lower.contains('furaffinity') ||
