@@ -467,7 +467,7 @@ Future<void> _showBackgroundUpdateNotificationIfNeeded(
     await notificationService.showNotification(
       NotificationService.appUpdateNotificationId,
       'New Update Available!',
-      'Tap to open FA Notify.',
+      'Tap to open FA Notifier.',
       NotificationService.appUpdatePayload,
       'updates',
     );
