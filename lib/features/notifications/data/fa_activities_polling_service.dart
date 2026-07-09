@@ -407,6 +407,15 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       }
       final ActivitiesDiff diff = await activitiesStateStore
           .diffFromAcknowledged(currentCounts: currentCounts);
+      await activitiesStateStore.synchronizeDisabledCounts(
+        currentCounts: currentCounts,
+        submissionsEnabled: submissionsEnabled,
+        watchesEnabled: watchesEnabled,
+        commentsEnabled: commentsEnabled,
+        favoritesEnabled: favoritesEnabled,
+        journalsEnabled: journalsEnabled,
+        notesEnabled: notesEnabled,
+      );
 
       if (triggerNotesRefreshOnNotesIncrease && diff.increasedBy.notes > 0) {
         NotesRefreshService().triggerRefresh();
@@ -466,6 +475,12 @@ class FaActivitiesPollingService with WidgetsBindingObserver {
       final bool isDuplicate =
           await activitiesStateStore.areCurrentCountsLastShown(
         currentCounts: currentCounts,
+        submissionsEnabled: submissionsEnabled,
+        watchesEnabled: watchesEnabled,
+        commentsEnabled: commentsEnabled,
+        favoritesEnabled: favoritesEnabled,
+        journalsEnabled: journalsEnabled,
+        notesEnabled: notesEnabled,
       );
       if (isDuplicate) return;
 

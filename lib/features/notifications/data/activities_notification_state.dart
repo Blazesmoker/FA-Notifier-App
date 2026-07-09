@@ -203,6 +203,56 @@ class ActivitiesNotificationStateStore {
     });
   }
 
+  Future<void> synchronizeDisabledCounts({
+    required NotificationCounts currentCounts,
+    required bool submissionsEnabled,
+    required bool watchesEnabled,
+    required bool commentsEnabled,
+    required bool favoritesEnabled,
+    required bool journalsEnabled,
+    required bool notesEnabled,
+  }) async {
+    return _withMutex(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final changed = await _saveSelectedLastSeenCounts(
+        prefs,
+        currentCounts,
+        acknowledgeSubmissions: !submissionsEnabled,
+        acknowledgeWatches: !watchesEnabled,
+        acknowledgeComments: !commentsEnabled,
+        acknowledgeFavorites: !favoritesEnabled,
+        acknowledgeJournals: !journalsEnabled,
+        acknowledgeNotes: !notesEnabled,
+      );
+      if (changed) {
+        await prefs.setInt(
+          kLastSeenUpdatedAtMsKey,
+          DateTime.now().millisecondsSinceEpoch,
+        );
+      }
+      if (prefs.getString(_kLastShownBody) == null) return;
+      if (!submissionsEnabled) {
+        await prefs.setInt(_kLastShownSubmissions, currentCounts.submissions);
+      }
+      if (!watchesEnabled) {
+        await prefs.setInt(_kLastShownWatches, currentCounts.watches);
+      }
+      if (!commentsEnabled) {
+        await prefs.setInt(_kLastShownComments, currentCounts.comments);
+      }
+      if (!favoritesEnabled) {
+        await prefs.setInt(_kLastShownFavorites, currentCounts.favorites);
+      }
+      if (!journalsEnabled) {
+        await prefs.setInt(_kLastShownJournals, currentCounts.journals);
+      }
+      if (!notesEnabled) {
+        await prefs.setInt(_kLastShownNotes, currentCounts.notes);
+      }
+    });
+  }
+
   Future<void> requestAcknowledgeOnNextForegroundFetch() {
     return _withMutex(() async {
       final prefs = await SharedPreferences.getInstance();
@@ -345,6 +395,12 @@ class ActivitiesNotificationStateStore {
 
   Future<bool> areCurrentCountsLastShown({
     required NotificationCounts currentCounts,
+    required bool submissionsEnabled,
+    required bool watchesEnabled,
+    required bool commentsEnabled,
+    required bool favoritesEnabled,
+    required bool journalsEnabled,
+    required bool notesEnabled,
   }) {
     return _withMutex(() async {
       final prefs = await SharedPreferences.getInstance();
@@ -352,13 +408,19 @@ class ActivitiesNotificationStateStore {
 
       if (prefs.getString(_kLastShownBody) == null) return false;
 
-      return prefs.getInt(_kLastShownSubmissions) ==
-              currentCounts.submissions &&
-          prefs.getInt(_kLastShownWatches) == currentCounts.watches &&
-          prefs.getInt(_kLastShownComments) == currentCounts.comments &&
-          prefs.getInt(_kLastShownFavorites) == currentCounts.favorites &&
-          prefs.getInt(_kLastShownJournals) == currentCounts.journals &&
-          prefs.getInt(_kLastShownNotes) == currentCounts.notes;
+      return (!submissionsEnabled ||
+              prefs.getInt(_kLastShownSubmissions) ==
+                  currentCounts.submissions) &&
+          (!watchesEnabled ||
+              prefs.getInt(_kLastShownWatches) == currentCounts.watches) &&
+          (!commentsEnabled ||
+              prefs.getInt(_kLastShownComments) == currentCounts.comments) &&
+          (!favoritesEnabled ||
+              prefs.getInt(_kLastShownFavorites) == currentCounts.favorites) &&
+          (!journalsEnabled ||
+              prefs.getInt(_kLastShownJournals) == currentCounts.journals) &&
+          (!notesEnabled ||
+              prefs.getInt(_kLastShownNotes) == currentCounts.notes);
     });
   }
 

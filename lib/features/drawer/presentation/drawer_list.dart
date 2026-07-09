@@ -1,5 +1,3 @@
-// lib/model/drawer_list.dart
-
 import 'package:flutter/material.dart';
 import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
 

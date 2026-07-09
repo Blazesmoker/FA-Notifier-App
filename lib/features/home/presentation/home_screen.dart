@@ -20,7 +20,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:FANotifier/shared/utils/content_rating_filters.dart';
 import 'package:FANotifier/shared/utils/external_link_launcher.dart';
@@ -34,6 +33,9 @@ import 'package:FANotifier/features/notifications/data/pending_navigation_store.
 import 'package:FANotifier/shared/fa/fa_service.dart';
 import 'package:FANotifier/features/auth/data/startup_cloudflare_check_service.dart';
 import 'package:FANotifier/features/home/data/home_auth_cookie_service.dart';
+import 'package:FANotifier/features/home/data/home_login_webview_load_throttle.dart';
+import 'package:FANotifier/features/home/data/home_login_webview_navigation_policy.dart';
+import 'package:FANotifier/features/home/data/home_login_webview_scripts.dart';
 import 'package:FANotifier/features/home/data/home_profile_cache.dart';
 import 'package:FANotifier/features/home/data/home_session_preference.dart';
 import 'package:FANotifier/features/home/data/home_login_html_detector.dart';
@@ -55,9 +57,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   static const AssetImage _submissionsIconImage =
       AssetImage('assets/icons/submissions.png');
-  static const String _loginWebViewLastLoadAtMsKey =
-      'login_webview.last_load_at_ms';
-  static const Duration _loginWebViewMinSpacing = Duration(seconds: 1);
   static Future<void> _loginWebViewLoadQueue = Future<void>.value();
 
   UserProfile? _userProfile;
@@ -70,6 +69,10 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _sfwEnabled = true;
   final SfwModePreference _sfwModePreference = SfwModePreference();
   final HomeSessionPreference _homeSessionPreference = HomeSessionPreference();
+  final HomeLoginWebViewLoadThrottle _homeLoginWebViewLoadThrottle =
+      const HomeLoginWebViewLoadThrottle();
+  final HomeLoginWebViewNavigationPolicy _homeLoginWebViewNavigationPolicy =
+      const HomeLoginWebViewNavigationPolicy();
   final HomeProfileCache _homeProfileCache = const HomeProfileCache();
   final PendingNavigationStore _pendingNavigationStore =
       PendingNavigationStore();
@@ -516,7 +519,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildWebView() {
     return InAppWebView(
       initialData: InAppWebViewInitialData(
-        data: '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#000;"></body></html>',
+        data: homeLoginInitialHtml,
         baseUrl: WebUri('about:blank'),
       ),
       initialSettings: InAppWebViewSettings(
@@ -599,12 +602,9 @@ class _HomeScreenState extends State<HomeScreen> {
       shouldOverrideUrlLoading: (controller, navigationAction) async {
         var uri = navigationAction.request.url;
         debugPrint("Navigating to: $uri");
-        const String passwordRecoveryPath = '/lostpw/';
-        if (uri != null &&
-            uri.host.contains('furaffinity.net') &&
-            uri.path.contains(passwordRecoveryPath)) {
+        if (_homeLoginWebViewNavigationPolicy.isPasswordRecoveryUrl(uri)) {
           debugPrint("Password recovery URL detected.");
-          if (await tryLaunchExternalUri(uri)) {
+          if (await tryLaunchExternalUri(uri!)) {
             debugPrint('Opened Password Recovery in external browser.');
             return NavigationActionPolicy.CANCEL;
           } else {
@@ -625,22 +625,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadInitialLoginUrl(InAppWebViewController controller) {
     final next = _loginWebViewLoadQueue.catchError((_) {}).then((_) async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.reload();
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      final lastLoadMs = prefs.getInt(_loginWebViewLastLoadAtMsKey) ?? 0;
-      final waitMs = _loginWebViewMinSpacing.inMilliseconds -
-          (nowMs - lastLoadMs);
-      if (waitMs > 0) {
-        await Future<void>.delayed(Duration(milliseconds: waitMs));
-      }
+      final loadSlot =
+          await _homeLoginWebViewLoadThrottle.waitForAvailableSlot();
       if (!mounted || isLoggedIn || _webViewController != controller) {
         return;
       }
-      await prefs.setInt(
-        _loginWebViewLastLoadAtMsKey,
-        DateTime.now().millisecondsSinceEpoch,
-      );
+      await loadSlot.recordLoadStart();
       await controller.loadUrl(
         urlRequest: URLRequest(url: WebUri(loginUrl)),
       );
@@ -656,7 +646,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (_webViewController == null) return;
 
       String? html = await _webViewController!
-          .evaluateJavascript(source: "document.documentElement.outerHTML;");
+          .evaluateJavascript(source: homeLoginOuterHtmlScript);
 
       final elementFound = hasLoggedInHomeElement(html);
 
@@ -1010,43 +1000,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _injectLoginCss() async {
     await _webViewController?.injectCSSCode(
-      source: '''
-      /* Minimal CSS to hide some FA elements on login page */
-      .mobile-navigation,
-      nav#ddmenu,
-      .news-block,
-      .leaderboardAd,
-      .mobile-notification-bar,
-      .footerAds,
-      .floatleft,
-      .submenu-trigger,
-      .banner-svg,
-      .message-bar-desktop,
-      .notification-container,
-      .dropdown,
-      #main-window > nav,
-      #main-window > .message-bar-desktop,
-      #main-window > .news-block,
-      #footer .auto_link.footer-links,
-      #footer .footerAds__slot,
-      #footer .footerAds__column {
-        display: none !important;
-      }
-
-      /* Center username, password, and login button */
-      section.login-page .section-body {
-        text-align: center !important;
-      }
-
-      section.login-page .section-body input[type="text"],
-      section.login-page .section-body input[type="password"],
-      section.login-page .section-body input[type="submit"] {
-        display: block !important;
-        margin: 0 auto !important;
-        margin-bottom: 10px !important;
-        max-width: 300px;
-      }
-    ''',
+      source: homeLoginCss,
     );
   }
 

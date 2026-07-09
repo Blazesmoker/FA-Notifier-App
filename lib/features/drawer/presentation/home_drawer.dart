@@ -13,7 +13,7 @@ import 'package:FANotifier/features/search/presentation/find_source_screen.dart'
 import 'package:FANotifier/features/settings/presentation/settings_screen.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
-import 'package:FANotifier/features/drawer/domain/drawer_list.dart';
+import 'package:FANotifier/features/drawer/presentation/drawer_list.dart';
 import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/StarBurstAnimation.dart';

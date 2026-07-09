@@ -5,14 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter/scheduler.dart';
 import 'package:FANotifier/features/notes/presentation/reply_screen.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart';
 import 'package:intl/intl.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:saver_gallery/saver_gallery.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:like_button/like_button.dart';
 import 'package:share_plus/share_plus.dart';
@@ -20,6 +17,7 @@ import 'package:FANotifier/app/app_theme.dart';
 import 'package:FANotifier/main.dart';
 import 'package:FANotifier/shared/fa/fa_username.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:FANotifier/shared/utils/comment_composer_lines.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/submissions/data/post_comment_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_action_service.dart';
@@ -27,6 +25,7 @@ import 'package:FANotifier/features/submissions/data/openpost_cookie_service.dar
 import 'package:FANotifier/features/submissions/data/openpost_image_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_link_parser.dart';
 import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
+import 'package:FANotifier/features/submissions/data/openpost_media_export_service.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
 import 'package:FANotifier/features/submissions/presentation/SubmissionDescriptionWebview.dart';
@@ -172,6 +171,8 @@ class _OpenPostState extends State<OpenPost>
   late final PostCommentService _postCommentService;
   final OpenPostImageService _openPostImageService =
       const OpenPostImageService();
+  final OpenPostMediaExportService _openPostMediaExportService =
+      const OpenPostMediaExportService();
   final TranslationService _translationService = TranslationService.instance;
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _commentFocusNode = FocusNode();
@@ -1035,9 +1036,7 @@ class _OpenPostState extends State<OpenPost>
         );
         return;
       }
-      final unblockUri = Uri.parse(unblockLink!);
-
-      final key = unblockUri.queryParameters['key'] ?? _unblockKey;
+      final key = extractOpenPostActionKey(unblockLink!, _unblockKey);
       if (key == null || key.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1059,9 +1058,7 @@ class _OpenPostState extends State<OpenPost>
         );
         return;
       }
-      final blockUri = Uri.parse(blockLink!);
-
-      final key = blockUri.queryParameters['key'] ?? _blockKey;
+      final key = extractOpenPostActionKey(blockLink!, _blockKey);
       if (key == null || key.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1771,16 +1768,10 @@ class _OpenPostState extends State<OpenPost>
       _commentDraftHasText.value = hasText;
     }
 
-    final int collapsedLines = _collapsedComposerLines(_commentController.text);
+    final int collapsedLines = collapsedComposerLines(_commentController.text);
     if (collapsedLines != _commentDraftCollapsedLines.value) {
       _commentDraftCollapsedLines.value = collapsedLines;
     }
-  }
-
-  int _collapsedComposerLines(String text) {
-    if (text.isEmpty) return 1;
-    final lines = '\n'.allMatches(text).length + 1;
-    return lines.clamp(1, 6);
   }
 
   Future<void> _sendInlineComment() async {
@@ -1918,30 +1909,17 @@ class _OpenPostState extends State<OpenPost>
   /// Downloads the image from [imageUrl] and saves it to the gallery.
   Future<void> _downloadImage(BuildContext context, String imageUrl) async {
     try {
-      bool isPermissionGranted = false;
-
-      if (Platform.isAndroid) {
-        isPermissionGranted = await _requestPermissionAndroid();
-      } else if (Platform.isIOS) {
-        if (await Permission.photosAddOnly.request().isGranted) {
-          isPermissionGranted = true;
-        }
-      }
+      final isPermissionGranted =
+          await _openPostMediaExportService.requestImageExportPermission();
 
       if (isPermissionGranted) {
         final bytes = await _openPostImageService.fetchImageBytes(imageUrl) ??
-            await _loadDefaultImageBytes();
+            await _openPostMediaExportService.loadDefaultImageBytes();
 
-        // Save image to gallery
-        final result = await SaverGallery.saveImage(
-          bytes,
-          quality: 80,
-          fileName: "image_${DateTime.now().millisecondsSinceEpoch}.jpg",
-          skipIfExists: false,
-          androidRelativePath: "Pictures/YourAppName/images",
-        );
+        final isSaved =
+            await _openPostMediaExportService.saveImageToGallery(bytes);
 
-        if (result.isSuccess) {
+        if (isSaved) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Image saved to gallery!'),
@@ -1978,15 +1956,8 @@ class _OpenPostState extends State<OpenPost>
   /// Downloads the image, writes it to a temporary file, then triggers sharing.
   Future<void> _shareImage(BuildContext context, String imageUrl) async {
     try {
-      bool isPermissionGranted = false;
-
-      if (Platform.isAndroid) {
-        isPermissionGranted = await _requestPermissionAndroid();
-      } else if (Platform.isIOS) {
-        if (await Permission.photosAddOnly.request().isGranted) {
-          isPermissionGranted = true;
-        }
-      }
+      final isPermissionGranted =
+          await _openPostMediaExportService.requestImageExportPermission();
 
       if (!isPermissionGranted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1999,17 +1970,9 @@ class _OpenPostState extends State<OpenPost>
       }
 
       final bytes = await _openPostImageService.fetchImageBytes(imageUrl) ??
-          await _loadDefaultImageBytes();
+          await _openPostMediaExportService.loadDefaultImageBytes();
 
-      final tempDir = Directory.systemTemp;
-      final tempFile = await File(
-              '${tempDir.path}/shared_image_${DateTime.now().millisecondsSinceEpoch}.jpg')
-          .create();
-      await tempFile.writeAsBytes(bytes);
-
-      await SharePlus.instance.share(
-        ShareParams(files: [XFile(tempFile.path)]),
-      );
+      await _openPostMediaExportService.shareImage(bytes);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -2017,27 +1980,6 @@ class _OpenPostState extends State<OpenPost>
           backgroundColor: Colors.red,
         ),
       );
-    }
-  }
-
-  /// Loads default image bytes from assets if image download fails.
-  Future<Uint8List> _loadDefaultImageBytes() async {
-    final byteData = await rootBundle.load('assets/images/defaultpic.gif');
-    return byteData.buffer.asUint8List();
-  }
-
-  /// Requests photo/storage permission on Android.
-  /// Returns true if granted, false otherwise.
-  Future<bool> _requestPermissionAndroid() async {
-    final androidInfo = await DeviceInfoPlugin().androidInfo;
-    final sdkInt = androidInfo.version.sdkInt;
-
-    if (sdkInt >= 33) {
-      final status = await Permission.photos.request();
-      return status.isGranted;
-    } else {
-      final status = await Permission.storage.request();
-      return status.isGranted;
     }
   }
 

@@ -4,25 +4,17 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:FANotifier/features/profile/data/user_description_parser.dart';
 import 'package:FANotifier/features/profile/data/user_description_service.dart';
+import 'package:FANotifier/features/profile/data/user_description_webview_content.dart';
+import 'package:FANotifier/features/profile/data/user_description_webview_html_builder.dart';
+import 'package:FANotifier/shared/fa/fa_theme_css_loader.dart';
 import 'package:FANotifier/shared/utils/fa_icon_image_inliner.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
 enum UserDescriptionWebViewPauseReason { route, visibility, scrolling }
-
-class _UserDescriptionWebViewContent {
-  final String html;
-  final String faThemeCss;
-
-  const _UserDescriptionWebViewContent({
-    required this.html,
-    required this.faThemeCss,
-  });
-}
 
 class UserDescriptionWebView extends StatefulWidget {
   final String sanitizedUsername;
@@ -56,7 +48,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     with AutomaticKeepAliveClientMixin<UserDescriptionWebView> {
   late final UserDescriptionService _userDescriptionService =
       UserDescriptionService();
-  late Future<_UserDescriptionWebViewContent> _userDescriptionFuture;
+  late Future<UserDescriptionWebViewContent> _userDescriptionFuture;
   InAppWebViewController? _controller;
   final Set<UserDescriptionWebViewPauseReason> _pauseReasons =
       <UserDescriptionWebViewPauseReason>{};
@@ -187,163 +179,28 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     });
   }
 
-  Future<_UserDescriptionWebViewContent> _processInitialHtml(String html) async {
+  Future<UserDescriptionWebViewContent> _processInitialHtml(String html) async {
     final extractedHtml =
         await compute(extractUserDescriptionHtmlWithBodyFallback, html);
     final htmlWithInlinedIcons = await inlineFaIconUsernameImages(extractedHtml);
     _userDescriptionHtml = htmlWithInlinedIcons;
-    return _UserDescriptionWebViewContent(
+    return UserDescriptionWebViewContent(
       html: htmlWithInlinedIcons,
-      faThemeCss: await _loadFaThemeCss(),
+      faThemeCss: await loadFaThemeCss(),
     );
   }
 
   /// Fetches and cleans the HTML content for the user description.
-  Future<_UserDescriptionWebViewContent> _fetchCleanHTML() async {
+  Future<UserDescriptionWebViewContent> _fetchCleanHTML() async {
     final extractedHtml = await _userDescriptionService.fetchCleanHtml(
       widget.sanitizedUsername,
     );
     final htmlWithInlinedIcons = await inlineFaIconUsernameImages(extractedHtml);
     _userDescriptionHtml = htmlWithInlinedIcons;
-    return _UserDescriptionWebViewContent(
+    return UserDescriptionWebViewContent(
       html: htmlWithInlinedIcons,
-      faThemeCss: await _loadFaThemeCss(),
+      faThemeCss: await loadFaThemeCss(),
     );
-  }
-
-  Future<String> _loadFaThemeCss() {
-    return rootBundle.loadString('assets/webview/fa/ui_theme_dark.css');
-  }
-
-  /// Injects necessary CSS into the HTML content.
-  String _injectFACSS(String userDescHtml, String faThemeCss) {
-    final selectionCss = widget.enableTextSelection
-        ? '''
-      html, body, body * {
-        -webkit-touch-callout: default !important;
-        -webkit-user-select: text !important;
-        user-select: text !important;
-      }
-'''
-        : '''
-      html, body, body * {
-        -webkit-touch-callout: none !important;
-        -webkit-user-select: none !important;
-        user-select: none !important;
-      }
-''';
-
-    return '''
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <base href="https://www.furaffinity.net/">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,500,500i,600,600i,700,700i">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/wenk/1.0.8/wenk.min.css">
-    <style>
-      $faThemeCss
-
-      ::selection {
-        background: rgba(224, 147, 33, 0.4) !important;
-        color: #fff !important;
-      }
-
-      ::-webkit-selection {
-        background: rgba(224, 147, 33, 0.4) !important;
-        color: #fff !important;
-      }
-
-      html, body {
-        margin: 0 !important;
-        padding: 0 !important;
-        background-color: #000 !important;
-        color: #fff !important;
-        font-family: 'Open Sans', sans-serif;
-      }
-
-      $selectionCss
-
-      body {
-        margin: 8px;
-      }
-
-      .container, .section-body, .userpage-layout-profile, .user-submitted-links {
-        background-color: transparent !important;
-      }
-
-      #page-userpage .userpage-profile {
-        border: none !important;
-      }
-
-      img {
-        max-width: 100%;
-        height: auto;
-      }
-
-      a.iconusername img {
-        width: 60px;
-        height: auto;
-      }
-
-      @media (max-width: 600px) {
-        a.iconusername img {
-          width: 40px;
-        }
-      }
-
-      @media (min-width: 1200px) {
-        a.iconusername img {
-          width: 80px;
-        }
-      }
-
-      code {
-        display: block;
-        margin: 10px 0;
-      }
-
-      .bbcode_center {
-        text-align: center !important;
-      }
-
-      .bbcode_right {
-        text-align: right !important;
-      }
-
-      .bbcode_left {
-        text-align: left !important;
-      }
-
-      h1, h2, h3, h4 {
-        color: #fff !important;
-      }
-
-      h1, h2, h3, h4, h5, h6 {
-        text-align: center;
-      }
-
-      sup.bbcode_sup {
-        display: block;
-        text-align: inherit;
-        margin-bottom: 10px;
-      }
-
-      a {
-        color: #E09321 !important;
-        text-decoration: none !important;
-      }
-    </style>
-    <script src="https://www.furaffinity.net/themes/beta/js/prototype.1.7.3.min.js"></script>
-    <script src="https://www.furaffinity.net/themes/beta/js/common.js?u=2024112800"></script>
-    <script src="https://www.furaffinity.net/themes/beta/js/script.js?u=2024112800"></script>
-  </head>
-  <body class="c-bodyColor" id="pageid-userpage">
-    <div id="page-userpage">
-      $userDescHtml
-    </div>
-  </body>
-</html>
-''';
   }
 
   /// Searches the given [htmlSource] for an <a> tag with class "auto_link_shortened"
@@ -379,7 +236,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return FutureBuilder<_UserDescriptionWebViewContent>(
+    return FutureBuilder<UserDescriptionWebViewContent>(
       future: _userDescriptionFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -443,7 +300,11 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
                           }
                         : null,
                     initialData: InAppWebViewInitialData(
-                      data: _injectFACSS(cleanHtml, faThemeCss),
+                      data: buildUserDescriptionWebViewHtml(
+                        userDescriptionHtml: cleanHtml,
+                        faThemeCss: faThemeCss,
+                        enableTextSelection: widget.enableTextSelection,
+                      ),
                       baseUrl: WebUri('https://www.furaffinity.net'),
                       encoding: 'utf-8',
                       mimeType: 'text/html',

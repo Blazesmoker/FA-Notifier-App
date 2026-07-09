@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:FANotifier/features/notes/data/note_reply_service.dart';
+import 'package:FANotifier/features/notes/data/note_reply_webview_controller_factory.dart';
 import 'package:FANotifier/features/notes/data/note_reply_webview_cookie_service.dart';
 import 'package:FANotifier/features/notes/data/note_reply_webview_navigation_service.dart';
 import 'package:FANotifier/features/notes/data/note_reply_webview_scripts.dart';
@@ -50,6 +50,8 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       NoteReplyService();
   late final NoteReplyWebViewCookieService _webViewCookieService =
       NoteReplyWebViewCookieService();
+  final NoteReplyWebViewControllerFactory _webViewControllerFactory =
+      const NoteReplyWebViewControllerFactory();
   final NoteReplyWebViewNavigationService _webViewNavigationService =
       const NoteReplyWebViewNavigationService();
 
@@ -122,22 +124,11 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     final webViewUrl =
         _webViewNavigationService.buildMessageUrl(widget.messageLink);
 
-    late final PlatformWebViewControllerCreationParams params;
-    if (WebViewPlatform.instance is WebKitWebViewPlatform) {
-      params = WebKitWebViewControllerCreationParams(
-        allowsInlineMediaPlayback: true,
-        mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
-      );
-    } else {
-      params = const PlatformWebViewControllerCreationParams();
-    }
+    final WebViewController controller = _webViewControllerFactory.create();
 
-    final WebViewController controller = WebViewController.fromPlatformCreationParams(params);
-
-    controller
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
+    _webViewControllerFactory.configure(
+      controller,
+      navigationDelegate: NavigationDelegate(
           onPageStarted: (String url) {
             // Check if we've navigated to the messages list (success)
             debugPrint('DEBUG: WebView page started: $url');
@@ -176,10 +167,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
             }
           },
         ),
-      )
-      ..setUserAgent(
-        'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
-      );
+    );
 
     await controller.loadRequest(Uri.parse(webViewUrl));
 

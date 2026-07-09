@@ -8,14 +8,15 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:FANotifier/shared/widgets/tags_and_codes_webview_widget.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 import 'package:FANotifier/features/upload/data/upload_file_webview_scripts.dart';
 import 'package:FANotifier/features/upload/data/upload_js_result_decoder.dart';
 import 'package:FANotifier/features/upload/data/upload_page_webview_scripts.dart';
+import 'package:FANotifier/features/upload/data/upload_permission_service.dart';
 import 'package:FANotifier/features/upload/data/upload_submission_navigation_service.dart';
 import 'package:FANotifier/features/upload/data/upload_template_js_builder.dart';
+import 'package:FANotifier/features/upload/data/upload_webview_navigation_policy.dart';
 import 'package:FANotifier/features/upload/data/submission_template_store.dart';
 import 'package:FANotifier/features/upload/domain/submission_template.dart';
 import 'package:FANotifier/features/upload/presentation/submission_templates_screen.dart';
@@ -32,8 +33,12 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   static const Color _accent = Color(0xFFE09321);
 
   final UploadJsResultDecoder _jsResultDecoder = const UploadJsResultDecoder();
+  final UploadPermissionService _permissionService =
+      const UploadPermissionService();
   final UploadSubmissionNavigationService _navigationService =
       const UploadSubmissionNavigationService();
+  final UploadWebViewNavigationPolicy _webViewNavigationPolicy =
+      const UploadWebViewNavigationPolicy();
   final SubmissionTemplateStore _templateStore = SubmissionTemplateStore();
   late final FAWebViewCookieService _webViewCookieService;
 
@@ -63,7 +68,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   void initState() {
     super.initState();
     _webViewCookieService = const FAWebViewCookieService();
-    _requestPermissions();
+    _permissionService.requestInitialPermissions();
 
     _toolsMenuController = AnimationController(
       vsync: this,
@@ -79,15 +84,6 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _toolsMenuController, curve: Curves.easeOutCubic));
 
-  }
-
-  Future<void> _requestPermissions() async {
-    if (Platform.isAndroid) {
-      await [
-        Permission.storage,
-        Permission.photos,
-      ].request();
-    }
   }
 
   void _setFinalizeReady(bool value) {
@@ -615,22 +611,11 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       shouldOverrideUrlLoading: (controller, navigationAction) async {
         final uri = navigationAction.request.url;
 
-        if (Platform.isIOS && uri != null) {
-          final blockedHosts = {
-            'www15.smartadserver.com',
-            'securepubads.g.doubleclick.net',
-            'cdn.playwire.com',
-            'z.moatads.com',
-            'pagead2.googlesyndication.com',
-            'cdn.intergient.com',
-            'cdn.intergi.com',
-            'config.playwire.com',
-          };
-
-          if (blockedHosts.contains(uri.host)) {
-            debugPrint('Blocking ad/tracker request on iOS: ${uri.host}');
-            return NavigationActionPolicy.CANCEL;
-          }
+        if (Platform.isIOS &&
+            uri != null &&
+            _webViewNavigationPolicy.shouldBlockIosHost(uri.host)) {
+          debugPrint('Blocking ad/tracker request on iOS: ${uri.host}');
+          return NavigationActionPolicy.CANCEL;
         }
 
 

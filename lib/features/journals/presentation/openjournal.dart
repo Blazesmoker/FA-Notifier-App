@@ -20,6 +20,7 @@ import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
 import 'package:FANotifier/features/journals/data/openjournal_api_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:FANotifier/shared/utils/comment_composer_lines.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
 import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
@@ -799,16 +800,10 @@ class _OpenJournalState extends State<OpenJournal>
       _commentDraftHasText.value = hasText;
     }
 
-    final int collapsedLines = _collapsedComposerLines(_commentController.text);
+    final int collapsedLines = collapsedComposerLines(_commentController.text);
     if (collapsedLines != _commentDraftCollapsedLines.value) {
       _commentDraftCollapsedLines.value = collapsedLines;
     }
-  }
-
-  int _collapsedComposerLines(String text) {
-    if (text.isEmpty) return 1;
-    final lines = '\n'.allMatches(text).length + 1;
-    return lines.clamp(1, 6);
   }
 
   Future<void> _sendInlineComment() async {

@@ -292,6 +292,15 @@ void callbackDispatcher() {
               final activitiesStateStore = ActivitiesNotificationStateStore();
               final ActivitiesDiff diff = await activitiesStateStore
                   .diffFromAcknowledged(currentCounts: counts);
+              await activitiesStateStore.synchronizeDisabledCounts(
+                currentCounts: counts,
+                submissionsEnabled: submissionsEnabled,
+                watchesEnabled: watchesEnabled,
+                commentsEnabled: commentsEnabled,
+                favoritesEnabled: favoritesEnabled,
+                journalsEnabled: journalsEnabled,
+                notesEnabled: notesEnabled,
+              );
               kDebugPrint(
                   '[BG] Last-seen counts: S:${diff.previous.submissions} W:${diff.previous.watches} C:${diff.previous.comments} F:${diff.previous.favorites} J:${diff.previous.journals} N:${diff.previous.notes}');
               kDebugPrint(
@@ -338,6 +347,12 @@ void callbackDispatcher() {
                   final bool isDuplicate =
                       await activitiesStateStore.areCurrentCountsLastShown(
                     currentCounts: counts,
+                    submissionsEnabled: submissionsEnabled,
+                    watchesEnabled: watchesEnabled,
+                    commentsEnabled: commentsEnabled,
+                    favoritesEnabled: favoritesEnabled,
+                    journalsEnabled: journalsEnabled,
+                    notesEnabled: notesEnabled,
                   );
                   if (isDuplicate) {
                     appLog(
@@ -1452,7 +1467,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return MaterialApp(
       scaffoldMessengerKey: rootMessengerKey,
-      title: 'FA Notify',
+      title: 'FA Notifier',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       navigatorKey: navigatorKey,

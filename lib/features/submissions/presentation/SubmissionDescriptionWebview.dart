@@ -3,24 +3,16 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:FANotifier/features/submissions/data/submission_description_parser.dart';
 import 'package:FANotifier/features/submissions/data/submission_description_service.dart';
+import 'package:FANotifier/features/submissions/data/submission_description_webview_content.dart';
+import 'package:FANotifier/features/submissions/data/submission_description_webview_html_builder.dart';
+import 'package:FANotifier/shared/fa/fa_theme_css_loader.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/utils/fa_icon_image_inliner.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
-
-class _SubmissionDescriptionWebViewContent {
-  final String html;
-  final String faThemeCss;
-
-  const _SubmissionDescriptionWebViewContent({
-    required this.html,
-    required this.faThemeCss,
-  });
-}
 
 class SubmissionDescriptionWebView extends StatefulWidget {
   final String submissionId;
@@ -58,7 +50,8 @@ class SubmissionDescriptionWebViewState
 
   late final SubmissionDescriptionService _submissionDescriptionService =
       SubmissionDescriptionService();
-  late Future<_SubmissionDescriptionWebViewContent> _submissionDescriptionFuture;
+  late Future<SubmissionDescriptionWebViewContent>
+      _submissionDescriptionFuture;
   InAppWebViewController? _controller;
   double _webViewHeight = 50.0;
   static const Duration _scrollWebViewResumeDelay =
@@ -188,21 +181,21 @@ class SubmissionDescriptionWebViewState
     });
   }
 
-  Future<_SubmissionDescriptionWebViewContent> _processInitialHtml(
+  Future<SubmissionDescriptionWebViewContent> _processInitialHtml(
       String html) async {
     final descriptionHtml =
         await compute(extractSubmissionDescriptionHtmlWithBodyFallback, html);
     final htmlWithInlinedIcons =
         await inlineFaIconUsernameImages(descriptionHtml);
     _submissionDescriptionHtml = htmlWithInlinedIcons;
-    return _SubmissionDescriptionWebViewContent(
+    return SubmissionDescriptionWebViewContent(
       html: htmlWithInlinedIcons,
-      faThemeCss: await _loadFaThemeCss(),
+      faThemeCss: await loadFaThemeCss(),
     );
   }
 
   /// Fetches and cleans the HTML content for the submission description.
-  Future<_SubmissionDescriptionWebViewContent> _fetchCleanHTML() async {
+  Future<SubmissionDescriptionWebViewContent> _fetchCleanHTML() async {
     final descriptionHtml =
         await _submissionDescriptionService.fetchDescriptionHtml(
       widget.submissionId,
@@ -210,152 +203,10 @@ class SubmissionDescriptionWebViewState
     final htmlWithInlinedIcons =
         await inlineFaIconUsernameImages(descriptionHtml);
     _submissionDescriptionHtml = htmlWithInlinedIcons;
-    return _SubmissionDescriptionWebViewContent(
+    return SubmissionDescriptionWebViewContent(
       html: htmlWithInlinedIcons,
-      faThemeCss: await _loadFaThemeCss(),
+      faThemeCss: await loadFaThemeCss(),
     );
-  }
-
-  Future<String> _loadFaThemeCss() {
-    return rootBundle.loadString('assets/webview/fa/ui_theme_dark.css');
-  }
-
-  /// Injects CSS to enable text selection and apply the FA dark theme.
-  String _injectFACSS(String submissionDescHtml, String faThemeCss) {
-    String textColor = '#FFFFFF';
-
-    final selectionCss = widget.enableTextSelection
-        ? '''
-      html, body, body * {
-        -webkit-touch-callout: default !important;
-        -webkit-user-select: text !important;
-        user-select: text !important;
-      }
-'''
-        : '''
-      html, body, body * {
-        -webkit-touch-callout: none !important;
-        -webkit-user-select: none !important;
-        user-select: none !important;
-      }
-''';
-
-    return '''
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <base href="https://www.furaffinity.net/">
-
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,500,500i,600,600i,700,700i">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/wenk/1.0.8/wenk.min.css">
-
-    <style>
-      $faThemeCss
-
-      ::selection {
-        background: rgba(224, 147, 33, 0.4) !important;
-        color: #fff !important;
-      }
-
-      ::-webkit-selection {
-        background: rgba(224, 147, 33, 0.4) !important;
-        color: #fff !important;
-      }
-
-      html, body {
-        margin: 0 !important;
-        padding: 0 !important;
-        background-color: #000 !important;
-        color: $textColor !important;
-        font-family: 'Open Sans', sans-serif;
-      }
-
-      $selectionCss
-
-      body {
-        margin: 8px;
-      }
-
-      .submission-description,
-      .bbcode,
-      .user-submitted-links {
-        background-color: transparent !important;
-      }
-
-      img {
-        max-width: 100%;
-        height: auto;
-      }
-
-      a.iconusername img {
-        width: 60px;
-        height: auto;
-      }
-
-      @media (max-width: 600px) {
-        a.iconusername img {
-          width: 40px;
-        }
-      }
-
-      @media (min-width: 1200px) {
-        a.iconusername img {
-          width: 80px;
-        }
-      }
-
-      code {
-        display: block;
-        margin-bottom: 10px;
-      }
-
-      .bbcode_center {
-        text-align: center !important;
-      }
-
-      .bbcode_right {
-        text-align: right !important;
-        display: block;
-      }
-
-      .bbcode_left {
-        text-align: left !important;
-        display: block;
-      }
-
-      h1, h2, h3, h4 {
-        color: #fff !important;
-      }
-
-      h1, h2, h3, h4, h5, h6 {
-        text-align: center;
-      }
-
-      sup.bbcode_sup {
-        display: block;
-        text-align: inherit;
-        margin-bottom: 10px;
-      }
-
-      a {
-        color: #E09321 !important;
-        text-decoration: none !important;
-      }
-
-      a.auto_link.named_url:hover {
-        text-decoration: underline;
-      }
-    </style>
-
-    <script src="https://www.furaffinity.net/themes/beta/js/prototype.1.7.3.min.js"></script>
-    <script src="https://www.furaffinity.net/themes/beta/js/common.js?u=2024112800"></script>
-    <script src="https://www.furaffinity.net/themes/beta/js/script.js?u=2024112800"></script>
-  </head>
-  <body class="c-bodyColor" id="pageid-submission">
-    $submissionDescHtml
-  </body>
-</html>
-''';
   }
 
   /// Searches the provided HTML for a truncated URL and returns the full URL.
@@ -376,7 +227,7 @@ class SubmissionDescriptionWebViewState
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return FutureBuilder<_SubmissionDescriptionWebViewContent>(
+    return FutureBuilder<SubmissionDescriptionWebViewContent>(
       future: _submissionDescriptionFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -435,7 +286,11 @@ class SubmissionDescriptionWebViewState
                     }
                   : null,
               initialData: InAppWebViewInitialData(
-                data: _injectFACSS(cleanHtml, faThemeCss),
+                data: buildSubmissionDescriptionWebViewHtml(
+                  submissionDescriptionHtml: cleanHtml,
+                  faThemeCss: faThemeCss,
+                  enableTextSelection: widget.enableTextSelection,
+                ),
                 baseUrl: WebUri('https://www.furaffinity.net'),
                 encoding: 'utf-8',
                 mimeType: 'text/html',
