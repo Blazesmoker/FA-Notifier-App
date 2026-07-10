@@ -8,12 +8,10 @@ import 'package:FANotifier/shared/utils/string_extensions.dart';
 class SearchFiltersScreen extends StatefulWidget {
   final Map<String, String> selectedSearchFilters;
   final bool sfwEnabled;
-  final Map<String, List<Map<String, String>>> searchFilterOptions;
 
   SearchFiltersScreen({
     required this.selectedSearchFilters,
     required this.sfwEnabled,
-    required this.searchFilterOptions,
     Key? key,
   }) : super(key: key);
 

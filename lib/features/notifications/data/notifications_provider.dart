@@ -6,46 +6,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
-
-/// Model representing a single notification item.
-class NotificationItem {
-  final String id;
-  final String content;
-  final String? username;
-  final String? submissionId;
-  final String? journalId;
-  final String? url;
-  String? avatarUrl;
-  final String date;       // e.g. "3 weeks ago"
-  final String fullDate;   // e.g. "Feb 16, 2025 05:34 PM"
-  bool isChecked;
-
-  NotificationItem({
-    required this.id,
-    required this.content,
-    this.username,
-    this.submissionId,
-    this.journalId,
-    this.url,
-    this.avatarUrl,
-    required this.date,
-    required this.fullDate,
-    this.isChecked = false,
-  });
-}
-
-/// Model representing a notification section (e.g. "Shouts", "Watches").
-class NotificationSection {
-  final String title;
-  final String formAction;
-  List<NotificationItem> items;
-
-  NotificationSection({
-    required this.title,
-    required this.formAction,
-    required this.items,
-  });
-}
+import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
 
 /// Provider managing notifications from Fur Affinity.
 class NotificationsProvider with ChangeNotifier {

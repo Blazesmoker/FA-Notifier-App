@@ -3,17 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/journals/data/journal_action_service.dart';
 import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
 import 'package:FANotifier/features/journals/data/journal_link_parser.dart';
+import 'package:FANotifier/features/journals/data/journal_url_builder.dart';
 import 'package:FANotifier/features/journals/presentation/create_journal.dart';
 import 'package:FANotifier/features/journals/presentation/editjournalcommentscreen.dart';
 import 'package:FANotifier/features/journals/presentation/journal_reply_screen.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal_comments.dart';
 import 'package:FANotifier/features/journals/domain/journal_not_found_exception.dart';
+import 'package:FANotifier/features/journals/domain/journal_availability_detector.dart';
 import 'package:FANotifier/features/journals/domain/journal_publication_time_parser.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
@@ -26,6 +27,8 @@ import 'package:FANotifier/features/settings/data/translator_settings_provider.d
 import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/shared/translation/translation_service.dart';
+import 'package:FANotifier/shared/translation/translation_source_text_builder.dart';
+import 'package:FANotifier/shared/platform/fa_share_service.dart';
 import 'package:FANotifier/main.dart';
 import 'package:provider/provider.dart';
 
@@ -57,6 +60,8 @@ class _OpenJournalState extends State<OpenJournal>
   late final JournalActionService _journalActionService;
   late final JournalCommentService _journalCommentService;
   final TranslationService _translationService = TranslationService.instance;
+  final TranslationSourceTextBuilder _translationSourceTextBuilder =
+      TranslationSourceTextBuilder(TranslationService.instance);
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _commentFocusNode = FocusNode();
   bool _commentComposerFocusRequestedByUser = false;
@@ -247,19 +252,15 @@ class _OpenJournalState extends State<OpenJournal>
     _commentSelectedTexts[selectionId] = text;
   }
 
-  String _journalTranslationSourceText() {
-    final description = submissionDescription == null
-        ? ''
-        : _translationService.plainTextFromHtml(submissionDescription!);
-    return '${submissionTitle ?? ''}\n$description'.trim();
-  }
-
   bool _shouldOfferJournalTranslation(
     TranslatorSettingsProvider settings, {
     VoidCallback? onLanguageDetectionUpdated,
   }) {
     return _translationService.shouldOfferTranslation(
-      _journalTranslationSourceText(),
+      _translationSourceTextBuilder.content(
+        title: submissionTitle,
+        descriptionHtml: submissionDescription,
+      ),
       settings,
       onLanguageDetectionUpdated: onLanguageDetectionUpdated,
     );
@@ -270,27 +271,24 @@ class _OpenJournalState extends State<OpenJournal>
     TranslatorSettingsProvider settings, {
     VoidCallback? onLanguageDetectionUpdated,
   }) {
-    if (comment['deleted'] == true) return false;
+    if (!_translationSourceTextBuilder.isCommentAvailable(comment)) {
+      return false;
+    }
     return _translationService.shouldOfferTranslation(
-      _commentTranslationSourceText(comment),
+      _translationSourceTextBuilder.comment(comment),
       settings,
       onLanguageDetectionUpdated: onLanguageDetectionUpdated,
     );
-  }
-
-  String _commentTranslationSourceText(Map<String, dynamic> comment) {
-    final commentHtml = comment['commentHtml'] as String?;
-    if (commentHtml != null && commentHtml.trim().isNotEmpty) {
-      return _translationService.plainTextFromHtml(commentHtml);
-    }
-    return comment['text']?.toString() ?? '';
   }
 
   Future<void> _openJournalTranslation(
     TranslatorSettingsProvider settings,
   ) async {
     await NativeTranslateLauncher.open(
-      _journalTranslationSourceText(),
+      _translationSourceTextBuilder.content(
+        title: submissionTitle,
+        descriptionHtml: submissionDescription,
+      ),
       targetLanguageCode: settings.targetLanguageCode,
     );
   }
@@ -300,7 +298,7 @@ class _OpenJournalState extends State<OpenJournal>
     TranslatorSettingsProvider settings,
   ) async {
     await NativeTranslateLauncher.open(
-      _commentTranslationSourceText(comment),
+      _translationSourceTextBuilder.comment(comment),
       targetLanguageCode: settings.targetLanguageCode,
     );
   }
@@ -401,16 +399,11 @@ class _OpenJournalState extends State<OpenJournal>
     try {
       final result = await _api.fetchJournal(widget.uniqueNumber);
       try {
-        final String titleLower = (result.title ?? '').toLowerCase();
-        final String descLower =
-            (result.submissionDescription ?? '').toLowerCase();
-        final String rawLower = (result.dateTimeRaw ?? '').toLowerCase();
-
-        final bool looksLikeSystemError = titleLower.contains('system error') ||
-            descLower.contains('not in our database') ||
-            descLower.contains('this submission does not exist') ||
-            titleLower.contains('not in our database') ||
-            rawLower.contains('not in our database');
+        final looksLikeSystemError = looksLikeUnavailableJournal(
+          title: result.title,
+          descriptionHtml: result.submissionDescription,
+          rawDate: result.dateTimeRaw,
+        );
 
         if (looksLikeSystemError) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -725,14 +718,11 @@ class _OpenJournalState extends State<OpenJournal>
   }
 
   void _sharePost() {
-    final postUrl =
-        'https://www.furaffinity.net/journal/${widget.uniqueNumber}/';
+    final postUrl = buildFaJournalUrl(widget.uniqueNumber);
     final shareContent = '$postUrl';
-    SharePlus.instance.share(
-      ShareParams(
-        text: shareContent,
-        subject: submissionTitle ?? 'Fur Affinity Post',
-      ),
+    const FaShareService().shareText(
+      text: shareContent,
+      subject: submissionTitle ?? 'Fur Affinity Post',
     );
   }
 

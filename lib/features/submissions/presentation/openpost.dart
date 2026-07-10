@@ -12,7 +12,6 @@ import 'package:http/http.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:like_button/like_button.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:FANotifier/app/app_theme.dart';
 import 'package:FANotifier/main.dart';
 import 'package:FANotifier/shared/fa/fa_username.dart';
@@ -26,12 +25,14 @@ import 'package:FANotifier/features/submissions/data/openpost_image_service.dart
 import 'package:FANotifier/features/submissions/data/openpost_link_parser.dart';
 import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
 import 'package:FANotifier/features/submissions/data/openpost_media_export_service.dart';
+import 'package:FANotifier/features/submissions/data/submission_publication_time_parser.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
 import 'package:FANotifier/features/submissions/presentation/SubmissionDescriptionWebview.dart';
 import 'package:FANotifier/features/profile/presentation/image_inspect_screen.dart';
 import 'package:FANotifier/features/submissions/data/openpost_api_service.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_tag_block_state.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
 import 'package:FANotifier/features/submissions/presentation/edit_submission_screen.dart';
 import 'package:FANotifier/features/comments/presentation/editcommentscreen.dart';
@@ -47,6 +48,8 @@ import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.d
 import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/shared/translation/translation_service.dart';
+import 'package:FANotifier/shared/translation/translation_source_text_builder.dart';
+import 'package:FANotifier/shared/platform/fa_share_service.dart';
 import 'package:provider/provider.dart';
 
 class _TransparentOpenPostPageRoute<T> extends PageRoute<T> {
@@ -174,6 +177,8 @@ class _OpenPostState extends State<OpenPost>
   final OpenPostMediaExportService _openPostMediaExportService =
       const OpenPostMediaExportService();
   final TranslationService _translationService = TranslationService.instance;
+  final TranslationSourceTextBuilder _translationSourceTextBuilder =
+      TranslationSourceTextBuilder(TranslationService.instance);
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _commentFocusNode = FocusNode();
   bool _commentComposerFocusRequestedByUser = false;
@@ -469,19 +474,15 @@ class _OpenPostState extends State<OpenPost>
     _commentSelectedTexts[selectionId] = text;
   }
 
-  String _postTranslationSourceText() {
-    final description = submissionDescription == null
-        ? ''
-        : _translationService.plainTextFromHtml(submissionDescription!);
-    return '${submissionTitle ?? ''}\n$description'.trim();
-  }
-
   bool _shouldOfferPostTranslation(
     TranslatorSettingsProvider settings, {
     VoidCallback? onLanguageDetectionUpdated,
   }) {
     return _translationService.shouldOfferTranslation(
-      _postTranslationSourceText(),
+      _translationSourceTextBuilder.content(
+        title: submissionTitle,
+        descriptionHtml: submissionDescription,
+      ),
       settings,
       onLanguageDetectionUpdated: onLanguageDetectionUpdated,
     );
@@ -492,27 +493,24 @@ class _OpenPostState extends State<OpenPost>
     TranslatorSettingsProvider settings, {
     VoidCallback? onLanguageDetectionUpdated,
   }) {
-    if (comment['deleted'] == true) return false;
+    if (!_translationSourceTextBuilder.isCommentAvailable(comment)) {
+      return false;
+    }
     return _translationService.shouldOfferTranslation(
-      _commentTranslationSourceText(comment),
+      _translationSourceTextBuilder.comment(comment),
       settings,
       onLanguageDetectionUpdated: onLanguageDetectionUpdated,
     );
-  }
-
-  String _commentTranslationSourceText(Map<String, dynamic> comment) {
-    final commentHtml = comment['commentHtml'] as String?;
-    if (commentHtml != null && commentHtml.trim().isNotEmpty) {
-      return _translationService.plainTextFromHtml(commentHtml);
-    }
-    return comment['text']?.toString() ?? '';
   }
 
   Future<void> _openPostTranslation(
     TranslatorSettingsProvider settings,
   ) async {
     await NativeTranslateLauncher.open(
-      _postTranslationSourceText(),
+      _translationSourceTextBuilder.content(
+        title: submissionTitle,
+        descriptionHtml: submissionDescription,
+      ),
       targetLanguageCode: settings.targetLanguageCode,
     );
   }
@@ -522,7 +520,7 @@ class _OpenPostState extends State<OpenPost>
     TranslatorSettingsProvider settings,
   ) async {
     await NativeTranslateLauncher.open(
-      _commentTranslationSourceText(comment),
+      _translationSourceTextBuilder.comment(comment),
       targetLanguageCode: settings.targetLanguageCode,
     );
   }
@@ -955,31 +953,16 @@ class _OpenPostState extends State<OpenPost>
   }
 
   void _applyLocalTagBlockState(String tagName, {required bool isBlocked}) {
-    bool updated = false;
-
-    FaPostTag copyWith(FaPostTag t) => FaPostTag(
-          name: t.name,
-          isBlocked: isBlocked,
-          isMeta: t.isMeta,
-          isSearchable: t.isSearchable,
-        );
-
-    final updatedKeywords = keywordTags.map((t) {
-      if (t.name != tagName) return t;
-      updated = true;
-      return copyWith(t);
-    }).toList(growable: false);
-
-    final updatedMeta = metaKeywordTags.map((t) {
-      if (t.name != tagName) return t;
-      updated = true;
-      return copyWith(t);
-    }).toList(growable: false);
-
-    if (!updated) return;
+    final result = updateOpenPostTagBlockState(
+      keywordTags: keywordTags,
+      metaKeywordTags: metaKeywordTags,
+      tagName: tagName,
+      isBlocked: isBlocked,
+    );
+    if (!result.updated) return;
     setState(() {
-      keywordTags = updatedKeywords;
-      metaKeywordTags = updatedMeta;
+      keywordTags = result.keywordTags;
+      metaKeywordTags = result.metaKeywordTags;
     });
   }
 
@@ -1700,11 +1683,9 @@ class _OpenPostState extends State<OpenPost>
   void _sharePost() {
     final postUrl = buildSubmissionViewUrl(widget.uniqueNumber);
     final shareContent = '$postUrl';
-    SharePlus.instance.share(
-      ShareParams(
-        text: shareContent,
-        subject: submissionTitle ?? 'Fur Affinity Post',
-      ),
+    const FaShareService().shareText(
+      text: shareContent,
+      subject: submissionTitle ?? 'Fur Affinity Post',
     );
   }
 

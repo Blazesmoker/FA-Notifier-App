@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:FANotifier/features/search/data/find_source_image_input_service.dart';
 import 'package:FANotifier/features/search/data/find_source_service.dart';
 import 'package:FANotifier/features/search/domain/find_source_models.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
@@ -18,9 +17,7 @@ class FindSourceScreen extends StatefulWidget {
 
 class _FindSourceScreenState extends State<FindSourceScreen>
     with SingleTickerProviderStateMixin {
-  final ImagePicker _picker = ImagePicker();
-
-  XFile? _image;
+  String? _imagePath;
   bool _loading = false;
   String? _error;
   List<String> _results = [];
@@ -33,6 +30,8 @@ class _FindSourceScreenState extends State<FindSourceScreen>
   String? _lastImageHash;
   static const Duration _cooldown = Duration(seconds: 10);
   final FindSourceService _findSourceService = FindSourceService();
+  final FindSourceImageInputService _imageInputService =
+      const FindSourceImageInputService();
 
   static const Color _orange = Color(0xFFE09321);
 
@@ -44,7 +43,7 @@ class _FindSourceScreenState extends State<FindSourceScreen>
 
   void _clearState() {
     setState(() {
-      _image = null;
+      _imagePath = null;
       _loading = false;
       _error = null;
       _results.clear();
@@ -60,17 +59,12 @@ class _FindSourceScreenState extends State<FindSourceScreen>
   }
 
   Future<void> _pickImage() async {
-    final img = await _picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 2000,
-      maxHeight: 2000,
-      imageQuality: 100,
-    );
+    final imagePath = await _imageInputService.pickImagePath();
 
-    if (img == null) return;
+    if (imagePath == null) return;
 
     setState(() {
-      _image = img;
+      _imagePath = imagePath;
       _results.clear();
       _accuracy = null;
       _error = null;
@@ -82,18 +76,13 @@ class _FindSourceScreenState extends State<FindSourceScreen>
     });
   }
 
-  Future<String> _hashImage(File file) async {
-    final bytes = await file.readAsBytes();
-    return sha256.convert(bytes).toString();
-  }
-
   bool _canSendRequest() {
     if (_lastRequestTime == null) return true;
     return DateTime.now().difference(_lastRequestTime!) > _cooldown;
   }
 
   Future<void> _search() async {
-    if (_image == null) {
+    if (_imagePath == null) {
       setState(() => _error = 'Pick an image first');
       return;
     }
@@ -103,8 +92,8 @@ class _FindSourceScreenState extends State<FindSourceScreen>
       return;
     }
 
-    final file = File(_image!.path);
-    final hash = await _hashImage(file);
+    final file = File(_imagePath!);
+    final hash = await _imageInputService.hashImage(file);
 
     if (hash == _lastImageHash) {
       setState(() => _error = 'This image was already searched');
@@ -445,7 +434,7 @@ class _FindSourceScreenState extends State<FindSourceScreen>
                           width: 3,
                         ),
                       ),
-                      child: _image == null
+                      child: _imagePath == null
                           ? Center(
                         child: Text(
                           'Tap here to load image',
@@ -455,7 +444,7 @@ class _FindSourceScreenState extends State<FindSourceScreen>
                           : ClipRRect(
                         borderRadius: BorderRadius.circular(11),
                         child: Image.file(
-                          File(_image!.path),
+                          File(_imagePath!),
                           fit: BoxFit.contain,
                           width: double.infinity,
                           height: double.infinity,
@@ -525,11 +514,20 @@ class _FindSourceScreenState extends State<FindSourceScreen>
                   const SizedBox(height: 6),
                   Expanded(
                     child: ListView.separated(
-                      itemCount: _computeListItemCount(),
+                      itemCount: getFindSourceResultItemCount(
+                        faAuthorLinks: _faAuthorLinks,
+                        faPostLinks: _faPostLinks,
+                        e621PostLinks: _e621PostLinks,
+                      ),
                       separatorBuilder: (_, __) =>
                       const Divider(color: Colors.white12),
                       itemBuilder: (context, index) {
-                        final mapping = _mapIndexToLink(index);
+                        final mapping = getFindSourceResultItem(
+                          index: index,
+                          faAuthorLinks: _faAuthorLinks,
+                          faPostLinks: _faPostLinks,
+                          e621PostLinks: _e621PostLinks,
+                        );
                         final link = mapping?.link;
                         final isHeader = mapping?.isHeader ?? false;
 
@@ -552,46 +550,4 @@ class _FindSourceScreenState extends State<FindSourceScreen>
     );
   }
 
-  int _computeListItemCount() {
-    var count = 0;
-    final hasFa = _faAuthorLinks.isNotEmpty || _faPostLinks.isNotEmpty;
-    if (hasFa) {
-      count += 1;
-      count += _faAuthorLinks.length;
-      count += _faPostLinks.length;
-    }
-    if (_e621PostLinks.isNotEmpty) {
-      count += 1 + _e621PostLinks.length;
-    }
-    return count;
-  }
-
-  IndexMapping? _mapIndexToLink(int index) {
-    var i = index;
-
-    final hasFa = _faAuthorLinks.isNotEmpty || _faPostLinks.isNotEmpty;
-    if (hasFa) {
-      if (i == 0) {
-        return IndexMapping(link: 'Fur Affinity.net', isHeader: true);
-      }
-      i -= 1;
-      if (i < _faAuthorLinks.length) {
-        return IndexMapping(link: _faAuthorLinks[i]);
-      }
-      i -= _faAuthorLinks.length;
-      if (i < _faPostLinks.length) return IndexMapping(link: _faPostLinks[i]);
-      i -= _faPostLinks.length;
-    }
-
-    if (_e621PostLinks.isNotEmpty) {
-      if (i == 0) return IndexMapping(link: 'e621.net', isHeader: true);
-      i -= 1;
-      if (i < _e621PostLinks.length) {
-        return IndexMapping(link: _e621PostLinks[i]);
-      }
-      i -= _e621PostLinks.length;
-    }
-
-    return null;
-  }
 }

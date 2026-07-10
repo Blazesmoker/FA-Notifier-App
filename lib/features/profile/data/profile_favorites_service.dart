@@ -22,6 +22,10 @@ class ProfileFavoritesService {
   final FlutterSecureStorage _secureStorage;
   final SfwModePreference _sfwModePreference = SfwModePreference();
 
+  String buildInitialFavoritesPageUrl(String username) {
+    return 'https://www.furaffinity.net/favorites/$username/';
+  }
+
   Future<ProfilePostsParseResult> fetchFavoritesPage(String url) async {
     final cookieHeader = await _getAllCookies();
     final response = await FAHttp.get(

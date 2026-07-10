@@ -1,63 +1,38 @@
-import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter/services.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:saver_gallery/saver_gallery.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:FANotifier/shared/fa/fa_default_image_loader.dart';
+import 'package:FANotifier/shared/platform/image_export_service.dart';
 
 class OpenPostMediaExportService {
-  const OpenPostMediaExportService();
+  const OpenPostMediaExportService({
+    ImageExportService imageExportService = const ImageExportService(),
+  }) : _imageExportService = imageExportService;
 
-  Future<bool> requestImageExportPermission() async {
-    if (Platform.isAndroid) {
-      return _requestAndroidPermission();
-    }
-    if (Platform.isIOS) {
-      return (await Permission.photosAddOnly.request()).isGranted;
-    }
-    return false;
+  final ImageExportService _imageExportService;
+
+  Future<bool> requestImageExportPermission() {
+    return _imageExportService.requestImageExportPermission();
   }
 
-  Future<Uint8List> loadDefaultImageBytes() async {
-    final byteData = await rootBundle.load('assets/images/defaultpic.gif');
-    return byteData.buffer.asUint8List();
+  Future<Uint8List> loadDefaultImageBytes() {
+    return loadFaDefaultImageBytes();
   }
 
-  Future<bool> saveImageToGallery(Uint8List bytes) async {
-    final result = await SaverGallery.saveImage(
+  Future<bool> saveImageToGallery(Uint8List bytes) {
+    return _imageExportService.saveImageToGallery(
       bytes,
       quality: 80,
       fileName: 'image_${DateTime.now().millisecondsSinceEpoch}.jpg',
       skipIfExists: false,
       androidRelativePath: 'Pictures/YourAppName/images',
     );
-    return result.isSuccess;
   }
 
-  Future<void> shareImage(Uint8List bytes) async {
-    final tempDir = Directory.systemTemp;
-    final tempFile = await File(
-      '${tempDir.path}/shared_image_${DateTime.now().millisecondsSinceEpoch}.jpg',
-    ).create();
-    await tempFile.writeAsBytes(bytes);
-
-    await SharePlus.instance.share(
-      ShareParams(files: [XFile(tempFile.path)]),
+  Future<void> shareImage(Uint8List bytes) {
+    return _imageExportService.shareImage(
+      bytes,
+      fileName: 'shared_image_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      recursiveCreate: false,
     );
-  }
-
-  Future<bool> _requestAndroidPermission() async {
-    final androidInfo = await DeviceInfoPlugin().androidInfo;
-    final sdkInt = androidInfo.version.sdkInt;
-
-    if (sdkInt >= 33) {
-      final status = await Permission.photos.request();
-      return status.isGranted;
-    }
-
-    final status = await Permission.storage.request();
-    return status.isGranted;
   }
 }

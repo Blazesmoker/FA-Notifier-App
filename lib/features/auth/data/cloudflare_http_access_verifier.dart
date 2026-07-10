@@ -18,6 +18,8 @@ class CloudflareHttpAccessVerifier {
 
   final FlutterSecureStorage _secureStorage;
 
+  String get userAgent => FAHttp.userAgent;
+
   Future<bool> verify({
     required String url,
     Future<void> Function()? beforeRetryAttempt,

@@ -1,7 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-const String appUpdateNotificationPayload = 'app_update_available';
-
 class PendingNavigationStore {
   static const _pendingNavigationKey = 'pending_navigation';
 

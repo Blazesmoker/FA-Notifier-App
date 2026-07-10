@@ -44,7 +44,9 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
   void initState() {
     super.initState();
 
-    _nextPageUrl = 'https://www.furaffinity.net/favorites/${widget.username}/';
+    _nextPageUrl = _profileFavoritesService.buildInitialFavoritesPageUrl(
+      widget.username,
+    );
     unawaited(_fetchImages());
   }
 
@@ -60,7 +62,9 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
     if (!mounted) return;
     _fetchGeneration++;
     setState(() {
-      _nextPageUrl = 'https://www.furaffinity.net/favorites/${widget.username}/';
+      _nextPageUrl = _profileFavoritesService.buildInitialFavoritesPageUrl(
+        widget.username,
+      );
       _isLoading = false;
       _hasMore = true;
       _images.clear();

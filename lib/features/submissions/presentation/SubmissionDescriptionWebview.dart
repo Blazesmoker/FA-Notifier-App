@@ -4,13 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:FANotifier/features/submissions/data/submission_description_parser.dart';
 import 'package:FANotifier/features/submissions/data/submission_description_service.dart';
-import 'package:FANotifier/features/submissions/data/submission_description_webview_content.dart';
 import 'package:FANotifier/features/submissions/data/submission_description_webview_html_builder.dart';
-import 'package:FANotifier/shared/fa/fa_theme_css_loader.dart';
+import 'package:FANotifier/features/submissions/domain/submission_description_webview_content.dart';
+import 'package:FANotifier/shared/fa/fa_webview_document_scripts.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/shared/utils/fa_icon_image_inliner.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
 
@@ -184,13 +182,12 @@ class SubmissionDescriptionWebViewState
   Future<SubmissionDescriptionWebViewContent> _processInitialHtml(
       String html) async {
     final descriptionHtml =
-        await compute(extractSubmissionDescriptionHtmlWithBodyFallback, html);
+        await _submissionDescriptionService.extractInitialHtml(html);
     final htmlWithInlinedIcons =
-        await inlineFaIconUsernameImages(descriptionHtml);
+        await _submissionDescriptionService.inlineIcons(descriptionHtml);
     _submissionDescriptionHtml = htmlWithInlinedIcons;
-    return SubmissionDescriptionWebViewContent(
-      html: htmlWithInlinedIcons,
-      faThemeCss: await loadFaThemeCss(),
+    return _submissionDescriptionService.buildWebViewContent(
+      htmlWithInlinedIcons,
     );
   }
 
@@ -201,11 +198,10 @@ class SubmissionDescriptionWebViewState
       widget.submissionId,
     );
     final htmlWithInlinedIcons =
-        await inlineFaIconUsernameImages(descriptionHtml);
+        await _submissionDescriptionService.inlineIcons(descriptionHtml);
     _submissionDescriptionHtml = htmlWithInlinedIcons;
-    return SubmissionDescriptionWebViewContent(
-      html: htmlWithInlinedIcons,
-      faThemeCss: await loadFaThemeCss(),
+    return _submissionDescriptionService.buildWebViewContent(
+      htmlWithInlinedIcons,
     );
   }
 
@@ -216,12 +212,14 @@ class SubmissionDescriptionWebViewState
       {String? htmlSource}) {
     final String? source = htmlSource ?? _submissionDescriptionHtml;
     if (source == null) return truncatedUrl;
-    return findFullSubmissionAutoShortenedLink(source, truncatedUrl);
+    return _submissionDescriptionService.findFullLink(source, truncatedUrl);
   }
 
   Future<String?> getPlainText() async {
     if (_submissionDescriptionHtml == null) return null;
-    return plainTextFromSubmissionHtml(_submissionDescriptionHtml!);
+    return _submissionDescriptionService.plainText(
+      _submissionDescriptionHtml!,
+    );
   }
 
   @override
@@ -322,7 +320,7 @@ class SubmissionDescriptionWebViewState
               },
               onLoadStop: (controller, url) async {
                 String heightString = await controller.evaluateJavascript(
-                  source: "document.body.scrollHeight.toString()",
+                  source: faDocumentBodyScrollHeightScript,
                 );
                 double height = double.tryParse(heightString) ?? 300.0;
                 WidgetsBinding.instance.addPostFrameCallback((_) {

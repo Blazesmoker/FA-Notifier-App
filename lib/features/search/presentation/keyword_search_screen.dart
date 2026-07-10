@@ -72,61 +72,6 @@ class _KeywordSearchScreenState extends State<KeywordSearchScreen> {
         builder: (context) => SearchFiltersScreen(
           selectedSearchFilters: _currentSearchFilters,
           sfwEnabled: _sfwEnabled,
-          searchFilterOptions: {
-            'order-by': [
-              {'label': 'Relevancy', 'value': 'relevancy'},
-              {'label': 'Date', 'value': 'date'},
-              {'label': 'Popularity', 'value': 'popularity'},
-            ],
-            'order-direction': [
-              {'label': 'Descending', 'value': 'desc'},
-              {'label': 'Ascending', 'value': 'asc'},
-            ],
-            'range': [
-              {'label': '1 Day', 'value': '1day'},
-              {'label': '3 Days', 'value': '3days'},
-              {'label': '7 Days', 'value': '7days'},
-              {'label': '30 Days', 'value': '30days'},
-              {'label': '90 Days', 'value': '90days'},
-              {'label': '1 Year', 'value': '1year'},
-              {'label': '3 Years', 'value': '3years'},
-              {'label': '5 Years', 'value': '5years'},
-              {'label': 'All Time', 'value': 'all'},
-              {'label': 'Manual', 'value': 'manual'},
-            ],
-            'mode': [
-              {'label': 'All', 'value': 'all'},
-              {'label': 'Any', 'value': 'any'},
-              {'label': 'Extended', 'value': 'extended'},
-            ],
-            'rating-general': [
-              {'label': 'General', 'value': '1'},
-            ],
-            'rating-mature': [
-              {'label': 'Mature', 'value': '1'},
-            ],
-            'rating-adult': [
-              {'label': 'Adult', 'value': '1'},
-            ],
-            'type-art': [
-              {'label': 'Art', 'value': '1'},
-            ],
-            'type-music': [
-              {'label': 'Music', 'value': '1'},
-            ],
-            'type-flash': [
-              {'label': 'Flash', 'value': '1'},
-            ],
-            'type-story': [
-              {'label': 'Story', 'value': '1'},
-            ],
-            'type-photo': [
-              {'label': 'Photo', 'value': '1'},
-            ],
-            'type-poetry': [
-              {'label': 'Poetry', 'value': '1'},
-            ],
-          },
         ),
       ),
     );

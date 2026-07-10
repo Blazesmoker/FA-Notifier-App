@@ -4,7 +4,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:FANotifier/features/auth/data/cloudflare_http_access_verifier.dart';
 import 'package:FANotifier/features/auth/data/cloudflare_webview_cookie_service.dart';
 import 'package:FANotifier/features/auth/domain/cloudflare_check_result.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_webview_document_scripts.dart';
 
 class CloudflareCheckScreen extends StatefulWidget {
   final String initialUrl;
@@ -62,7 +62,7 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
     String body = '';
     try {
       final html = await _controller!.evaluateJavascript(
-        source: 'document.documentElement.outerHTML;',
+        source: faDocumentOuterHtmlScript,
       );
       body = (html ?? '').toString();
     } catch (_) {
@@ -144,7 +144,7 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
             javaScriptEnabled: true,
             useShouldOverrideUrlLoading: true,
             supportZoom: true,
-            userAgent: FAHttp.userAgent,
+            userAgent: _httpAccessVerifier.userAgent,
           ),
           shouldOverrideUrlLoading: (controller, navigationAction) async {
             return NavigationActionPolicy.ALLOW;

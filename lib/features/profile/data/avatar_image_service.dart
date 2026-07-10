@@ -1,8 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:flutter/services.dart' show rootBundle;
-
 import 'package:FANotifier/features/profile/domain/avatar_image_data.dart';
+import 'package:FANotifier/shared/fa/fa_default_image_loader.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/shared/fa/fa_media_auth.dart';
 
@@ -27,8 +26,7 @@ Future<AvatarImageData> fetchAvatarImageData(String imageUrl) async {
 }
 
 Future<Uint8List> loadDefaultAvatarImageBytes() async {
-  final byteData = await rootBundle.load('assets/images/defaultpic.gif');
-  return byteData.buffer.asUint8List();
+  return loadFaDefaultImageBytes();
 }
 
 String avatarImageExtensionFromUrlOrContentType(

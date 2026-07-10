@@ -3,8 +3,8 @@
 import 'dart:io';
 
 import 'package:FANotifier/features/notifications/data/notification_settings_service.dart';
+import 'package:FANotifier/features/notifications/domain/notification_permission_state.dart';
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
 
@@ -52,24 +52,26 @@ class _NotificationsSettingsScreenState
   }
 
   Future<void> _checkNotificationPermissions() async {
-    final status = await Permission.notification.status;
+    final status =
+        await _notificationSettingsService.getNotificationPermissionState();
     if (!mounted) {
       return;
     }
 
-    final message = status.isGranted
+    final message = status == NotificationPermissionState.granted
         ? 'Notification permissions are allowed.'
-        : status.isProvisional
+        : status == NotificationPermissionState.provisional
             ? 'Notification permissions are provisional.'
-            : status.isRestricted
+            : status == NotificationPermissionState.restricted
                 ? 'Notification permissions are restricted.'
-                : status.isPermanentlyDenied
+                : status == NotificationPermissionState.permanentlyDenied
                     ? 'Notification permissions are blocked. Open app settings to change them.'
                     : 'Notification permissions are not allowed.';
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: status.isGranted || status.isProvisional
+        backgroundColor: status == NotificationPermissionState.granted ||
+                status == NotificationPermissionState.provisional
             ? Colors.green
             : const Color(0xFFE09321),
         content: Text(

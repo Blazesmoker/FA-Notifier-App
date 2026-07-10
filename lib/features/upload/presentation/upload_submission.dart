@@ -1,16 +1,14 @@
 // lib/screens/upload_submission_screen.dart
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:FANotifier/shared/widgets/tags_and_codes_webview_widget.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
 import 'package:FANotifier/features/upload/data/upload_file_webview_scripts.dart';
+import 'package:FANotifier/features/upload/data/upload_file_picker_service.dart';
 import 'package:FANotifier/features/upload/data/upload_js_result_decoder.dart';
 import 'package:FANotifier/features/upload/data/upload_page_webview_scripts.dart';
 import 'package:FANotifier/features/upload/data/upload_permission_service.dart';
@@ -35,6 +33,8 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   final UploadJsResultDecoder _jsResultDecoder = const UploadJsResultDecoder();
   final UploadPermissionService _permissionService =
       const UploadPermissionService();
+  final UploadFilePickerService _filePickerService =
+      const UploadFilePickerService();
   final UploadSubmissionNavigationService _navigationService =
       const UploadSubmissionNavigationService();
   final UploadWebViewNavigationPolicy _webViewNavigationPolicy =
@@ -59,10 +59,6 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   late final Animation<double> _toolsMenuSize;
   late final Animation<double> _toolsMenuFade;
   late final Animation<Offset> _toolsMenuSlide;
-
-  List<int>? _uploadedFileBytes;
-  // ignore: unused_field
-  String? _uploadedFileName;
 
   @override
   void initState() {
@@ -686,53 +682,26 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
 
       if (source == null) return;
 
-      File? selectedFile;
-      String? fileName;
-
-      if (source == 'files') {
-        final file = await FilePicker.pickFile(
-          type: FileType.custom,
-          allowedExtensions: ['jpg', 'jpeg', 'png', 'gif'],
-        );
-
-        if (file == null) return;
-
-        fileName = file.name;
-        _uploadedFileBytes = (await file.readAsBytes()).toList();
-      } else if (source == 'gallery') {
-        final ImagePicker picker = ImagePicker();
-        final XFile? pickedFile = await picker.pickImage(
-          source: ImageSource.gallery,
-        );
-
-        if (pickedFile == null) return;
-
-        selectedFile = File(pickedFile.path);
-        fileName = pickedFile.name;
-        _uploadedFileBytes = await selectedFile.readAsBytes();
-      }
-
-      if (_uploadedFileBytes == null || fileName == null) {
+      if (source != 'files' && source != 'gallery') {
         debugPrint('Failed to read file bytes');
         return;
       }
 
-      _uploadedFileName = fileName;
-      final base64Data = base64Encode(_uploadedFileBytes!);
-
-
-      final extension = fileName.split('.').last.toLowerCase();
+      final selectedFile = source == 'files'
+          ? await _filePickerService.pickFile()
+          : await _filePickerService.pickGalleryImage();
+      if (selectedFile == null) return;
 
       await _webViewController!.evaluateJavascript(
         source: buildUploadFileInputScript(
-          base64Data: base64Data,
-          fileName: fileName,
-          extension: extension,
+          base64Data: selectedFile.base64Data,
+          fileName: selectedFile.fileName,
+          extension: selectedFile.extension,
           returnResult: false,
         ),
       );
 
-      debugPrint('File loaded successfully: $fileName');
+      debugPrint('File loaded successfully: ${selectedFile.fileName}');
     } catch (e) {
       debugPrint('Error selecting file: $e');
     }

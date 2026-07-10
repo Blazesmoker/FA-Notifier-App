@@ -11,6 +11,9 @@ import 'package:html/dom.dart' as dom;
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/notifications/data/fa_activities_polling_service.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
+import 'package:FANotifier/features/notifications/data/notification_shout_mapper.dart';
+import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:FANotifier/features/notifications/domain/notification_section_kind.dart';
 import 'package:FANotifier/features/notifications/data/notification_content_parser.dart';
 import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
@@ -20,6 +23,7 @@ import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
+import 'package:FANotifier/features/notifications/presentation/notification_tab_badge_value.dart';
 
 /// A widget that toggles between relative and absolute date formats when tapped.
 class ToggleableDate extends StatefulWidget {
@@ -126,7 +130,9 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
   void initState() {
     super.initState();
     // Start with whatever msg/others parsed (no network).
-    final cached = _deduplicateShouts(_readShoutsFromService());
+    final cached = deduplicateNotificationShouts(
+      notificationShoutsFromSections(widget.service.sections),
+    );
     _shouts = cached;
     _shoutsFuture = Future.value(cached);
 
@@ -160,7 +166,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
       _shoutsFuture = widget.service
           .enrichShoutsFromProfileIfNeeded(force: true)
           .then((list) {
-        final unique = _deduplicateShouts(list);
+        final unique = deduplicateNotificationShouts(list);
         _shouts = unique;
         return unique;
       }).whenComplete(() {
@@ -200,9 +206,9 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
 
   void _onServiceChanged() {
     if (!mounted) return;
-    final latest = _readShoutsFromService();
+    final latest = notificationShoutsFromSections(widget.service.sections);
     if (latest.isEmpty) return;
-    final unique = _deduplicateShouts(latest);
+    final unique = deduplicateNotificationShouts(latest);
     final prev = _shouts;
     final bool changed = prev == null ||
         prev.length != unique.length ||
@@ -224,46 +230,11 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
     });
   }
 
-  List<Shout> _readShoutsFromService() {
-    try {
-      final idx = widget.service.sections
-          .indexWhere((s) => s.title.toLowerCase().contains('shouts'));
-      if (idx == -1) return const <Shout>[];
-      final items = widget.service.sections[idx].items;
-      if (items.isEmpty) return const <Shout>[];
-      return items.map((it) {
-        return Shout(
-          id: it.id,
-          nickname: it.username ?? '',
-          nicknameLink: it.linkUsername ?? '',
-          postedTitle: it.fullDate,
-          avatarUrl: it.avatarUrl ?? '',
-          postedAgo: it.date,
-          textContent: it.content,
-          isRemoved:
-              it.content.toLowerCase().contains('shout has been removed'),
-          isChecked: it.isChecked,
-        );
-      }).toList();
-    } catch (_) {
-      return const <Shout>[];
-    }
-  }
-
-  // Helper to remove duplicates if FA sends the same shout multiple times
-  List<Shout> _deduplicateShouts(List<Shout> shouts) {
-    final Map<String, Shout> unique = {};
-    for (var shout in shouts) {
-      unique[shout.id] = shout;
-    }
-    return unique.values.toList();
-  }
-
   /// Force a fresh fetch of the Shouts from FA
   Future<List<Shout>> _refreshShouts() async {
     FaActivitiesPollingService().resetSchedule();
     final fetchedShouts = await FANotificationService.fetchMsgCenterShouts();
-    final uniqueShouts = _deduplicateShouts(fetchedShouts);
+    final uniqueShouts = deduplicateNotificationShouts(fetchedShouts);
     setState(() {
       _shouts = uniqueShouts;
       _shoutsFuture = Future.value(uniqueShouts);
@@ -381,7 +352,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                 }
 
                 final data = snapshot.data ?? [];
-                _shouts = _deduplicateShouts(data);
+                _shouts = deduplicateNotificationShouts(data);
 
                 if (_shouts!.isEmpty) {
                   return ListView(
@@ -649,6 +620,8 @@ class NotificationSectionWidget extends StatelessWidget {
                   itemCount: section.items.length,
                   itemBuilder: (context, itemIndex) {
                     final item = section.items[itemIndex];
+                    final sectionKind =
+                        notificationSectionKindFromTitle(section.title);
                     return Column(
                       children: [
                         if (itemIndex == 0)
@@ -665,12 +638,12 @@ class NotificationSectionWidget extends StatelessWidget {
                               Material(
                                 type: MaterialType.transparency,
                                 child: ConstrainedBox(
-                                  constraints: (section.title
-                                              .toLowerCase()
-                                              .contains('favorites') ||
-                                          section.title
-                                              .toLowerCase()
-                                              .contains('submission comments'))
+                                  constraints: (sectionKind ==
+                                              NotificationSectionKind
+                                                  .favorites ||
+                                          sectionKind ==
+                                              NotificationSectionKind
+                                                  .submissionComments)
                                       ? const BoxConstraints(
                                           minHeight: 88.0, maxHeight: 88.0)
                                       : const BoxConstraints(
@@ -721,9 +694,8 @@ class NotificationSectionWidget extends StatelessWidget {
                                       horizontal: 0.0),
                                 ),
                               ),
-                              if (section.title
-                                  .toLowerCase()
-                                  .contains('watches'))
+                              if (sectionKind ==
+                                  NotificationSectionKind.watches)
                                 GestureDetector(
                                   onTap: () {
                                     debugPrint(
@@ -750,9 +722,8 @@ class NotificationSectionWidget extends StatelessWidget {
                               Expanded(
                                 child: GestureDetector(
                                   onTap: () {
-                                    if (section.title
-                                        .toLowerCase()
-                                        .contains('watches')) {
+                                    if (sectionKind ==
+                                        NotificationSectionKind.watches) {
                                       debugPrint(
                                           "Opening profile: ${item.linkUsername}");
                                       if (item.linkUsername != null) {
@@ -762,12 +733,11 @@ class NotificationSectionWidget extends StatelessWidget {
                                               nickname: item.linkUsername!),
                                         );
                                       }
-                                    } else if (section.title
-                                            .toLowerCase()
-                                            .contains('favorites') ||
-                                        section.title
-                                            .toLowerCase()
-                                            .contains('submission comments')) {
+                                    } else if (sectionKind ==
+                                            NotificationSectionKind.favorites ||
+                                        sectionKind ==
+                                            NotificationSectionKind
+                                                .submissionComments) {
                                       if (item.submissionId != null) {
                                         Navigator.push(
                                           context,
@@ -777,9 +747,9 @@ class NotificationSectionWidget extends StatelessWidget {
                                           ),
                                         );
                                       }
-                                    } else if (section.title
-                                        .toLowerCase()
-                                        .contains('journal comments')) {
+                                    } else if (sectionKind ==
+                                        NotificationSectionKind
+                                            .journalComments) {
                                       if (item.journalId != null) {
                                         Navigator.push(
                                           context,
@@ -789,9 +759,8 @@ class NotificationSectionWidget extends StatelessWidget {
                                           ),
                                         );
                                       }
-                                    } else if (section.title
-                                        .toLowerCase()
-                                        .contains('shouts')) {
+                                    } else if (sectionKind ==
+                                        NotificationSectionKind.shouts) {
                                       final username =
                                           service.currentUsernameFromLink;
                                       debugPrint("shout clicked: $username");
@@ -803,9 +772,8 @@ class NotificationSectionWidget extends StatelessWidget {
                                               nickname: username),
                                         );
                                       }
-                                    } else if (section.title
-                                        .toLowerCase()
-                                        .contains('journals')) {
+                                    } else if (sectionKind ==
+                                        NotificationSectionKind.journals) {
                                       if (item.journalId != null) {
                                         Navigator.push(
                                           context,
@@ -1476,37 +1444,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                             dividerColor: Colors.black,
                             dividerHeight: 3.7,
                             tabs: sections.map((section) {
-                              // Determine the typeKey based on section title
-                              String? typeKey;
-                              final titleLower = section.title.toLowerCase();
-                              if (titleLower.contains('watch')) {
-                                typeKey = 'W';
-                              } else if (titleLower.contains('favorite')) {
-                                typeKey = 'F';
-                              } else if (titleLower.contains('journal') &&
-                                  !titleLower.contains('comment')) {
-                                typeKey = 'J';
-                              }
-
-                              // Get count from messageBarCounts if W/F/J, else use section.items.length
-                              int rawCount = 0;
-                              if (typeKey != null &&
-                                  service.messageBarCounts
-                                      .containsKey(typeKey)) {
-                                rawCount = service.messageBarCounts[typeKey]!;
-                              } else {
-                                rawCount = section.items.length;
-                              }
-
-                              // Apply "30+" rule for Comments and Shouts
-                              String displayText;
-                              if (titleLower.contains('comment') ||
-                                  titleLower.contains('shout')) {
-                                displayText =
-                                    rawCount >= 30 ? '30+' : '$rawCount';
-                              } else {
-                                displayText = '$rawCount';
-                              }
+                              final badgeValue = notificationTabBadgeValue(
+                                sectionTitle: section.title,
+                                itemCount: section.items.length,
+                                messageBarCounts: service.messageBarCounts,
+                              );
+                              final rawCount = badgeValue.rawCount;
+                              final displayText = badgeValue.displayText;
 
                               return Tab(
                                 child: FittedBox(

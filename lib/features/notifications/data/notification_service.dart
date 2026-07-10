@@ -14,21 +14,8 @@ import 'package:FANotifier/features/notifications/data/NotificationNavigationPro
 import 'package:FANotifier/features/notifications/data/activities_notification_state.dart';
 import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:FANotifier/features/notifications/data/notification_refresh_service.dart';
-import 'package:FANotifier/features/notifications/data/pending_navigation_store.dart';
+import 'package:FANotifier/features/notifications/domain/notification_payloads.dart';
 import 'package:FANotifier/core/logging/app_logging.dart';
-
-bool isActivityNotificationPayload(String payload) {
-  return payload.startsWith('fa_activity_') ||
-      payload.startsWith('activity_') ||
-      payload.contains('DrawerIndex.Notifications') ||
-      payload == 'activity_native';
-}
-
-bool isNoteNotificationPayload(String payload) {
-  return payload.startsWith('note_') ||
-      payload.contains('DrawerIndex.Notes') ||
-      payload == 'note_native';
-}
 
 /// Manages notification channels, shows notifications, and handles taps.
 class NotificationService {
@@ -40,17 +27,6 @@ class NotificationService {
       GlobalKey<DrawerUserControllerState>();
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
-
-  static const List<String> notificationTypes = <String>[
-    'submissions',
-    'watches',
-    'comments',
-    'favorites',
-    'journals',
-    'notes',
-    'activities',
-    'updates',
-  ];
 
   static const MethodChannel _iosChannel = MethodChannel('app.notifications');
   static const String _kNextActivityNotificationId =

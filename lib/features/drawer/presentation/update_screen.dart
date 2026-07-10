@@ -1,4 +1,5 @@
 import 'package:FANotifier/app/app_theme.dart';
+import 'package:FANotifier/core/links/app_external_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -78,7 +79,7 @@ class UpdateScreen extends StatelessWidget {
                       children: [
                         FilledButton(
                           onPressed: () => launchUrlString(
-                            'https://t.me/+xTEmmXoDW5tkMGFi',
+                            AppExternalLinks.telegramUrl,
                             mode: LaunchMode.externalApplication,
                           ),
                           style: FilledButton.styleFrom(

@@ -41,7 +41,8 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   @override
   void initState() {
     super.initState();
-    _nextPageUrl = 'https://www.furaffinity.net/scraps/${widget.username}/';
+    _nextPageUrl =
+        _profileScrapsService.buildInitialScrapsPageUrl(widget.username);
     unawaited(_fetchImages());
   }
 
@@ -57,7 +58,8 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     if (!mounted) return;
     _fetchGeneration++;
     setState(() {
-      _nextPageUrl = 'https://www.furaffinity.net/scraps/${widget.username}/';
+      _nextPageUrl =
+          _profileScrapsService.buildInitialScrapsPageUrl(widget.username);
       _isLoading = false;
       _hasMore = true;
       _images.clear();

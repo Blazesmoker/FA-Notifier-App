@@ -5,12 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:FANotifier/features/profile/data/user_description_parser.dart';
 import 'package:FANotifier/features/profile/data/user_description_service.dart';
-import 'package:FANotifier/features/profile/data/user_description_webview_content.dart';
 import 'package:FANotifier/features/profile/data/user_description_webview_html_builder.dart';
-import 'package:FANotifier/shared/fa/fa_theme_css_loader.dart';
-import 'package:FANotifier/shared/utils/fa_icon_image_inliner.dart';
+import 'package:FANotifier/features/profile/domain/user_description_webview_content.dart';
+import 'package:FANotifier/shared/fa/fa_webview_document_scripts.dart';
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
@@ -180,13 +178,12 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   }
 
   Future<UserDescriptionWebViewContent> _processInitialHtml(String html) async {
-    final extractedHtml =
-        await compute(extractUserDescriptionHtmlWithBodyFallback, html);
-    final htmlWithInlinedIcons = await inlineFaIconUsernameImages(extractedHtml);
+    final extractedHtml = await _userDescriptionService.extractInitialHtml(html);
+    final htmlWithInlinedIcons =
+        await _userDescriptionService.inlineIcons(extractedHtml);
     _userDescriptionHtml = htmlWithInlinedIcons;
-    return UserDescriptionWebViewContent(
-      html: htmlWithInlinedIcons,
-      faThemeCss: await loadFaThemeCss(),
+    return _userDescriptionService.buildWebViewContent(
+      htmlWithInlinedIcons,
     );
   }
 
@@ -195,11 +192,11 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     final extractedHtml = await _userDescriptionService.fetchCleanHtml(
       widget.sanitizedUsername,
     );
-    final htmlWithInlinedIcons = await inlineFaIconUsernameImages(extractedHtml);
+    final htmlWithInlinedIcons =
+        await _userDescriptionService.inlineIcons(extractedHtml);
     _userDescriptionHtml = htmlWithInlinedIcons;
-    return UserDescriptionWebViewContent(
-      html: htmlWithInlinedIcons,
-      faThemeCss: await loadFaThemeCss(),
+    return _userDescriptionService.buildWebViewContent(
+      htmlWithInlinedIcons,
     );
   }
 
@@ -211,13 +208,13 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
       {String? htmlSource}) {
     final String? source = htmlSource ?? _userDescriptionHtml;
     if (source == null) return truncatedUrl;
-    return findFullAutoShortenedLink(source, truncatedUrl) ?? truncatedUrl;
+    return _userDescriptionService.findFullLink(source, truncatedUrl);
   }
 
   /// Returns plain text by stripping HTML tags from the cleaned HTML.
   Future<String?> getPlainText() async {
     if (_userDescriptionHtml == null) return null;
-    return plainTextFromHtml(_userDescriptionHtml!);
+    return _userDescriptionService.plainText(_userDescriptionHtml!);
   }
 
   /// Processes a FurAffinity URL.
@@ -341,7 +338,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
                     onLoadStop: (controller, url) async {
                       String heightString =
                           await controller.evaluateJavascript(
-                        source: "document.body.scrollHeight.toString()",
+                        source: faDocumentBodyScrollHeightScript,
                       );
                       double height = double.tryParse(heightString) ?? 300.0;
                       WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -1,117 +1,22 @@
-import 'dart:async';
-import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/notifications/domain/notifications.dart';
 import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
+import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:FANotifier/features/notifications/data/simple_semaphore.dart';
+import 'package:FANotifier/features/notifications/data/fa_notification_link_parser.dart';
+import 'package:FANotifier/features/notifications/data/notification_section_parser_helpers.dart';
+import 'package:FANotifier/features/notifications/data/fa_notification_cookie_header_provider.dart';
+import 'package:FANotifier/features/notifications/data/fa_notification_media_repository.dart';
+import 'package:FANotifier/features/notifications/data/fa_notification_shout_repository.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
 
-/// A semaphore to limit concurrent network requests.
-class SimpleSemaphore {
-  int _available;
-  final Queue<Completer<void>> _waitQueue = Queue();
-
-  SimpleSemaphore(this._available);
-
-  Future<void> acquire() {
-    if (_available > 0) {
-      _available--;
-      return Future.value();
-    }
-    final completer = Completer<void>();
-    _waitQueue.add(completer);
-    return completer.future;
-  }
-
-  void release() {
-    if (_waitQueue.isNotEmpty) {
-      final completer = _waitQueue.removeFirst();
-      completer.complete();
-    } else {
-      _available++;
-    }
-  }
-}
-
-/// Model representing one Shout.
-class Shout {
-  final String id;
-  final String nickname; // e.g. "UserName" for display
-  final String nicknameLink; // e.g. "username" parsed from href
-  final String postedTitle; // e.g. "Mar 6, 2025 07:34 PM"
-  final String avatarUrl; // Avatar from user profile
-  final String postedAgo; // e.g. "a few minutes ago"
-  final String textContent; // The actual text of the shout (or "removed")
-  bool isChecked;
-  final bool isRemoved;
-
-  Shout({
-    required this.id,
-    required this.nickname,
-    required this.nicknameLink,
-    required this.postedTitle,
-    required this.avatarUrl,
-    required this.postedAgo,
-    required this.textContent,
-    required this.isRemoved,
-    this.isChecked = false,
-  });
-
-  @override
-  String toString() {
-    return 'Shout(id=$id, nickname=$nickname, postedTitle=$postedTitle, removed=$isRemoved, text="$textContent")';
-  }
-}
-
-/// Model representing a single notification item.
-class NotificationItem {
-  final String id;
-  final String content;
-  final String? username;
-  final String? linkUsername;
-  final String? submissionId;
-  final String? journalId;
-  final String? url;
-  String? avatarUrl;
-  final String date; // e.g. "3 weeks ago"
-  final String fullDate; // e.g. "Feb 16, 2025 05:34 PM"
-  bool isChecked;
-
-  NotificationItem({
-    required this.id,
-    required this.content,
-    this.username,
-    this.linkUsername,
-    this.submissionId,
-    this.journalId,
-    this.url,
-    this.avatarUrl,
-    required this.date,
-    required this.fullDate,
-    this.isChecked = false,
-  });
-
-
-}
-
-/// Model representing a notification section.
-class NotificationSection {
-  final String title;
-  final String formAction;
-  List<NotificationItem> items;
-
-  NotificationSection({
-    required this.title,
-    required this.formAction,
-    required this.items,
-  });
-}
+import 'notification_shout_parser.dart';
 
 /// Centralized service for notifications.
 class FANotificationService with ChangeNotifier {
@@ -130,13 +35,19 @@ class FANotificationService with ChangeNotifier {
   String? linkUsername;
   String? currentUsernameFromLink;
 
-  // For shouts caching and concurrency control.
   static final SimpleSemaphore _semaphore = SimpleSemaphore(3);
-  static final Map<String, String> _avatarCache = {};
-  static final Map<String, String> _previewCache = {};
-  static final Map<String, Future<String?>> _previewInFlight = {};
-  static bool _didFetchProfileShouts = false;
-  static List<Shout> _profileShoutList = [];
+  static const FaNotificationCookieHeaderProvider _cookieHeaderProvider =
+      FaNotificationCookieHeaderProvider();
+  static final FaNotificationShoutRepository _shoutRepository =
+      FaNotificationShoutRepository(
+    semaphore: _semaphore,
+    cookieHeaderProvider: _cookieHeaderProvider,
+  );
+  static final FaNotificationMediaRepository _mediaRepository =
+      FaNotificationMediaRepository(
+    semaphore: _semaphore,
+    cookieHeaderProvider: _cookieHeaderProvider,
+  );
   String? displayName;
   String? username;
   bool shoutsEnriched = false;
@@ -259,136 +170,6 @@ class FANotificationService with ChangeNotifier {
     }
   }
 
-  static int _extractAnyInt(String s) {
-    final m = RegExp(r'\d{1,3}(?:[,.]\d{3})*|\d+').firstMatch(s);
-    if (m == null) return 0;
-    return int.tryParse(m.group(0)!.replaceAll(RegExp(r'[,.]'), '')) ?? 0;
-  }
-
-  static String? _typeKeyFromHrefOrTitle({
-    required String href,
-    required String title,
-  }) {
-    final h = href.toLowerCase();
-    final t = title.toLowerCase();
-    if (h.contains('#submissions') || h.contains('msg/submissions') || t.contains('submission')) return 'S';
-    if (h.contains('#watches') || t.contains('watch')) return 'W';
-    if (h.contains('#comments') || t.contains('comment')) return 'C';
-    if (h.contains('#favorites') || t.contains('favorite')) return 'F';
-    if (h.contains('#journals') || t.contains('journal')) return 'J';
-    if (h.contains('#notes') || h.contains('msg/pms') || t.contains('note')) return 'N';
-    return null;
-  }
-
-
-  /// Helper method to extract a username (nicknameLink).
-  static String _extractNicknameLink(dom.Element li) {
-    String nicknameLink = "";
-
-    dom.Element? parentAnchor = li.querySelector(
-        'span.c-usernameBlockSimple.username-underlined a[href*="/user/"]'
-    );
-
-    if (parentAnchor == null) {
-      parentAnchor = li.querySelector('a[href*="/user/"]');
-    }
-    if (parentAnchor != null) {
-      String? href = parentAnchor.attributes['href'];
-      if (href != null) {
-        final regExp = RegExp(
-          r'^(?:https?://(?:www\.)?furaffinity\.net)?/user/([^/]+)/?$',
-        );
-        final match = regExp.firstMatch(href);
-        if (match != null) {
-          nicknameLink = match.group(1)!;
-        }
-      }
-    }
-    return nicknameLink;
-  }
-
-  static String? _extractUsernameFromHref(String? href) {
-    if (href == null) return null;
-    final match = RegExp(
-      r'(?:https?://(?:www\.)?furaffinity\.net)?/user/([^/]+)/?',
-    ).firstMatch(href);
-    return match?.group(1);
-  }
-
-  static String? _extractSubmissionIdFromHref(String? href) {
-    if (href == null) return null;
-    final match = RegExp(
-      r'(?:https?://(?:www\.)?furaffinity\.net)?/view/(\d+)/?',
-    ).firstMatch(href);
-    return match?.group(1);
-  }
-
-  static String? _extractJournalIdFromHref(String? href) {
-    if (href == null) return null;
-    final match = RegExp(
-      r'(?:https?://(?:www\.)?furaffinity\.net)?/journal/(\d+)/?',
-    ).firstMatch(href);
-    return match?.group(1);
-  }
-
-  static String? _normalizeImageUrl(String? src) {
-    final trimmed = src?.trim();
-    if (trimmed == null || trimmed.isEmpty) return null;
-    if (trimmed.startsWith('//')) return 'https:$trimmed';
-    if (trimmed.startsWith('/')) return 'https://www.furaffinity.net$trimmed';
-    return trimmed;
-  }
-
-  static String _normalizeSectionHeading(String heading) {
-    var normalized =
-        heading.trim().replaceFirst(RegExp(r'^New\s+', caseSensitive: false), '');
-    if (normalized.isEmpty) return 'No Title';
-    return normalized
-        .split(' ')
-        .map((word) => word.isNotEmpty ? word[0].toUpperCase() + word.substring(1) : '')
-        .join(' ');
-  }
-
-  static String _sectionHeadingFromContainer(dom.Element container) {
-    final explicitHeading = (container.querySelector('h2') ??
-            container.querySelector('h3') ??
-            container.querySelector('legend') ??
-            container.querySelector('.section-header .highlight'))
-        ?.text
-        .trim();
-    if (explicitHeading != null && explicitHeading.isNotEmpty) {
-      return _normalizeSectionHeading(explicitHeading);
-    }
-
-    final lowerId = (container.id.isNotEmpty
-            ? container.id
-            : container.classes.join(' '))
-        .toLowerCase();
-    final html = container.outerHtml.toLowerCase();
-    if ((lowerId.contains('submission') && lowerId.contains('comment')) ||
-        html.contains('name="comments-submissions[]"')) {
-      return 'Submission Comments';
-    }
-    if ((lowerId.contains('journal') && lowerId.contains('comment')) ||
-        html.contains('name="comments-journals[]"')) {
-      return 'Journal Comments';
-    }
-    if (lowerId.contains('journal') || html.contains('name="journals[]"')) {
-      return 'Journals';
-    }
-    if (lowerId.contains('watch') || html.contains('name="watches[]"')) {
-      return 'Watches';
-    }
-    if (lowerId.contains('shout') || html.contains('name="shouts[]"')) {
-      return 'Shouts';
-    }
-    if (lowerId.contains('favorite') || html.contains('name="favorites[]"')) {
-      return 'Favorites';
-    }
-    return 'No Title';
-  }
-
-
   Future<void> _initializeDio() async {
     _dio.options.headers['User-Agent'] = FAHttp.userAgent;
     _dio.options.headers['Accept'] =
@@ -465,10 +246,13 @@ class FANotificationService with ChangeNotifier {
         final href = link.attributes['href'] ?? '';
         final text = link.text.trim();
         final title = (link.attributes['title'] ?? '').trim();
-        final typeKey = _typeKeyFromHrefOrTitle(href: href, title: title);
+        final typeKey =
+            notificationTypeKeyFromHrefOrTitle(href: href, title: title);
         if (typeKey == null) continue;
         foundNotificationCounter = true;
-        final int count = _extractAnyInt(title.isNotEmpty ? title : text);
+        final int count = extractNotificationCount(
+          title.isNotEmpty ? title : text,
+        );
         if (count > 0) {
           messageBarCounts[typeKey] = count;
         }
@@ -521,8 +305,7 @@ class FANotificationService with ChangeNotifier {
         registeredUsersOnline: '$registeredUsersOnline',
       );
 
-      // We already have /msg/others/ HTML, so don't refetch it just to find the user.
-      currentUsername = _extractMenubarUsernameFromDocument(document);
+      currentUsername = extractNotificationMenubarUsername(document);
       currentUsernameFromLink = currentUsername;
 
 
@@ -537,7 +320,7 @@ class FANotificationService with ChangeNotifier {
 
       List<NotificationSection> fetchedSections = [];
       for (var container in containers) {
-        String heading = _sectionHeadingFromContainer(container);
+        String heading = notificationSectionHeadingFromContainer(container);
 
         // Grab <li> items and ignore <li class="section-controls">
         final liItems = container
@@ -581,11 +364,13 @@ class FANotificationService with ChangeNotifier {
 
                 dom.Element? avatarLink = li.querySelector('td.avatar a');
                 if (avatarLink != null) {
-                  linkUsername =
-                      _extractUsernameFromHref(avatarLink.attributes['href']);
+                  linkUsername = extractNotificationUsernameFromHref(
+                    avatarLink.attributes['href'],
+                  );
                 }
                 if (av != null) {
-                  avatarUrl = _normalizeImageUrl(av.attributes['src']);
+                  avatarUrl =
+                      normalizeNotificationImageUrl(av.attributes['src']);
                 }
               }
               dom.Element? infoDiv = li.querySelector('div.info');
@@ -596,8 +381,9 @@ class FANotificationService with ChangeNotifier {
 
               dom.Element? avatarLink = li.querySelector('td.avatar a');
               if (avatarLink != null) {
-                username =
-                    _extractUsernameFromHref(avatarLink.attributes['href']);
+                username = extractNotificationUsernameFromHref(
+                  avatarLink.attributes['href'],
+                );
               }
 
               String avatarHtml = li.querySelector('div.avatar')?.outerHtml ?? '';
@@ -609,13 +395,16 @@ class FANotificationService with ChangeNotifier {
 
                 dom.Element? avatarLink = li.querySelector('div.avatar a');
                 if (avatarLink != null) {
-                  linkUsername =
-                      _extractUsernameFromHref(avatarLink.attributes['href']);
+                  linkUsername = extractNotificationUsernameFromHref(
+                    avatarLink.attributes['href'],
+                  );
                 }
                 displayName = infoDiv.querySelector('span')?.text.trim();
                 dom.Element? avatarImg = li.querySelector('div.avatar img.avatar');
                 if (avatarImg != null) {
-                  avatarUrl = _normalizeImageUrl(avatarImg.attributes['src']);
+                  avatarUrl = normalizeNotificationImageUrl(
+                    avatarImg.attributes['src'],
+                  );
                 }
                 content = infoDiv.outerHtml;
               }
@@ -624,14 +413,14 @@ class FANotificationService with ChangeNotifier {
             dom.Element? subLink = li.querySelector('a[href*="/view/"]');
             if (subLink != null) {
               url = subLink.attributes['href'];
-              submissionId = _extractSubmissionIdFromHref(url);
+              submissionId = extractNotificationSubmissionIdFromHref(url);
               content = content.replaceAll('"', '');
             }
           } else if (lowerHeading.contains('journal comments')) {
             dom.Element? journLink = li.querySelector('a[href*="/journal/"]');
             if (journLink != null) {
               url = journLink.attributes['href'];
-              journalId = _extractJournalIdFromHref(url);
+              journalId = extractNotificationJournalIdFromHref(url);
             }
             if (username != null && journalId != null) {
               content = "$username replied to your journal $journalId";
@@ -647,7 +436,7 @@ class FANotificationService with ChangeNotifier {
             dom.Element? subLink = li.querySelector('a[href*="/view/"]');
             if (subLink != null) {
               url = subLink.attributes['href'];
-              submissionId = _extractSubmissionIdFromHref(url);
+              submissionId = extractNotificationSubmissionIdFromHref(url);
               content = content.replaceAll('"', '');
             }
             if (content.isNotEmpty) {
@@ -663,7 +452,8 @@ class FANotificationService with ChangeNotifier {
                 } else {
                   dom.Element? av = li.querySelector('td.alt1 a img.avatar');
                   if (av != null) {
-                    avatarUrl = _normalizeImageUrl(av.attributes['src']);
+                    avatarUrl =
+                        normalizeNotificationImageUrl(av.attributes['src']);
                   }
                   dom.Element? unameLink = li.querySelector('div.c-usernameBlock a.c-usernameBlock__displayName');
                   if (unameLink != null) {
@@ -707,7 +497,8 @@ class FANotificationService with ChangeNotifier {
                   }
                   dom.Element? av = li.querySelector('div.avatar img.avatar');
                   if (av != null) {
-                    avatarUrl = _normalizeImageUrl(av.attributes['src']);
+                    avatarUrl =
+                        normalizeNotificationImageUrl(av.attributes['src']);
                   }
                 }
               }
@@ -724,7 +515,7 @@ class FANotificationService with ChangeNotifier {
               );
               if (parentAnchor != null) {
                 url = parentAnchor.attributes['href'];
-                String extracted = _extractNicknameLink(li);
+                String extracted = extractNotificationNicknameLink(li);
                 if (extracted.isNotEmpty) {
                   username = username ?? "";
 
@@ -732,7 +523,9 @@ class FANotificationService with ChangeNotifier {
               }
               dom.Element? avatarImg = li.querySelector('div.avatar img.avatar');
               if (avatarImg != null) {
-                avatarUrl = _normalizeImageUrl(avatarImg.attributes['src']);
+                avatarUrl = normalizeNotificationImageUrl(
+                  avatarImg.attributes['src'],
+                );
               }
               dom.Element? timeSpan = li.querySelector('div.floatright span.popup_date');
               if (timeSpan != null) {
@@ -746,7 +539,7 @@ class FANotificationService with ChangeNotifier {
                   : '';
             }
 
-            String finalNicknameLink = _extractNicknameLink(li);
+            String finalNicknameLink = extractNotificationNicknameLink(li);
 
 
             items.add(NotificationItem(
@@ -770,7 +563,7 @@ class FANotificationService with ChangeNotifier {
             dom.Element? journLink = li.querySelector('a[href*="/journal/"]');
             if (journLink != null) {
               url = journLink.attributes['href'];
-              journalId = _extractJournalIdFromHref(url);
+              journalId = extractNotificationJournalIdFromHref(url);
             }
             content = content.trim();
             content = content.replaceAll('"', '').trim();
@@ -847,459 +640,24 @@ class FANotificationService with ChangeNotifier {
   }
 
 
-  /// Fetch shouts from the user's profile.
-  static Future<List<Shout>> fetchProfileShouts(String myUsername, {bool forceRefresh = false}) async {
-    if (_didFetchProfileShouts && !forceRefresh) {
-      debugPrint("[fetchProfileShouts] Using cached _profileShoutList (size=${_profileShoutList.length})");
-      return _profileShoutList;
-    }
-    _didFetchProfileShouts = true;
-    _profileShoutList.clear();
-    final url = 'https://www.furaffinity.net/user/$myUsername/';
-    debugPrint("[fetchProfileShouts] Fetching $url ...");
-    await _semaphore.acquire();
-    try {
-      String? cookieHeader = await _getCookieHeader();
-      final resp = await FAHttp.get(
-        Uri.parse(url),
-        headers: {
-          if (cookieHeader != null) 'Cookie': cookieHeader,
-        },
-      );
-
-      if (resp.statusCode == 200) {
-        final doc = html_parser.parse(resp.body);
-        bool isClassic = doc.querySelector('body')?.attributes['data-static-path'] == '/themes/classic';
-        if (isClassic) {
-          final shoutTables = doc.querySelectorAll('table[id^="shout-"]');
-          debugPrint("[fetchProfileShouts] Found ${shoutTables.length} classic shout table(s)");
-          for (var t in shoutTables) {
-            String nickname = "";
-            String nicknameLink = "";
-            String postedTitle = "";
-            String postedAgo = "";
-            String textContent = "";
-            String avatarUrl = "";
-            dom.Element? avatarImg = t.querySelector('td.alt1 a img.avatar');
-            if (avatarImg != null) {
-              avatarUrl = avatarImg.attributes['src'] ?? "";
-              if (avatarUrl.startsWith('//')) avatarUrl = 'https:' + avatarUrl;
-            }
-            dom.Element? unameLink = t.querySelector('div.c-usernameBlock a.c-usernameBlock__displayName');
-            if (unameLink != null) {
-              nickname = unameLink.text.trim();
-              String? href = unameLink.attributes['href'];
-              if (href != null) {
-                final regExp = RegExp(r'^/user/([^/]+)/?$');
-                final match = regExp.firstMatch(href);
-                if (match != null) {
-                  nicknameLink = match.group(1)!;
-                }
-              }
-            }
-            dom.Element? dateElem = t.querySelector('span.popup_date');
-            if (dateElem != null) {
-              postedAgo = dateElem.text.trim();
-              postedTitle = dateElem.attributes['title']?.replaceFirst(RegExp(r'^on\s+'), '').trim() ?? "";
-            }
-            dom.Element? contentDiv = t.querySelector('td.alt1.addpad div.no_overflow');
-            if (contentDiv != null) {
-              textContent = contentDiv.innerHtml.trim();
-            }
-            _profileShoutList.add(Shout(
-              id: '',
-              nickname: nickname,
-              nicknameLink: nicknameLink,
-              postedTitle: postedTitle,
-              avatarUrl: avatarUrl,
-              postedAgo: postedAgo,
-              textContent: textContent,
-              isRemoved: false,
-            ));
-          }
-        } else {
-          final containers = doc.querySelectorAll('div.comment_container');
-          debugPrint("[fetchProfileShouts] Found ${containers.length} modern comment_container blocks");
-          for (var c in containers) {
-            String nickname = "";
-            String nicknameLink = _extractNicknameLink(c);
-            String postedTitle = "";
-            String postedAgo = "";
-            String textContent = "";
-            String avatarUrl = "";
-            dom.Element? disp = c.querySelector('.c-usernameBlock__displayName .js-displayName');
-            if (disp != null) {
-              nickname = disp.text.trim();
-            }
-            dom.Element? dateSpan = c.querySelector('comment-date span.popup_date');
-            if (dateSpan != null) {
-              postedAgo = dateSpan.text.trim();
-              postedTitle = dateSpan.attributes['title']?.replaceFirst(RegExp(r'^on\s+'), '').trim() ?? "";
-            }
-            dom.Element? textElem = c.querySelector('comment-user-text.comment_text');
-            if (textElem != null) {
-              textContent = textElem.text.trim();
-            }
-            dom.Element? avatarDiv = c.querySelector('div.avatar');
-            if (avatarDiv != null) {
-              dom.Element? link = avatarDiv.querySelector('a[href*="/user/"]');
-              if (link != null) {
-                dom.Element? img = link.querySelector('img.comment_useravatar');
-                if (img != null) {
-                  var src = img.attributes['src'] ?? "";
-                  if (src.startsWith('//')) src = 'https:' + src;
-                  avatarUrl = src;
-                }
-              }
-            }
-            _profileShoutList.add(Shout(
-              id: '',
-              nickname: nickname,
-              nicknameLink: nicknameLink,
-              postedTitle: postedTitle,
-              avatarUrl: avatarUrl,
-              postedAgo: postedAgo,
-              textContent: textContent,
-              isRemoved: false,
-            ));
-          }
-        }
-      }
-    } catch (e, st) {
-      debugPrint("[fetchProfileShouts] Error: $e\n$st");
-    } finally {
-      _semaphore.release();
-    }
-    debugPrint("[fetchProfileShouts] Returning ${_profileShoutList.length} items");
-    return _profileShoutList;
-  }
-
-  /// Merge shouts from /msg/others/ and the profile page.
-  static Future<List<Shout>> fetchMsgCenterShouts() async {
-    debugPrint("[fetchMsgCenterShouts] Called");
-    final url = 'https://www.furaffinity.net/msg/others/';
-    try {
-      String? cookieHeader = await _getCookieHeader();
-      final resp = await FAHttp.get(
-        Uri.parse(url),
-        headers: {
-          if (cookieHeader != null) 'Cookie': cookieHeader,
-        },
-      );
-      if (resp.statusCode != 200) return <Shout>[];
-      final doc = html_parser.parse(resp.body);
-      return await _fetchMsgCenterShoutsFromDocument(doc);
-    } catch (e, st) {
-      debugPrint("[fetchMsgCenterShouts] Error: $e\n$st");
-      return <Shout>[];
-    }
-  }
-
-  static String _extractMenubarUsernameFromDocument(dom.Document doc) {
-    final body = doc.querySelector('body');
-    final bool isClassic = (body?.attributes['data-static-path'] == '/themes/classic');
-
-    // Classic (and sometimes modern) provides #my-username.
-    final myUsernameElem = doc.getElementById("my-username");
-    if (myUsernameElem != null) {
-      final href = myUsernameElem.attributes['href'];
-      if (href != null) {
-        final username = _extractUsernameFromHref(href);
-        if (username != null) return username;
-      }
-    }
-
-    if (!isClassic) {
-      // Modern menubar user link.
-      final menubarLink =
-          doc.querySelector('div.floatleft.hideonmobile a[href*="/user/"]');
-      final href = menubarLink?.attributes['href'];
-      if (href != null) {
-        final username = _extractUsernameFromHref(href);
-        if (username != null) return username;
-      }
-    }
-
-    return "";
-  }
-
-  static List<Map<String, dynamic>> _parseMsgOthersShoutsFromDocument(dom.Document doc) {
-    final results = <Map<String, dynamic>>[];
-    final bool isClassic =
-        doc.querySelector('body')?.attributes['data-static-path'] == '/themes/classic';
-
-    if (isClassic) {
-      final liItems = doc
-          .querySelectorAll('li')
-          .where((li) => li.querySelector('input[type="checkbox"][name="shouts[]"]') != null)
-          .toList();
-      debugPrint("[fetchMsgOthersShouts] Found ${liItems.length} classic shout <li> items");
-      for (final li in liItems) {
-        final checkbox = li.querySelector('input[type="checkbox"][name="shouts[]"]');
-        final id = checkbox?.attributes['value'] ?? '';
-        final isRemoved = li.text.toLowerCase().contains('shout has been removed');
-        String nickname = "";
-        String nicknameLink = "";
-        if (!isRemoved) {
-          final nameSpan = li.querySelector(
-              'span.c-usernameBlockSimple.username-underlined a span.c-usernameBlockSimple__displayName');
-          if (nameSpan != null) nickname = nameSpan.text.trim();
-          nicknameLink = _extractNicknameLink(li);
-        }
-        String postedAgo = "";
-        String postedTitle = "";
-        final timeSpan = li.querySelector('span.popup_date');
-        if (timeSpan != null) {
-          postedAgo = timeSpan.text.trim();
-          postedTitle = (timeSpan.attributes['title'] ?? postedAgo)
-              .replaceFirst(RegExp(r'^on\s+'), '')
-              .trim();
-        }
-        results.add({
-          "id": id,
-          "nickname": nickname,
-          "nicknameLink": nicknameLink,
-          "postedTitle": postedTitle,
-          "postedAgo": postedAgo,
-          "isRemoved": isRemoved,
-        });
-      }
-
-      final tableShouts = doc.querySelectorAll('table[id^="shout-"]');
-      debugPrint("[fetchMsgOthersShouts] Found ${tableShouts.length} classic shout <table> items");
-      for (final t in tableShouts) {
-        final shoutId = t.id.replaceFirst('shout-', '');
-        final isRemoved = t.text.toLowerCase().contains('shout has been removed');
-
-        String nickname = "";
-        String nicknameLink = "";
-        final nameElem = t.querySelector('div.c-usernameBlock a.c-usernameBlock__displayName');
-        if (nameElem != null) {
-          nickname = nameElem.text.trim();
-          final href = nameElem.attributes['href'];
-          if (href != null) {
-            final match = RegExp(r'^/user/([^/]+)/?$').firstMatch(href);
-            if (match != null) nicknameLink = match.group(1)!;
-          }
-        }
-
-        String postedAgo = "";
-        String postedTitle = "";
-        final dateElem = t.querySelector('span.popup_date');
-        if (dateElem != null) {
-          postedAgo = dateElem.text.trim();
-          postedTitle = (dateElem.attributes['title'] ?? postedAgo)
-              .replaceFirst(RegExp(r'^on\s+'), '')
-              .trim();
-        }
-
-        String textHtml = "";
-        final contentDiv = t.querySelector('td.alt1.addpad div.no_overflow');
-        if (contentDiv != null) {
-          textHtml = contentDiv.innerHtml.trim();
-          textHtml = textHtml.replaceAllMapped(
-            RegExp(r'<i\s+class="smilie\s+([\w-]+)"[^>]*></i>'),
-                (m) => '[smilie-${m.group(1)}]',
-          );
-        }
-
-        String avatarUrl = "";
-        final avatarImg = t.querySelector('td.alt1 a img.avatar');
-        if (avatarImg != null) {
-          avatarUrl = avatarImg.attributes['src'] ?? "";
-          if (avatarUrl.startsWith('//')) avatarUrl = 'https:' + avatarUrl;
-        }
-
-        results.add({
-          "id": shoutId,
-          "nickname": nickname,
-          "nicknameLink": nicknameLink,
-          "postedTitle": postedTitle,
-          "postedAgo": postedAgo,
-          "isRemoved": isRemoved,
-          "avatarUrl": avatarUrl,
-          "textHtml": textHtml,
-        });
-      }
-    } else {
-      final shoutSection = doc.querySelector('section#messages-shouts');
-      if (shoutSection == null) {
-        debugPrint("[fetchMsgOthersShouts] No #messages-shouts section found.");
-        return results;
-      }
-      final ul = shoutSection.querySelector('ul.message-stream');
-      if (ul == null) {
-        debugPrint("[fetchMsgOthersShouts] No .message-stream found in #messages-shouts");
-        return results;
-      }
-      final liItems = ul.querySelectorAll('li');
-      debugPrint("[fetchMsgOthersShouts] Found ${liItems.length} <li> items");
-      for (final li in liItems) {
-        final checkbox = li.querySelector('input[type="checkbox"][name="shouts[]"]');
-        final id = checkbox?.attributes['value'] ?? '';
-        final isRemoved = li.text.toLowerCase().contains('shout has been removed');
-        String nickname = "";
-        String nicknameLink = "";
-        if (!isRemoved) {
-          final nameSpan = li.querySelector(
-              'span.c-usernameBlockSimple.username-underlined a[href*="/user/"] span.c-usernameBlockSimple__displayName');
-          if (nameSpan != null) nickname = nameSpan.text.trim();
-          nicknameLink = _extractNicknameLink(li);
-        }
-        String postedAgo = "";
-        String postedTitle = "";
-        final timeSpan = li.querySelector('div.floatright span.popup_date');
-        if (timeSpan != null) {
-          postedAgo = timeSpan.text.trim();
-          postedTitle = (timeSpan.attributes['title'] ?? postedAgo)
-              .replaceFirst(RegExp(r'^on\s+'), '')
-              .trim();
-        }
-        results.add({
-          "id": id,
-          "nickname": nickname,
-          "nicknameLink": nicknameLink,
-          "postedTitle": postedTitle,
-          "postedAgo": postedAgo,
-          "isRemoved": isRemoved,
-        });
-      }
-    }
-    debugPrint("[fetchMsgOthersShouts] Returning ${results.length} items");
-    return results;
-  }
-
-  static List<Shout> _mergeMsgShoutsWithProfile({
-    required List<Map<String, dynamic>> msgItems,
-    required List<Shout> profileShouts,
+  static Future<List<Shout>> fetchProfileShouts(
+    String myUsername, {
+    bool forceRefresh = false,
   }) {
-    final results = <Shout>[];
-    for (final m in msgItems) {
-      final id = (m["id"] as String? ?? '').trim();
-      final isRemoved = m["isRemoved"] as bool? ?? false;
-      final postedTitle = (m["postedTitle"] as String? ?? "").trim();
-      final postedAgo = (m["postedAgo"] as String? ?? "").trim();
-      final nick = (m["nickname"] as String? ?? "").trim();
-      final nicknameLink = (m["nicknameLink"] as String? ?? "").trim();
-
-      if (isRemoved) {
-        results.add(Shout(
-          id: id,
-          nickname: nick,
-          nicknameLink: nicknameLink,
-          postedTitle: postedTitle,
-          avatarUrl: "",
-          postedAgo: postedAgo,
-          textContent: "Shout has been removed from your page.",
-          isRemoved: true,
-        ));
-        continue;
-      }
-
-      // If msg/others already provided full details (classic), prefer those.
-      final msgAvatarUrl = (m["avatarUrl"] as String? ?? "").trim();
-      final msgTextHtml = (m["textHtml"] as String? ?? "").trim();
-      if (msgAvatarUrl.isNotEmpty || msgTextHtml.isNotEmpty) {
-        results.add(Shout(
-          id: id,
-          nickname: nick,
-          nicknameLink: nicknameLink,
-          postedTitle: postedTitle,
-          avatarUrl: msgAvatarUrl,
-          postedAgo: postedAgo,
-          textContent: msgTextHtml.isNotEmpty ? msgTextHtml : "left a shout:",
-          isRemoved: false,
-        ));
-        continue;
-      }
-
-      // Otherwise, merge with profile shouts for avatar/text if possible.
-      final matches = profileShouts.where((p) {
-        final nicknameMatches = p.nickname.trim().toLowerCase() == nick.trim().toLowerCase();
-        final timeMatches = p.postedTitle == postedTitle;
-        return nicknameMatches && timeMatches;
-      }).toList();
-
-      if (matches.isNotEmpty) {
-        final profileShout = matches.first;
-        results.add(Shout(
-          id: id,
-          nickname: nick,
-          nicknameLink: nicknameLink,
-          postedTitle: postedTitle,
-          avatarUrl: profileShout.avatarUrl,
-          postedAgo: postedAgo,
-          textContent: profileShout.textContent,
-          isRemoved: false,
-        ));
-      } else {
-        results.add(Shout(
-          id: id,
-          nickname: nick,
-          nicknameLink: nicknameLink,
-          postedTitle: postedTitle,
-          avatarUrl: "",
-          postedAgo: postedAgo,
-          textContent: "",
-          isRemoved: false,
-        ));
-      }
-    }
-    debugPrint("[fetchMsgCenterShouts] Final results count: ${results.length}");
-    return results;
+    return _shoutRepository.fetchProfileShouts(
+      myUsername,
+      forceRefresh: forceRefresh,
+    );
   }
 
-  static Future<List<Shout>> _fetchMsgCenterShoutsFromDocument(dom.Document doc) async {
-    final msgItems = _parseMsgOthersShoutsFromDocument(doc);
-    debugPrint("[fetchMsgCenterShouts] msgItems count=${msgItems.length}");
-
-    final myUsername = _extractMenubarUsernameFromDocument(doc);
-    if (myUsername.isEmpty) {
-      debugPrint("[fetchMsgCenterShouts] No user found in menubar; profile parse skipped.");
-      return _mergeMsgShoutsWithProfile(msgItems: msgItems, profileShouts: const []);
-    }
-
-    // If msg/others already contains avatar/text for all non-removed shouts (classic),
-    // don't fetch the profile page.
-    final needsProfileMerge = msgItems.any((m) {
-      final removed = m["isRemoved"] as bool? ?? false;
-      if (removed) return false;
-      final avatar = (m["avatarUrl"] as String? ?? "").trim();
-      final text = (m["textHtml"] as String? ?? "").trim();
-      return avatar.isEmpty && text.isEmpty;
-    });
-    if (!needsProfileMerge) {
-      return _mergeMsgShoutsWithProfile(msgItems: msgItems, profileShouts: const []);
-    }
-
-    final profileShouts = await fetchProfileShouts(myUsername, forceRefresh: true);
-    return _mergeMsgShoutsWithProfile(msgItems: msgItems, profileShouts: profileShouts);
+  static Future<List<Shout>> fetchMsgCenterShouts() {
+    return _shoutRepository.fetchMsgCenterShouts();
   }
 
-  /// Parse /msg/others/ to get shouts.
-  static Future<List<Map<String, dynamic>>> fetchMsgOthersShouts() async {
-    final url = 'https://www.furaffinity.net/msg/others/';
-    debugPrint("[fetchMsgOthersShouts] Checking $url...");
-    try {
-      String? cookieHeader = await _getCookieHeader();
-      final resp = await FAHttp.get(
-        Uri.parse(url),
-        headers: {
-          if (cookieHeader != null) 'Cookie': cookieHeader,
-        },
-      );
-
-      if (resp.statusCode != 200) return <Map<String, dynamic>>[];
-      final doc = html_parser.parse(resp.body);
-      return _parseMsgOthersShoutsFromDocument(doc);
-    } catch (e, st) {
-      debugPrint("[fetchMsgOthersShouts] Error: $e\n$st");
-    }
-    // If anything fails, return empty list.
-    return <Map<String, dynamic>>[];
+  static Future<List<Map<String, dynamic>>> fetchMsgOthersShouts() {
+    return _shoutRepository.fetchMsgOthersShouts();
   }
 
-  /// Remove selected items in a section.
   Future<void> removeSelected(int sectionIndex) async {
     if (sectionIndex < 0 || sectionIndex >= sections.length) return;
     List<NotificationItem> selectedItems = sections[sectionIndex].items.where((item) => item.isChecked).toList();
@@ -1688,154 +1046,11 @@ class FANotificationService with ChangeNotifier {
 
 
 
-  static Future<String?> _getCookieHeader() async {
-    try {
-      String? cookieA = await const FlutterSecureStorage(iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock)).read(key: 'fa_cookie_a');
-      String? cookieB = await const FlutterSecureStorage(iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock)).read(key: 'fa_cookie_b');
-      bool sfwEnabled = await const SfwModePreference().loadSfwEnabled();
-      String cookieHeader = '';
-      if (cookieA != null && cookieA.isNotEmpty) {
-        cookieHeader += 'a=$cookieA; ';
-      }
-      if (cookieB != null && cookieB.isNotEmpty) {
-        cookieHeader += 'b=$cookieB; ';
-      }
-      if (sfwEnabled) {
-        cookieHeader += 'sfw=1;';
-      }
-      cookieHeader = cookieHeader.trim();
-      cookieHeader = await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader);
-      debugPrint("[_getCookieHeader] $cookieHeader");
-      return cookieHeader;
-    } catch (e) {
-      debugPrint("[_getCookieHeader] Error reading cookies: $e");
-    }
-    return null;
+  static Future<String?> fetchAvatarUrl(String username) {
+    return _mediaRepository.fetchAvatarUrl(username);
   }
 
-  /// Fetch the user's avatar URL.
-  static Future<String?> fetchAvatarUrl(String username) async {
-    if (username.isEmpty) return null;
-    String canonicalUsername;
-    if (username.startsWith('/user/')) {
-      canonicalUsername = username.replaceFirst('/user/', '').replaceAll('/', '');
-    } else {
-      canonicalUsername = username.toLowerCase().replaceAll('_', '');
-    }
-    final fullUrl = 'https://www.furaffinity.net/user/$canonicalUsername/';
-    debugPrint("[fetchAvatarUrl] Checking $fullUrl");
-    if (_avatarCache.containsKey(canonicalUsername)) {
-      debugPrint("[fetchAvatarUrl] Cache hit for $canonicalUsername -> ${_avatarCache[canonicalUsername]}");
-      return _avatarCache[canonicalUsername];
-    }
-    await _semaphore.acquire();
-    try {
-      String? cookieHeader = await _getCookieHeader();
-      final response = await FAHttp.get(
-        Uri.parse(fullUrl),
-        headers: {
-          if (cookieHeader != null) 'Cookie': cookieHeader,
-        },
-      );
-      debugPrint("[fetchAvatarUrl] code=${response.statusCode}");
-      if (response.statusCode == 200) {
-        final doc = html_parser.parse(response.body);
-        bool isClassic = doc.querySelector('body')?.attributes['data-static-path'] == '/themes/classic';
-        dom.Element? avatarElem;
-        if (isClassic) {
-          avatarElem = doc.querySelector('td.alt1 a img.avatar');
-        } else {
-          avatarElem = doc.querySelector('userpage-nav-avatar a.current img');
-        }
-        if (avatarElem != null) {
-          String? src = avatarElem.attributes['src'];
-          if (src != null && src.isNotEmpty) {
-            if (src.startsWith('//')) src = 'https:' + src;
-            _avatarCache[canonicalUsername] = src;
-            debugPrint("[fetchAvatarUrl] Found -> $src");
-            return src;
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint("[fetchAvatarUrl] Error: $e");
-    } finally {
-      _semaphore.release();
-    }
-    return null;
-  }
-
-  /// Fetch the submission’s preview image URL.
-  static Future<String?> fetchSubmissionPreview(String submissionId) async {
-    if (submissionId.isEmpty) return null;
-    if (_previewCache.containsKey(submissionId)) {
-      debugPrint("[fetchSubmissionPreview] Cache hit for submission $submissionId: ${_previewCache[submissionId]}");
-      return _previewCache[submissionId];
-    }
-    // If many rows reference the same submissionId, de-dupe in-flight requests
-    // so we don't spam /view/<id>/.
-    final inFlight = _previewInFlight[submissionId];
-    if (inFlight != null) return inFlight;
-
-    Future<String?> doFetch() async {
-      await _semaphore.acquire();
-      try {
-        // Cache may have been filled while we were queued behind the semaphore.
-        final cached = _previewCache[submissionId];
-        if (cached != null) return cached;
-
-        String? cookieHeader = await _getCookieHeader();
-        final url = 'https://www.furaffinity.net/view/$submissionId/';
-        final response = await FAHttp.get(
-          Uri.parse(url),
-          headers: {
-            if (cookieHeader != null) 'Cookie': cookieHeader,
-          },
-        );
-        debugPrint("[fetchSubmissionPreview] Response code for $submissionId: ${response.statusCode}");
-        if (response.statusCode == 200) {
-          final document = html_parser.parse(response.body);
-          dom.Element? noticeSection = document.querySelector('section.aligncenter.notice-message');
-          if (noticeSection != null && noticeSection.text.contains("This submission contains Mature or Adult content")) {
-            // Note: UI treats this as a "bad" URL and shows an errorWidget; that's OK.
-            return "assets/images/nsfw.png";
-          }
-          final images = document.querySelectorAll('img');
-          for (var img in images) {
-            if (img.attributes.containsKey('data-preview-src')) {
-              String? src = img.attributes['data-preview-src'];
-              if (src != null && src.isNotEmpty) {
-                if (src.startsWith('//')) src = 'https:' + src;
-                _previewCache[submissionId] = src;
-                return src;
-              }
-            }
-          }
-          dom.Element? fallbackElement = document.querySelector('img#submissionImg');
-          if (fallbackElement != null) {
-            String? fallbackSrc = fallbackElement.attributes['src'];
-            if (fallbackSrc != null && fallbackSrc.isNotEmpty) {
-              if (fallbackSrc.startsWith('//')) fallbackSrc = 'https:' + fallbackSrc;
-              _previewCache[submissionId] = fallbackSrc;
-              return fallbackSrc;
-            }
-          }
-        }
-      } catch (e) {
-        debugPrint("[fetchSubmissionPreview] Error fetching preview for submission $submissionId: $e");
-      } finally {
-        _semaphore.release();
-        _previewInFlight.remove(submissionId);
-      }
-      return null;
-    }
-
-    final future = doFetch();
-    _previewInFlight[submissionId] = future;
-    return future;
+  static Future<String?> fetchSubmissionPreview(String submissionId) {
+    return _mediaRepository.fetchSubmissionPreview(submissionId);
   }
 }

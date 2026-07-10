@@ -1,7 +1,9 @@
+import 'package:FANotifier/shared/fa/fa_webview_document_scripts.dart';
+
 const String homeLoginInitialHtml =
     '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#000;"></body></html>';
 
-const String homeLoginOuterHtmlScript = 'document.documentElement.outerHTML;';
+const String homeLoginOuterHtmlScript = faDocumentOuterHtmlScript;
 
 const String homeLoginCss = '''
       /* Minimal CSS to hide some FA elements on login page */

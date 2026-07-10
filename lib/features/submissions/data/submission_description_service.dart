@@ -4,8 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:FANotifier/features/submissions/data/submission_description_parser.dart';
+import 'package:FANotifier/features/submissions/domain/submission_description_webview_content.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/shared/fa/fa_theme_css_loader.dart';
+import 'package:FANotifier/shared/utils/fa_icon_image_inliner.dart';
 
 class SubmissionDescriptionService {
   SubmissionDescriptionService({
@@ -19,6 +22,31 @@ class SubmissionDescriptionService {
             );
 
   final FlutterSecureStorage _secureStorage;
+
+  Future<String> extractInitialHtml(String html) {
+    return compute(extractSubmissionDescriptionHtmlWithBodyFallback, html);
+  }
+
+  Future<String> inlineIcons(String html) {
+    return inlineFaIconUsernameImages(html);
+  }
+
+  Future<SubmissionDescriptionWebViewContent> buildWebViewContent(
+    String html,
+  ) async {
+    return SubmissionDescriptionWebViewContent(
+      html: html,
+      faThemeCss: await loadFaThemeCss(),
+    );
+  }
+
+  String findFullLink(String htmlSource, String truncatedUrl) {
+    return findFullSubmissionAutoShortenedLink(htmlSource, truncatedUrl);
+  }
+
+  String plainText(String html) {
+    return plainTextFromSubmissionHtml(html);
+  }
 
   Future<String> fetchDescriptionHtml(String submissionId) async {
     final cookieA = await _secureStorage.read(key: 'fa_cookie_a');

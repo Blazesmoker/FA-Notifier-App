@@ -7,6 +7,7 @@ import 'package:FANotifier/features/notifications/data/NotificationNavigationPro
 import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:FANotifier/features/notifications/data/notification_refresh_service.dart';
 import 'package:FANotifier/features/notifications/data/pending_navigation_store.dart';
+import 'package:FANotifier/features/notifications/domain/notification_payloads.dart';
 
 Future<void> processPendingNavigation({String from = 'unknown'}) async {
   final pendingNavigationStore = PendingNavigationStore();

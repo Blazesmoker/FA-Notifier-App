@@ -15,6 +15,7 @@ import 'package:FANotifier/features/profile/presentation/user_profile_screen.dar
 import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_list.dart';
 import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
+import 'package:FANotifier/core/links/app_external_links.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/StarBurstAnimation.dart';
 import 'package:FANotifier/features/notifications/presentation/notification_badge.dart';
@@ -197,7 +198,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
         });
       }
 
-      const url = 'https://ko-fi.com/fanotifier';
+      const url = AppExternalLinks.koFiUrl;
       launchUrlString(url, mode: LaunchMode.externalApplication);
     });
   }
@@ -890,7 +891,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
                                       clipBehavior: Clip.antiAlias,
                                       child: InkWell(
                                         onTap: () => launchUrlString(
-                                          'https://t.me/+xTEmmXoDW5tkMGFi',
+                                          AppExternalLinks.telegramUrl,
                                           mode: LaunchMode.externalApplication,
                                         ),
                                         child: const SizedBox(

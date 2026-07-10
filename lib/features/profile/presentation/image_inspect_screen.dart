@@ -1,14 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
-import 'package:saver_gallery/saver_gallery.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:device_info_plus/device_info_plus.dart';
-import 'package:share_plus/share_plus.dart';
 
-import 'package:FANotifier/features/profile/data/avatar_image_service.dart';
+import 'package:FANotifier/features/profile/data/image_inspect_media_export_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
 class ImageInspectScreen extends StatefulWidget {
@@ -38,6 +35,8 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
     with SingleTickerProviderStateMixin {
   final TransformationController _transformationController =
       TransformationController();
+  final ImageInspectMediaExportService _mediaExportService =
+      const ImageInspectMediaExportService();
   late final AnimationController _doubleTapZoomAnimationController;
   Matrix4 _zoomAnimationStart = Matrix4.identity();
   Matrix4 _zoomAnimationEnd = Matrix4.identity();
@@ -108,13 +107,8 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
 
   Future<void> _downloadImage(BuildContext context) async {
     try {
-      bool isPermissionGranted = false;
-
-      if (Platform.isAndroid) {
-        isPermissionGranted = await _requestPermissionAndroid();
-      } else if (Platform.isIOS) {
-        isPermissionGranted = await Permission.photosAddOnly.request().isGranted;
-      }
+      final isPermissionGranted =
+          await _mediaExportService.requestImageExportPermission();
 
       if (!isPermissionGranted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -123,20 +117,10 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
         return;
       }
 
-      final imageData = await fetchAvatarImageData(widget.imageUrl);
-      final filename =
-          "avatar_${DateTime.now().millisecondsSinceEpoch}${imageData.extension}";
+      final imageData = await _mediaExportService.fetchImageData(widget.imageUrl);
+      final isSaved = await _mediaExportService.saveImageToGallery(imageData);
 
-
-      final result = await SaverGallery.saveImage(
-        imageData.bytes,
-        quality: isJpegAvatarExtension(imageData.extension) ? 100 : 100,
-        fileName: filename,
-        skipIfExists: false,
-        androidRelativePath: "Pictures/YourAppName/images",
-      );
-
-      if (result.isSuccess) {
+      if (isSaved) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Image saved to gallery!'), backgroundColor: Colors.green),
         );
@@ -154,13 +138,8 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
 
   Future<void> _shareImage(BuildContext context) async {
     try {
-      bool isPermissionGranted = false;
-
-      if (Platform.isAndroid) {
-        isPermissionGranted = await _requestPermissionAndroid();
-      } else if (Platform.isIOS) {
-        isPermissionGranted = await Permission.photosAddOnly.request().isGranted;
-      }
+      final isPermissionGranted =
+          await _mediaExportService.requestImageExportPermission();
 
       if (!isPermissionGranted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -169,17 +148,8 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
         return;
       }
 
-      final imageData = await fetchAvatarImageData(widget.imageUrl);
-      final ext = imageData.extension;
-      final filename = 'shared_image_${DateTime.now().millisecondsSinceEpoch}$ext';
-
-      final tempDir = Directory.systemTemp;
-      final tempFile = await File('${tempDir.path}/$filename').create(recursive: true);
-      await tempFile.writeAsBytes(imageData.bytes);
-
-      await SharePlus.instance.share(
-        ShareParams(files: [XFile(tempFile.path)]),
-      );
+      final imageData = await _mediaExportService.fetchImageData(widget.imageUrl);
+      await _mediaExportService.shareImage(imageData);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to share image: $e'), backgroundColor: Colors.red),
@@ -410,20 +380,6 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
 
     if (mounted) {
       await Navigator.of(context).maybePop();
-    }
-  }
-
-  Future<bool> _requestPermissionAndroid() async {
-    final androidInfo = await DeviceInfoPlugin().androidInfo;
-    final sdkInt = androidInfo.version.sdkInt;
-
-    if (sdkInt >= 33) {
-      final status = await Permission.photos.request();
-      return status.isGranted;
-    } else {
-      // Android 12 and below
-      final status = await Permission.storage.request();
-      return status.isGranted;
     }
   }
 

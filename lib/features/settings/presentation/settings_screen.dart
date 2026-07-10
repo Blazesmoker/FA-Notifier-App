@@ -1,24 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:FANotifier/app/app_theme.dart'; // If you need to reference AppTheme.fontName, etc.
+import 'package:FANotifier/core/links/app_external_links.dart';
+import 'package:FANotifier/features/settings/data/settings_app_info_service.dart';
 import 'package:FANotifier/shared/utils/external_link_launcher.dart';
 
-import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/features/settings/presentation/siteSettings.dart';
 import 'package:FANotifier/features/settings/presentation/appSettings.dart';
 
 class SettingsScreen extends StatelessWidget {
   final Function onLogout;
+  static const SettingsAppInfoService _appInfoService =
+      SettingsAppInfoService();
 
   const SettingsScreen({
     Key? key,
     required this.onLogout,
   }) : super(key: key);
 
-  static final Uri _telegramUri = Uri.parse('https://t.me/+xTEmmXoDW5tkMGFi');
-
   Future<void> _openTelegram(BuildContext context) async {
     try {
-      await launchExternalUriWithFallback(_telegramUri);
+      await launchExternalUriWithFallback(AppExternalLinks.telegramUri);
     } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open the Telegram link')),
@@ -170,7 +171,7 @@ class SettingsScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 16.0),
               child: Text(
-                FAHttp.userAgent,
+                _appInfoService.userAgent,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: AppTheme.fontName,

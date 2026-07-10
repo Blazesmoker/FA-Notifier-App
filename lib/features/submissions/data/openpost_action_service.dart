@@ -1,8 +1,8 @@
+import 'package:FANotifier/features/submissions/data/openpost_delete_response_parser.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:html/parser.dart' as html_parser;
 
 class OpenPostActionService {
   const OpenPostActionService({
@@ -119,31 +119,9 @@ class OpenPostActionService {
       );
     }
 
-    final document = html_parser.parse(response.body);
-
-    final confirmInput = document.querySelector('button[name="confirm"]');
-    final confirmValue = confirmInput?.attributes['value'];
-    final deleteSubmissionsSubmitInput =
-        document.querySelector('input[name="delete_submissions_submit"]');
-    final deleteSubmissionsSubmitValue =
-        deleteSubmissionsSubmitInput?.attributes['value'];
-    final submissionIdsInput =
-        document.querySelector('input[name="submission_ids[]"]');
-    final submissionIdValue = submissionIdsInput?.attributes['value'];
-
-    final confirmationData = confirmValue == null ||
-            deleteSubmissionsSubmitValue == null ||
-            submissionIdValue == null
-        ? null
-        : OpenPostDeleteConfirmationData(
-            confirmValue: confirmValue,
-            deleteSubmissionsSubmitValue: deleteSubmissionsSubmitValue,
-            submissionIdValue: submissionIdValue,
-          );
-
     return OpenPostDeletePrepareResult(
       statusCode: response.statusCode,
-      confirmationData: confirmationData,
+      confirmationData: parseOpenPostDeleteConfirmation(response.body),
     );
   }
 
@@ -177,10 +155,7 @@ class OpenPostActionService {
       return false;
     }
 
-    final document = html_parser.parse(response.body);
-    final bodyText = document.body?.text.trim() ?? '';
-    return bodyText.isEmpty ||
-        bodyText.toLowerCase().contains('there are no submissions to list');
+    return isOpenPostDeletionConfirmed(response.body);
   }
 
   Future<String?> _buildAuthCookieHeader({required bool sfwEnabled}) async {

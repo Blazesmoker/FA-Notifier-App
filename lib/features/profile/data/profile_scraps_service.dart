@@ -22,6 +22,10 @@ class ProfileScrapsService {
   final FlutterSecureStorage _secureStorage;
   final SfwModePreference _sfwModePreference = SfwModePreference();
 
+  String buildInitialScrapsPageUrl(String username) {
+    return 'https://www.furaffinity.net/scraps/$username/';
+  }
+
   Future<ProfilePostsParseResult> fetchScrapsPage(String url) async {
     final cookieHeader = await _getAllCookies();
     final response = await FAHttp.get(
