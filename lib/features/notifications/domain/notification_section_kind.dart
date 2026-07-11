@@ -30,3 +30,20 @@ NotificationSectionKind notificationSectionKindFromTitle(String title) {
   }
   return NotificationSectionKind.other;
 }
+
+bool isShoutsNotificationSectionTitle(String title) {
+  return title.toLowerCase().contains('shouts');
+}
+
+int notificationSectionIndexForInitialTitle(
+  Iterable<String> titles,
+  String initialSection,
+) {
+  final normalized = initialSection.toLowerCase();
+  var index = 0;
+  for (final title in titles) {
+    if (title.toLowerCase().contains(normalized)) return index;
+    index++;
+  }
+  return -1;
+}

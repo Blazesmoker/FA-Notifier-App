@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/submissions/data/post_comment_service.dart';
+import 'package:FANotifier/features/comments/data/submission_comment_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 

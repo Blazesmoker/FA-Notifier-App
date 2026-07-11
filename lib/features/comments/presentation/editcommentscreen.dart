@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/fa/fa_edit_comment_service.dart';
+import 'package:FANotifier/features/comments/data/fa_edit_comment_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 

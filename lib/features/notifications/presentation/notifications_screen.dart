@@ -15,6 +15,7 @@ import 'package:FANotifier/features/notifications/data/notification_shout_mapper
 import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
 import 'package:FANotifier/features/notifications/domain/notification_section_kind.dart';
 import 'package:FANotifier/features/notifications/data/notification_content_parser.dart';
+import 'package:FANotifier/features/notifications/data/notification_shouts_coordinator.dart';
 import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
@@ -119,6 +120,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
   late Future<List<Shout>> _shoutsFuture;
   List<Shout>? _shouts; // Local list of parsed shouts
   bool _serviceListenerAttached = false;
+  NotificationShoutsCoordinator get _shoutsCoordinator =>
+      NotificationShoutsCoordinator(widget.service);
   bool _isEnriching = false;
   String? _enrichRequestedForSignature;
   String? _autoEnrichScheduledForSignature;
@@ -129,10 +132,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
   @override
   void initState() {
     super.initState();
-    // Start with whatever msg/others parsed (no network).
-    final cached = deduplicateNotificationShouts(
-      notificationShoutsFromSections(widget.service.sections),
-    );
+    final cached = _shoutsCoordinator.currentShouts();
     _shouts = cached;
     _shoutsFuture = Future.value(cached);
 
@@ -206,15 +206,11 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
 
   void _onServiceChanged() {
     if (!mounted) return;
-    final latest = notificationShoutsFromSections(widget.service.sections);
+    final latest = _shoutsCoordinator.currentShouts();
     if (latest.isEmpty) return;
-    final unique = deduplicateNotificationShouts(latest);
+    final unique = latest;
     final prev = _shouts;
-    final bool changed = prev == null ||
-        prev.length != unique.length ||
-        (prev.isNotEmpty &&
-            unique.isNotEmpty &&
-            prev.first.id != unique.first.id);
+    final changed = _shoutsCoordinator.hasShoutListChanged(prev, unique);
     if (!changed) return;
     if (widget.isActive &&
         _enrichRequestedForSignature == null &&
@@ -232,55 +228,36 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
 
   /// Force a fresh fetch of the Shouts from FA
   Future<List<Shout>> _refreshShouts() async {
-    FaActivitiesPollingService().resetSchedule();
-    final fetchedShouts = await FANotificationService.fetchMsgCenterShouts();
-    final uniqueShouts = deduplicateNotificationShouts(fetchedShouts);
+    final uniqueShouts = await _shoutsCoordinator.refresh();
     setState(() {
       _shouts = uniqueShouts;
       _shoutsFuture = Future.value(uniqueShouts);
     });
-
-    widget.service.updateShouts(uniqueShouts);
+    _shoutsCoordinator.commitRefreshedShouts(uniqueShouts);
     return uniqueShouts;
   }
 
   /// Called when user taps "Select All"
   Future<void> toggleSelectAll() async {
-    int index = widget.service.sections.indexWhere(
-      (s) => s.title.toLowerCase().contains('shouts'),
-    );
-    if (index == -1) return;
-    widget.service.toggleSelectAll(index);
-
-    final providerItems = widget.service.sections[index].items;
+    final localShouts = _shouts;
+    if (localShouts == null ||
+        !_shoutsCoordinator.toggleSelectAll(localShouts)) {
+      return;
+    }
     setState(() {
-      for (var localShout in _shouts!) {
-        try {
-          final match =
-              providerItems.firstWhere((pi) => pi.id == localShout.id);
-          localShout.isChecked = match.isChecked;
-        } catch (_) {}
-      }
+      _shouts = localShouts;
     });
   }
 
   /// Called when user taps "Remove Selected"
   Future<void> removeSelected() async {
-    int index = widget.service.sections.indexWhere(
-      (s) => s.title.toLowerCase().contains('shouts'),
-    );
-    if (index == -1) return;
-    await widget.service.removeSelected(index);
+    if (!await _shoutsCoordinator.removeSelected()) return;
     await _refreshShouts();
   }
 
   /// Called when user taps "Nuke" for the entire "Shouts" section
   Future<void> nukeSection() async {
-    int index = widget.service.sections.indexWhere(
-      (s) => s.title.toLowerCase().contains('shouts'),
-    );
-    if (index == -1) return;
-    await widget.service.nukeSection(index);
+    if (!await _shoutsCoordinator.nukeSection()) return;
     await _refreshShouts();
   }
 
@@ -290,7 +267,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
     setState(() {
       s.isChecked = val;
     });
-    widget.service.setShoutCheckedById(s.id, val);
+    _shoutsCoordinator.setChecked(s.id, val);
   }
 
   @override
@@ -1232,10 +1209,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     _tabController?.dispose();
     _initialTabIndex = 0;
     if (widget.initialSection != null) {
-      int desiredIndex = service.sections.indexWhere(
-        (section) => section.title
-            .toLowerCase()
-            .contains(widget.initialSection!.toLowerCase()),
+      final desiredIndex = notificationSectionIndexForInitialTitle(
+        service.sections.map((section) => section.title),
+        widget.initialSection!,
       );
       if (desiredIndex != -1) {
         _initialTabIndex = desiredIndex;
@@ -1509,10 +1485,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                               onPressed: () {
                                 final currentTabIndex =
                                     _tabController?.index ?? 0;
-                                if (sections[currentTabIndex]
-                                    .title
-                                    .toLowerCase()
-                                    .contains('shouts')) {
+                                if (isShoutsNotificationSectionTitle(
+                                    sections[currentTabIndex].title)) {
                                   _shoutsSectionKey.currentState
                                       ?.toggleSelectAll();
                                 } else {
@@ -1538,10 +1512,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                               onPressed: () async {
                                 final currentTabIndex =
                                     _tabController?.index ?? 0;
-                                if (sections[currentTabIndex]
-                                    .title
-                                    .toLowerCase()
-                                    .contains('shouts')) {
+                                if (isShoutsNotificationSectionTitle(
+                                    sections[currentTabIndex].title)) {
                                   await _shoutsSectionKey.currentState
                                       ?.removeSelected();
                                 } else {
@@ -1589,10 +1561,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                   ),
                                 );
                                 if (confirm) {
-                                  if (sections[currentTabIndex]
-                                      .title
-                                      .toLowerCase()
-                                      .contains('shouts')) {
+                                  if (isShoutsNotificationSectionTitle(
+                                      sections[currentTabIndex].title)) {
                                     await _shoutsSectionKey.currentState
                                         ?.nukeSection();
                                   } else {
@@ -1634,9 +1604,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                             sections.length,
                             (index) {
                               final section = sections[index];
-                              if (section.title
-                                  .toLowerCase()
-                                  .contains('shouts')) {
+                              if (isShoutsNotificationSectionTitle(
+                                  section.title)) {
                                 return ShoutsSectionWidget(
                                   key: _shoutsSectionKey,
                                   service: service,

@@ -14,8 +14,9 @@ import 'package:FANotifier/features/journals/presentation/editjournalcommentscre
 import 'package:FANotifier/features/journals/presentation/journal_reply_screen.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal_comments.dart';
-import 'package:FANotifier/features/journals/domain/journal_not_found_exception.dart';
 import 'package:FANotifier/features/journals/domain/journal_deletion_result.dart';
+import 'package:FANotifier/features/journals/domain/journal_load_failure.dart';
+import 'package:FANotifier/features/journals/domain/journal_optimistic_comment.dart';
 import 'package:FANotifier/features/journals/domain/journal_availability_detector.dart';
 import 'package:FANotifier/features/journals/domain/journal_publication_time_parser.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
@@ -482,16 +483,7 @@ class _OpenJournalState extends State<OpenJournal>
 
       if (!mounted) return;
 
-      final lower = e.toString().toLowerCase();
-      final bool isNotFound = (e is JournalNotFoundException) ||
-          lower.contains('not in our database') ||
-          lower.contains('does not exist') ||
-          lower.contains('deleted') ||
-          lower.contains('not found');
-
-      final String message = isNotFound
-          ? 'This journal does not exist or has been deleted'
-          : 'Failed to load journal';
+      final message = journalLoadFailureMessage(e);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -718,17 +710,10 @@ class _OpenJournalState extends State<OpenJournal>
 
   void _addComment(String commentText) {
     setState(() {
-      comments.add({
-        'profileImage': null,
-        'username': 'You',
-        'text': commentText,
-        'width': 100.0,
-        'isOP': false,
-        'popupDateFull':
-            DateFormat('MMM d, yyyy hh:mm a').format(DateTime.now()),
-        'commentId': null,
-        'deleted': false,
-      });
+      comments.add(buildOptimisticJournalComment(
+        text: commentText,
+        now: DateTime.now(),
+      ));
       commentsCount = commentsCount + 1;
     });
   }

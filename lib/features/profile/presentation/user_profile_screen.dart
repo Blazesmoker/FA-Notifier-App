@@ -35,6 +35,7 @@ import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.d
 import 'package:FANotifier/features/profile/data/user_profile_api_service.dart';
 import 'package:FANotifier/features/profile/data/user_profile_loader.dart';
 import 'package:FANotifier/features/profile/data/profile_avatar_transparency_detector.dart';
+import 'package:FANotifier/features/profile/data/profile_folder_selection_resolver.dart';
 import 'package:FANotifier/features/profile/data/user_profile_shout_deletion_coordinator.dart';
 import 'package:FANotifier/features/profile/data/user_profile_action_parser.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_sliver_helpers.dart';
@@ -371,25 +372,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   void _onFoldersParsed(List<FaFolder> folders) {
     setState(() {
-      if (_selectedFolderUrl.isNotEmpty) {
-        final matchingFolder = folders.firstWhere(
-          (folder) => areFaFolderUrlsEquivalent(folder.url, _selectedFolderUrl),
-          orElse: () =>
-              FaFolder(name: _selectedFolderName, url: _selectedFolderUrl),
-        );
-        _selectedFolderName = matchingFolder.name;
-        if (!areFaFolderUrlsEquivalent(
-            matchingFolder.url, _selectedFolderUrl)) {
-          _selectedFolderUrl = matchingFolder.url;
-        }
-      } else if (folders.isNotEmpty) {
-        final mainGallery = folders.firstWhere(
-          (f) => f.name == 'Main Gallery',
-          orElse: () => folders.first,
-        );
-        _selectedFolderName = mainGallery.name;
+      final selected = resolveProfileFolderSelection(
+        folders: folders,
+        selectedName: _selectedFolderName,
+        selectedUrl: _selectedFolderUrl,
+      );
+      _selectedFolderName = selected.name;
+      if (!areFaFolderUrlsEquivalent(selected.url, _selectedFolderUrl)) {
+        _selectedFolderUrl = selected.url;
       }
-
       _allFolders = folders;
     });
   }

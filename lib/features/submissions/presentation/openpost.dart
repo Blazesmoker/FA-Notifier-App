@@ -18,13 +18,12 @@ import 'package:FANotifier/shared/fa/fa_username.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/utils/comment_composer_lines.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/submissions/data/post_comment_service.dart';
+import 'package:FANotifier/features/comments/data/submission_comment_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_action_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_cookie_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_details_loader.dart';
 import 'package:FANotifier/features/submissions/data/openpost_favorite_links_loader.dart';
 import 'package:FANotifier/features/submissions/data/openpost_user_actions_loader.dart';
-import 'package:FANotifier/features/submissions/data/openpost_image_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_link_parser.dart';
 import 'package:FANotifier/features/submissions/data/openpost_url_builder.dart';
 import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
@@ -36,6 +35,8 @@ import 'package:FANotifier/features/profile/presentation/image_inspect_screen.da
 import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_details_load_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_favorite_links_load_result.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_media_export_result.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_action_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_tag_block_state.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
 import 'package:FANotifier/features/submissions/presentation/edit_submission_screen.dart';
@@ -176,8 +177,6 @@ class _OpenPostState extends State<OpenPost>
       const OpenPostCookieService();
   final SfwModePreference _sfwModePreference = SfwModePreference();
   late final PostCommentService _postCommentService;
-  final OpenPostImageService _openPostImageService =
-      const OpenPostImageService();
   final OpenPostMediaExportService _openPostMediaExportService =
       const OpenPostMediaExportService();
   final TranslationService _translationService = TranslationService.instance;
@@ -975,7 +974,7 @@ class _OpenPostState extends State<OpenPost>
       throw Exception('Missing tag blocklist nonce.');
     }
 
-    final statusCode = await _openPostActionService.sendTagBlocklistRequest(
+    final result = await _openPostActionService.performTagBlocklistRequest(
       tagName: tagName,
       shouldBlock: shouldBlock,
       nonce: tagBlocklistNonce!,
@@ -983,12 +982,12 @@ class _OpenPostState extends State<OpenPost>
       sfwEnabled: _sfwEnabled,
     );
 
-    if (statusCode == null) {
+    if (result.status == OpenPostActionStatus.missingAuth) {
       throw Exception('Not logged in.');
     }
 
-    if (statusCode != 200) {
-      throw Exception('Tag blocklist request failed: $statusCode');
+    if (result.status != OpenPostActionStatus.success) {
+      throw Exception('Tag blocklist request failed: ${result.statusCode}');
     }
   }
 
@@ -1062,14 +1061,14 @@ class _OpenPostState extends State<OpenPost>
   Future<void> _sendBlockUnblockPostRequest(String urlPath, String keyValue,
       {required bool shouldBlock}) async {
     try {
-      final statusCode = await _openPostActionService.sendBlockUnblockRequest(
+      final result = await _openPostActionService.performBlockUnblockRequest(
         urlPath: urlPath,
         keyValue: keyValue,
         linkUsername: linkUsername ?? '',
         sfwEnabled: _sfwEnabled,
       );
 
-      if (statusCode == null) {
+      if (result.status == OpenPostActionStatus.missingAuth) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Please log in to perform this action.'),
@@ -1079,7 +1078,7 @@ class _OpenPostState extends State<OpenPost>
         return;
       }
 
-      if (statusCode == 200 || statusCode == 302) {
+      if (result.status == OpenPostActionStatus.success) {
         await _fetchUserPageLinks();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1112,11 +1111,11 @@ class _OpenPostState extends State<OpenPost>
       {required bool shouldWatch}) async {
     final fullUrl = buildOpenPostAbsolutePath(urlPath);
     try {
-      final statusCode = await _openPostActionService.sendAuthenticatedGet(
+      final result = await _openPostActionService.performAuthenticatedGet(
         url: fullUrl,
         sfwEnabled: _sfwEnabled,
       );
-      if (statusCode == null) {
+      if (result.status == OpenPostActionStatus.missingAuth) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Please log in to perform this action.'),
@@ -1125,7 +1124,7 @@ class _OpenPostState extends State<OpenPost>
         );
         return;
       }
-      if (statusCode == 200) {
+      if (result.status == OpenPostActionStatus.success) {
         await _fetchUserPageLinks();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1878,35 +1877,26 @@ class _OpenPostState extends State<OpenPost>
   /// Downloads the image from [imageUrl] and saves it to the gallery.
   Future<void> _downloadImage(BuildContext context, String imageUrl) async {
     try {
-      final isPermissionGranted =
-          await _openPostMediaExportService.requestImageExportPermission();
-
-      if (isPermissionGranted) {
-        final bytes = await _openPostImageService.fetchImageBytes(imageUrl) ??
-            await _openPostMediaExportService.loadDefaultImageBytes();
-
-        final isSaved =
-            await _openPostMediaExportService.saveImageToGallery(bytes);
-
-        if (isSaved) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Image saved to gallery!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to save image to gallery.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      } else {
+      final result =
+          await _openPostMediaExportService.exportToGallery(imageUrl);
+      if (result.status == OpenPostMediaExportStatus.permissionDenied) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Photo permission denied'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } else if (result.status == OpenPostMediaExportStatus.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Image saved to gallery!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to save image to gallery.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -1925,10 +1915,8 @@ class _OpenPostState extends State<OpenPost>
   /// Downloads the image, writes it to a temporary file, then triggers sharing.
   Future<void> _shareImage(BuildContext context, String imageUrl) async {
     try {
-      final isPermissionGranted =
-          await _openPostMediaExportService.requestImageExportPermission();
-
-      if (!isPermissionGranted) {
+      final result = await _openPostMediaExportService.shareFromUrl(imageUrl);
+      if (result.status == OpenPostMediaExportStatus.permissionDenied) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Permission denied'),
@@ -1937,11 +1925,6 @@ class _OpenPostState extends State<OpenPost>
         );
         return;
       }
-
-      final bytes = await _openPostImageService.fetchImageBytes(imageUrl) ??
-          await _openPostMediaExportService.loadDefaultImageBytes();
-
-      await _openPostMediaExportService.shareImage(bytes);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

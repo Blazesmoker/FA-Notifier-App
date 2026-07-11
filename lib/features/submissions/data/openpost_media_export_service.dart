@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:FANotifier/features/submissions/data/openpost_image_service.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_media_export_result.dart';
 import 'package:FANotifier/shared/fa/fa_default_image_loader.dart';
 import 'package:FANotifier/shared/platform/image_export_service.dart';
 
@@ -9,6 +11,38 @@ class OpenPostMediaExportService {
   }) : _imageExportService = imageExportService;
 
   final ImageExportService _imageExportService;
+
+  Future<OpenPostMediaExportResult> exportToGallery(String imageUrl) async {
+    if (!await requestImageExportPermission()) {
+      return const OpenPostMediaExportResult(
+        OpenPostMediaExportStatus.permissionDenied,
+      );
+    }
+    final bytes =
+        await const OpenPostImageService().fetchImageBytes(imageUrl) ??
+            await loadDefaultImageBytes();
+    final saved = await saveImageToGallery(bytes);
+    return OpenPostMediaExportResult(
+      saved
+          ? OpenPostMediaExportStatus.success
+          : OpenPostMediaExportStatus.saveFailed,
+    );
+  }
+
+  Future<OpenPostMediaExportResult> shareFromUrl(String imageUrl) async {
+    if (!await requestImageExportPermission()) {
+      return const OpenPostMediaExportResult(
+        OpenPostMediaExportStatus.permissionDenied,
+      );
+    }
+    final bytes =
+        await const OpenPostImageService().fetchImageBytes(imageUrl) ??
+            await loadDefaultImageBytes();
+    await shareImage(bytes);
+    return const OpenPostMediaExportResult(
+      OpenPostMediaExportStatus.success,
+    );
+  }
 
   Future<bool> requestImageExportPermission() {
     return _imageExportService.requestImageExportPermission();

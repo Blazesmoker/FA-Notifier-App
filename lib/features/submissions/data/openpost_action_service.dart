@@ -3,6 +3,7 @@ import 'package:FANotifier/features/submissions/data/openpost_url_builder.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_action_result.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class OpenPostActionService {
@@ -17,6 +18,49 @@ class OpenPostActionService {
             );
 
   final FlutterSecureStorage _secureStorage;
+
+  Future<OpenPostActionResult> performTagBlocklistRequest({
+    required String tagName,
+    required bool shouldBlock,
+    required String nonce,
+    required String submissionId,
+    required bool sfwEnabled,
+  }) async {
+    final statusCode = await sendTagBlocklistRequest(
+      tagName: tagName,
+      shouldBlock: shouldBlock,
+      nonce: nonce,
+      submissionId: submissionId,
+      sfwEnabled: sfwEnabled,
+    );
+    return _classifyActionStatus(statusCode, const {200});
+  }
+
+  Future<OpenPostActionResult> performBlockUnblockRequest({
+    required String urlPath,
+    required String keyValue,
+    required String linkUsername,
+    required bool sfwEnabled,
+  }) async {
+    final statusCode = await sendBlockUnblockRequest(
+      urlPath: urlPath,
+      keyValue: keyValue,
+      linkUsername: linkUsername,
+      sfwEnabled: sfwEnabled,
+    );
+    return _classifyActionStatus(statusCode, const {200, 302});
+  }
+
+  Future<OpenPostActionResult> performAuthenticatedGet({
+    required String url,
+    required bool sfwEnabled,
+  }) async {
+    final statusCode = await sendAuthenticatedGet(
+      url: url,
+      sfwEnabled: sfwEnabled,
+    );
+    return _classifyActionStatus(statusCode, const {200});
+  }
 
   Future<int?> sendTagBlocklistRequest({
     required String tagName,
@@ -176,5 +220,22 @@ class OpenPostActionService {
       return null;
     }
     return 'a=$cookieA; b=$cookieB';
+  }
+
+  OpenPostActionResult _classifyActionStatus(
+    int? statusCode,
+    Set<int> successCodes,
+  ) {
+    if (statusCode == null) {
+      return const OpenPostActionResult(
+        status: OpenPostActionStatus.missingAuth,
+      );
+    }
+    return OpenPostActionResult(
+      status: successCodes.contains(statusCode)
+          ? OpenPostActionStatus.success
+          : OpenPostActionStatus.failure,
+      statusCode: statusCode,
+    );
   }
 }

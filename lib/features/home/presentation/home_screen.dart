@@ -39,6 +39,7 @@ import 'package:FANotifier/features/home/data/home_profile_cache.dart';
 import 'package:FANotifier/features/home/data/home_session_preference.dart';
 import 'package:FANotifier/features/home/data/home_login_html_detector.dart';
 import 'package:FANotifier/features/home/data/home_logout_cleanup_service.dart';
+import 'package:FANotifier/features/home/domain/pending_home_destination.dart';
 import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
 import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
@@ -216,15 +217,9 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    final bool isNotes = pendingPayload.startsWith('note_') ||
-        pendingPayload.contains('DrawerIndex.Notes') ||
-        pendingPayload == 'note_native';
-    final bool isActivities = pendingPayload.startsWith('activity_') ||
-        pendingPayload.startsWith('fa_activity_') ||
-        pendingPayload.contains('DrawerIndex.Notifications') ||
-        pendingPayload == 'activity_native';
+    final destination = pendingHomeDestinationFromPayload(pendingPayload);
 
-    if (isNotes) {
+    if (destination == PendingHomeDestination.notes) {
       _navProvider.setTargetIndex(4);
       setState(
           () => _forceNotesRefresh = true);
@@ -233,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
         NotesRefreshService().triggerRefresh();
         debugPrint("NOTES REFRESH TRIGGERED_home_postframe");
       });
-    } else if (isActivities) {
+    } else if (destination == PendingHomeDestination.notifications) {
       _navProvider.setTargetIndex(3);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
