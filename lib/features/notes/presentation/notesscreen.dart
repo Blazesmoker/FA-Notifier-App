@@ -3,15 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:FANotifier/main.dart';
 import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
+import 'package:FANotifier/features/notes/data/notes_unread_notification_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/notes/presentation/message_detail_screen.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
 import 'package:FANotifier/features/notes/presentation/new_message.dart';
-import 'package:FANotifier/features/notifications/data/notification_service.dart';
 import 'package:FANotifier/features/notifications/data/fa_activities_polling_service.dart';
 import 'package:FANotifier/features/notes/data/message_storage.dart';
 import 'package:FANotifier/features/notes/data/notes_first_run_preference.dart';
 import 'package:FANotifier/features/notes/data/note_unread_service.dart';
+import 'package:FANotifier/features/notes/domain/inbox_second_page_policy.dart';
 import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
 import 'package:FANotifier/features/notes/data/notesscreen_api_service.dart';
@@ -42,6 +43,7 @@ class NotesScreenState extends State<NotesScreen>
   final NotesFirstRunPreference _notesFirstRunPreference =
       NotesFirstRunPreference();
   late final NoteUnreadService _noteUnreadService = NoteUnreadService();
+  late final NotesUnreadNotificationService _unreadNotificationService;
   late final TabController _tabController;
 
   StreamSubscription<void>? _notesRefreshSub;
@@ -87,6 +89,10 @@ class NotesScreenState extends State<NotesScreen>
     WidgetsBinding.instance.addObserver(this);
 
     _notesApi = NotesApiService();
+    _unreadNotificationService = NotesUnreadNotificationService(
+      notesApi: _notesApi,
+      noteUnreadService: _noteUnreadService,
+    );
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
 
@@ -416,10 +422,11 @@ class NotesScreenState extends State<NotesScreen>
       final page1 =
           await _notesApi.fetchNotesPageSnapshot(folder: 'inbox', page: 1);
       final newFetched = <Message>[...page1.messages];
-      if (_shouldFetchInboxPage2(
-        page1: page1,
+      if (shouldFetchSecondInboxPage(
+        page1Messages: page1.messages,
         shownNoteIds: shownIds,
         seenNoteIds: seenIds,
+        topbarNotes: page1.topbarCounts?.notes,
       )) {
         newFetched
             .addAll(await _notesApi.fetchNotesPage(folder: 'inbox', page: 2));
@@ -436,30 +443,6 @@ class NotesScreenState extends State<NotesScreen>
     } catch (e) {
       debugPrint('[Foreground fetchInboxTwoPagesOnly] error => $e');
     }
-  }
-
-  bool _shouldFetchInboxPage2({
-    required NotesPageSnapshot page1,
-    required Set<String> shownNoteIds,
-    required Set<String> seenNoteIds,
-  }) {
-    if (page1.messages.isEmpty) return false;
-
-    final knownIds = <String>{...shownNoteIds, ...seenNoteIds};
-    final allPage1RowsAreBrandNewUnread = page1.messages.every((message) {
-      if (!message.isUnread) return false;
-      if (message.id.trim().isEmpty) return false;
-      return !knownIds.contains(message.id);
-    });
-    if (!allPage1RowsAreBrandNewUnread) return false;
-
-    final topbarNotes = page1.topbarCounts?.notes;
-    if (topbarNotes != null) {
-      final page1UnreadCount = page1.messages.where((m) => m.isUnread).length;
-      if (topbarNotes <= page1UnreadCount) return false;
-    }
-
-    return true;
   }
 
   Future<void> _handleNotesPageTopbarCounts(
@@ -624,77 +607,13 @@ class NotesScreenState extends State<NotesScreen>
   }
 
   Future<int> _handleNewUnreadMessages(List<Message> fetchedInbox) async {
-    try {
-      final previousTopId = _lastInboxTopId;
-      if (fetchedInbox.isNotEmpty) {
-        _lastInboxTopId = fetchedInbox.first.id;
-      }
-
-      final unread = fetchedInbox.where((m) => m.isUnread).toList();
-      if (unread.isEmpty) return 0;
-
-      if (!_didFirstRunSkip) {
-        return 0;
-      }
-
-      final shownIds = await MessageStorage.getShownNoteIds();
-      final unreadNotShown =
-          unread.where((m) => !shownIds.contains(m.id)).toList();
-      if (unreadNotShown.isEmpty) return 0;
-
-      int anchorIndex = -1;
-      if (previousTopId != null) {
-        anchorIndex = fetchedInbox.indexWhere((m) => m.id == previousTopId);
-      }
-
-      final Set<String>? eligibleIds;
-      if (previousTopId == null) {
-        eligibleIds = null;
-      } else {
-        final nextEligibleIds = <String>{};
-        if (anchorIndex > 0) {
-          for (var i = 0; i < anchorIndex; i++) {
-            nextEligibleIds.add(fetchedInbox[i].id);
-          }
-        }
-        eligibleIds = nextEligibleIds;
-      }
-
-      final List<Message> newUnread;
-      if (eligibleIds == null) {
-        newUnread = unreadNotShown;
-      } else if (eligibleIds.isEmpty) {
-        newUnread = <Message>[];
-      } else {
-        final nonNullEligibleIds = eligibleIds;
-        newUnread = unreadNotShown
-            .where((m) => nonNullEligibleIds.contains(m.id))
-            .toList();
-      }
-
-      var shownCount = 0;
-      for (var msg in newUnread) {
-        try {
-          final content = await _notesApi.fetchMessageContent(msg.link);
-          await NotificationService().showNotification(
-            msg.id.hashCode,
-            'New Note from ${msg.sender}',
-            content,
-            'note_${msg.id}',
-            "notes",
-          );
-          shownCount++;
-
-          await _markAsUnreadWithoutRefetch(msg);
-        } catch (_) {}
-      }
-
-      final newIds = unreadNotShown.map((m) => m.id).toList();
-      await MessageStorage.addShownNoteIds(newIds);
-      return shownCount;
-    } catch (_) {
-      return 0;
-    }
+    final result = await _unreadNotificationService.handle(
+      fetchedInbox: fetchedInbox,
+      previousTopId: _lastInboxTopId,
+      didFirstRunSkip: _didFirstRunSkip,
+    );
+    _lastInboxTopId = result.latestTopId;
+    return result.shownCount;
   }
 
   Future<void> _markAsUnreadWithoutRefetch(Message msg) async {

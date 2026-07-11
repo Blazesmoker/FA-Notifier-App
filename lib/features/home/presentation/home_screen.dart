@@ -17,7 +17,6 @@ import 'package:badges/badges.dart' as badges;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
@@ -39,6 +38,7 @@ import 'package:FANotifier/features/home/data/home_login_webview_scripts.dart';
 import 'package:FANotifier/features/home/data/home_profile_cache.dart';
 import 'package:FANotifier/features/home/data/home_session_preference.dart';
 import 'package:FANotifier/features/home/data/home_login_html_detector.dart';
+import 'package:FANotifier/features/home/data/home_logout_cleanup_service.dart';
 import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
 import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
@@ -109,6 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final FaService _faService = FaService();
   final HomeAuthCookieService _homeAuthCookieService =
       const HomeAuthCookieService();
+  late final HomeLogoutCleanupService _homeLogoutCleanupService;
   late final StartupCloudflareCheckService _startupCloudflareCheckService;
   Timer? _dataRefreshTimer;
 
@@ -132,6 +133,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _homeLogoutCleanupService = HomeLogoutCleanupService(
+      authCookieService: _homeAuthCookieService,
+      sessionPreference: _homeSessionPreference,
+      profileCache: _homeProfileCache,
+    );
     _startupCloudflareCheckService =
         const StartupCloudflareCheckService();
     _navProvider =
@@ -945,17 +951,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       FaActivitiesPollingService().stop();
-      await _homeAuthCookieService.clearWebViewCookies();
-      debugPrint('[Logout] All cookies deleted.');
-
-      await _homeAuthCookieService.clearStoredCookies();
-      debugPrint('[Logout] FlutterSecureStorage cleared.');
-
-      await _homeSessionPreference.clearAll();
-      await _homeProfileCache.clear();
-
-      await DefaultCacheManager().emptyCache();
-      debugPrint('[Logout] Image cache cleared.');
+      await _homeLogoutCleanupService.clearLocalSession();
 
       final faNotificationService =
           Provider.of<FANotificationService>(context, listen: false);

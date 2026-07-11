@@ -21,17 +21,21 @@ import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/submissions/data/post_comment_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_action_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_cookie_service.dart';
+import 'package:FANotifier/features/submissions/data/openpost_details_loader.dart';
+import 'package:FANotifier/features/submissions/data/openpost_favorite_links_loader.dart';
+import 'package:FANotifier/features/submissions/data/openpost_user_actions_loader.dart';
 import 'package:FANotifier/features/submissions/data/openpost_image_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_link_parser.dart';
+import 'package:FANotifier/features/submissions/data/openpost_url_builder.dart';
 import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
 import 'package:FANotifier/features/submissions/data/openpost_media_export_service.dart';
 import 'package:FANotifier/features/submissions/data/submission_publication_time_parser.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
 import 'package:FANotifier/features/submissions/presentation/SubmissionDescriptionWebview.dart';
 import 'package:FANotifier/features/profile/presentation/image_inspect_screen.dart';
-import 'package:FANotifier/features/submissions/data/openpost_api_service.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_details_load_result.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_favorite_links_load_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_tag_block_state.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
 import 'package:FANotifier/features/submissions/presentation/edit_submission_screen.dart';
@@ -719,14 +723,13 @@ class _OpenPostState extends State<OpenPost>
   Future<void> _fetchUserPageLinks() async {
     if (username == null) return;
 
-    final userPageUrl = 'https://www.furaffinity.net/user/$username/';
-    final response = await _getWithSfwCookie(userPageUrl);
+    final result = await const OpenPostUserActionsLoader().load(
+      url: buildOpenPostUserUrl(username!),
+      fetch: _getWithSfwCookie,
+    );
 
-    if (response.statusCode == 200) {
-      final decodedBody = decodeOpenPostResponseBody(response.bodyBytes);
-      final document = await parseOpenPostHtmlDocument(decodedBody);
-
-      final actions = parseOpenPostUserPageActions(document);
+    if (result.actions != null) {
+      final actions = result.actions!;
 
       setState(() {
         watchLink = actions.watchLink;
@@ -741,7 +744,7 @@ class _OpenPostState extends State<OpenPost>
         isBlocked = actions.isBlocked;
       });
     } else {
-      debugPrint('Failed to fetch user page links: ${response.statusCode}');
+      debugPrint('Failed to fetch user page links: ${result.statusCode}');
     }
   }
 
@@ -1107,7 +1110,7 @@ class _OpenPostState extends State<OpenPost>
 
   Future<void> _sendWatchUnwatchRequest(String urlPath,
       {required bool shouldWatch}) async {
-    final fullUrl = 'https://www.furaffinity.net$urlPath';
+    final fullUrl = buildOpenPostAbsolutePath(urlPath);
     try {
       final statusCode = await _openPostActionService.sendAuthenticatedGet(
         url: fullUrl,
@@ -1218,35 +1221,21 @@ class _OpenPostState extends State<OpenPost>
   }
 
   Future<void> _fetchFavoriteLinks() async {
-    if (!await _openPostCookieService.hasAuthCookies()) {
-      return;
-    }
+    final result = await OpenPostFavoriteLinksLoader(
+      cookieService: _openPostCookieService,
+    ).load(
+      url: buildSubmissionViewUrl(widget.uniqueNumber),
+      fetch: _getWithSfwCookie,
+    );
 
-    final postUrl = buildSubmissionViewUrl(widget.uniqueNumber);
-    final response = await _getWithSfwCookie(postUrl);
-
-    if (response.statusCode == 200) {
-      final decodedBody = decodeOpenPostFavoriteLinksBody(
-        response.body,
-        response.bodyBytes,
-      );
-      final document = await parseOpenPostHtmlDocument(decodedBody);
-      final favoriteLinks = parseSubmissionFavoriteLinksFromDocument(
-        document,
-        includeClassicFallback: true,
-      );
-
+    if (result.status == OpenPostFavoriteLinksLoadStatus.success) {
       setState(() {
-        favLink = favoriteLinks.hasFavUrl
-            ? toRelativeFavoriteUrl(favoriteLinks.favUrl)
-            : null;
-        unfavLink = favoriteLinks.hasUnfavUrl
-            ? toRelativeFavoriteUrl(favoriteLinks.unfavUrl)
-            : null;
-        isFavorited = (unfavLink != null);
+        favLink = result.favoriteLink;
+        unfavLink = result.unfavoriteLink;
+        isFavorited = result.isFavorited;
       });
-    } else {
-      debugPrint('Failed to fetch favorite links: ${response.statusCode}');
+    } else if (result.status == OpenPostFavoriteLinksLoadStatus.httpFailure) {
+      debugPrint('Failed to fetch favorite links: ${result.statusCode}');
     }
   }
 
@@ -1261,10 +1250,13 @@ class _OpenPostState extends State<OpenPost>
     final postUrl = buildSubmissionViewUrl(widget.uniqueNumber);
 
     try {
-      final response = await _getWithSfwCookie(postUrl);
+      final result = await const OpenPostDetailsLoader().load(
+        url: postUrl,
+        fetch: _getWithSfwCookie,
+      );
 
-      if (response.statusCode != 200) {
-        debugPrint('Failed to fetch post details: ${response.statusCode}');
+      if (result.status == OpenPostDetailsLoadStatus.httpFailure) {
+        debugPrint('Failed to fetch post details: ${result.statusCode}');
         setState(() => isLoading = false);
 
         if (mounted) {
@@ -1279,11 +1271,7 @@ class _OpenPostState extends State<OpenPost>
         return;
       }
 
-      final decodedBody = decodeOpenPostResponseBody(response.bodyBytes);
-
-      final document = await parseOpenPostHtmlDocument(decodedBody);
-
-      if (hasMatureRatingNotice(document)) {
+      if (result.status == OpenPostDetailsLoadStatus.matureWarning) {
         debugPrint(
             'ERROR: Still got mature warning after retry - this should not happen');
         setState(() => isLoading = false);
@@ -1299,8 +1287,8 @@ class _OpenPostState extends State<OpenPost>
         return;
       }
 
-      final parsedPost = OpenPostApiService.parsePostDocument(document);
-      final parsedComments = OpenPostApiService.parseComments(document);
+      final parsedPost = result.parsedPost!;
+      final parsedComments = result.comments!;
 
       setState(() {
         currentUsername = parsedPost.currentUsername;
@@ -2092,11 +2080,9 @@ class _OpenPostState extends State<OpenPost>
   void _openSubmissionEdit(String type) {
     String editUrl;
     if (type == 'info') {
-      editUrl =
-          'https://www.furaffinity.net/controls/submissions/changeinfo/${widget.uniqueNumber}/';
+      editUrl = buildOpenPostChangeInfoUrl(widget.uniqueNumber);
     } else {
-      editUrl =
-          'https://www.furaffinity.net/controls/submissions/changesubmission/${widget.uniqueNumber}/';
+      editUrl = buildOpenPostChangeSubmissionUrl(widget.uniqueNumber);
     }
 
     Navigator.push(
@@ -2172,13 +2158,13 @@ class _OpenPostState extends State<OpenPost>
     String? url;
     if (shouldFavorite) {
       if (favLink != null) {
-        url = 'https://www.furaffinity.net$favLink';
+        url = buildOpenPostAbsolutePath(favLink!);
       } else {
         return;
       }
     } else {
       if (unfavLink != null) {
-        url = 'https://www.furaffinity.net$unfavLink';
+        url = buildOpenPostAbsolutePath(unfavLink!);
       } else {
         return;
       }
@@ -2616,8 +2602,7 @@ class _OpenPostState extends State<OpenPost>
 
                             switch (selected) {
                               case 'report':
-                                launchUrlString(
-                                    'https://www.furaffinity.net/controls/troubletickets/');
+                                launchUrlString(openPostTroubleTicketsUrl);
                                 break;
                               case 'block_unblock':
                                 await _handleBlockUnblock();

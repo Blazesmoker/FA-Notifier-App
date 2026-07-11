@@ -12,6 +12,7 @@ import 'package:FANotifier/features/notifications/data/notification_section_pars
 import 'package:FANotifier/features/notifications/data/fa_notification_cookie_header_provider.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_media_repository.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_shout_repository.dart';
+import 'package:FANotifier/features/notifications/data/notification_removal_request_builder.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
@@ -671,36 +672,11 @@ class FANotificationService with ChangeNotifier {
         throw Exception('Authentication cookies not found.');
       }
       String tLower = sections[sectionIndex].title.toLowerCase();
-      Map<String, dynamic> formData = {};
-      if (tLower.contains('shouts')) {
-        formData['remove-shouts'] = 'Remove Selected Shouts';
-        formData['shouts'] = selectedItems.map((x) => x.id).toList();
-      } else if (tLower.contains('watches')) {
-        formData['remove-watches'] = 'Remove Selected Watches';
-        formData['watches'] = selectedItems.map((x) => x.id).toList();
-      } else if (tLower.contains('submission comments')) {
-        formData['remove-submission-comments'] = 'Remove Selected Comments';
-        formData['comments-submissions'] = selectedItems.map((x) => x.id).toList();
-      } else if (tLower.contains('journal comments')) {
-        formData['remove-journal-comments'] = 'Remove Selected Comments';
-        formData['comments-journals'] = selectedItems.map((x) => x.id).toList();
-      } else if (tLower.contains('favorites')) {
-        formData['remove-favorites'] = 'Remove Selected Favorites';
-        formData['favorites'] = selectedItems.map((x) => x.id).toList();
-      } else if (tLower.contains('journals')) {
-        formData['remove-journals'] = 'Remove Selected Journals';
-        formData['journals'] = selectedItems.map((x) => x.id).toList();
-      }
-      FormData dioFormData = FormData();
-      formData.forEach((k, v) {
-        if (v is List) {
-          for (var val in v) {
-            dioFormData.fields.add(MapEntry('$k[]', val));
-          }
-        } else {
-          dioFormData.fields.add(MapEntry(k, v));
-        }
-      });
+      final fields = buildSelectedNotificationRemovalFields(
+        sections[sectionIndex].title,
+        selectedItems.map((item) => item.id),
+      );
+      final dioFormData = buildNotificationFormData(fields);
       final url =
           'https://www.furaffinity.net${sections[sectionIndex].formAction}';
       await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
@@ -762,27 +738,12 @@ class FANotificationService with ChangeNotifier {
       if (cookieA == null || cookieB == null) {
         throw Exception('Authentication cookies not found.');
       }
-      String tLower = sections[sectionIndex].title.toLowerCase();
-      Map<String, dynamic> formData = {};
-      if (tLower.contains('watches')) {
-        formData['nuke-watches'] = 'Nuke Watches';
-      } else if (tLower.contains('submission comments')) {
-        formData['nuke-submission-comments'] = 'Nuke Submission Comments';
-      } else if (tLower.contains('journal comments')) {
-        formData['nuke-journal-comments'] = 'Nuke Journal Comments';
-      } else if (tLower.contains('shouts')) {
-        formData['nuke-shouts'] = 'Nuke Shouts';
-      } else if (tLower.contains('favorites')) {
-        formData['nuke-favorites'] = 'Nuke Favorites';
-      } else if (tLower.contains('journals')) {
-        formData['nuke-journals'] = 'Nuke Journals';
-      } else {
+      final fields =
+          buildNotificationNukeFields(sections[sectionIndex].title);
+      if (fields.isEmpty) {
         throw Exception('Unknown section type for nuking: ${sections[sectionIndex].title}');
       }
-      FormData dioFormData = FormData();
-      formData.forEach((k, v) {
-        dioFormData.fields.add(MapEntry(k, v));
-      });
+      final dioFormData = buildNotificationFormData(fields);
       final url =
           'https://www.furaffinity.net${sections[sectionIndex].formAction}';
       await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
@@ -835,39 +796,12 @@ class FANotificationService with ChangeNotifier {
       for (int i = sections.length - 1; i >= 0; i--) {
         List<NotificationItem> items = sections[i].items;
         if (items.isEmpty) continue;
-        String headingLower = sections[i].title.toLowerCase();
-        Map<String, dynamic> formData = {};
-        if (headingLower.contains('shouts')) {
-          formData['remove-shouts'] = 'Remove Selected Shouts';
-          formData['shouts'] = items.map((x) => x.id).toList();
-        } else if (headingLower.contains('watches')) {
-          formData['remove-watches'] = 'Remove Selected Watches';
-          formData['watches'] = items.map((x) => x.id).toList();
-        } else if (headingLower.contains('submission comments')) {
-          formData['remove-submission-comments'] = 'Remove Selected Comments';
-          formData['comments-submissions'] = items.map((x) => x.id).toList();
-        } else if (headingLower.contains('journal comments')) {
-          formData['remove-journal-comments'] = 'Remove Selected Comments';
-          formData['comments-journals'] = items.map((x) => x.id).toList();
-        } else if (headingLower.contains('favorites')) {
-          formData['remove-favorites'] = 'Remove Selected Favorites';
-          formData['favorites'] = items.map((x) => x.id).toList();
-        } else if (headingLower.contains('journals')) {
-          formData['remove-journals'] = 'Remove Selected Journals';
-          formData['journals'] = items.map((x) => x.id).toList();
-        } else {
-          continue;
-        }
-        FormData dioFormData = FormData();
-        formData.forEach((k, val) {
-          if (val is List) {
-            for (var v in val) {
-              dioFormData.fields.add(MapEntry('$k[]', v));
-            }
-          } else {
-            dioFormData.fields.add(MapEntry(k, val));
-          }
-        });
+        final fields = buildSelectedNotificationRemovalFields(
+          sections[i].title,
+          items.map((item) => item.id),
+        );
+        if (fields.isEmpty) continue;
+        final dioFormData = buildNotificationFormData(fields);
         final url = 'https://www.furaffinity.net${sections[i].formAction}';
         await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
         final resp = await _dio.post(

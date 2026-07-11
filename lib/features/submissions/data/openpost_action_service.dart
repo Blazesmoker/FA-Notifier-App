@@ -1,4 +1,5 @@
 import 'package:FANotifier/features/submissions/data/openpost_delete_response_parser.dart';
+import 'package:FANotifier/features/submissions/data/openpost_url_builder.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
@@ -28,13 +29,13 @@ class OpenPostActionService {
     if (cookieHeader == null) return null;
 
     final response = await FAHttp.post(
-      Uri.parse('https://www.furaffinity.net/route/tag_blocking'),
+      Uri.parse(openPostTagBlockingUrl),
       headers: <String, String>{
         'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
           cookieHeader,
         ),
-        'Referer': 'https://www.furaffinity.net/view/$submissionId/',
-        'Origin': 'https://www.furaffinity.net',
+        'Referer': buildSubmissionViewUrl(submissionId),
+        'Origin': openPostFaOrigin,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: <String, String>{
@@ -56,14 +57,14 @@ class OpenPostActionService {
     final cookieHeader = await _buildAuthCookieHeader(sfwEnabled: sfwEnabled);
     if (cookieHeader == null) return null;
 
-    final fullUrl = 'https://www.furaffinity.net$urlPath';
+    final fullUrl = buildOpenPostAbsolutePath(urlPath);
     final response = await FAHttp.post(
       Uri.parse(fullUrl),
       headers: {
         'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
           cookieHeader,
         ),
-        'Referer': 'https://www.furaffinity.net/user/$linkUsername/',
+        'Referer': buildOpenPostUserUrl(linkUsername),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: {'key': keyValue},
@@ -98,12 +99,12 @@ class OpenPostActionService {
     if (cookieHeader == null) return null;
 
     final response = await FAHttp.post(
-      Uri.parse('https://www.furaffinity.net/controls/submissions/'),
+      Uri.parse(openPostSubmissionControlsUrl),
       headers: {
         'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
           cookieHeader,
         ),
-        'Referer': 'https://www.furaffinity.net/view/$submissionId/',
+        'Referer': buildSubmissionViewUrl(submissionId),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: {
@@ -135,12 +136,12 @@ class OpenPostActionService {
     if (cookieHeader == null) return null;
 
     final response = await FAHttp.post(
-      Uri.parse('https://www.furaffinity.net/controls/submissions/'),
+      Uri.parse(openPostSubmissionControlsUrl),
       headers: {
         'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
           cookieHeader,
         ),
-        'Referer': 'https://www.furaffinity.net/controls/submissions/',
+        'Referer': openPostSubmissionControlsUrl,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: {

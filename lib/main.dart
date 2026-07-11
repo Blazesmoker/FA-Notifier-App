@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:FANotifier/features/notifications/data/NotificationNavigationProvider.dart';
 import 'package:FANotifier/features/settings/data/timezone_provider.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
+import 'package:FANotifier/features/notes/domain/inbox_second_page_policy.dart';
 import 'package:FANotifier/core/cache/CacheMonitorService.dart';
 import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/shared/fa/fa_http.dart';
@@ -830,10 +831,11 @@ Future<_BackgroundInboxSnapshot> _fetchInboxSnapshotBg({
   final result = <Message>[...page1.messages];
   var fetchedPage2 = false;
 
-  if (_shouldFetchInboxPage2Bg(
-    page1: page1,
+  if (shouldFetchSecondInboxPage(
+    page1Messages: page1.messages,
     shownNoteIds: shownNoteIds,
     seenNoteIds: seenNoteIds,
+    topbarNotes: page1.topbarCounts?.notes,
   )) {
     final page2 = await _fetchInboxPageBg(
       page: 2,
@@ -849,30 +851,6 @@ Future<_BackgroundInboxSnapshot> _fetchInboxSnapshotBg({
     topbarCounts: page1.topbarCounts,
     fetchedPage2: fetchedPage2,
   );
-}
-
-bool _shouldFetchInboxPage2Bg({
-  required _ParsedInboxPage page1,
-  required Set<String> shownNoteIds,
-  required Set<String> seenNoteIds,
-}) {
-  if (page1.messages.isEmpty) return false;
-
-  final knownIds = <String>{...shownNoteIds, ...seenNoteIds};
-  final allPage1RowsAreBrandNewUnread = page1.messages.every((message) {
-    if (!message.isUnread) return false;
-    if (message.id.trim().isEmpty) return false;
-    return !knownIds.contains(message.id);
-  });
-  if (!allPage1RowsAreBrandNewUnread) return false;
-
-  final topbarNotes = page1.topbarCounts?.notes;
-  if (topbarNotes != null) {
-    final page1UnreadCount = page1.messages.where((m) => m.isUnread).length;
-    if (topbarNotes <= page1UnreadCount) return false;
-  }
-
-  return true;
 }
 
 Future<_ParsedInboxPage> _fetchInboxPageBg({

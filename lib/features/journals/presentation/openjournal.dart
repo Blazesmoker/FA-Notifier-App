@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/journals/data/journal_action_service.dart';
 import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
+import 'package:FANotifier/features/journals/data/journal_deletion_coordinator.dart';
 import 'package:FANotifier/features/journals/data/journal_link_parser.dart';
 import 'package:FANotifier/features/journals/data/journal_url_builder.dart';
 import 'package:FANotifier/features/journals/presentation/create_journal.dart';
@@ -14,6 +15,7 @@ import 'package:FANotifier/features/journals/presentation/journal_reply_screen.d
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal_comments.dart';
 import 'package:FANotifier/features/journals/domain/journal_not_found_exception.dart';
+import 'package:FANotifier/features/journals/domain/journal_deletion_result.dart';
 import 'package:FANotifier/features/journals/domain/journal_availability_detector.dart';
 import 'package:FANotifier/features/journals/domain/journal_publication_time_parser.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
@@ -58,6 +60,7 @@ class _OpenJournalState extends State<OpenJournal>
   List<Map<String, dynamic>> comments = [];
   late final OpenJournalApiService _api;
   late final JournalActionService _journalActionService;
+  late final JournalDeletionCoordinator _journalDeletionCoordinator;
   late final JournalCommentService _journalCommentService;
   final TranslationService _translationService = TranslationService.instance;
   final TranslationSourceTextBuilder _translationSourceTextBuilder =
@@ -110,9 +113,6 @@ class _OpenJournalState extends State<OpenJournal>
   bool isOwner = false;
   String? deleteLink;
   bool _isDeleting = false;
-  bool _deleteLinkMatchesCurrentId(String link) {
-    return isDeleteJournalLinkForId(link, widget.uniqueNumber);
-  }
 
   // Additional post info
   String? category;
@@ -150,6 +150,10 @@ class _OpenJournalState extends State<OpenJournal>
     });
     _api = OpenJournalApiService();
     _journalActionService = const JournalActionService();
+    _journalDeletionCoordinator = JournalDeletionCoordinator(
+      api: _api,
+      actionService: _journalActionService,
+    );
     _journalCommentService = JournalCommentService();
     IosScrollRecovery.addListener(_handleIosScrollRecovery);
     // Only fetch the journal itself on open.
@@ -507,20 +511,6 @@ class _OpenJournalState extends State<OpenJournal>
     }
   }
 
-  Future<void> _fetchDeleteLinkFallback() async {
-    try {
-      final fetchedDeleteLink =
-          await _api.fetchDeleteLinkFromControls(widget.uniqueNumber);
-      if (fetchedDeleteLink != null && fetchedDeleteLink.trim().isNotEmpty) {
-        setState(() {
-          deleteLink = fetchedDeleteLink;
-        });
-      }
-    } catch (e) {
-      debugPrint('Failed to fetch delete link: $e');
-    }
-  }
-
   Future<void> _fetchCommentsNew(String body) async {
     try {
       final parsed = await _api.fetchCommentsFromBody(body);
@@ -564,43 +554,43 @@ class _OpenJournalState extends State<OpenJournal>
     setState(() => _isDeleting = true);
 
     try {
-      final previousDeleteLink = deleteLink;
-      await _fetchDeleteLinkFallback();
-      deleteLink ??= previousDeleteLink;
-      if (deleteLink == null || !_deleteLinkMatchesCurrentId(deleteLink!)) {
+      final result = await _journalDeletionCoordinator.delete(
+        journalId: widget.uniqueNumber,
+        currentDeleteLink: deleteLink,
+        onDeleteLinkResolved: (resolvedDeleteLink) {
+          setState(() {
+            deleteLink = resolvedDeleteLink;
+          });
+        },
+      );
+      if (result.status == JournalDeletionStatus.invalidDeleteLink) {
         showAppSnackBar(context,
             "Safe delete failed: couldn't confirm delete link for this journal.",
             backgroundColor: Colors.red);
         return;
       }
 
-      final statusCode = await _journalActionService.deleteJournal(
-        deleteLink: deleteLink!,
-        journalId: widget.uniqueNumber,
-      );
-      if (statusCode == null) {
+      if (result.status == JournalDeletionStatus.missingCookies) {
         showAppSnackBar(context, 'Please log in to perform this action.',
             backgroundColor: Colors.red);
         return;
       }
 
-      if (statusCode < 200 || statusCode >= 400) {
+      if (result.status == JournalDeletionStatus.httpFailure) {
         if (!mounted) return;
-        showAppSnackBar(context, 'Delete failed (HTTP $statusCode).',
+        showAppSnackBar(context, 'Delete failed (HTTP ${result.statusCode}).',
             backgroundColor: Colors.red);
         return;
       }
 
-      final wasDeleted = await _api.isJournalDeleted(widget.uniqueNumber);
       if (!mounted) return;
 
-      if (wasDeleted) {
+      if (result.status == JournalDeletionStatus.deleted) {
         widget.onJournalMutated?.call();
         showAppSnackBar(context, 'Journal "$titleForDialog" deleted.',
             backgroundColor: Colors.green);
         Navigator.of(context).pop(true);
       } else {
-        await _fetchDeleteLinkFallback();
         showAppSnackBar(
           context,
           'Delete request completed, but the journal still exists.',

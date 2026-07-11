@@ -1,9 +1,5 @@
 import 'package:html/parser.dart' as html_parser;
 
-String buildSubmissionViewUrl(String submissionId) {
-  return 'https://www.furaffinity.net/view/$submissionId/';
-}
-
 String? extractOpenPostActionKey(String actionLink, String? fallbackKey) {
   return Uri.parse(actionLink).queryParameters['key'] ?? fallbackKey;
 }

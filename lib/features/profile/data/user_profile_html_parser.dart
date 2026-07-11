@@ -1,0 +1,871 @@
+import 'package:html/dom.dart' as dom;
+import 'package:html/parser.dart' as html_parser;
+
+import 'package:FANotifier/features/profile/domain/shout.dart';
+import 'package:FANotifier/features/profile/domain/user_link.dart';
+import 'package:FANotifier/features/profile/domain/user_profile_api_models.dart';
+import 'package:FANotifier/shared/fa/parsing_utils.dart';
+
+UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
+  final document = html_parser.parse(htmlBody);
+
+  String? userProfileImageUrl;
+  String? userProfilePostNumber;
+  String? userProfileTexts;
+  bool acceptingTrades = false;
+  bool acceptingCommissions = false;
+
+  String? profileBannerUrl;
+  final bannerElem = document.querySelector(
+          'site-banner picture source[media="(min-width: 800px)"]') ??
+      document.querySelector('site-banner img') ??
+      document.querySelector('source[media="(min-width: 800px)"]');
+  if (bannerElem != null) {
+    String bannerUrl =
+        bannerElem.attributes['srcset'] ?? bannerElem.attributes['src'] ?? '';
+    if (bannerUrl.startsWith('/themes/beta/img/banners/logo/')) {
+      profileBannerUrl = 'https://www.furaffinity.net$bannerUrl';
+    } else if (bannerUrl.startsWith('//')) {
+      profileBannerUrl = 'https:$bannerUrl';
+    } else if (bannerUrl.startsWith('http://') ||
+        bannerUrl.startsWith('https://')) {
+      profileBannerUrl = bannerUrl;
+    } else {
+      profileBannerUrl = 'https://www.furaffinity.net$bannerUrl';
+    }
+  } else {
+    profileBannerUrl =
+        'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg';
+  }
+
+  String? profileImageUrl;
+  final profilePicElem = document.querySelector('userpage-nav-avatar img') ??
+      document.querySelector('img.avatar');
+  profileImageUrl = profilePicElem != null
+      ? normalizeFaUrl(profilePicElem.attributes['src'])
+      : null;
+
+  final displayNameElem = document
+          .querySelector('a.c-usernameBlock__displayName .js-displayName') ??
+      document.querySelector('a.js-displayName-block .js-displayName');
+  final displayName = displayNameElem?.text.trim() ?? 'Unknown User';
+
+  final userNameElem =
+      document.querySelector('a.c-usernameBlock__userName span') ??
+          document.querySelector('a.js-userName-block span');
+  final symbolElem = document.querySelector(
+          'a.c-usernameBlock__userName span .c-usernameBlock__symbol') ??
+      document
+          .querySelector('a.js-userName-block span .c-usernameBlock__symbol');
+
+  String symbolText = symbolElem?.text.trim() ?? '';
+  String fullUserName = userNameElem?.text.trim() ?? '';
+  String nicknameWithoutSymbol = fullUserName;
+  if (symbolText.isNotEmpty) {
+    nicknameWithoutSymbol = fullUserName.replaceFirst(symbolText, '').trim();
+  }
+  final symbolUsername = symbolText.isNotEmpty
+      ? '$symbolText $nicknameWithoutSymbol'
+      : fullUserName;
+  final username =
+      (nicknameWithoutSymbol.isNotEmpty ? nicknameWithoutSymbol : displayName)
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9\\-_.~]'), '');
+  final profileUserNamePart = '';
+
+  List<String> userIconBeforeUrls = [];
+  List<String> userIconAfterUrls = [];
+  final usernameContainer = document.querySelector('.c-usernameBlock') ??
+      document.querySelector('div.c-usernameBlock');
+  final iconBeforeElems =
+      usernameContainer?.querySelectorAll('usericon-block-before img');
+  if (iconBeforeElems != null && iconBeforeElems.isNotEmpty) {
+    userIconBeforeUrls = iconBeforeElems
+        .map((imgElem) {
+          String? src = imgElem.attributes['src'];
+          if (src != null) {
+            if (src.startsWith('//')) return 'https:$src';
+            if (src.startsWith('/')) return 'https://www.furaffinity.net$src';
+            return src;
+          }
+          return '';
+        })
+        .where((src) => src.isNotEmpty)
+        .toList();
+  }
+  final iconAfterElems =
+      usernameContainer?.querySelectorAll('usericon-block-after img');
+  if (iconAfterElems != null && iconAfterElems.isNotEmpty) {
+    userIconAfterUrls = iconAfterElems
+        .map((imgElem) {
+          String? src = imgElem.attributes['src'];
+          if (src != null) {
+            if (src.startsWith('//')) return 'https:$src';
+            if (src.startsWith('/')) return 'https://www.furaffinity.net$src';
+            return src;
+          }
+          return '';
+        })
+        .where((src) => src.isNotEmpty)
+        .toList();
+  }
+
+  String? userTitle;
+  String? registrationDate;
+  final userTitleElem = document.querySelector('span.user-title');
+  if (userTitleElem != null) {
+    String fullText = userTitleElem.text.trim();
+    final regExp = RegExp(r'Registered:\s+(.+)$', multiLine: true);
+    final regMatch = regExp.firstMatch(fullText);
+    if (regMatch != null) {
+      registrationDate = regMatch.group(1)!.trim();
+      userTitle = fullText.substring(0, regMatch.start).trim();
+      if (userTitle.endsWith("|")) {
+        userTitle = userTitle.substring(0, userTitle.length - 1).trim();
+      }
+    } else {
+      userTitle = fullText;
+      registrationDate = "";
+    }
+  } else {
+    final classicHtml = document.body?.innerHtml ?? "";
+    final userTitleMatch = RegExp(r'<b>\s*User Title:\s*<\/b>\s*([^<]+)')
+        .firstMatch(classicHtml);
+    final registeredMatch =
+        RegExp(r'<b>\s*Registered Since:\s*<\/b>\s*([^<]+)')
+            .firstMatch(classicHtml);
+    userTitle = userTitleMatch?.group(1)?.trim() ?? "";
+    registrationDate = registeredMatch?.group(1)?.trim() ?? 'N/A';
+  }
+
+  String? userDescription;
+  bool hasRealUserProfile = true;
+  final sectionElem =
+      document.querySelector('section.userpage-layout-profile') ??
+          document.querySelector('td.ldot');
+  if (sectionElem != null) {
+    if (sectionElem.localName == 'section') {
+      userDescription = sectionElem.outerHtml.trim();
+    } else if (sectionElem.localName == 'td') {
+      String classicHtml = sectionElem.innerHtml;
+      const headerMarker = '<b>Artist Profile:</b><br>';
+      final splitIndex = classicHtml.indexOf(headerMarker);
+      if (splitIndex != -1) {
+        userDescription =
+            classicHtml.substring(splitIndex + headerMarker.length).trim();
+      } else {
+        userDescription = classicHtml.trim();
+      }
+    }
+
+    if (userDescription != null &&
+        userDescription.contains('<i>Not Available...</i>')) {
+      hasRealUserProfile = false;
+    }
+  } else {
+    userDescription = 'No description available.';
+    hasRealUserProfile = false;
+  }
+
+  int? views;
+  int? submissions;
+  int? favs;
+  int? commentsEarned;
+  int? commentsMade;
+  int? journals;
+  dom.Element? statsSection =
+      document.querySelector('.userpage-section-right .section-body');
+  String statsText = "";
+  if (statsSection != null) {
+    statsText = statsSection.text.trim();
+  } else {
+    dom.Element? classicStatsTable;
+    for (dom.Element table in document.querySelectorAll('table')) {
+      var firstRow = table.querySelector('tr');
+      if (firstRow != null) {
+        var firstCell = firstRow.querySelector('td');
+        if (firstCell != null && firstCell.text.trim() == 'Statistics') {
+          classicStatsTable = table;
+          break;
+        }
+      }
+    }
+    if (classicStatsTable != null) {
+      var statsCell = classicStatsTable
+          .querySelector('tr:nth-child(2) td[align=\"left\"]');
+      statsText = statsCell?.text.trim() ?? "";
+    }
+  }
+
+  int? _extract(String label) {
+    final regex = RegExp('$label\\s*(\\d+)');
+    final match = regex.firstMatch(statsText);
+    if (match != null && match.groupCount > 0) {
+      return int.tryParse(match.group(1)!);
+    }
+    return null;
+  }
+
+
+  if (statsText.isNotEmpty) {
+    views = _extract('Views:') ?? _extract('Page Visits:');
+    submissions = _extract('Submissions:');
+    favs = _extract('Favs:') ?? _extract('Favorites:');
+    commentsEarned =
+        _extract('Comments Earned:') ?? _extract('Comments Received:');
+    commentsMade = _extract('Comments Made:') ?? _extract('Comments Given:');
+    journals = _extract('Journals:');
+  } else {
+    views = 0;
+    submissions = 0;
+    favs = 0;
+    commentsEarned = 0;
+    commentsMade = 0;
+    journals = 0;
+  }
+
+  bool isClassicMarkup = document.body != null &&
+      document.body!.attributes['data-static-path'] == '/themes/classic';
+
+  bool userProfileFound = false;
+  if (!isClassicMarkup) {
+    final userSections = document.querySelectorAll('.userpage-section-right');
+    for (var section in userSections) {
+      final headerElem = section.querySelector('.section-header h2') ??
+          section.querySelector('.section-header h3') ??
+          section.querySelector('.section-header');
+      final headerText = headerElem?.text.trim() ?? '';
+
+      if (headerText.toLowerCase() == 'user profile'.toLowerCase()) {
+        final linkElem = section.querySelector(
+                '.section-submission.aligncenter a[href^="/view/"]') ??
+            section.querySelector('.section-submission a[href^="/view/"]') ??
+            section.querySelector('.section-body a[href^="/view/"]') ??
+            section.querySelector('a[href^="/view/"]');
+
+        if (linkElem != null) {
+          final href = linkElem.attributes['href'];
+          if (href != null) {
+            final hrefParts = href.split('/');
+            userProfilePostNumber =
+                hrefParts.length > 2 ? hrefParts[2] : 'N/A';
+          }
+
+          final imageElem = linkElem.querySelector('img') ??
+              section.querySelector('.section-submission.aligncenter img') ??
+              section.querySelector('.section-submission img') ??
+              section.querySelector('.section-body img');
+
+          if (imageElem != null) {
+            String? imageSrc = imageElem.attributes['src'];
+            if (imageSrc != null && imageSrc.isNotEmpty) {
+              if (imageSrc.startsWith('//')) {
+                userProfileImageUrl = 'https:$imageSrc';
+              } else if (imageSrc.startsWith('http://') ||
+                  imageSrc.startsWith('https://')) {
+                userProfileImageUrl = imageSrc;
+              } else {
+                userProfileImageUrl = 'https://www.furaffinity.net$imageSrc';
+              }
+            }
+          }
+        }
+
+        final sectionBodyElem = section.querySelector('.section-body');
+        if (sectionBodyElem != null &&
+            sectionBodyElem.innerHtml.trim().isNotEmpty) {
+          userProfileTexts = sectionBodyElem.innerHtml.trim();
+        } else {
+          userProfileTexts = null;
+        }
+
+        userProfileFound = true;
+        break;
+      }
+    }
+  }
+
+  if (isClassicMarkup || !userProfileFound) {
+    final profileIdElem = document.getElementById('profilepic-submission');
+    if (profileIdElem != null) {
+      final anchor = profileIdElem.querySelector('a[href^="/view/"]');
+      if (anchor != null) {
+        final href = anchor.attributes['href'];
+        if (href != null) {
+          final parts = href.split('/');
+          userProfilePostNumber = parts.length > 2 ? parts[2] : 'N/A';
+        }
+      }
+
+      final imageElem = profileIdElem.querySelector('img');
+      if (imageElem != null) {
+        String? imageSrc = imageElem.attributes['src'];
+        if (imageSrc != null) {
+          if (imageSrc.startsWith('//')) {
+            userProfileImageUrl = 'https:$imageSrc';
+          } else if (imageSrc.startsWith('http://') ||
+              imageSrc.startsWith('https://')) {
+            userProfileImageUrl = imageSrc;
+          } else {
+            userProfileImageUrl = 'https://www.furaffinity.net$imageSrc';
+          }
+        }
+      }
+    }
+
+    dom.Element? artistInfoCell;
+    for (dom.Element table in document.querySelectorAll('table.maintable')) {
+      final headerElem = table.querySelector('td.cat b');
+      if (headerElem != null &&
+          headerElem.text.trim() == 'Artist Information') {
+        artistInfoCell = table.querySelector('td.alt1.user-info');
+        break;
+      }
+    }
+
+    if (artistInfoCell != null) {
+      userProfileTexts = artistInfoCell.innerHtml.trim();
+    }
+
+    final optionYesElements = document.querySelectorAll('span.option-yes');
+    acceptingTrades = optionYesElements.any(
+      (elem) => elem.text.trim().toLowerCase().contains('trades'),
+    );
+    acceptingCommissions = optionYesElements.any(
+      (elem) => elem.text.trim().toLowerCase().contains('commissions'),
+    );
+  }
+
+  String? featuredImageUrl;
+  String? featuredImageTitle;
+  String? featuredPostNumber;
+
+  dom.Element? featuredSection;
+  for (final section in document.querySelectorAll('.userpage-section-left')) {
+    final header = section.querySelector('.section-header h2') ??
+        section.querySelector('.section-header h3') ??
+        section.querySelector('.section-header');
+    if (header != null &&
+        header.text
+            .toLowerCase()
+            .contains('featured submission'.toLowerCase())) {
+      featuredSection = section;
+      break;
+    }
+  }
+
+  if (featuredSection != null) {
+    final linkElem = featuredSection.querySelector(
+            '.section-body .aligncenter.preview_img a[href^="/view/"]') ??
+        featuredSection.querySelector('.section-body a[href^="/view/"]') ??
+        featuredSection.querySelector('a[href^="/view/"]');
+
+    if (linkElem != null) {
+      final href = linkElem.attributes['href'];
+      if (href != null) {
+        final hrefParts = href.split('/');
+        featuredPostNumber = hrefParts.length > 2 ? hrefParts[2] : 'N/A';
+      }
+
+      final imgElem = linkElem.querySelector('img') ??
+          featuredSection.querySelector('.section-body img') ??
+          featuredSection.querySelector('img');
+      if (imgElem != null) {
+        var imageSrc = imgElem.attributes['src'] ?? '';
+        if (imageSrc.isNotEmpty) {
+          if (imageSrc.startsWith('//')) {
+            featuredImageUrl = 'https:$imageSrc';
+          } else if (imageSrc.startsWith('http://') ||
+              imageSrc.startsWith('https://')) {
+            featuredImageUrl = imageSrc;
+          } else {
+            featuredImageUrl = 'https://www.furaffinity.net$imageSrc';
+          }
+        }
+      }
+    }
+
+    final titleElem =
+        featuredSection.querySelector('.userpage-featured-title h2 a') ??
+            featuredSection.querySelector('.userpage-featured-title h3 a') ??
+            featuredSection.querySelector('.userpage-featured-title a') ??
+            featuredSection.querySelector('.section-body h2 a') ??
+            featuredSection.querySelector('.section-body h3 a');
+
+    if (titleElem != null && titleElem.text.trim().isNotEmpty) {
+      featuredImageTitle = titleElem.text.trim();
+    }
+  }
+
+  if ((featuredImageUrl == null || featuredPostNumber == null) &&
+      isClassicMarkup) {
+    dom.Element? featuredTable;
+    for (dom.Element table in document.querySelectorAll('table.maintable')) {
+      final headerElem = table.querySelector('td.cat b');
+      if (headerElem != null &&
+          headerElem.text.trim() == 'Featured Submission') {
+        featuredTable = table;
+        break;
+      }
+
+    }
+
+    if (featuredTable != null) {
+      final contentCell =
+          featuredTable.querySelector('td.alt1#featured-submission');
+      if (contentCell != null) {
+        final anchor = contentCell.querySelector('center a[href^="/view/"]');
+        if (anchor != null) {
+          final href = anchor.attributes['href'];
+          if (href != null) {
+            final hrefParts = href.split('/');
+            featuredPostNumber = hrefParts.length > 2 ? hrefParts[2] : 'N/A';
+          }
+          final img = anchor.querySelector('img');
+          if (img != null) {
+            String? imageSrc = img.attributes['src'];
+            if (imageSrc != null) {
+              if (imageSrc.startsWith('//')) {
+                featuredImageUrl = 'https:$imageSrc';
+              } else if (imageSrc.startsWith('http://') ||
+                  imageSrc.startsWith('https://')) {
+                featuredImageUrl = imageSrc;
+              } else {
+                featuredImageUrl = 'https://www.furaffinity.net$imageSrc';
+              }
+            }
+          }
+        }
+
+        final spanTitle = contentCell.querySelector('center b span');
+        featuredImageTitle =
+            spanTitle != null && spanTitle.text.trim().isNotEmpty
+                ? spanTitle.text.trim()
+                : featuredImageTitle;
+      }
+    }
+  }
+
+  List<Map<String, String>> contactInformationLinks = [];
+  dom.Element? contactInfoSection =
+      document.querySelector('#userpage-contact');
+  if (contactInfoSection != null) {
+    final contactItems =
+        contactInfoSection.querySelectorAll('.user-contact-item');
+    for (var item in contactItems) {
+      final labelElement =
+          item.querySelector('.user-contact-user-info .highlight');
+      final valueElement = item.querySelector('.user-contact-user-info a');
+      String? label = labelElement?.text.trim();
+      if (label != null && label.endsWith(':')) {
+        label = label.substring(0, label.length - 1);
+      }
+      String? href = valueElement?.attributes['href'];
+      String value = valueElement?.text.trim() ?? 'N/A';
+      if (label != null && href != null) {
+        if (valueElement!.children.isNotEmpty &&
+            valueElement.children.first.localName == 'i') {
+          value = valueElement.children.first.text.trim();
+        }
+        if (value.isNotEmpty && value != 'N/A') {
+          contactInformationLinks
+              .add({'label': label, 'value': value, 'href': href});
+        }
+      }
+    }
+  }
+
+  List<UserLink> recentWatchers = [];
+  int recentWatchersCount = 0;
+  dom.Element? recentWatchersSection =
+      document.querySelector('section.userpage-left-column.watched-by-block');
+  if (recentWatchersSection != null) {
+    final viewListLink = recentWatchersSection
+        .querySelector('.section-header .floatright h3 a');
+    if (viewListLink != null) {
+      final linkText = viewListLink.text.trim();
+      final countMatch = RegExp(r'Watched by (\d+)').firstMatch(linkText);
+      if (countMatch != null && countMatch.groupCount >= 1) {
+        recentWatchersCount = int.tryParse(countMatch.group(1)!) ?? 0;
+      }
+    }
+
+    final userElements = recentWatchersSection.querySelectorAll(
+        '.section-body span.c-usernameBlockSimple__displayName');
+    for (var userElem in userElements) {
+      final watcherName = userElem.text.trim();
+      final linkElem = userElem.parent;
+      final href = linkElem?.attributes['href'] ?? '';
+      if (watcherName.isNotEmpty && href.isNotEmpty) {
+        final fullUrl = href.startsWith('http')
+            ? href
+            : 'https://www.furaffinity.net$href';
+        recentWatchers.add(UserLink(rawUsername: watcherName, url: fullUrl));
+      }
+    }
+  } else {
+    dom.Element? watchersTable;
+    for (dom.Element table in document.querySelectorAll('table.maintable')) {
+      final headerElem = table.querySelector('td.cat b');
+      if (headerElem != null && headerElem.text.trim() == 'Watched By') {
+        watchersTable = table;
+        break;
+      }
+    }
+
+    if (watchersTable != null) {
+      final watchersCell = watchersTable.querySelector('td#watched-by');
+      if (watchersCell != null) {
+        final userElements = watchersCell
+            .querySelectorAll('span.c-usernameBlockSimple__displayName');
+        for (var userElem in userElements) {
+          final watcherName = userElem.text.trim();
+          final linkElem = userElem.parent;
+          final href = linkElem?.attributes['href'] ?? '';
+          if (watcherName.isNotEmpty && href.isNotEmpty) {
+            final fullUrl = href.startsWith('http')
+                ? href
+                : 'https://www.furaffinity.net$href';
+            recentWatchers
+                .add(UserLink(rawUsername: watcherName, url: fullUrl));
+          }
+        }
+      }
+
+      final countLink = watchersTable.querySelector('td.cat a');
+      if (countLink != null) {
+        final linkText = countLink.text.trim();
+        final countMatch = RegExp(r'\((\d+)\)').firstMatch(linkText);
+        if (countMatch != null && countMatch.groupCount >= 1) {
+          recentWatchersCount = int.tryParse(countMatch.group(1)!) ?? 0;
+        }
+      }
+    }
+  }
+
+  List<UserLink> recentlyWatched = [];
+  int recentlyWatchedCount = 0;
+  dom.Element? recentlyWatchedSection = document
+      .querySelector('section.userpage-left-column.is-watching-block');
+  if (recentlyWatchedSection != null) {
+    final viewListLink = recentlyWatchedSection
+        .querySelector('.section-header .floatright h3 a');
+    if (viewListLink != null) {
+      final linkText = viewListLink.text.trim();
+      final countMatch = RegExp(r'Watching (\d+)').firstMatch(linkText);
+      if (countMatch != null && countMatch.groupCount >= 1) {
+        recentlyWatchedCount = int.tryParse(countMatch.group(1)!) ?? 0;
+      }
+    }
+
+    final userElements = recentlyWatchedSection.querySelectorAll(
+        '.section-body span.c-usernameBlockSimple__displayName');
+    for (var userElem in userElements) {
+      final watchedName = userElem.text.trim();
+      final linkElem = userElem.parent;
+      final href = linkElem?.attributes['href'] ?? '';
+      if (watchedName.isNotEmpty && href.isNotEmpty) {
+        final fullUrl = href.startsWith('http')
+            ? href
+            : 'https://www.furaffinity.net$href';
+        recentlyWatched.add(UserLink(rawUsername: watchedName, url: fullUrl));
+      }
+    }
+  } else {
+    dom.Element? watchingTable;
+    for (dom.Element table in document.querySelectorAll('table.maintable')) {
+      final headerElem = table.querySelector('td.cat b');
+      if (headerElem != null && headerElem.text.trim() == 'Is Watching') {
+        watchingTable = table;
+        break;
+      }
+    }
+
+    if (watchingTable != null) {
+      final watchingCell = watchingTable.querySelector('td#is-watching');
+      if (watchingCell != null) {
+        final userElements = watchingCell
+            .querySelectorAll('span.c-usernameBlockSimple__displayName');
+        for (var userElem in userElements) {
+          final watchedName = userElem.text.trim();
+          final linkElem = userElem.parent;
+          final href = linkElem?.attributes['href'] ?? '';
+          if (watchedName.isNotEmpty && href.isNotEmpty) {
+            final fullUrl = href.startsWith('http')
+                ? href
+                : 'https://www.furaffinity.net$href';
+            recentlyWatched
+                .add(UserLink(rawUsername: watchedName, url: fullUrl));
+          }
+        }
+      }
+
+      final countLink = watchingTable.querySelector('td.cat a');
+      if (countLink != null) {
+        final linkText = countLink.text.trim();
+        final countMatch = RegExp(r'\((\d+)\)').firstMatch(linkText);
+        if (countMatch != null && countMatch.groupCount >= 1) {
+          recentlyWatchedCount = int.tryParse(countMatch.group(1)!) ?? 0;
+        }
+      }
+
+    }
+  }
+
+  List<Shout> shouts = [];
+  String? shoutPaginationKey;
+  int currentShoutPage = 1;
+  int totalShoutPages = 1;
+
+  dom.Element? shoutsSection =
+      document.querySelector('.userpage-section-right.no-border');
+  if (shoutsSection != null) {
+    final shoutContainers =
+        shoutsSection.querySelectorAll('div.comment_container');
+    for (var container in shoutContainers) {
+      final avatarElem = container.querySelector('img.comment_useravatar');
+      String avatarUrl = avatarElem != null
+          ? (avatarElem.attributes['src']!.startsWith('//')
+              ? 'https:${avatarElem.attributes['src']!}'
+              : avatarElem.attributes['src']!)
+          : 'assets/images/defaultpic.gif';
+
+      final displayNameElem = container
+          .querySelector('a.c-usernameBlock__displayName .js-displayName');
+      final userNameElem = container.querySelector(
+          'a.c-usernameBlock__userName .js-userName-block span');
+      final displayNameShout = displayNameElem?.text.trim() ?? 'Unknown';
+      final userNamePartShout = userNameElem?.text.trim() ?? '';
+
+      final symbolElemShout = container.querySelector(
+          'a.c-usernameBlock__userName .c-usernameBlock__symbol');
+      final symbolShout = symbolElemShout?.text.trim() ?? "~";
+
+      final usernameWithoutSymbol =
+          userNamePartShout.replaceFirst(symbolShout, '').trim();
+      String cmtUsername = (usernameWithoutSymbol.isEmpty ||
+              displayNameShout.toLowerCase() ==
+                  usernameWithoutSymbol.toLowerCase())
+          ? displayNameShout
+          : '$displayNameShout\n@$usernameWithoutSymbol';
+
+      final usernameLink = container.querySelector('div.avatar a');
+      String profileNickname = usernameLink?.attributes['href'] != null
+          ? usernameLink!.attributes['href']!
+              .split('/')
+              .where((part) => part.isNotEmpty)
+              .last
+          : 'Unknown';
+
+      final dateElem = container.querySelector('span.popup_date');
+      String relativeDate = dateElem?.text.trim() ?? 'Unknown date';
+      String fullDate = dateElem?.attributes['title']?.trim() ?? relativeDate;
+
+      final textElem =
+          container.querySelector('comment-user-text.comment_text');
+      String text = textElem?.innerHtml.trim() ?? '';
+
+      String shoutId = '';
+      final anchor =
+          container.querySelector('a.comment_anchor[id^=\"shout-\"]');
+      if (anchor != null) {
+        final idAttr = anchor.attributes['id'] ?? '';
+        if (idAttr.startsWith('shout-')) {
+          shoutId = idAttr.substring('shout-'.length);
+        }
+      }
+
+      List<String> shoutIconBeforeUrls = [];
+      List<String> shoutIconAfterUrls = [];
+      final shoutUsernameContainer =
+          container.querySelector('.c-usernameBlock');
+      if (shoutUsernameContainer != null) {
+        final beforeIcons = shoutUsernameContainer
+            .querySelectorAll('usericon-block-before img');
+        shoutIconBeforeUrls = beforeIcons
+            .map((imgElem) {
+              String? src = imgElem.attributes['src'];
+              if (src != null) {
+                if (src.startsWith('//')) return 'https:$src';
+                if (src.startsWith('/'))
+                  return 'https://www.furaffinity.net$src';
+                return src;
+              }
+              return '';
+            })
+            .where((src) => src.isNotEmpty)
+            .toList();
+
+        final afterIcons = shoutUsernameContainer
+            .querySelectorAll('usericon-block-after img');
+        shoutIconAfterUrls = afterIcons
+            .map((imgElem) {
+              String? src = imgElem.attributes['src'];
+              if (src != null) {
+                if (src.startsWith('//')) return 'https:$src';
+                if (src.startsWith('/'))
+                  return 'https://www.furaffinity.net$src';
+                return src;
+              }
+              return '';
+            })
+            .where((src) => src.isNotEmpty)
+            .toList();
+      }
+
+      shouts.add(Shout(
+        id: shoutId,
+        avatarUrl: avatarUrl,
+        username: cmtUsername,
+        profileNickname: profileNickname,
+        date: relativeDate,
+        text: text,
+        popupDateFull: fullDate,
+        popupDateRelative: relativeDate,
+        iconBeforeUrls: shoutIconBeforeUrls,
+        iconAfterUrls: shoutIconAfterUrls,
+        symbol: symbolShout,
+        sourcePage: currentShoutPage,
+      ));
+    }
+
+    dom.Element? shoutPaginationForm =
+        document.querySelector('form.c-shoutPaginationForm');
+    if (shoutPaginationForm != null) {
+      final keyInput =
+          shoutPaginationForm.querySelector('input[name=\"key\"]');
+      shoutPaginationKey = keyInput?.attributes['value'];
+
+      final pageSelect =
+          shoutPaginationForm.querySelector('select[name=\"shout_page\"]');
+      if (pageSelect != null) {
+        final options = pageSelect.querySelectorAll('option');
+        if (options.isNotEmpty) {
+          totalShoutPages = options.length;
+        }
+        final selectedOption = pageSelect.querySelector('option[selected]');
+        if (selectedOption != null) {
+          currentShoutPage =
+              int.tryParse(selectedOption.attributes['value'] ?? '1') ?? 1;
+        }
+      }
+    }
+  }
+
+  var watchLinkElement =
+      document.querySelector('a.button.standard.go[href^=\"/watch/\"]') ??
+          document.querySelector('a[href^=\"/watch/\"]');
+
+  var unwatchLinkElement =
+      document.querySelector('a.button.standard.stop[href^=\"/unwatch/\"]') ??
+          document.querySelector('a[href^=\"/unwatch/\"]');
+
+  var blockLinkElement =
+      document.querySelector('a.button.standard.stop[href^=\"/block/\"]') ??
+          document.querySelector('form[action^=\"/block/\"]');
+  String? computedBlockLink;
+  bool blockUsesPost = false;
+  if (blockLinkElement != null) {
+    if (blockLinkElement.localName == 'form') {
+      blockUsesPost = true;
+      final actionUrl = blockLinkElement.attributes['action'];
+      final keyElem = blockLinkElement.querySelector('input[name=\"key\"]') ??
+          blockLinkElement.querySelector('button[name=\"key\"]');
+      final keyValue = keyElem?.attributes['value'] ?? '';
+
+      if (actionUrl != null && keyValue.isNotEmpty) {
+        final actionUri = Uri.parse(actionUrl.startsWith('http')
+            ? actionUrl
+            : 'https://www.furaffinity.net$actionUrl');
+        computedBlockLink =
+            actionUri.replace(queryParameters: {'key': keyValue}).toString();
+      }
+    } else {
+      computedBlockLink = blockLinkElement.attributes['href'];
+    }
+  }
+
+  var unblockLinkElement =
+      document.querySelector('a.button.standard.stop[href^=\"/unblock/\"]') ??
+          document.querySelector('form[action^=\"/unblock/\"]');
+  String? computedUnblockLink;
+  bool unblockUsesPost = false;
+  if (unblockLinkElement != null) {
+    if (unblockLinkElement.localName == 'form') {
+      unblockUsesPost = true;
+      final actionUrl = unblockLinkElement.attributes['action'];
+      final keyElem =
+          unblockLinkElement.querySelector('input[name=\"key\"]') ??
+              unblockLinkElement.querySelector('button[name=\"key\"]');
+      final keyValue = keyElem?.attributes['value'] ?? '';
+
+      if (actionUrl != null && keyValue.isNotEmpty) {
+        final actionUri = Uri.parse(actionUrl.startsWith('http')
+            ? actionUrl
+            : 'https://www.furaffinity.net$actionUrl');
+        computedUnblockLink =
+            actionUri.replace(queryParameters: {'key': keyValue}).toString();
+      }
+    } else {
+      computedUnblockLink = unblockLinkElement.attributes['href'];
+    }
+
+  }
+
+  bool isOwnProfile = watchLinkElement == null &&
+      unwatchLinkElement == null &&
+      blockLinkElement == null &&
+      unblockLinkElement == null;
+
+  if (userProfileTexts != null && userProfileTexts.trim().isEmpty) {
+    userProfileTexts = null;
+  }
+
+  return UserProfileParsed(
+    profileBannerUrl: profileBannerUrl,
+    profileImageUrl: profileImageUrl,
+    profileDisplayName: displayName,
+    profileUserNamePart: profileUserNamePart,
+    symbolUsername: symbolUsername,
+    username: username,
+    userTitle: userTitle,
+    registrationDate: registrationDate,
+    userDescription: userDescription,
+    hasRealUserProfile: hasRealUserProfile,
+    isClassicMarkup: isClassicMarkup,
+    acceptingTrades: acceptingTrades,
+    acceptingCommissions: acceptingCommissions,
+    userIconBeforeUrls: userIconBeforeUrls,
+    userIconAfterUrls: userIconAfterUrls,
+    views: views,
+    submissions: submissions,
+    favs: favs,
+    commentsEarned: commentsEarned,
+    commentsMade: commentsMade,
+    journals: journals,
+    featuredImageUrl: featuredImageUrl,
+    featuredImageTitle: featuredImageTitle,
+    featuredPostNumber: featuredPostNumber,
+    userProfileImageUrl: userProfileImageUrl,
+    userProfilePostNumber: userProfilePostNumber,
+    userProfileTexts: userProfileTexts,
+    contactInformationLinks: contactInformationLinks,
+    recentWatchers: recentWatchers,
+    recentWatchersCount: recentWatchersCount,
+    recentlyWatched: recentlyWatched,
+    recentlyWatchedCount: recentlyWatchedCount,
+    shouts: shouts,
+    shoutPaginationKey: shoutPaginationKey,
+    currentShoutPage: currentShoutPage,
+    totalShoutPages: totalShoutPages,
+    watchLink: watchLinkElement?.attributes['href'],
+    unwatchLink: unwatchLinkElement?.attributes['href'],
+    blockLink: computedBlockLink,
+    unblockLink: computedUnblockLink,
+    blockUsesPost: blockUsesPost,
+    unblockUsesPost: unblockUsesPost,
+    isWatching: unwatchLinkElement != null,
+    isBlocked: computedUnblockLink != null,
+    isOwnProfile: isOwnProfile,
+  );
+}

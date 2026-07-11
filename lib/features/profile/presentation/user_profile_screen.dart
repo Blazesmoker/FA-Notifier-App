@@ -2,9 +2,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math';
-import 'dart:ui' as ui;
 import 'package:FANotifier/features/profile/presentation/user_description_webview.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/scheduler.dart';
@@ -17,6 +15,7 @@ import 'package:FANotifier/features/profile/domain/fa_folder.dart';
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
 import 'package:FANotifier/features/profile/domain/shout.dart';
 import 'package:FANotifier/features/profile/domain/user_profile_api_models.dart';
+import 'package:FANotifier/features/profile/domain/user_profile_shout_deletion_result.dart';
 import 'package:FANotifier/features/profile/domain/user_link.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/shared/fa/fa_username.dart';
@@ -34,6 +33,9 @@ import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
 import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.dart';
 import 'package:FANotifier/features/profile/data/user_profile_api_service.dart';
+import 'package:FANotifier/features/profile/data/user_profile_loader.dart';
+import 'package:FANotifier/features/profile/data/profile_avatar_transparency_detector.dart';
+import 'package:FANotifier/features/profile/data/user_profile_shout_deletion_coordinator.dart';
 import 'package:FANotifier/features/profile/data/user_profile_action_parser.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_sliver_helpers.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_favorites_section.dart';
@@ -222,6 +224,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
       GlobalKey<UserDescriptionWebViewState>();
 
   late final UserProfileApiService _api;
+  late final UserProfileLoader _profileLoader;
+  final ProfileAvatarTransparencyDetector _avatarTransparencyDetector =
+      const ProfileAvatarTransparencyDetector();
   final SfwModePreference _sfwModePreference = SfwModePreference();
   final TranslationService _translationService = TranslationService.instance;
 
@@ -465,6 +470,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     DetachableWebViewRouteRegistry.register(this);
 
     _api = UserProfileApiService();
+    _profileLoader = UserProfileLoader(api: _api);
     if (_webViewScrollOptimizationEnabled) {
       SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
     }
@@ -1248,12 +1254,14 @@ class UserProfileScreenState extends State<UserProfileScreen>
     });
 
     try {
-      final resolvedShouts = await _api.resolveControlsShouts(
+      final deletionResult = await UserProfileShoutDeletionCoordinator(_api)
+          .delete(
         shouts: shoutsToDelete,
         sfwEnabled: _sfwEnabled,
       );
 
-      if (resolvedShouts.length != shoutsToDelete.length) {
+      if (deletionResult.status ==
+          UserProfileShoutDeletionStatus.unmatched) {
         showAppSnackBar(
           context,
           "Failed to match one or more selected shouts on the controls page.",
@@ -1262,37 +1270,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
         return;
       }
 
-      final shoutIdsByPage = <int, List<String>>{};
-      for (final resolvedShout in resolvedShouts) {
-        shoutIdsByPage.putIfAbsent(resolvedShout.page, () => <String>[]);
-        shoutIdsByPage[resolvedShout.page]!.add(resolvedShout.id);
-      }
-
-      final pages = shoutIdsByPage.keys.toList()
-        ..sort((a, b) => b.compareTo(a));
-      bool anySuccess = false;
-      DeleteShoutResult? failedResult;
-
-      for (final page in pages) {
-        final result = await _api.deleteShouts(
-          shoutIds: shoutIdsByPage[page]!,
-          sfwEnabled: _sfwEnabled,
-          page: page,
-        );
-
-        if (result.success) {
-          anySuccess = true;
-          continue;
-        }
-
-        failedResult = result;
-        break;
-      }
-
-      if (failedResult?.missingCookies == true) {
+      if (deletionResult.status ==
+          UserProfileShoutDeletionStatus.missingCookies) {
         showAppSnackBar(context, "Please log in to perform this action.",
             backgroundColor: Colors.red);
-      } else if (failedResult == null) {
+      } else if (deletionResult.status ==
+          UserProfileShoutDeletionStatus.success) {
         final deletedCount = shoutsToDelete.length;
         showAppSnackBar(
           context,
@@ -1309,7 +1292,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
         });
         await _fetchUserProfile();
         await _restoreLoadedShoutPages(loadedProfilePage);
-      } else if (anySuccess) {
+      } else if (deletionResult.status ==
+          UserProfileShoutDeletionStatus.partialFailure) {
         showAppSnackBar(
           context,
           "Some selected shouts were deleted, but one page failed.",
@@ -1323,8 +1307,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
         });
         await _fetchUserProfile();
         await _restoreLoadedShoutPages(loadedProfilePage);
-      } else if (failedResult.error != null) {
-        showAppSnackBar(context, "Error: ${failedResult.error}",
+      } else if (deletionResult.error != null) {
+        showAppSnackBar(context, "Error: ${deletionResult.error}",
             backgroundColor: Colors.red);
       } else {
         showAppSnackBar(context, "Failed to delete shout.",
@@ -1435,24 +1419,20 @@ class UserProfileScreenState extends State<UserProfileScreen>
   /// Fetches the user's profile data from FurAffinity.
   Future<void> _fetchUserProfile() async {
     try {
-      final payload = await _api.fetchProfile(
+      final result = await _profileLoader.load(
         nickname: widget.nickname,
         sfwEnabled: _sfwEnabled,
       );
 
-      sanitizedUsername = payload.sanitizedUsername;
-
-      final parsed = await compute(parseUserProfileHtml, payload.htmlBody);
-      final bool shouldShowDescription = parsed.hasRealUserProfile &&
-          parsed.userDescription != null &&
-          parsed.userDescription!.trim().isNotEmpty;
+      sanitizedUsername = result.sanitizedUsername;
 
       setState(() {
-        _profileParsed = parsed;
-        _webViewLoaded = shouldShowDescription ? _webViewLoaded : true;
+        _profileParsed = result.parsed;
+        _webViewLoaded =
+            result.shouldShowDescription ? _webViewLoaded : true;
         isLoading = false;
       });
-      _updateProfileAvatarTransparency(parsed.profileImageUrl);
+      _updateProfileAvatarTransparency(result.parsed.profileImageUrl);
 
       debugPrint("Block/Unblock Link: $blockLink / $unblockLink");
       debugPrint("Watch/Unwatch Link: $watchLink / $unwatchLink");
@@ -1610,7 +1590,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
         (ImageInfo imageInfo, bool synchronousCall) async {
           stream.removeListener(listener);
           final bool hasTransparentEdge =
-              await _imageHasTransparentEdge(imageInfo.image);
+              await _avatarTransparencyDetector
+                  .hasTransparentEdge(imageInfo.image);
           if (!mounted ||
               generation != _profileAvatarTransparencyCheckGeneration ||
               _profileAvatarTransparencyCheckedUrl != trimmedUrl) {
@@ -1639,31 +1620,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
       );
       stream.addListener(listener);
     });
-  }
-
-  Future<bool> _imageHasTransparentEdge(ui.Image image) async {
-    final ByteData? bytes =
-        await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-    if (bytes == null || image.width <= 0 || image.height <= 0) {
-      return false;
-    }
-
-    bool isTransparentAt(int x, int y) {
-      final int alphaIndex = ((y * image.width + x) * 4) + 3;
-      return bytes.getUint8(alphaIndex) < 255;
-    }
-
-    for (int x = 0; x < image.width; x++) {
-      if (isTransparentAt(x, 0) || isTransparentAt(x, image.height - 1)) {
-        return true;
-      }
-    }
-    for (int y = 0; y < image.height; y++) {
-      if (isTransparentAt(0, y) || isTransparentAt(image.width - 1, y)) {
-        return true;
-      }
-    }
-    return false;
   }
 
   Widget buildAvatarImage() {
