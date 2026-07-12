@@ -1,32 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:dio/dio.dart';
-import 'package:html/parser.dart' as html_parser;
-import 'package:html/dom.dart' as dom;
 import 'package:FANotifier/features/notifications/domain/notifications.dart';
 import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
 import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:FANotifier/features/notifications/domain/fa_notifications_page_snapshot.dart';
+import 'package:FANotifier/features/notifications/domain/notification_shout_merge_policy.dart';
 import 'package:FANotifier/features/notifications/data/simple_semaphore.dart';
-import 'package:FANotifier/features/notifications/data/fa_notification_link_parser.dart';
-import 'package:FANotifier/features/notifications/data/notification_section_parser_helpers.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_cookie_header_provider.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_media_repository.dart';
+import 'package:FANotifier/features/notifications/data/fa_notifications_page_parser.dart';
+import 'package:FANotifier/features/notifications/data/fa_notifications_remote_data_source.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_shout_repository.dart';
 import 'package:FANotifier/features/notifications/data/notification_removal_request_builder.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
-
-import 'notification_shout_parser.dart';
 
 /// Centralized service for notifications.
 class FANotificationService with ChangeNotifier {
-  final Dio _dio = Dio();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    iOptions: IOSOptions( 
-    accountName: 'flutter_secure_storage_service',
-    accessibility: KeychainAccessibility.first_unlock),
-  );
+  FANotificationService({
+    FaNotificationsRemoteDataSource? remoteDataSource,
+  }) : _remoteDataSource =
+            remoteDataSource ?? FaNotificationsRemoteDataSource();
+
+  final FaNotificationsRemoteDataSource _remoteDataSource;
 
   bool isLoading = true;
   bool hasFetched = false;
@@ -49,6 +42,8 @@ class FANotificationService with ChangeNotifier {
     semaphore: _semaphore,
     cookieHeaderProvider: _cookieHeaderProvider,
   );
+  static const NotificationShoutMergePolicy _shoutMergePolicy =
+      NotificationShoutMergePolicy();
   String? displayName;
   String? username;
   bool shoutsEnriched = false;
@@ -58,69 +53,12 @@ class FANotificationService with ChangeNotifier {
   String? get shoutsEnrichedSignature => _shoutsEnrichedSignature;
 
   bool get shoutsNeedEnrich {
-    final idx = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
-    if (idx == -1) return false;
-    if (_shoutsAppearEnrichedFromMsgOthers()) return false; // classic already has bodies/avatars
-    if (_shoutsLightSignature.isEmpty) return false;
-    return _shoutsEnrichedSignature != _shoutsLightSignature;
+    return _shoutMergePolicy.needsEnrichment(
+      sections: sections,
+      lightSignature: _shoutsLightSignature,
+      enrichedSignature: _shoutsEnrichedSignature,
+    );
   }
-
-  String _computeShoutsSignatureFromSections(List<NotificationSection> secs) {
-    final idx = secs.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
-    if (idx == -1) return '';
-    final ids = secs[idx]
-        .items
-        .map((it) => it.id.trim())
-        .where((id) => id.isNotEmpty)
-        .toList(growable: false);
-    return ids.join(',');
-  }
-
-  Map<String, NotificationItem> _captureShoutsById() {
-    final idx = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
-    if (idx == -1) return <String, NotificationItem>{};
-    final map = <String, NotificationItem>{};
-    for (final it in sections[idx].items) {
-      map[it.id] = it;
-    }
-    return map;
-  }
-
-  void _applyEnrichedShoutsFromPrevious(Map<String, NotificationItem> prevById) {
-    final idx = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
-    if (idx == -1) return;
-
-    final existing = sections[idx].items;
-    final rebuilt = <NotificationItem>[];
-    for (final it in existing) {
-      final prev = prevById[it.id];
-      final mergedContent = (prev != null && prev.content.isNotEmpty) ? prev.content : it.content;
-      final mergedUsername = (prev != null && (prev.username ?? '').isNotEmpty) ? prev.username : it.username;
-      final mergedLinkUsername =
-          (prev != null && (prev.linkUsername ?? '').isNotEmpty) ? prev.linkUsername : it.linkUsername;
-      final mergedAvatarUrl =
-          (prev != null && (prev.avatarUrl ?? '').isNotEmpty) ? prev.avatarUrl : it.avatarUrl;
-
-      rebuilt.add(NotificationItem(
-        id: it.id,
-        content: mergedContent,
-        username: mergedUsername,
-        linkUsername: mergedLinkUsername,
-        submissionId: it.submissionId,
-        journalId: it.journalId,
-        url: it.url,
-        avatarUrl: mergedAvatarUrl,
-        date: it.date,
-        fullDate: it.fullDate,
-        isChecked: it.isChecked,
-      ));
-    }
-    sections[idx].items = rebuilt;
-  }
-  FANotificationService() {
-    _initializeDio();
-  }
-
   /// Stores counts from the message-bar (e.g., {"W": 1, "F": 2, "J": 3}).
   Map<String, int> messageBarCounts = {};
   bool hasValidLatestCountsSnapshot = false;
@@ -171,18 +109,6 @@ class FANotificationService with ChangeNotifier {
     }
   }
 
-  Future<void> _initializeDio() async {
-    _dio.options.headers['User-Agent'] = FAHttp.userAgent;
-    _dio.options.headers['Accept'] =
-    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8';
-    _dio.options.headers['Accept-Encoding'] = 'gzip, deflate, br, zstd';
-    _dio.options.headers['Accept-Language'] = 'en-US,en;q=0.9,ru;q=0.8';
-    _dio.options.followRedirects = false;
-    _dio.options.validateStatus = (status) =>
-        status != null && status >= 200 && status < 600;
-  }
-
-
   void clearAllNotifications() {
     isLoading = false;
     hasFetched = true;
@@ -204,421 +130,68 @@ class FANotificationService with ChangeNotifier {
     notifyListeners();
 
     try {
-      String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-      String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-      if (cookieA == null || cookieB == null) {
-        throw Exception('Authentication cookies not found.');
-      }
+      final remoteSession =
+          await _remoteDataSource.createAuthenticatedSession();
+      final response =
+          await _remoteDataSource.fetchNotificationsPage(remoteSession);
 
-
-      const url = 'https://www.furaffinity.net/msg/others/';
-      await FaRequestCoordinator.instance.waitForTurn(label: 'GET $url');
-      final response = await _dio.get(
-        url,
-        options: Options(
-          headers: {
-            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-              'a=$cookieA; b=$cookieB',
-            ),
-            'Referer': 'https://www.furaffinity.net/msg/others/',
-          },
-        ),
+      final parserState = FaNotificationsPageParserState(
+        linkUsername: linkUsername,
+        displayName: displayName,
       );
-      FaRequestCoordinator.instance.recordHttpStatus(
-        statusCode: response.statusCode,
-        responseBody: response.statusCode == 403 ? response.data : null,
-      );
-      if (response.statusCode != 200) {
-        throw Exception('Failed to load notifications.');
-      }
-
-      final document = html_parser.parse(response.data.toString());
-
-      // Find message-bar in both modern and classic formats
-      final messageBar = document.querySelector('li.message-bar-desktop') ??
-          document.querySelector('li.noblock');
-      if (messageBar == null) {
-        throw Exception('Notification counters not found.');
-      }
-      messageBarCounts.clear();
-      final links = messageBar.querySelectorAll('a.notification-container');
-      bool foundNotificationCounter = false;
-      for (final link in links) {
-        final href = link.attributes['href'] ?? '';
-        final text = link.text.trim();
-        final title = (link.attributes['title'] ?? '').trim();
-        final typeKey =
-            notificationTypeKeyFromHrefOrTitle(href: href, title: title);
-        if (typeKey == null) continue;
-        foundNotificationCounter = true;
-        final int count = extractNotificationCount(
-          title.isNotEmpty ? title : text,
+      late final FaNotificationsPageSnapshot pageSnapshot;
+      try {
+        pageSnapshot = parseFaNotificationsPage(
+          response.htmlBody,
+          messageBarCounts: messageBarCounts,
+          sideState: parserState,
         );
-        if (count > 0) {
-          messageBarCounts[typeKey] = count;
+      } finally {
+        if (parserState.hasValidLatestCountsSnapshot) {
+          latestCounts = parserState.latestCounts!;
+          hasValidLatestCountsSnapshot = true;
         }
-      }
-      if (!foundNotificationCounter) {
-        throw Exception('Notification counters not found.');
-      }
-
-      final body = document.querySelector('body');
-      final bool isClassic = (body?.attributes['data-static-path'] == '/themes/classic');
-      int registeredUsersOnline = 0;
-      if (isClassic) {
-        final center = document.querySelector('div.footer center');
-        final txt = center?.text ?? '';
-        final m = RegExp(r'(\d+)\s+registered', caseSensitive: false).firstMatch(txt);
-        if (m != null) {
-          registeredUsersOnline = int.tryParse(m.group(1)!.replaceAll(',', '')) ?? 0;
+        final parsedTopBarNotifications =
+            parserState.latestTopBarNotifications;
+        if (parsedTopBarNotifications != null) {
+          latestTopBarNotifications = parsedTopBarNotifications;
         }
-      } else {
-        final statsDiv = document.querySelector('div.online-stats');
-        final txt = statsDiv?.text ?? '';
-        final m = RegExp(r'(\d+)\s+registered', caseSensitive: false).firstMatch(txt);
-        if (m != null) {
-          registeredUsersOnline = int.tryParse(m.group(1)!.replaceAll(',', '')) ?? 0;
+        if (parserState.hasParsedCurrentUsername) {
+          currentUsername = parserState.currentUsername;
+          currentUsernameFromLink = currentUsername;
         }
+        linkUsername = parserState.linkUsername;
+        displayName = parserState.displayName;
       }
-
-      final int s = messageBarCounts['S'] ?? 0;
-      final int w = messageBarCounts['W'] ?? 0;
-      final int c = messageBarCounts['C'] ?? 0;
-      final int f = messageBarCounts['F'] ?? 0;
-      final int j = messageBarCounts['J'] ?? 0;
-      final int n = messageBarCounts['N'] ?? 0;
-      latestCounts = NotificationCounts(
-        submissions: s,
-        watches: w,
-        comments: c,
-        favorites: f,
-        journals: j,
-        notes: n,
-      );
-      hasValidLatestCountsSnapshot = true;
-      latestTopBarNotifications = Notifications(
-        submissions: '$s',
-        watches: '$w',
-        journals: '$j',
-        notes: '$n',
-        comments: '$c',
-        favorites: '$f',
-        registeredUsersOnline: '$registeredUsersOnline',
-      );
-
-      currentUsername = extractNotificationMenubarUsername(document);
-      currentUsernameFromLink = currentUsername;
-
-
-      List<dom.Element> containers = document.querySelectorAll('section.section_container');
-      if (containers.isEmpty) {
-        containers = document.querySelectorAll('fieldset');
-      }
-
-
-      final formAction =
-          document.querySelector('form#messages-form')?.attributes['action'] ?? '/msg/others/';
-
-      List<NotificationSection> fetchedSections = [];
-      for (var container in containers) {
-        String heading = notificationSectionHeadingFromContainer(container);
-
-        // Grab <li> items and ignore <li class="section-controls">
-        final liItems = container
-            .querySelectorAll('ul.message-stream > li')
-            .where((li) => !li.classes.contains('section-controls'))
-            .toList();
-
-        List<NotificationItem> items = [];
-        for (var li in liItems) {
-          dom.Element? checkbox = li.querySelector('input[type="checkbox"]');
-          String id = checkbox?.attributes['value'] ?? '';
-
-          // Extract date info
-          String date = '';
-          String fullDate = '';
-          dom.Element? dateElm = li.querySelector('.popup_date');
-          if (dateElm != null) {
-            date = dateElm.text.trim();
-            fullDate = dateElm.attributes['title'] ?? date;
-            dateElm.remove();
-          }
-
-
-          String content = li.innerHtml.trim().replaceAll(RegExp(r'<input[^>]*>'), '').trim();
-
-          String? username;
-          String? submissionId;
-          String? journalId;
-          String? url;
-          String? avatarUrl;
-          final lowerHeading = heading.toLowerCase();
-
-
-
-          if (lowerHeading.contains('watches')) {
-            bool isClassic = document.querySelector('body')?.attributes['data-static-path'] == '/themes/classic';
-            if (isClassic) {
-              dom.Element? tableElem = li.querySelector('table');
-              if (tableElem != null) {
-                dom.Element? av = tableElem.querySelector('td.avatar a img.avatar');
-
-                dom.Element? avatarLink = li.querySelector('td.avatar a');
-                if (avatarLink != null) {
-                  linkUsername = extractNotificationUsernameFromHref(
-                    avatarLink.attributes['href'],
-                  );
-                }
-                if (av != null) {
-                  avatarUrl =
-                      normalizeNotificationImageUrl(av.attributes['src']);
-                }
-              }
-              dom.Element? infoDiv = li.querySelector('div.info');
-              if (infoDiv != null) {
-                displayName = infoDiv.querySelector('span')?.text.trim();
-              }
-
-
-              dom.Element? avatarLink = li.querySelector('td.avatar a');
-              if (avatarLink != null) {
-                username = extractNotificationUsernameFromHref(
-                  avatarLink.attributes['href'],
-                );
-              }
-
-              String avatarHtml = li.querySelector('div.avatar')?.outerHtml ?? '';
-              String infoHtml = li.querySelector('div.info')?.outerHtml ?? '';
-              content = avatarHtml + infoHtml;
-            } else {
-              dom.Element? infoDiv = li.querySelector('div.info');
-              if (infoDiv != null) {
-
-                dom.Element? avatarLink = li.querySelector('div.avatar a');
-                if (avatarLink != null) {
-                  linkUsername = extractNotificationUsernameFromHref(
-                    avatarLink.attributes['href'],
-                  );
-                }
-                displayName = infoDiv.querySelector('span')?.text.trim();
-                dom.Element? avatarImg = li.querySelector('div.avatar img.avatar');
-                if (avatarImg != null) {
-                  avatarUrl = normalizeNotificationImageUrl(
-                    avatarImg.attributes['src'],
-                  );
-                }
-                content = infoDiv.outerHtml;
-              }
-            }
-          } else if (lowerHeading.contains('favorites')) {
-            dom.Element? subLink = li.querySelector('a[href*="/view/"]');
-            if (subLink != null) {
-              url = subLink.attributes['href'];
-              submissionId = extractNotificationSubmissionIdFromHref(url);
-              content = content.replaceAll('"', '');
-            }
-          } else if (lowerHeading.contains('journal comments')) {
-            dom.Element? journLink = li.querySelector('a[href*="/journal/"]');
-            if (journLink != null) {
-              url = journLink.attributes['href'];
-              journalId = extractNotificationJournalIdFromHref(url);
-            }
-            if (username != null && journalId != null) {
-              content = "$username replied to your journal $journalId";
-            } else {
-              content = content
-                  .replaceFirst(RegExp(r'\s*has replied to your journal titled\s*'), ' replied to your journal ')
-                  .replaceAll('"', '');
-            }
-            if (content.isNotEmpty) {
-              content = content.substring(0, content.length - 1);
-            }
-          } else if (lowerHeading.contains('submission comments')) {
-            dom.Element? subLink = li.querySelector('a[href*="/view/"]');
-            if (subLink != null) {
-              url = subLink.attributes['href'];
-              submissionId = extractNotificationSubmissionIdFromHref(url);
-              content = content.replaceAll('"', '');
-            }
-            if (content.isNotEmpty) {
-              content = content.substring(0, content.length - 1);
-            }
-          }
-          else if (lowerHeading.contains('shouts')) {
-            bool isClassic = document.querySelector('body')?.attributes['data-static-path'] == '/themes/classic';
-            if (isClassic) {
-              if (li.localName == 'table' && li.id.startsWith('shout-')) {
-                if (li.text.trim() == 'Shout has been removed from your page.') {
-                  content = 'Shout has been removed from your page.';
-                } else {
-                  dom.Element? av = li.querySelector('td.alt1 a img.avatar');
-                  if (av != null) {
-                    avatarUrl =
-                        normalizeNotificationImageUrl(av.attributes['src']);
-                  }
-                  dom.Element? unameLink = li.querySelector('div.c-usernameBlock a.c-usernameBlock__displayName');
-                  if (unameLink != null) {
-                    username = unameLink.text.trim();
-                    url = unameLink.attributes['href'];
-                  }
-                  dom.Element? dateElem = li.querySelector('span.popup_date');
-                  if (dateElem != null) {
-                    date = dateElem.text.trim();
-                    fullDate = dateElem.attributes['title'] ?? date;
-                    dateElem.remove();
-                  }
-                  dom.Element? contentDiv = li.querySelector('td.alt1.addpad div.no_overflow');
-                  if (contentDiv != null) {
-                    content = contentDiv.text.trim();
-                  } else {
-                    content = li.text.trim();
-                  }
-                }
-              } else if (li.querySelector('input[type="checkbox"][name="shouts[]"]') != null) {
-                dom.Element? userLink = li.querySelector('a[href*="/user/"]');
-                if (userLink != null) {
-                  username = userLink.text.trim();
-                  url = userLink.attributes['href'];
-                }
-                dom.Element? dateElem = li.querySelector('span.popup_date');
-                if (dateElem != null) {
-                  date = dateElem.text.trim();
-                  fullDate = dateElem.attributes['title'] ?? date;
-                  dateElem.remove();
-                }
-                content = li.text.trim();
-              } else {
-                if (li.text.contains('Shout has been removed')) {
-                  content = 'Shout has been removed from your page.';
-                } else {
-                  dom.Element? userLink = li.querySelector('a[href*="/user/"]');
-                  if (userLink != null) {
-                    username = userLink.text.trim();
-                    url = userLink.attributes['href'];
-                  }
-                  dom.Element? av = li.querySelector('div.avatar img.avatar');
-                  if (av != null) {
-                    avatarUrl =
-                        normalizeNotificationImageUrl(av.attributes['src']);
-                  }
-                }
-              }
-            } else {
-
-              dom.Element? nameSpan = li.querySelector(
-                  'span.c-usernameBlockSimple.username-underlined a[href*="/user/"] span.c-usernameBlockSimple__displayName'
-              );
-              if (nameSpan != null) {
-                username = nameSpan.text.trim();
-              }
-              dom.Element? parentAnchor = li.querySelector(
-                  'span.c-usernameBlockSimple.username-underlined a[href*="/user/"]'
-              );
-              if (parentAnchor != null) {
-                url = parentAnchor.attributes['href'];
-                String extracted = extractNotificationNicknameLink(li);
-                if (extracted.isNotEmpty) {
-                  username = username ?? "";
-
-                }
-              }
-              dom.Element? avatarImg = li.querySelector('div.avatar img.avatar');
-              if (avatarImg != null) {
-                avatarUrl = normalizeNotificationImageUrl(
-                  avatarImg.attributes['src'],
-                );
-              }
-              dom.Element? timeSpan = li.querySelector('div.floatright span.popup_date');
-              if (timeSpan != null) {
-                date = timeSpan.text.trim();
-                fullDate = timeSpan.attributes['title'] ?? date;
-                timeSpan.remove();
-              }
-              final lower = li.text.toLowerCase();
-              content = lower.contains('shout has been removed')
-                  ? 'Shout has been removed from your page.'
-                  : '';
-            }
-
-            String finalNicknameLink = extractNotificationNicknameLink(li);
-
-
-            items.add(NotificationItem(
-              id: id,
-              content: content,
-              username: username,
-              // For shouts, store the user slug here (used for opening profile).
-              linkUsername: finalNicknameLink,
-              submissionId: submissionId,
-              journalId: journalId,
-              url: url,
-              avatarUrl: avatarUrl,
-              date: date,
-              fullDate: fullDate,
-            ));
-
-            continue;
-          }
-
-          else if (lowerHeading.contains('journals')) {
-            dom.Element? journLink = li.querySelector('a[href*="/journal/"]');
-            if (journLink != null) {
-              url = journLink.attributes['href'];
-              journalId = extractNotificationJournalIdFromHref(url);
-            }
-            content = content.trim();
-            content = content.replaceAll('"', '').trim();
-            content = content.replaceFirst(RegExp(r',\s*posted by'), ' posted by');
-            if (content.endsWith(',')) {
-              content = content.substring(0, content.length - 1).trim();
-            }
-          }
-
-
-          items.add(
-            NotificationItem(
-              id: id,
-              content: content,
-              username: username,
-              linkUsername: linkUsername,
-              submissionId: submissionId,
-              journalId: journalId,
-              url: url,
-              avatarUrl: avatarUrl,
-              date: date,
-              fullDate: fullDate,
-            ),
-          );
-        }
-
-
-        fetchedSections.add(
-          NotificationSection(
-            title: heading,
-            formAction: formAction,
-            items: items,
-          ),
-        );
-      }
-
 
       final prevEnrichedSig = _shoutsEnrichedSignature;
-      final prevById = (prevEnrichedSig != null) ? _captureShoutsById() : <String, NotificationItem>{};
+      final prevById = (prevEnrichedSig != null)
+          ? _shoutMergePolicy.captureById(sections)
+          : <String, NotificationItem>{};
 
-      sections = fetchedSections;
+      sections = pageSnapshot.sections.toList();
       debugPrint("[fetchNotifications] Parsed sections: "
           "${sections.map((s) => s.title).toList()}");
       // Shouts signature is used to decide if we need enrichment when the user opens the tab.
-      final newSig = _computeShoutsSignatureFromSections(sections);
+      final newSig = _shoutMergePolicy.signatureFromSections(sections);
       _shoutsLightSignature = newSig;
 
       // If we already enriched these exact shout IDs before, preserve the enriched data
       // across background refreshes without re-fetching.
       if (newSig.isNotEmpty && prevEnrichedSig != null && prevEnrichedSig == newSig && prevById.isNotEmpty) {
-        _applyEnrichedShoutsFromPrevious(prevById);
+        final shoutSectionIndex =
+            _shoutMergePolicy.shoutSectionIndex(sections);
+        if (shoutSectionIndex != -1) {
+          sections[shoutSectionIndex].items =
+              _shoutMergePolicy.mergePreviousEnrichedItems(
+            existingItems: sections[shoutSectionIndex].items,
+            previousItemsById: prevById,
+          );
+        }
         shoutsEnriched = true;
         _shoutsEnrichedSignature = newSig;
-      } else if (newSig.isNotEmpty && _shoutsAppearEnrichedFromMsgOthers()) {
+      } else if (newSig.isNotEmpty &&
+          _shoutMergePolicy.appearsEnriched(sections)) {
         // Classic msg/others already includes shout bodies/avatars.
         shoutsEnriched = true;
         _shoutsEnrichedSignature = newSig;
@@ -666,36 +239,17 @@ class FANotificationService with ChangeNotifier {
     isLoading = true;
     notifyListeners();
     try {
-      String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-      String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-      if (cookieA == null || cookieB == null) {
-        throw Exception('Authentication cookies not found.');
-      }
+      final remoteSession =
+          await _remoteDataSource.createAuthenticatedSession();
       String tLower = sections[sectionIndex].title.toLowerCase();
       final fields = buildSelectedNotificationRemovalFields(
         sections[sectionIndex].title,
         selectedItems.map((item) => item.id),
       );
-      final dioFormData = buildNotificationFormData(fields);
-      final url =
-          'https://www.furaffinity.net${sections[sectionIndex].formAction}';
-      await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
-      final response = await _dio.post(
-        url,
-        data: dioFormData,
-        options: Options(
-          headers: {
-            'Referer': 'https://www.furaffinity.net/msg/others/',
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-              'a=$cookieA; b=$cookieB',
-            ),
-          },
-        ),
-      );
-      FaRequestCoordinator.instance.recordHttpStatus(
-        statusCode: response.statusCode,
-        responseBody: response.statusCode == 403 ? response.data : null,
+      final response = await _remoteDataSource.removeSelected(
+        remoteSession,
+        formAction: sections[sectionIndex].formAction,
+        fields: fields,
       );
       if (tLower.contains('shouts')) {
         if (response.statusCode == 200 || response.statusCode == 302) {
@@ -733,36 +287,17 @@ class FANotificationService with ChangeNotifier {
     isLoading = true;
     notifyListeners();
     try {
-      String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-      String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-      if (cookieA == null || cookieB == null) {
-        throw Exception('Authentication cookies not found.');
-      }
+      final remoteSession =
+          await _remoteDataSource.createAuthenticatedSession();
       final fields =
           buildNotificationNukeFields(sections[sectionIndex].title);
       if (fields.isEmpty) {
         throw Exception('Unknown section type for nuking: ${sections[sectionIndex].title}');
       }
-      final dioFormData = buildNotificationFormData(fields);
-      final url =
-          'https://www.furaffinity.net${sections[sectionIndex].formAction}';
-      await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
-      final response = await _dio.post(
-        url,
-        data: dioFormData,
-        options: Options(
-          headers: {
-            'Referer': 'https://www.furaffinity.net/msg/others/',
-            'Content-Type': 'multipart/form-data',
-            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-              'a=$cookieA; b=$cookieB',
-            ),
-          },
-        ),
-      );
-      FaRequestCoordinator.instance.recordHttpStatus(
-        statusCode: response.statusCode,
-        responseBody: response.statusCode == 403 ? response.data : null,
+      final response = await _remoteDataSource.nukeSection(
+        remoteSession,
+        formAction: sections[sectionIndex].formAction,
+        fields: fields,
       );
       if (response.statusCode == 302) {
         sections[sectionIndex].items.clear();
@@ -788,11 +323,8 @@ class FANotificationService with ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
-      String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-      String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-      if (cookieA == null || cookieB == null) {
-        throw Exception('Authentication cookies not found.');
-      }
+      final remoteSession =
+          await _remoteDataSource.createAuthenticatedSession();
       for (int i = sections.length - 1; i >= 0; i--) {
         List<NotificationItem> items = sections[i].items;
         if (items.isEmpty) continue;
@@ -801,25 +333,10 @@ class FANotificationService with ChangeNotifier {
           items.map((item) => item.id),
         );
         if (fields.isEmpty) continue;
-        final dioFormData = buildNotificationFormData(fields);
-        final url = 'https://www.furaffinity.net${sections[i].formAction}';
-        await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
-        final resp = await _dio.post(
-          url,
-          data: dioFormData,
-          options: Options(
-            headers: {
-              'Referer': 'https://www.furaffinity.net/msg/others/',
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-                'a=$cookieA; b=$cookieB',
-              ),
-            },
-          ),
-        );
-        FaRequestCoordinator.instance.recordHttpStatus(
-          statusCode: resp.statusCode,
-          responseBody: resp.statusCode == 403 ? resp.data : null,
+        final resp = await _remoteDataSource.removeAllFromSection(
+          remoteSession,
+          formAction: sections[i].formAction,
+          fields: fields,
         );
         if (resp.statusCode == 302) {
           sections[i].items.clear();
@@ -839,74 +356,25 @@ class FANotificationService with ChangeNotifier {
 
   /// Update the shouts section with new data.
   void updateShouts(List<dynamic> newShouts) {
-    int idx = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
+    int idx = _shoutMergePolicy.shoutSectionIndex(sections);
     if (idx == -1) return;
-    List<NotificationItem> updated = [];
-    for (var sh in newShouts) {
-      NotificationItem? oldItem = sections[idx].items.firstWhere(
-              (o) => o.id == sh.id,
-          orElse: () => NotificationItem(
-            id: sh.id,
-            content: sh.textContent,
-            username: sh.nickname,
-            linkUsername: sh.nicknameLink,
-            avatarUrl: sh.avatarUrl,
-            date: sh.postedAgo,
-            fullDate: sh.postedTitle,
-          ));
-      updated.add(NotificationItem(
-        id: sh.id,
-        content: sh.textContent,
-        username: sh.nickname,
-        linkUsername: sh.nicknameLink,
-        avatarUrl: sh.avatarUrl,
-        date: sh.postedAgo,
-        fullDate: sh.postedTitle,
-        isChecked: oldItem.isChecked,
-      ));
-    }
+    final updated = _shoutMergePolicy.updatedItems(
+      existingItems: sections[idx].items,
+      newShouts: newShouts,
+    );
     sections[idx].items = updated;
     shoutsEnriched = true;
-    final sig = updated.map((it) => it.id.trim()).where((id) => id.isNotEmpty).join(',');
+    final sig = _shoutMergePolicy.signatureFromItems(updated);
     _shoutsLightSignature = sig;
     _shoutsEnrichedSignature = sig;
     notifyListeners();
   }
 
-  bool _shoutsAppearEnrichedFromMsgOthers() {
-    final idx = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
-    if (idx == -1) return false;
-    final items = sections[idx].items;
-    if (items.isEmpty) return false;
-    // If any non-removed shout has a non-empty body, consider it enriched (classic msg/others).
-    return items.any((it) {
-      final removed = it.content.toLowerCase().contains('shout has been removed');
-      if (removed) return false;
-      return it.content.trim().isNotEmpty;
-    });
-  }
-
-  static String _normalizeShoutStamp(String s) {
-    return s.replaceFirst(RegExp(r'^on\s+', caseSensitive: false), '').trim();
-  }
-
   Future<List<Shout>> enrichShoutsFromProfileIfNeeded({bool force = false}) async {
-    final idx = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
+    final idx = _shoutMergePolicy.shoutSectionIndex(sections);
     if (idx == -1) return const <Shout>[];
     if (!force && shoutsEnriched) {
-      return sections[idx].items.map((it) {
-        return Shout(
-          id: it.id,
-          nickname: it.username ?? '',
-          nicknameLink: it.linkUsername ?? '',
-          postedTitle: it.fullDate,
-          avatarUrl: it.avatarUrl ?? '',
-          postedAgo: it.date,
-          textContent: it.content,
-          isRemoved: it.content.toLowerCase().contains('shout has been removed'),
-          isChecked: it.isChecked,
-        );
-      }).toList();
+      return _shoutMergePolicy.shoutsFromItems(sections[idx].items);
     }
 
     final my = (currentUsername ?? '').trim();
@@ -914,42 +382,11 @@ class FANotificationService with ChangeNotifier {
 
     final profileShouts = await fetchProfileShouts(my, forceRefresh: true);
 
-    // Merge by nicknameLink (preferred) + timestamp, falling back to display name.
     final currentItems = sections[idx].items;
-    final enriched = <Shout>[];
-    for (final item in currentItems) {
-      final removed = item.content.toLowerCase().contains('shout has been removed');
-      final wantLink = (item.linkUsername ?? '').trim().toLowerCase();
-      final wantName = (item.username ?? '').trim().toLowerCase();
-      final wantStamp = _normalizeShoutStamp(item.fullDate);
-
-      Shout? match;
-      if (!removed) {
-        for (final p in profileShouts) {
-          final pLink = p.nicknameLink.trim().toLowerCase();
-          final pName = p.nickname.trim().toLowerCase();
-          final pStamp = _normalizeShoutStamp(p.postedTitle);
-          final linkOk = wantLink.isNotEmpty && pLink.isNotEmpty ? (wantLink == pLink) : true;
-          final nameOk = wantName.isNotEmpty ? (pName == wantName) : true;
-          if (pStamp == wantStamp && linkOk && nameOk) {
-            match = p;
-            break;
-          }
-        }
-      }
-
-      enriched.add(Shout(
-        id: item.id,
-        nickname: item.username ?? '',
-        nicknameLink: item.linkUsername ?? '',
-        postedTitle: item.fullDate,
-        avatarUrl: match?.avatarUrl ?? (item.avatarUrl ?? ''),
-        postedAgo: item.date,
-        textContent: match?.textContent ?? item.content,
-        isRemoved: removed,
-        isChecked: item.isChecked,
-      ));
-    }
+    final enriched = _shoutMergePolicy.mergeWithProfile(
+      currentItems: currentItems,
+      profileShouts: profileShouts,
+    );
 
     updateShouts(enriched);
     return enriched;
@@ -967,7 +404,7 @@ class FANotificationService with ChangeNotifier {
 
   /// Mark/unmark a single shout by ID.
   void setShoutCheckedById(String id, bool isChecked) {
-    int idx = sections.indexWhere((s) => s.title.toLowerCase().contains('shouts'));
+    int idx = _shoutMergePolicy.shoutSectionIndex(sections);
     if (idx == -1) return;
     for (var item in sections[idx].items) {
       if (item.id == id) {

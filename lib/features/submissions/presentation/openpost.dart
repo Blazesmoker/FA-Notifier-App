@@ -19,26 +19,17 @@ import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/utils/comment_composer_lines.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/comments/data/submission_comment_service.dart';
-import 'package:FANotifier/features/submissions/data/openpost_action_service.dart';
-import 'package:FANotifier/features/submissions/data/openpost_cookie_service.dart';
-import 'package:FANotifier/features/submissions/data/openpost_details_loader.dart';
-import 'package:FANotifier/features/submissions/data/openpost_favorite_links_loader.dart';
-import 'package:FANotifier/features/submissions/data/openpost_user_actions_loader.dart';
 import 'package:FANotifier/features/submissions/data/openpost_link_parser.dart';
 import 'package:FANotifier/features/submissions/data/openpost_url_builder.dart';
-import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
 import 'package:FANotifier/features/submissions/data/openpost_media_export_service.dart';
-import 'package:FANotifier/features/submissions/data/submission_publication_time_parser.dart';
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/submissions/presentation/SubmissionDescriptionWebview.dart';
 import 'package:FANotifier/features/profile/presentation/image_inspect_screen.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_details_load_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_favorite_links_load_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_media_export_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_action_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_tag_block_state.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
+import 'package:FANotifier/features/submissions/presentation/openpost_controller.dart';
 import 'package:FANotifier/features/submissions/presentation/edit_submission_screen.dart';
 import 'package:FANotifier/features/comments/presentation/editcommentscreen.dart';
 import 'package:FANotifier/features/search/presentation/keyword_search_screen.dart';
@@ -55,68 +46,8 @@ import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/shared/translation/translation_service.dart';
 import 'package:FANotifier/shared/translation/translation_source_text_builder.dart';
 import 'package:FANotifier/shared/platform/fa_share_service.dart';
+import 'package:FANotifier/shared/navigation/transparent_slide_page_route.dart';
 import 'package:provider/provider.dart';
-
-class _TransparentOpenPostPageRoute<T> extends PageRoute<T> {
-  _TransparentOpenPostPageRoute({
-    required this.builder,
-    super.settings,
-    super.requestFocus,
-    this.maintainState = true,
-    this.routeTransitionDuration = const Duration(milliseconds: 280),
-    this.routeReverseTransitionDuration = const Duration(milliseconds: 280),
-  });
-
-  final WidgetBuilder builder;
-  @override
-  final bool maintainState;
-  final Duration routeTransitionDuration;
-  final Duration routeReverseTransitionDuration;
-
-  @override
-  bool get opaque => false;
-
-  @override
-  Color? get barrierColor => null;
-
-  @override
-  String? get barrierLabel => null;
-
-  @override
-  Duration get transitionDuration => routeTransitionDuration;
-
-  @override
-  Duration get reverseTransitionDuration => routeReverseTransitionDuration;
-
-  @override
-  Widget buildPage(
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-  ) {
-    return builder(context);
-  }
-
-  @override
-  Widget buildTransitions(
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
-    return SlideTransition(
-      position: animation.drive(
-        Tween<Offset>(
-          begin: const Offset(1.0, 0.0),
-          end: Offset.zero,
-        ).chain(
-          CurveTween(curve: Curves.easeOutCubic),
-        ),
-      ),
-      child: child,
-    );
-  }
-}
 
 class OpenPost extends StatefulWidget {
   final String imageUrl;
@@ -143,7 +74,7 @@ class OpenPost extends StatefulWidget {
         );
 
     if (Platform.isAndroid || Platform.isIOS) {
-      return _TransparentOpenPostPageRoute<T>(
+      return TransparentSlidePageRoute<T>(
         settings: settings,
         builder: builder,
       );
@@ -160,22 +91,7 @@ class _OpenPostState extends State<OpenPost>
     with RouteAware, WidgetsBindingObserver, TickerProviderStateMixin
     implements DetachableWebViewRouteOwner {
   bool _showFullPublicationDate = false;
-  String? profileImageUrl;
-  String? username;
-  String? linkUsername;
-  String? submissionTitle;
-  String? fullViewImageUrl;
-  String? submissionDescription;
-  DateTime? publicationTime;
-  String? rating; // "general" | "mature" | "adult" | null
-  int favoritesCount = 0;
-  int viewCount = 0;
-  int commentsCount = 0;
-  List<Map<String, dynamic>> comments = [];
-  late final OpenPostActionService _openPostActionService;
-  final OpenPostCookieService _openPostCookieService =
-      const OpenPostCookieService();
-  final SfwModePreference _sfwModePreference = SfwModePreference();
+  late final OpenPostController _controller;
   late final PostCommentService _postCommentService;
   final OpenPostMediaExportService _openPostMediaExportService =
       const OpenPostMediaExportService();
@@ -188,29 +104,6 @@ class _OpenPostState extends State<OpenPost>
   bool _blockRestoredCommentComposerFocus = true;
   Timer? _debounceTimer;
   bool _pendingFavoriteState = false;
-  String? userTimezoneIanaName;
-  String? currentUsername;
-  bool isDstCorrectionApplied = false;
-  String? favLink;
-  String? unfavLink;
-  bool isFavorited = false;
-  String? watchLink;
-  String? unwatchLink;
-  String? blockLink;
-  bool isWatching = false;
-  bool _watchLinksLoading = false;
-  String? unblockLink;
-  bool isBlocked = false;
-  String? category;
-  String? type;
-  String? species;
-  String? gender;
-  String? size;
-  String? fileSize;
-  List<String> keywords = [];
-  List<FaPostTag> keywordTags = [];
-  List<FaPostTag> metaKeywordTags = [];
-  String? tagBlocklistNonce;
   bool _showTagsSection = false;
   final Set<String> _tagToggleInFlight = <String>{};
   final ValueNotifier<bool> _showScrollToTopNotifier =
@@ -222,21 +115,12 @@ class _OpenPostState extends State<OpenPost>
       ValueNotifier<bool>(false);
   final ValueNotifier<bool> _commentDraftHasText = ValueNotifier<bool>(false);
   final ValueNotifier<int> _commentDraftCollapsedLines = ValueNotifier<int>(1);
-  String? _blockKey;
-  String? _unblockKey;
-  bool _isClassicUserPage = false;
   bool _isPostWebViewDetached = false;
   bool _suppressNextRouteDetach = false;
   bool _enableScrollWebViewPause = false;
   int _frameTimingCount = 0;
   int _frameTimingTotalMicros = 0;
-  double? imageWidth;
-  double? imageHeight;
-  bool isLoading = true;
-  bool _detailsLoaded = false;
   bool _webViewLoaded = false;
-  bool _sfwEnabled = true;
-  bool _nsfwAllowed = false;
   final GlobalKey<SubmissionDescriptionWebViewState> _submissionWebViewKey =
       GlobalKey<SubmissionDescriptionWebViewState>();
   final ScrollController _scrollController = ScrollController();
@@ -268,10 +152,45 @@ class _OpenPostState extends State<OpenPost>
   double get _backSwipeOffset => _backSwipeOffsetNotifier.value;
   set _backSwipeOffset(double value) => _backSwipeOffsetNotifier.value = value;
 
+  String? get profileImageUrl => _controller.profileImageUrl;
+  String? get username => _controller.username;
+  String? get linkUsername => _controller.linkUsername;
+  String? get submissionTitle => _controller.submissionTitle;
+  String? get fullViewImageUrl => _controller.fullViewImageUrl;
+  String? get submissionDescription => _controller.submissionDescription;
+  DateTime? get publicationTime => _controller.publicationTime;
+  String? get rating => _controller.rating;
+  int get favoritesCount => _controller.favoritesCount;
+  int get viewCount => _controller.viewCount;
+  int get commentsCount => _controller.commentsCount;
+  List<Map<String, dynamic>> get comments => _controller.comments;
+  String? get currentUsername => _controller.currentUsername;
+  bool get isFavorited => _controller.isFavorited;
+  String? get watchLink => _controller.watchLink;
+  String? get unwatchLink => _controller.unwatchLink;
+  String? get blockLink => _controller.blockLink;
+  String? get unblockLink => _controller.unblockLink;
+  bool get isWatching => _controller.isWatching;
+  bool get _watchLinksLoading => _controller.watchLinksLoading;
+  bool get isBlocked => _controller.isBlocked;
+  String? get category => _controller.category;
+  String? get type => _controller.type;
+  String? get species => _controller.species;
+  String? get gender => _controller.gender;
+  String? get size => _controller.size;
+  String? get fileSize => _controller.fileSize;
+  List<FaPostTag> get keywordTags => _controller.keywordTags;
+  List<FaPostTag> get metaKeywordTags => _controller.metaKeywordTags;
+  String? get tagBlocklistNonce => _controller.tagBlocklistNonce;
+  bool get _isClassicUserPage => _controller.isClassicUserPage;
+  double? get imageWidth => _controller.imageWidth;
+  double? get imageHeight => _controller.imageHeight;
+  bool get _detailsLoaded => _controller.detailsLoaded;
+
   @override
   void initState() {
     super.initState();
-    _openPostActionService = const OpenPostActionService();
+    _controller = OpenPostController(submissionId: widget.uniqueNumber);
     _postCommentService = PostCommentService();
     DetachableWebViewRouteRegistry.register(this);
     WidgetsBinding.instance.addObserver(this);
@@ -613,78 +532,22 @@ class _OpenPostState extends State<OpenPost>
   }
 
   Future<void> _loadSfwEnabled() async {
-    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
-    setState(() {
-      _sfwEnabled = sfwEnabled;
-    });
+    await _controller.loadSfwEnabled();
+    setState(() {});
   }
 
   Future<Response> _getWithSfwCookie(
     String url, {
     Map<String, String>? additionalHeaders,
     bool skipSfw = false,
-  }) async {
-    final response = await _openPostCookieService.getWithSfwCookie(
-      url: url,
-      sfwEnabled: _sfwEnabled,
-      nsfwAllowed: _nsfwAllowed,
+  }) {
+    return _controller.getWithSfwCookie(
+      url,
       additionalHeaders: additionalHeaders,
       skipSfw: skipSfw,
+      confirmNsfw: _showNSFWConfirmationDialog,
+      onNsfwAllowed: () => setState(() {}),
     );
-
-    debugPrint('Response status: ${response.statusCode}');
-
-    final ct = (response.headers['content-type'] ?? '').toLowerCase();
-    if (response.statusCode == 200 &&
-        (ct.contains('text/html') || ct.contains('application/xhtml'))) {
-      final decodedBody = decodeOpenPostResponseBody(response.bodyBytes);
-
-      if (hasSubmissionNotFoundError(decodedBody)) {
-        debugPrint('DETECTED: Submission not found error');
-        throw Exception("Submission not found in database");
-      }
-
-      if (!skipSfw) {
-        if (hasMatureContentWarning(decodedBody) && !_nsfwAllowed) {
-          debugPrint('DETECTED: Mature/Adult content warning - showing dialog');
-
-          final userAgreed = await _showNSFWConfirmationDialog();
-          debugPrint('User response: $userAgreed');
-
-          if (userAgreed) {
-            setState(() => _nsfwAllowed = true);
-            debugPrint('Retrying request with NSFW allowed');
-            final retryResponse = await _getWithSfwCookie(
-              url,
-              additionalHeaders: additionalHeaders,
-              skipSfw: true,
-            );
-            debugPrint('Retry response status: ${retryResponse.statusCode}');
-            return retryResponse;
-          } else {
-            debugPrint('User declined NSFW content');
-            throw Exception("User declined to view NSFW content.");
-          }
-        }
-
-        if (hasOldMatureImageError(decodedBody) && !_nsfwAllowed) {
-          debugPrint('DETECTED: Old style mature error - showing dialog');
-          final userAgreed = await _showNSFWConfirmationDialog();
-          if (userAgreed) {
-            setState(() => _nsfwAllowed = true);
-            return await _getWithSfwCookie(
-              url,
-              additionalHeaders: additionalHeaders,
-              skipSfw: true,
-            );
-          } else {
-            throw Exception("User declined to view NSFW content.");
-          }
-        }
-      }
-    }
-
-    return response;
   }
 
   Future<bool> _showNSFWConfirmationDialog() async {
@@ -720,31 +583,10 @@ class _OpenPostState extends State<OpenPost>
   }
 
   Future<void> _fetchUserPageLinks() async {
-    if (username == null) return;
-
-    final result = await const OpenPostUserActionsLoader().load(
-      url: buildOpenPostUserUrl(username!),
+    final updated = await _controller.loadUserActions(
       fetch: _getWithSfwCookie,
     );
-
-    if (result.actions != null) {
-      final actions = result.actions!;
-
-      setState(() {
-        watchLink = actions.watchLink;
-        unwatchLink = actions.unwatchLink;
-        blockLink = actions.blockLink;
-        unblockLink = actions.unblockLink;
-        _blockKey = actions.blockKey;
-        _unblockKey = actions.unblockKey;
-        _isClassicUserPage = actions.isClassic;
-
-        isWatching = actions.isWatching;
-        isBlocked = actions.isBlocked;
-      });
-    } else {
-      debugPrint('Failed to fetch user page links: ${result.statusCode}');
-    }
+    if (updated) setState(() {});
   }
 
   Widget _buildTagsPanel() {
@@ -955,40 +797,19 @@ class _OpenPostState extends State<OpenPost>
   }
 
   void _applyLocalTagBlockState(String tagName, {required bool isBlocked}) {
-    final result = updateOpenPostTagBlockState(
-      keywordTags: keywordTags,
-      metaKeywordTags: metaKeywordTags,
-      tagName: tagName,
+    final updated = _controller.applyLocalTagBlockState(
+      tagName,
       isBlocked: isBlocked,
     );
-    if (!result.updated) return;
-    setState(() {
-      keywordTags = result.keywordTags;
-      metaKeywordTags = result.metaKeywordTags;
-    });
+    if (updated) setState(() {});
   }
 
   Future<void> _sendTagBlocklistRequest(String tagName,
-      {required bool shouldBlock}) async {
-    if (tagBlocklistNonce == null || tagBlocklistNonce!.isEmpty) {
-      throw Exception('Missing tag blocklist nonce.');
-    }
-
-    final result = await _openPostActionService.performTagBlocklistRequest(
-      tagName: tagName,
+      {required bool shouldBlock}) {
+    return _controller.updateTagBlocklist(
+      tagName,
       shouldBlock: shouldBlock,
-      nonce: tagBlocklistNonce!,
-      submissionId: widget.uniqueNumber,
-      sfwEnabled: _sfwEnabled,
     );
-
-    if (result.status == OpenPostActionStatus.missingAuth) {
-      throw Exception('Not logged in.');
-    }
-
-    if (result.status != OpenPostActionStatus.success) {
-      throw Exception('Tag blocklist request failed: ${result.statusCode}');
-    }
   }
 
   void _navigateToSearch(String keyword) {
@@ -1006,10 +827,10 @@ class _OpenPostState extends State<OpenPost>
   Future<void> _handleBlockUnblock() async {
     // When we skipped initial fetch, load links on first use (same as Watch)
     if (blockLink == null && unblockLink == null && username != null) {
-      setState(() => _watchLinksLoading = true);
+      setState(() => _controller.setWatchLinksLoading(true));
       await _fetchUserPageLinks();
       if (!mounted) return;
-      setState(() => _watchLinksLoading = false);
+      setState(() => _controller.setWatchLinksLoading(false));
     }
     if (isBlocked) {
       if (unblockLink == null) {
@@ -1021,7 +842,7 @@ class _OpenPostState extends State<OpenPost>
         );
         return;
       }
-      final key = extractOpenPostActionKey(unblockLink!, _unblockKey);
+      final key = _controller.blockActionKey(shouldBlock: false);
       if (key == null || key.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1043,7 +864,7 @@ class _OpenPostState extends State<OpenPost>
         );
         return;
       }
-      final key = extractOpenPostActionKey(blockLink!, _blockKey);
+      final key = _controller.blockActionKey(shouldBlock: true);
       if (key == null || key.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1061,12 +882,8 @@ class _OpenPostState extends State<OpenPost>
   Future<void> _sendBlockUnblockPostRequest(String urlPath, String keyValue,
       {required bool shouldBlock}) async {
     try {
-      final result = await _openPostActionService.performBlockUnblockRequest(
-        urlPath: urlPath,
-        keyValue: keyValue,
-        linkUsername: linkUsername ?? '',
-        sfwEnabled: _sfwEnabled,
-      );
+      final result =
+          await _controller.performBlockUnblock(urlPath, keyValue);
 
       if (result.status == OpenPostActionStatus.missingAuth) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1109,12 +926,8 @@ class _OpenPostState extends State<OpenPost>
 
   Future<void> _sendWatchUnwatchRequest(String urlPath,
       {required bool shouldWatch}) async {
-    final fullUrl = buildOpenPostAbsolutePath(urlPath);
     try {
-      final result = await _openPostActionService.performAuthenticatedGet(
-        url: fullUrl,
-        sfwEnabled: _sfwEnabled,
-      );
+      final result = await _controller.performWatchUnwatch(urlPath);
       if (result.status == OpenPostActionStatus.missingAuth) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1157,10 +970,10 @@ class _OpenPostState extends State<OpenPost>
     // When we skipped initial fetch (Browse/Search), fetch links on first tap
     if (watchLink == null && unwatchLink == null && username != null) {
       if (_watchLinksLoading) return;
-      setState(() => _watchLinksLoading = true);
+      setState(() => _controller.setWatchLinksLoading(true));
       await _fetchUserPageLinks();
       if (!mounted) return;
-      setState(() => _watchLinksLoading = false);
+      setState(() => _controller.setWatchLinksLoading(false));
       // After fetch: if already watching, button will show -Watch; else send watch request below
     }
     if (isWatching) {
@@ -1197,10 +1010,7 @@ class _OpenPostState extends State<OpenPost>
 
     if (shouldHide == true) {
       try {
-        final statusCode = await _openPostActionService.sendAuthenticatedGet(
-          url: hideLink,
-          sfwEnabled: _sfwEnabled,
-        );
+        final statusCode = await _controller.sendAuthenticatedGet(hideLink);
         if (statusCode == null) return;
         if (statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1219,44 +1029,22 @@ class _OpenPostState extends State<OpenPost>
     }
   }
 
-  Future<void> _fetchFavoriteLinks() async {
-    final result = await OpenPostFavoriteLinksLoader(
-      cookieService: _openPostCookieService,
-    ).load(
-      url: buildSubmissionViewUrl(widget.uniqueNumber),
-      fetch: _getWithSfwCookie,
-    );
-
-    if (result.status == OpenPostFavoriteLinksLoadStatus.success) {
-      setState(() {
-        favLink = result.favoriteLink;
-        unfavLink = result.unfavoriteLink;
-        isFavorited = result.isFavorited;
-      });
-    } else if (result.status == OpenPostFavoriteLinksLoadStatus.httpFailure) {
-      debugPrint('Failed to fetch favorite links: ${result.statusCode}');
-    }
-  }
-
   Future<void> _fetchPostDetails() async {
-    setState(() => isLoading = true);
+    setState(_controller.startLoading);
 
-    if (!await _openPostCookieService.hasAuthCookies()) {
-      setState(() => isLoading = false);
+    if (!await _controller.hasAuthCookies()) {
+      setState(_controller.stopLoading);
       return;
     }
 
-    final postUrl = buildSubmissionViewUrl(widget.uniqueNumber);
-
     try {
-      final result = await const OpenPostDetailsLoader().load(
-        url: postUrl,
+      final result = await _controller.loadDetails(
         fetch: _getWithSfwCookie,
       );
+      setState(() {});
 
       if (result.status == OpenPostDetailsLoadStatus.httpFailure) {
         debugPrint('Failed to fetch post details: ${result.statusCode}');
-        setState(() => isLoading = false);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1273,7 +1061,6 @@ class _OpenPostState extends State<OpenPost>
       if (result.status == OpenPostDetailsLoadStatus.matureWarning) {
         debugPrint(
             'ERROR: Still got mature warning after retry - this should not happen');
-        setState(() => isLoading = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1286,56 +1073,10 @@ class _OpenPostState extends State<OpenPost>
         return;
       }
 
-      final parsedPost = result.parsedPost!;
-      final parsedComments = result.comments!;
-
-      setState(() {
-        currentUsername = parsedPost.currentUsername;
-        username = parsedPost.username;
-        linkUsername = parsedPost.linkUsername;
-        profileImageUrl = parsedPost.profileImageUrl;
-        submissionTitle = parsedPost.submissionTitle;
-        fullViewImageUrl = parsedPost.fullViewImageUrl;
-        submissionDescription = parsedPost.submissionDescription;
-        rating = parsedPost.rating;
-
-        if (parsedPost.publicationTimeRaw != null &&
-            parsedPost.publicationTimeRaw!.isNotEmpty) {
-          _parsePublicationTime(parsedPost.publicationTimeRaw!);
-        }
-
-        favoritesCount = parsedPost.favoritesCount;
-        viewCount = parsedPost.viewCount;
-        commentsCount = parsedPost.commentsCount;
-
-        favLink = parsedPost.favLink;
-        unfavLink = parsedPost.unfavLink;
-        isFavorited = parsedPost.isFavorited;
-
-        category = parsedPost.category;
-        type = parsedPost.type;
-        species = parsedPost.species;
-        gender = parsedPost.gender;
-        size = parsedPost.size;
-        fileSize = parsedPost.fileSize;
-        keywords = parsedPost.keywords;
-        keywordTags = parsedPost.keywordTags;
-        metaKeywordTags = parsedPost.metaKeywordTags;
-        tagBlocklistNonce = parsedPost.tagBlocklistNonce;
-
-        imageWidth = parsedPost.imageWidth;
-        imageHeight = parsedPost.imageHeight;
-
-        comments = parsedComments;
-        commentsCount = parsedComments.length;
-        _detailsLoaded = true;
-        isLoading = false;
-      });
-
       debugPrint('Post loaded successfully: $submissionTitle');
     } catch (e) {
       debugPrint('Error fetching post details: $e');
-      setState(() => isLoading = false);
+      setState(() {});
 
       if (mounted) {
         String errorMessage = 'Failed to load submission';
@@ -1366,9 +1107,7 @@ class _OpenPostState extends State<OpenPost>
 
   Future<void> _handleDeletePost() async {
     try {
-      final result = await _openPostActionService.prepareDeletion(
-        submissionId: widget.uniqueNumber,
-      );
+      final result = await _controller.prepareDeletion();
 
       if (result == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1523,11 +1262,8 @@ class _OpenPostState extends State<OpenPost>
     String password,
   ) async {
     try {
-      final success = await _openPostActionService.confirmDeletion(
-        confirmValue: confirmationData.confirmValue,
-        deleteSubmissionsSubmitValue:
-            confirmationData.deleteSubmissionsSubmitValue,
-        submissionIdValue: confirmationData.submissionIdValue,
+      final success = await _controller.confirmDeletion(
+        confirmationData: confirmationData,
         password: password,
       );
 
@@ -1640,27 +1376,6 @@ class _OpenPostState extends State<OpenPost>
     }
   }
 
-  void _parsePublicationTime(String rawTime) {
-    try {
-      final parsed = parseSubmissionPublicationTime(
-        rawTime,
-        applyDstCorrection: isDstCorrectionApplied,
-      );
-      if (parsed != null) {
-        publicationTime = parsed;
-        debugPrint("Successfully parsed FA date: $publicationTime");
-        return;
-      }
-
-      debugPrint(
-          "Could not parse date with any format. Raw string: '$rawTime'");
-    } catch (e, stackTrace) {
-      debugPrint("Error parsing publication time: $e");
-      debugPrint("Raw time string was: '$rawTime'");
-      debugPrint("Stack trace: $stackTrace");
-    }
-  }
-
   String? getFormattedPublicationTime() {
     if (publicationTime == null) return null;
     final localTime = publicationTime!.toLocal();
@@ -1677,16 +1392,7 @@ class _OpenPostState extends State<OpenPost>
   }
 
   void _addComment(String commentText) {
-    setState(() {
-      comments.add({
-        'profileImage': null,
-        'username': 'You',
-        'text': commentText,
-        'width': 100.0,
-        'isOP': false,
-      });
-      commentsCount = (commentsCount) + 1;
-    });
+    setState(() => _controller.addComment(commentText));
   }
 
   void _syncCommentComposerExpansion() {
@@ -1852,10 +1558,8 @@ class _OpenPostState extends State<OpenPost>
 
     if (shouldUnhide == true) {
       try {
-        final statusCode = await _openPostActionService.sendAuthenticatedGet(
-          url: unhideLink,
-          sfwEnabled: _sfwEnabled,
-        );
+        final statusCode =
+            await _controller.sendAuthenticatedGet(unhideLink);
         if (statusCode == null) return;
         if (statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2138,35 +1842,11 @@ class _OpenPostState extends State<OpenPost>
   }
 
   Future<void> _sendFavoriteRequest(bool shouldFavorite) async {
-    String? url;
-    if (shouldFavorite) {
-      if (favLink != null) {
-        url = buildOpenPostAbsolutePath(favLink!);
-      } else {
-        return;
-      }
-    } else {
-      if (unfavLink != null) {
-        url = buildOpenPostAbsolutePath(unfavLink!);
-      } else {
-        return;
-      }
-    }
-
-    try {
-      final statusCode = await _openPostActionService.sendAuthenticatedGet(
-        url: url,
-        sfwEnabled: _sfwEnabled,
-      );
-      if (statusCode == null) return;
-      if (statusCode == 200) {
-        await _fetchFavoriteLinks();
-      } else {
-        debugPrint('Failed to toggle favorite: $statusCode');
-      }
-    } catch (e) {
-      debugPrint('Error toggling favorite: $e');
-    }
+    final updated = await _controller.sendFavoriteRequest(
+      shouldFavorite: shouldFavorite,
+      fetch: _getWithSfwCookie,
+    );
+    if (updated) setState(() {});
   }
 
   Future<bool> _toggleFavorite(bool isLiked) async {
@@ -2185,10 +1865,7 @@ class _OpenPostState extends State<OpenPost>
     }
 
     bool newLikeState = !isLiked;
-    setState(() {
-      isFavorited = newLikeState;
-      favoritesCount += newLikeState ? 1 : -1;
-    });
+    setState(() => _controller.toggleFavoriteLocally(newLikeState));
 
     _pendingFavoriteState = newLikeState;
     _debounceTimer?.cancel();

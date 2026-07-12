@@ -14,11 +14,8 @@ import 'package:FANotifier/main.dart';
 import 'package:FANotifier/features/profile/domain/fa_folder.dart';
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
 import 'package:FANotifier/features/profile/domain/shout.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_api_models.dart';
 import 'package:FANotifier/features/profile/domain/user_profile_shout_deletion_result.dart';
-import 'package:FANotifier/features/profile/domain/user_link.dart';
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/shared/fa/fa_username.dart';
+import 'package:FANotifier/features/profile/domain/user_profile_repository.dart';
 import 'package:FANotifier/shared/utils/external_link_launcher.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_styles.dart';
@@ -32,12 +29,10 @@ import 'package:FANotifier/features/profile/presentation/profilejournals.dart';
 import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
 import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.dart';
-import 'package:FANotifier/features/profile/data/user_profile_api_service.dart';
-import 'package:FANotifier/features/profile/data/user_profile_loader.dart';
+import 'package:FANotifier/features/profile/data/user_profile_repository_impl.dart';
 import 'package:FANotifier/features/profile/data/profile_avatar_transparency_detector.dart';
-import 'package:FANotifier/features/profile/data/profile_folder_selection_resolver.dart';
-import 'package:FANotifier/features/profile/data/user_profile_shout_deletion_coordinator.dart';
 import 'package:FANotifier/features/profile/data/user_profile_action_parser.dart';
+import 'package:FANotifier/features/profile/presentation/user_profile_controller.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_sliver_helpers.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_favorites_section.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_gallery_section.dart';
@@ -48,73 +43,8 @@ import 'package:FANotifier/features/settings/data/translator_settings_provider.d
 import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/shared/translation/translation_service.dart';
+import 'package:FANotifier/shared/navigation/transparent_slide_page_route.dart';
 import 'package:provider/provider.dart';
-
-class _TransparentUserProfilePageRoute<T> extends PageRoute<T> {
-  _TransparentUserProfilePageRoute({
-    required this.builder,
-    super.settings,
-    super.requestFocus,
-    this.allowSnapshotting = true,
-    this.fullscreenDialog = false,
-    this.maintainState = true,
-    this.routeTransitionDuration = const Duration(milliseconds: 280),
-    this.routeReverseTransitionDuration = const Duration(milliseconds: 280),
-  });
-
-  final WidgetBuilder builder;
-  final bool allowSnapshotting;
-  @override
-  final bool fullscreenDialog;
-  @override
-  final bool maintainState;
-  final Duration routeTransitionDuration;
-  final Duration routeReverseTransitionDuration;
-
-  @override
-  bool get opaque => false;
-
-  @override
-  Color? get barrierColor => null;
-
-  @override
-  String? get barrierLabel => null;
-
-  @override
-  Duration get transitionDuration => routeTransitionDuration;
-
-  @override
-  Duration get reverseTransitionDuration => routeReverseTransitionDuration;
-
-  @override
-  Widget buildPage(
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-  ) {
-    return builder(context);
-  }
-
-  @override
-  Widget buildTransitions(
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
-    return SlideTransition(
-      position: animation.drive(
-        Tween<Offset>(
-          begin: const Offset(1.0, 0.0),
-          end: Offset.zero,
-        ).chain(
-          CurveTween(curve: Curves.easeOutCubic),
-        ),
-      ),
-      child: child,
-    );
-  }
-}
 
 class _ProfileTabKeepAlive extends StatefulWidget {
   const _ProfileTabKeepAlive({
@@ -168,7 +98,7 @@ class UserProfileScreen extends StatefulWidget {
           initialFolderName: initialFolderName,
         );
 
-    return _TransparentUserProfilePageRoute<T>(
+    return TransparentSlidePageRoute<T>(
       settings: settings,
       builder: builder,
       routeTransitionDuration:
@@ -224,20 +154,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
   final GlobalKey<UserDescriptionWebViewState> _webViewKey =
       GlobalKey<UserDescriptionWebViewState>();
 
-  late final UserProfileApiService _api;
-  late final UserProfileLoader _profileLoader;
+  late final UserProfileRepository _profileRepository;
+  late final UserProfileController _profileController;
   final ProfileAvatarTransparencyDetector _avatarTransparencyDetector =
       const ProfileAvatarTransparencyDetector();
-  final SfwModePreference _sfwModePreference = SfwModePreference();
   final TranslationService _translationService = TranslationService.instance;
 
-  bool _sfwEnabled = true;
-
   Future<void> _loadSfwEnabled() async {
-    final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
-    setState(() {
-      _sfwEnabled = sfwEnabled;
-    });
+    await _profileController.loadSfwEnabled();
+    setState(() {});
   }
 
   Future<void> _handleDescriptionLongPress(
@@ -277,33 +202,17 @@ class UserProfileScreenState extends State<UserProfileScreen>
         context,
         MaterialPageRoute(
           builder: (context) => UserDescriptionWebViewScreen(
-            sanitizedUsername: sanitizedUsername,
-            initialHtml: userDescription,
+            sanitizedUsername: _profileController.sanitizedUsername,
+            initialHtml: _profileController.userDescription,
           ),
         ),
       );
     }
   }
 
-  String _selectedFolderName = 'Main Gallery';
-  String _selectedFolderUrl = '';
-  List<FaFolder> _allFolders = [];
-
-  UserProfileParsed? _profileParsed;
-
-  String? get profileBannerUrl => _profileParsed?.profileBannerUrl;
-  String? get profileImageUrl => _profileParsed?.profileImageUrl;
-  String? get profileDisplayName => _profileParsed?.profileDisplayName;
-  String? get profileUserNamePart => _profileParsed?.profileUserNamePart;
-  String? get symbolUsername => _profileParsed?.symbolUsername;
-  String? get username => _profileParsed?.username;
-  String? get userTitle => _profileParsed?.userTitle;
-  String? get registrationDate => _profileParsed?.registrationDate;
-  String? get userDescription => _profileParsed?.userDescription;
-  bool get hasRealUserProfile => _profileParsed?.hasRealUserProfile ?? true;
-
   String _profileTranslationSourceText() {
-    return _translationService.plainTextFromHtml(userDescription ?? '');
+    return _translationService
+        .plainTextFromHtml(_profileController.userDescription ?? '');
   }
 
   Future<void> _openProfileTranslation(
@@ -318,84 +227,19 @@ class UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
-  bool get isClassicMarkup => _profileParsed?.isClassicMarkup ?? false;
-  bool get acceptingTrades => _profileParsed?.acceptingTrades ?? false;
-  bool get acceptingCommissions =>
-      _profileParsed?.acceptingCommissions ?? false;
-
-  List<String> get userIconBeforeUrls =>
-      _profileParsed?.userIconBeforeUrls ?? const [];
-  List<String> get userIconAfterUrls =>
-      _profileParsed?.userIconAfterUrls ?? const [];
-
-  int? get views => _profileParsed?.views;
-  int? get submissions => _profileParsed?.submissions;
-  int? get favs => _profileParsed?.favs;
-  int? get commentsEarned => _profileParsed?.commentsEarned;
-  int? get commentsMade => _profileParsed?.commentsMade;
-  int? get journals => _profileParsed?.journals;
-
-  bool get isWatching => _profileParsed?.isWatching ?? false;
-  String? get watchLink => _profileParsed?.watchLink;
-  String? get unwatchLink => _profileParsed?.unwatchLink;
-  String? get unblockLink => _profileParsed?.unblockLink;
-  String? get blockLink => _profileParsed?.blockLink;
-  bool get isBlocked => _profileParsed?.isBlocked ?? false;
-  bool get blockUsesPost => _profileParsed?.blockUsesPost ?? false;
-  bool get unblockUsesPost => _profileParsed?.unblockUsesPost ?? false;
-
-  String? get featuredImageUrl => _profileParsed?.featuredImageUrl;
-  String? get featuredImageTitle => _profileParsed?.featuredImageTitle;
-  String? get featuredPostNumber => _profileParsed?.featuredPostNumber;
-
-  String? get userProfileImageUrl => _profileParsed?.userProfileImageUrl;
-  String? get userProfilePostNumber => _profileParsed?.userProfilePostNumber;
-  String? get userProfileTexts => _profileParsed?.userProfileTexts;
-
-  List<Map<String, String>> get contactInformationLinks =>
-      _profileParsed?.contactInformationLinks ?? const [];
-
-  List<UserLink> get recentWatchers =>
-      _profileParsed?.recentWatchers ?? const [];
-  int get recentWatchersCount => _profileParsed?.recentWatchersCount ?? 0;
-
-  List<UserLink> get recentlyWatched =>
-      _profileParsed?.recentlyWatched ?? const [];
-  int get recentlyWatchedCount => _profileParsed?.recentlyWatchedCount ?? 0;
-
-  List<Shout> get shouts => _profileParsed?.shouts ?? <Shout>[];
-  String? get shoutPaginationKey => _profileParsed?.shoutPaginationKey;
-  int get currentShoutPage => _profileParsed?.currentShoutPage ?? 1;
-  int get totalShoutPages => _profileParsed?.totalShoutPages ?? 1;
-
-  bool get isOwnProfile => _profileParsed?.isOwnProfile ?? false;
-
   void _onFoldersParsed(List<FaFolder> folders) {
     setState(() {
-      final selected = resolveProfileFolderSelection(
-        folders: folders,
-        selectedName: _selectedFolderName,
-        selectedUrl: _selectedFolderUrl,
-      );
-      _selectedFolderName = selected.name;
-      if (!areFaFolderUrlsEquivalent(selected.url, _selectedFolderUrl)) {
-        _selectedFolderUrl = selected.url;
-      }
-      _allFolders = folders;
+      _profileController.updateFolders(folders);
     });
   }
 
   void _onFolderSelected(FaFolder folder) {
     setState(() {
-      _selectedFolderName = folder.name;
-      _selectedFolderUrl = folder.url;
+      _profileController.selectFolder(folder);
     });
   }
 
-  String sanitizedUsername = '';
-  bool isLoading = true;
   bool _webViewLoaded = false;
-  String errorMessage = '';
 
   static const double sliverAppBarExpandedHeight = 120.0;
   static const double sliverAppBarMinHeight = kToolbarHeight - 80.0; // 56.0
@@ -460,18 +304,19 @@ class UserProfileScreenState extends State<UserProfileScreen>
     super.initState();
     DetachableWebViewRouteRegistry.register(this);
 
-    _api = UserProfileApiService();
-    _profileLoader = UserProfileLoader(api: _api);
+    final profileRepository = UserProfileRepositoryImpl();
+    _profileRepository = profileRepository;
+    _profileController = UserProfileController(
+      repository: profileRepository,
+      nickname: widget.nickname,
+      initialFolderUrl: widget.initialFolderUrl,
+      initialFolderName: widget.initialFolderName,
+    );
     if (_webViewScrollOptimizationEnabled) {
       SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
     }
     IosScrollRecovery.addListener(_handleIosScrollRecovery);
 
-    if (widget.initialFolderUrl != null &&
-        widget.initialFolderUrl!.isNotEmpty) {
-      _selectedFolderUrl = widget.initialFolderUrl!;
-      _selectedFolderName = widget.initialFolderName ?? _selectedFolderName;
-    }
     if (widget.initialSection != ProfileSection.Home) {
       _webViewLoaded = true;
     }
@@ -520,8 +365,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
         _previousIndex = _tabController.index;
       }
     });
-
-    sanitizedUsername = _sanitizeUsername(widget.nickname);
 
     _initAsyncFetch();
   }
@@ -970,10 +813,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   Future<void> _sendWatchUnwatchRequest(String urlPath,
       {required bool shouldWatch}) async {
-    final result = await _api.sendWatchUnwatchRequest(
-      urlPath,
+    final result = await _profileRepository.updateWatchState(
+      urlPath: urlPath,
       shouldWatch: shouldWatch,
-      sfwEnabled: _sfwEnabled,
+      sfwEnabled: _profileController.sfwEnabled,
     );
 
     if (result.missingCookies) {
@@ -987,12 +830,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
       debugPrint('${shouldWatch ? 'Watch' : 'Unwatch'} action successful.');
 
       setState(() {
-        _profileParsed?.isWatching = shouldWatch;
+        _profileController.setWatching(shouldWatch);
       });
 
       showAppSnackBar(
         context,
-        '${shouldWatch ? 'Now watching $username' : 'Stopped watching $username'}',
+        '${shouldWatch ? 'Now watching ${_profileController.username}' : 'Stopped watching ${_profileController.username}'}',
         backgroundColor: Colors.green,
       );
     } else if (result.error != null) {
@@ -1015,31 +858,38 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _handleWatchButtonPressed() async {
-    if (isWatching) {
-      if (unwatchLink == null) {
+    if (_profileController.isWatching) {
+      if (_profileController.unwatchLink == null) {
         debugPrint('Unwatch link not available.');
         return;
       }
-      await _sendWatchUnwatchRequest(unwatchLink!, shouldWatch: false);
+      await _sendWatchUnwatchRequest(
+        _profileController.unwatchLink!,
+        shouldWatch: false,
+      );
       _fetchUserProfile();
     } else {
-      if (watchLink == null) {
+      if (_profileController.watchLink == null) {
         debugPrint('Watch link not available.');
         return;
       }
-      await _sendWatchUnwatchRequest(watchLink!, shouldWatch: true);
+      await _sendWatchUnwatchRequest(
+        _profileController.watchLink!,
+        shouldWatch: true,
+      );
       _fetchUserProfile();
     }
   }
 
-  int get _selectedShoutCount => shouts.where((shout) => shout.selected).length;
+  int get _selectedShoutCount =>
+      _profileController.shouts.where((shout) => shout.selected).length;
 
   void _toggleShoutSelectionMode() {
     setState(() {
       final nextValue = !_isShoutSelectionMode;
       _isShoutSelectionMode = nextValue;
       if (!nextValue) {
-        for (final shout in shouts) {
+        for (final shout in _profileController.shouts) {
           shout.selected = false;
         }
       }
@@ -1052,7 +902,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     }
     setState(() {
       _isShoutSelectionMode = false;
-      for (final shout in shouts) {
+      for (final shout in _profileController.shouts) {
         shout.selected = false;
       }
     });
@@ -1200,12 +1050,13 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _confirmDeleteSelectedShouts() async {
-    if (!isOwnProfile || _isDeletingSelectedShouts) {
+    if (!_profileController.isOwnProfile || _isDeletingSelectedShouts) {
       return;
     }
 
-    final selectedShouts =
-        shouts.where((shout) => shout.selected).toList(growable: false);
+    final selectedShouts = _profileController.shouts
+        .where((shout) => shout.selected)
+        .toList(growable: false);
     if (selectedShouts.isEmpty) {
       return;
     }
@@ -1219,7 +1070,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _confirmDeleteShout(int index, Shout shout) async {
-    if (!isOwnProfile) {
+    if (!_profileController.isOwnProfile) {
       return;
     }
 
@@ -1238,17 +1089,16 @@ class UserProfileScreenState extends State<UserProfileScreen>
       return;
     }
 
-    final loadedProfilePage = currentShoutPage;
+    final loadedProfilePage = _profileController.currentShoutPage;
 
     setState(() {
       _isDeletingSelectedShouts = true;
     });
 
     try {
-      final deletionResult = await UserProfileShoutDeletionCoordinator(_api)
-          .delete(
+      final deletionResult = await _profileRepository.deleteShouts(
         shouts: shoutsToDelete,
-        sfwEnabled: _sfwEnabled,
+        sfwEnabled: _profileController.sfwEnabled,
       );
 
       if (deletionResult.status ==
@@ -1277,7 +1127,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         );
         setState(() {
           _isShoutSelectionMode = false;
-          for (final shout in shouts) {
+          for (final shout in _profileController.shouts) {
             shout.selected = false;
           }
         });
@@ -1292,7 +1142,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         );
         setState(() {
           _isShoutSelectionMode = false;
-          for (final shout in shouts) {
+          for (final shout in _profileController.shouts) {
             shout.selected = false;
           }
         });
@@ -1318,8 +1168,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   Future<void> _restoreLoadedShoutPages(int targetPage) async {
     while (mounted &&
-        currentShoutPage < targetPage &&
-        currentShoutPage < totalShoutPages) {
+        _profileController.currentShoutPage < targetPage &&
+        _profileController.currentShoutPage <
+            _profileController.totalShoutPages) {
       await _loadMoreShouts();
     }
   }
@@ -1410,41 +1261,26 @@ class UserProfileScreenState extends State<UserProfileScreen>
   /// Fetches the user's profile data from FurAffinity.
   Future<void> _fetchUserProfile() async {
     try {
-      final result = await _profileLoader.load(
-        nickname: widget.nickname,
-        sfwEnabled: _sfwEnabled,
-      );
-
-      sanitizedUsername = result.sanitizedUsername;
+      final result = await _profileController.loadProfile(widget.nickname);
 
       setState(() {
-        _profileParsed = result.parsed;
         _webViewLoaded =
             result.shouldShowDescription ? _webViewLoaded : true;
-        isLoading = false;
       });
       _updateProfileAvatarTransparency(result.parsed.profileImageUrl);
 
-      debugPrint("Block/Unblock Link: $blockLink / $unblockLink");
-      debugPrint("Watch/Unwatch Link: $watchLink / $unwatchLink");
-      debugPrint("isBlocked: $isBlocked");
+      debugPrint(
+          "Block/Unblock Link: ${_profileController.blockLink} / ${_profileController.unblockLink}");
+      debugPrint(
+          "Watch/Unwatch Link: ${_profileController.watchLink} / ${_profileController.unwatchLink}");
+      debugPrint("isBlocked: ${_profileController.isBlocked}");
     } on StateError catch (e) {
-      setState(() {
-        errorMessage = e.message;
-        isLoading = false;
-      });
+      setState(() {});
       debugPrint(e.toString());
     } catch (e) {
-      setState(() {
-        errorMessage = 'An error occurred: $e';
-        isLoading = false;
-      });
+      setState(() {});
       debugPrint("An error occurred while fetching profile: $e");
     }
-  }
-
-  String _sanitizeUsername(String username) {
-    return sanitizeFAUsername(username);
   }
 
   void switchToGalleryTab() {
@@ -1452,9 +1288,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _loadMoreShouts() async {
-    if (isLoadingMoreShouts || currentShoutPage >= totalShoutPages) {
+    if (isLoadingMoreShouts ||
+        _profileController.currentShoutPage >=
+            _profileController.totalShoutPages) {
       debugPrint(
-          "Cannot load more shouts. Loading: $isLoadingMoreShouts, Current: $currentShoutPage, Total: $totalShoutPages");
+          "Cannot load more shouts. Loading: $isLoadingMoreShouts, Current: ${_profileController.currentShoutPage}, Total: ${_profileController.totalShoutPages}");
       return;
     }
 
@@ -1463,13 +1301,14 @@ class UserProfileScreenState extends State<UserProfileScreen>
     });
 
     try {
-      final nextPage = currentShoutPage + 1;
-      final payload = await _api.fetchAdditionalShouts(
-        sanitizedUsername: sanitizedUsername,
-        shoutPaginationKey: shoutPaginationKey,
+      final nextPage = _profileController.currentShoutPage + 1;
+      final payload = await _profileRepository.loadAdditionalShouts(
+        sanitizedUsername: _profileController.sanitizedUsername,
+        shoutPaginationKey: _profileController.shoutPaginationKey,
         nextPage: nextPage,
-        sfwEnabled: _sfwEnabled,
-        existingShoutIds: shouts.map((s) => s.id).toSet(),
+        sfwEnabled: _profileController.sfwEnabled,
+        existingShoutIds:
+            _profileController.shouts.map((shout) => shout.id).toSet(),
       );
 
       if (payload == null) {
@@ -1478,10 +1317,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       }
 
       setState(() {
-        _profileParsed?.shouts.addAll(payload.newShouts);
-        if (_profileParsed != null) {
-          _profileParsed!.currentShoutPage = payload.nextPage;
-        }
+        _profileController.addShouts(payload);
       });
     } catch (e) {
       debugPrint('Error loading more shouts: $e');
@@ -1497,14 +1333,14 @@ class UserProfileScreenState extends State<UserProfileScreen>
   // Animated banner/avatar helpers
   Widget buildAnimatedBanner(BoxConstraints constraints) {
     double alignmentX = -1.0;
-    if (profileBannerUrl?.contains('fa-banner') ?? false) {
+    if (_profileController.profileBannerUrl?.contains('fa-banner') ?? false) {
       double shiftFraction = 30.0 / constraints.maxWidth * 2;
       alignmentX += shiftFraction;
     }
 
     return RepaintBoundary(
       child: FaNetworkImage(
-        profileBannerUrl ??
+        _profileController.profileBannerUrl ??
             'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg',
         fit: BoxFit.cover,
         alignment: Alignment(alignmentX, 0),
@@ -1616,8 +1452,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
   Widget buildAvatarImage() {
     final double outerAvatarSize =
         _profileAvatarSize + (_profileAvatarBorderWidth * 2.0);
-    final Widget avatarImage =
-        profileImageUrl == null || profileImageUrl!.isEmpty
+    final profileImageUrl = _profileController.profileImageUrl;
+    final Widget avatarImage = profileImageUrl == null || profileImageUrl.isEmpty
             ? Image.asset(
                 'assets/images/defaultpic.gif',
                 width: _profileAvatarSize,
@@ -1626,7 +1462,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                 gaplessPlayback: true,
               )
             : FaNetworkImage(
-                profileImageUrl!,
+                profileImageUrl,
                 width: _profileAvatarSize,
                 height: _profileAvatarSize,
                 fit: BoxFit.cover,
@@ -1694,7 +1530,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   void _copyProfileLinkToClipboard() {
-    final profileLink = 'https://www.furaffinity.net/user/$sanitizedUsername/';
+    final profileLink =
+        'https://www.furaffinity.net/user/${_profileController.sanitizedUsername}/';
     Clipboard.setData(ClipboardData(text: profileLink)).then((_) {
       showAppSnackBar(context, 'Copied profile link!',
           backgroundColor: Colors.green);
@@ -1726,15 +1563,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
         child: Row(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            if (userIconBeforeUrls.isNotEmpty)
-              ...userIconBeforeUrls.map(
+            if (_profileController.userIconBeforeUrls.isNotEmpty)
+              ..._profileController.userIconBeforeUrls.map(
                 (url) => Padding(
                   padding: const EdgeInsets.only(right: 4),
                   child: FaNetworkImage(url, width: 20, height: 20),
                 ),
               ),
             SelectableLinkify(
-              text: profileDisplayName ?? '',
+              text: _profileController.profileDisplayName ?? '',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 20.0,
@@ -1744,15 +1581,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
               selectionControls: MaterialTextSelectionControls(),
             ),
             const SizedBox(width: 4),
-            if (userIconAfterUrls.isNotEmpty)
-              ...userIconAfterUrls.map(
+            if (_profileController.userIconAfterUrls.isNotEmpty)
+              ..._profileController.userIconAfterUrls.map(
                 (url) => Padding(
                   padding: const EdgeInsets.only(right: 4),
                   child: FaNetworkImage(url, width: 20, height: 20),
                 ),
               ),
             SelectableLinkify(
-              text: profileUserNamePart ?? '',
+              text: _profileController.profileUserNamePart ?? '',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 20.0,
@@ -1772,13 +1609,13 @@ class UserProfileScreenState extends State<UserProfileScreen>
     required bool shouldBlock,
     required bool usePost,
   }) async {
-    final result = await _api.sendBlockUnblockRequest(
-      urlOrPath,
-      keyValue,
+    final result = await _profileRepository.updateBlockState(
+      urlOrPath: urlOrPath,
+      keyValue: keyValue,
       shouldBlock: shouldBlock,
       usePost: usePost,
-      sfwEnabled: _sfwEnabled,
-      sanitizedUsername: sanitizedUsername,
+      sfwEnabled: _profileController.sfwEnabled,
+      sanitizedUsername: _profileController.sanitizedUsername,
     );
 
     if (result.missingCookies) {
@@ -1813,8 +1650,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _handleBlockUnblock() async {
-    if (isBlocked) {
-      if (unblockLink == null) {
+    if (_profileController.isBlocked) {
+      if (_profileController.unblockLink == null) {
         showAppSnackBar(
           context,
           'Cannot unblock author at this time.',
@@ -1822,7 +1659,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         );
         return;
       }
-      final key = extractBlockUnblockKey(unblockLink!);
+      final key = extractBlockUnblockKey(_profileController.unblockLink!);
 
       if (key == null || key.isEmpty) {
         showAppSnackBar(
@@ -1834,13 +1671,13 @@ class UserProfileScreenState extends State<UserProfileScreen>
       }
 
       await _sendBlockUnblockRequest(
-        unblockLink!,
+        _profileController.unblockLink!,
         key,
         shouldBlock: false,
-        usePost: unblockUsesPost,
+        usePost: _profileController.unblockUsesPost,
       );
     } else {
-      if (blockLink == null) {
+      if (_profileController.blockLink == null) {
         showAppSnackBar(
           context,
           'Cannot block author at this time.',
@@ -1849,7 +1686,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         return;
       }
 
-      final key = extractBlockUnblockKey(blockLink!);
+      final key = extractBlockUnblockKey(_profileController.blockLink!);
 
       if (key == null || key.isEmpty) {
         showAppSnackBar(
@@ -1861,10 +1698,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
       }
 
       await _sendBlockUnblockRequest(
-        blockLink!,
+        _profileController.blockLink!,
         key,
         shouldBlock: true,
-        usePost: blockUsesPost,
+        usePost: _profileController.blockUsesPost,
       );
     }
   }
@@ -1878,9 +1715,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
     const double marginBetweenAvatarAndText = 0.0;
     final double textLeftPadding =
         avatarLeft + avatarWidth + marginBetweenAvatarAndText;
-    final bool needsDescriptionLoad =
-        hasRealUserProfile && userDescription != null;
-    bool showLoadingIndicator = isLoading ||
+    final bool needsDescriptionLoad = _profileController.hasRealUserProfile &&
+        _profileController.userDescription != null;
+    bool showLoadingIndicator = _profileController.isLoading ||
         (needsDescriptionLoad &&
             !_webViewLoaded &&
             _tabController.index == ProfileSection.Home.index);
@@ -1889,8 +1726,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
         platformViews.isNotEmpty ? platformViews.first : View.of(context);
     final fixedTextScaleMediaQuery = MediaQueryData.fromView(baseView)
         .copyWith(textScaler: TextScaler.linear(1.0));
-    final bool showDeleteSelectedFab = !isLoading &&
-        isOwnProfile &&
+    final bool showDeleteSelectedFab = !_profileController.isLoading &&
+        _profileController.isOwnProfile &&
         _isShoutSelectionMode &&
         _selectedShoutCount > 0;
     final translatorSettings = context.watch<TranslatorSettingsProvider>();
@@ -1973,7 +1810,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                         children: [
                                           // Stroked text as outline
                                           Text(
-                                            symbolUsername ?? 'Profile',
+                                            _profileController.symbolUsername ??
+                                                'Profile',
                                             style: TextStyle(
                                               fontSize: 18.0,
                                               fontWeight: FontWeight.bold,
@@ -1985,7 +1823,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                           ),
                                           // Filled text on top
                                           Text(
-                                            symbolUsername ?? 'Profile',
+                                            _profileController.symbolUsername ??
+                                                'Profile',
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 18.0,
@@ -1994,8 +1833,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                           ),
                                         ],
                                       ),
-                                      if (symbolUsername != null &&
-                                          symbolUsername!.startsWith('!'))
+                                      if (_profileController.symbolUsername !=
+                                              null &&
+                                          _profileController.symbolUsername!
+                                              .startsWith('!'))
                                         const Padding(
                                           padding: EdgeInsets.only(left: 8.0),
                                           child: Text(
@@ -2065,7 +1906,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                 'https://www.furaffinity.net/controls/troubletickets/');
                                             break;
                                           case 'block_unblock':
-                                            if (!isOwnProfile) {
+                                            if (!_profileController
+                                                .isOwnProfile) {
                                               await _handleBlockUnblock();
                                             }
                                             break;
@@ -2084,10 +1926,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                           value: 'report',
                                           child: Text('Report'),
                                         ),
-                                        if (!isOwnProfile)
+                                        if (!_profileController.isOwnProfile)
                                           PopupMenuItem<String>(
                                             value: 'block_unblock',
-                                            child: Text(isBlocked
+                                            child: Text(_profileController
+                                                    .isBlocked
                                                 ? 'Unblock author'
                                                 : 'Block author'),
                                           ),
@@ -2236,9 +2079,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                                         Alignment
                                                                             .center,
                                                                     child: Text(
-                                                                      (userTitle?.isNotEmpty ??
+                                                                      (_profileController
+                                                                                  .userTitle
+                                                                                  ?.isNotEmpty ??
                                                                               false)
-                                                                          ? userTitle!
+                                                                          ? _profileController
+                                                                              .userTitle!
                                                                           : " ",
                                                                       style:
                                                                           const TextStyle(
@@ -2267,11 +2113,13 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                                 alignment: Alignment
                                                                     .centerLeft,
                                                                 child: Text(
-                                                                  registrationDate !=
-                                                                              null &&
-                                                                          registrationDate!
+                                                                  _profileController
+                                                                              .registrationDate !=
+                                                                          null &&
+                                                                          _profileController
+                                                                              .registrationDate!
                                                                               .isNotEmpty
-                                                                      ? 'Joined $registrationDate'
+                                                                      ? 'Joined ${_profileController.registrationDate}'
                                                                       : '',
                                                                   style:
                                                                       const TextStyle(
@@ -2289,7 +2137,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                       ),
                                                     ),
                                                     const SizedBox(width: 4),
-                                                    if (isOwnProfile)
+                                                    if (_profileController
+                                                        .isOwnProfile)
                                                       SizedBox(
                                                         width: 100,
                                                         height: 38,
@@ -2362,7 +2211,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                                 fit: BoxFit
                                                                     .scaleDown,
                                                                 child: Text(
-                                                                  isWatching
+                                                                  _profileController
+                                                                          .isWatching
                                                                       ? "-Watch"
                                                                       : "+Watch",
                                                                   style:
@@ -2389,7 +2239,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                                         (context) =>
                                                                             NewMessageScreen(
                                                                       recipient:
-                                                                          sanitizedUsername,
+                                                                          _profileController
+                                                                              .sanitizedUsername,
                                                                     ),
                                                                   ),
                                                                 );
@@ -2461,22 +2312,28 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                   children: [
                                                     ProfileStatItem(
                                                         count:
-                                                            views?.toString() ??
+                                                            _profileController
+                                                                    .views
+                                                                    ?.toString() ??
                                                                 '0',
                                                         label: 'Views'),
                                                     ProfileStatItem(
-                                                        count: submissions
+                                                        count: _profileController
+                                                                .submissions
                                                                 ?.toString() ??
                                                             '0',
                                                         label: 'Submissions'),
                                                     ProfileStatItem(
                                                         count:
-                                                            favs?.toString() ??
+                                                            _profileController
+                                                                    .favs
+                                                                    ?.toString() ??
                                                                 '0',
                                                         label: 'Favs'),
                                                     ProfileStatItem(
                                                         count:
-                                                            recentWatchersCount
+                                                            _profileController
+                                                                .recentWatchersCount
                                                                 .toString(),
                                                         label: 'Watched'),
                                                   ],
@@ -2586,7 +2443,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                       ],
                     ),
                   ),
-                  floatingActionButton: !isLoading
+                  floatingActionButton: !_profileController.isLoading
                       ? ValueListenableBuilder<bool>(
                           valueListenable: _showMoveUpFab,
                           builder: (context, showFab, child) {
@@ -2794,10 +2651,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   Widget _buildHomeSection() {
     return UserProfileHomeSection(
-      hasRealUserProfile: hasRealUserProfile,
-      userDescription: userDescription,
+      hasRealUserProfile: _profileController.hasRealUserProfile,
+      userDescription: _profileController.userDescription,
       webViewKey: _webViewKey,
-      sanitizedUsername: sanitizedUsername,
+      sanitizedUsername: _profileController.sanitizedUsername,
       onDescriptionLongPressStart: _handleDescriptionLongPress,
       enableScrollPerformancePause:
           _webViewScrollOptimizationEnabled && _enableScrollWebViewPause,
@@ -2808,9 +2665,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
           });
         });
       },
-      featuredImageUrl: featuredImageUrl,
-      featuredImageTitle: featuredImageTitle,
-      featuredPostNumber: featuredPostNumber,
+      featuredImageUrl: _profileController.featuredImageUrl,
+      featuredImageTitle: _profileController.featuredImageTitle,
+      featuredPostNumber: _profileController.featuredPostNumber,
       onOpenPost: (context, imageUrl, uniqueNumber) {
         Navigator.push(
           context,
@@ -2820,31 +2677,33 @@ class UserProfileScreenState extends State<UserProfileScreen>
           ),
         );
       },
-      userProfileImageUrl: userProfileImageUrl,
-      userProfilePostNumber: userProfilePostNumber,
-      userProfileTexts: userProfileTexts,
-      isClassicMarkup: isClassicMarkup,
-      acceptingTrades: acceptingTrades,
-      acceptingCommissions: acceptingCommissions,
+      userProfileImageUrl: _profileController.userProfileImageUrl,
+      userProfilePostNumber: _profileController.userProfilePostNumber,
+      userProfileTexts: _profileController.userProfileTexts,
+      isClassicMarkup: _profileController.isClassicMarkup,
+      acceptingTrades: _profileController.acceptingTrades,
+      acceptingCommissions: _profileController.acceptingCommissions,
       onHandleFALink: _handleFALink,
-      contactInformationLinks: contactInformationLinks,
+      contactInformationLinks: _profileController.contactInformationLinks,
       onLaunchUrl: _launchURL,
-      recentWatchers: recentWatchers,
-      recentWatchersCount: recentWatchersCount,
-      recentlyWatched: recentlyWatched,
-      recentlyWatchedCount: recentlyWatchedCount,
-      shouts: shouts,
-      isOwnProfile: isOwnProfile,
+      recentWatchers: _profileController.recentWatchers,
+      recentWatchersCount: _profileController.recentWatchersCount,
+      recentlyWatched: _profileController.recentlyWatched,
+      recentlyWatchedCount: _profileController.recentlyWatchedCount,
+      shouts: _profileController.shouts,
+      isOwnProfile: _profileController.isOwnProfile,
       isShoutSelectionMode: _isShoutSelectionMode,
       selectedShoutCount: _selectedShoutCount,
-      currentShoutPage: currentShoutPage,
-      totalShoutPages: totalShoutPages,
+      currentShoutPage: _profileController.currentShoutPage,
+      totalShoutPages: _profileController.totalShoutPages,
       isLoadingMoreShouts: isLoadingMoreShouts,
       onOpenPostShout: (context) async {
         final result = await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PostShoutScreen(username: sanitizedUsername),
+            builder: (context) => PostShoutScreen(
+              username: _profileController.sanitizedUsername,
+            ),
           ),
         );
         if (result == true) {
@@ -2862,10 +2721,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
   Widget _buildGallerySection() {
     return UserProfileGallerySection(
       nickname: widget.nickname,
-      sanitizedUsername: sanitizedUsername,
-      selectedFolderName: _selectedFolderName,
-      selectedFolderUrl: _selectedFolderUrl,
-      allFolders: _allFolders,
+      sanitizedUsername: _profileController.sanitizedUsername,
+      selectedFolderName: _profileController.selectedFolderName,
+      selectedFolderUrl: _profileController.selectedFolderUrl,
+      allFolders: _profileController.allFolders,
       onFolderSelected: _onFolderSelected,
       onFoldersParsed: _onFoldersParsed,
     );
@@ -2874,13 +2733,13 @@ class UserProfileScreenState extends State<UserProfileScreen>
   /// Builds the Scraps section content.
   Widget _buildScrapsSection() {
     return UserProfileScrapsSection(
-      sanitizedUsername: sanitizedUsername,
+      sanitizedUsername: _profileController.sanitizedUsername,
     );
   }
 
   Widget _buildFavoritesSection() {
     return UserProfileFavoritesSection(
-      sanitizedUsername: sanitizedUsername,
+      sanitizedUsername: _profileController.sanitizedUsername,
     );
   }
 
@@ -2893,8 +2752,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
   /// Builds the Journals section content.
   Widget _buildJournalsSection() {
     return UserProfileJournalsSection(
-      sanitizedUsername: sanitizedUsername,
-      isOwnProfile: isOwnProfile,
+      sanitizedUsername: _profileController.sanitizedUsername,
+      isOwnProfile: _profileController.isOwnProfile,
       journalsKey: _journalsKey,
       onCreateJournalPressed: () {
         Navigator.push(

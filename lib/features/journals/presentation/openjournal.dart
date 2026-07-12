@@ -2,27 +2,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
-import 'package:intl/intl.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/journals/data/journal_action_service.dart';
-import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
-import 'package:FANotifier/features/journals/data/journal_deletion_coordinator.dart';
-import 'package:FANotifier/features/journals/data/journal_link_parser.dart';
 import 'package:FANotifier/features/journals/data/journal_url_builder.dart';
 import 'package:FANotifier/features/journals/presentation/create_journal.dart';
 import 'package:FANotifier/features/journals/presentation/editjournalcommentscreen.dart';
 import 'package:FANotifier/features/journals/presentation/journal_reply_screen.dart';
+import 'package:FANotifier/features/journals/presentation/openjournal_controller.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal_comments.dart';
 import 'package:FANotifier/features/journals/domain/journal_deletion_result.dart';
 import 'package:FANotifier/features/journals/domain/journal_load_failure.dart';
-import 'package:FANotifier/features/journals/domain/journal_optimistic_comment.dart';
-import 'package:FANotifier/features/journals/domain/journal_availability_detector.dart';
-import 'package:FANotifier/features/journals/domain/journal_publication_time_parser.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:FANotifier/shared/utils/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
-import 'package:FANotifier/features/journals/data/openjournal_api_service.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/utils/comment_composer_lines.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
@@ -34,6 +26,8 @@ import 'package:FANotifier/shared/translation/translation_source_text_builder.da
 import 'package:FANotifier/shared/platform/fa_share_service.dart';
 import 'package:FANotifier/main.dart';
 import 'package:provider/provider.dart';
+
+import '../data/journal_link_parser.dart';
 
 class OpenJournal extends StatefulWidget {
   final String uniqueNumber;
@@ -51,18 +45,7 @@ class OpenJournal extends StatefulWidget {
 
 class _OpenJournalState extends State<OpenJournal>
     with RouteAware, WidgetsBindingObserver {
-  String? profileImageUrl;
-  String? username;
-  String? submissionTitle;
-  String? submissionDescription;
-  DateTime? publicationTime;
-  String? publicationTimeRaw;
-  int commentsCount = 0;
-  List<Map<String, dynamic>> comments = [];
-  late final OpenJournalApiService _api;
-  late final JournalActionService _journalActionService;
-  late final JournalDeletionCoordinator _journalDeletionCoordinator;
-  late final JournalCommentService _journalCommentService;
+  late final OpenJournalController _controller;
   final TranslationService _translationService = TranslationService.instance;
   final TranslationSourceTextBuilder _translationSourceTextBuilder =
       TranslationSourceTextBuilder(TranslationService.instance);
@@ -80,49 +63,27 @@ class _OpenJournalState extends State<OpenJournal>
   final ValueNotifier<bool> _commentDraftHasText = ValueNotifier<bool>(false);
   final ValueNotifier<int> _commentDraftCollapsedLines = ValueNotifier<int>(1);
 
-  String? authorDisplayName;
-  String? authorUserName;
-  String? authorSymbol;
-  String? authorUserTitle;
-  bool isJournalClassic = false;
+  String? get profileImageUrl => _controller.profileImageUrl;
+  String? get submissionTitle => _controller.submissionTitle;
+  String? get submissionDescription => _controller.submissionDescription;
+  int get commentsCount => _controller.commentsCount;
+  List<Map<String, dynamic>> get comments => _controller.comments;
+  String? get authorDisplayName => _controller.authorDisplayName;
+  String? get authorUserName => _controller.authorUserName;
+  String? get authorSymbol => _controller.authorSymbol;
+  String? get authorUserTitle => _controller.authorUserTitle;
+  bool get isJournalClassic => _controller.isJournalClassic;
+  String? get fullViewImageUrl => _controller.fullViewImageUrl;
+  String? get fileLink => _controller.fileLink;
+  bool get isLoading => _controller.isLoading;
+  bool get isOwner => _controller.isOwner;
+  String? get category => _controller.category;
+  String? get type => _controller.type;
+  String? get species => _controller.species;
+  String? get gender => _controller.gender;
+  List<String> get keywords => _controller.keywords;
 
-  // User timezone and DST settings
-  String? userTimezoneIanaName;
-  bool isDstCorrectionApplied = false;
-
-  // Watch/unwatch links
-  String? watchLink;
-  String? unwatchLink;
-  bool isWatching = false;
-
-  // Favorite links
-  String? favoriteLink;
-  String? unfavoriteLink;
-  bool isFavorited = false;
-
-  // Block/unblock links
-  String? blockLink;
-  String? unblockLink;
-  bool isBlocked = false;
-
-  // Media links
-  String? fullViewImageUrl;
-  String? fileLink;
-
-  // Loading state and owner flag
-  bool isLoading = true;
-  bool isOwner = false;
-  String? deleteLink;
   bool _isDeleting = false;
-
-  // Additional post info
-  String? category;
-  String? type;
-  String? species;
-  String? gender;
-  String? size;
-  String? fileSize;
-  List<String> keywords = [];
 
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<SelectionAreaState> _titleSelectionKey = GlobalKey();
@@ -149,13 +110,8 @@ class _OpenJournalState extends State<OpenJournal>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateKeyboardInset();
     });
-    _api = OpenJournalApiService();
-    _journalActionService = const JournalActionService();
-    _journalDeletionCoordinator = JournalDeletionCoordinator(
-      api: _api,
-      actionService: _journalActionService,
-    );
-    _journalCommentService = JournalCommentService();
+    _controller = OpenJournalController(journalId: widget.uniqueNumber);
+    _controller.addListener(_handleControllerChanged);
     IosScrollRecovery.addListener(_handleIosScrollRecovery);
     // Only fetch the journal itself on open.
     // Extra "helper" fetches (user-page links, delete key) are done *on-demand*
@@ -189,7 +145,15 @@ class _OpenJournalState extends State<OpenJournal>
     _isCommentComposerExpanded.dispose();
     _commentDraftHasText.dispose();
     _commentDraftCollapsedLines.dispose();
+    _controller.removeListener(_handleControllerChanged);
+    _controller.dispose();
     super.dispose();
+  }
+
+  void _handleControllerChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _handleIosScrollRecovery() {
@@ -392,93 +356,29 @@ class _OpenJournalState extends State<OpenJournal>
     }
   }
 
-  /// Helper for full submission description HTML.
-  String _getFullLinkFromFetchedHtml(String truncatedUrl,
-      {String? htmlSource}) {
-    final String? source = htmlSource ?? submissionDescription;
-    if (source == null) return truncatedUrl;
-    return findFullShortenedJournalLink(source, truncatedUrl) ?? truncatedUrl;
-  }
-
   Future<void> _fetchPostDetailsNew() async {
     try {
-      final result = await _api.fetchJournal(widget.uniqueNumber);
-      try {
-        final looksLikeSystemError = looksLikeUnavailableJournal(
-          title: result.title,
-          descriptionHtml: result.submissionDescription,
-          rawDate: result.dateTimeRaw,
-        );
+      final loadResult = await _controller.load();
 
-        if (looksLikeSystemError) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (loadResult.isUnavailable) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This journal does not exist or has been deleted'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+
+          Future.delayed(const Duration(milliseconds: 400), () {
             if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content:
-                    Text('This journal does not exist or has been deleted'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 3),
-              ),
-            );
-
-            Future.delayed(const Duration(milliseconds: 400), () {
-              if (!mounted) return;
-              Navigator.of(context).pop();
-            });
+            Navigator.of(context).pop();
           });
-          return;
-        }
-      } catch (e) {
-        debugPrint('Error while checking for system-error markers: $e');
-      }
-      setState(() {
-        isJournalClassic = result.isJournalClassic;
-        isOwner = result.ownerEditLink != null;
-        profileImageUrl = result.profileImageUrl;
-        authorDisplayName = result.displayName;
-        authorUserName = result.authorSlug;
-        authorSymbol = result.symbol;
-        authorUserTitle = result.userTitle;
-        submissionDescription = result.submissionDescription;
-        submissionTitle = result.title;
-        publicationTime = result.dateTime;
-        publicationTimeRaw = result.dateTimeRaw;
-        commentsCount = result.commentsCount;
-        favoriteLink = result.favoriteLink;
-        unfavoriteLink = result.unfavoriteLink;
-        isFavorited = result.isFavorited;
-        watchLink = result.watchLink;
-        unwatchLink = result.unwatchLink;
-        isWatching = result.isWatching;
-        blockLink = result.blockLink;
-        unblockLink = result.unblockLink;
-        isBlocked = result.isBlocked;
-        category = result.category;
-        type = result.type;
-        species = result.species;
-        gender = result.gender;
-        keywords = result.keywords;
-        fullViewImageUrl = result.fullViewImageUrl;
-        fileLink = result.fileLink;
-        deleteLink = result.deleteLink;
-        isLoading = false;
-      });
-
-      if (publicationTime == null && publicationTimeRaw != null) {
-        _parsePublicationTime(publicationTimeRaw!);
-      }
-
-      if (result.commentBodies.isNotEmpty) {
-        setState(() {
-          comments = result.commentBodies;
-          commentsCount = result.commentsCount;
         });
-      } else if (submissionDescription != null) {
-        unawaited(_fetchCommentsNew(submissionDescription!));
+        return;
       }
     } catch (e) {
-      setState(() => isLoading = false);
       debugPrint('Failed to fetch journal details: $e');
 
       if (!mounted) return;
@@ -500,19 +400,6 @@ class _OpenJournalState extends State<OpenJournal>
           Navigator.of(context).pop();
         });
       });
-    }
-  }
-
-  Future<void> _fetchCommentsNew(String body) async {
-    try {
-      final parsed = await _api.fetchCommentsFromBody(body);
-      if (mounted) {
-        setState(() {
-          comments = parsed;
-        });
-      }
-    } catch (e) {
-      debugPrint('Failed to parse comments: $e');
     }
   }
 
@@ -546,15 +433,7 @@ class _OpenJournalState extends State<OpenJournal>
     setState(() => _isDeleting = true);
 
     try {
-      final result = await _journalDeletionCoordinator.delete(
-        journalId: widget.uniqueNumber,
-        currentDeleteLink: deleteLink,
-        onDeleteLinkResolved: (resolvedDeleteLink) {
-          setState(() {
-            deleteLink = resolvedDeleteLink;
-          });
-        },
-      );
+      final result = await _controller.deleteJournal();
       if (result.status == JournalDeletionStatus.invalidDeleteLink) {
         showAppSnackBar(context,
             "Safe delete failed: couldn't confirm delete link for this journal.",
@@ -598,31 +477,6 @@ class _OpenJournalState extends State<OpenJournal>
     }
   }
 
-  void _parsePublicationTime(String rawTime) {
-    try {
-      final parsed = parseJournalPublicationTime(
-        rawTime,
-        applyDstCorrection: isDstCorrectionApplied,
-      );
-      if (parsed != null) {
-        publicationTime = parsed;
-      }
-    } catch (e, stackTrace) {
-      debugPrint("Error parsing publication time: $e");
-      debugPrint("Stack trace: $stackTrace");
-    }
-  }
-
-  String? getFormattedPublicationTime() {
-    if (publicationTimeRaw != null && publicationTimeRaw!.isNotEmpty) {
-      return publicationTimeRaw;
-    }
-    if (publicationTime == null) return null;
-    final localTime = publicationTime!.toLocal();
-    return DateFormat.yMMMd().add_jm().format(localTime);
-  }
-
-  // (legacy _fetchComments removed; use _fetchCommentsNew)
   Future<void> hideComment(String hideLink, String commentId) async {
     final shouldHide = await showDialog<bool>(
       context: context,
@@ -645,8 +499,7 @@ class _OpenJournalState extends State<OpenJournal>
     );
     if (shouldHide == true) {
       try {
-        final statusCode =
-            await _journalActionService.updateCommentVisibility(hideLink);
+        final statusCode = await _controller.updateCommentVisibility(hideLink);
         if (statusCode == null) return;
         if (statusCode == 200) {
           showAppSnackBar(context, "Comment successfully hidden!",
@@ -684,7 +537,7 @@ class _OpenJournalState extends State<OpenJournal>
     if (shouldUnhide == true) {
       try {
         final statusCode =
-            await _journalActionService.updateCommentVisibility(unhideLink);
+            await _controller.updateCommentVisibility(unhideLink);
         if (statusCode == null) return;
         if (statusCode == 200) {
           showAppSnackBar(context, "Comment successfully un-hidden!",
@@ -706,16 +559,6 @@ class _OpenJournalState extends State<OpenJournal>
       text: shareContent,
       subject: submissionTitle ?? 'Fur Affinity Post',
     );
-  }
-
-  void _addComment(String commentText) {
-    setState(() {
-      comments.add(buildOptimisticJournalComment(
-        text: commentText,
-        now: DateTime.now(),
-      ));
-      commentsCount = commentsCount + 1;
-    });
   }
 
   void _syncCommentComposerExpansion() {
@@ -777,15 +620,12 @@ class _OpenJournalState extends State<OpenJournal>
     _isSendingInlineComment.value = true;
 
     try {
-      final success = await _journalCommentService.submitComment(
-        message: commentText,
-        journalId: widget.uniqueNumber,
-      );
+      final success = await _controller.submitComment(commentText);
 
       if (!mounted) return;
 
       if (success) {
-        _addComment(commentText);
+        _controller.addOptimisticComment(commentText, DateTime.now());
         _commentController.clear();
         _commentFocusNode.unfocus();
         await _fetchPostDetailsNew();
@@ -1121,7 +961,7 @@ class _OpenJournalState extends State<OpenJournal>
                                               ),
                                               const SizedBox(height: 6),
                                               Text(
-                                                  'Posted on: ${getFormattedPublicationTime() ?? ''}'),
+                                                  'Posted on: ${_controller.formattedPublicationTime ?? ''}'),
                                             ],
                                           ),
                                         ),
@@ -1199,7 +1039,7 @@ class _OpenJournalState extends State<OpenJournal>
                                                       htmlSource:
                                                           submissionDescription,
                                                       getFullUrl:
-                                                          _getFullLinkFromFetchedHtml),
+                                                          _controller.getFullLink),
                                               extensions: [
                                                 html_pkg.TagExtension(
                                                   tagsToExtend: {"i"},
@@ -1608,7 +1448,7 @@ class _OpenJournalState extends State<OpenJournal>
                                           url,
                                           htmlSource: commentHtml,
                                           getFullUrl:
-                                              _getFullLinkFromFetchedHtml,
+                                              _controller.getFullLink,
                                         );
                                       },
                                       selectionAreaKey:

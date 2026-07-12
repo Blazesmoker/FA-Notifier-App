@@ -1,16 +1,7 @@
-// lib/fa_image_grid.dart
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart';
-import 'package:FANotifier/features/browse/data/browse_image_parser.dart';
-import 'package:FANotifier/features/browse/data/browse_image_service.dart';
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/shared/fa/cloudflare_challenge_exception.dart';
-import 'package:FANotifier/features/submissions/data/submission_favorite_details_service.dart';
-import 'package:FANotifier/features/submissions/data/favorite_service.dart';
-import 'package:FANotifier/shared/fa/fa_thumbnail_processing.dart';
-import 'package:FANotifier/core/logging/app_logging.dart';
+import 'package:FANotifier/features/browse/presentation/browse_image_grid_controller.dart';
 import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation.dart';
@@ -31,54 +22,35 @@ class FAImageGrid extends StatefulWidget {
 }
 
 class FAImageGridState extends State<FAImageGrid> {
-  static const double _nextPageLeadScreens = 2.5;
+  late final BrowseImageGridController _controller;
 
-  int currentPage = 1;
-  bool isLoading = false;
-  bool hasMore = true;
-
-  bool _isError = false;
-  String? _errorMessage;
-
-  /// Each image is a Map with:
-  ///   - 'url': thumbnail URL
-  ///   - 'width': double
-  ///   - 'height': double
-  ///   - 'uniqueNumber': string
-  List<Map<String, dynamic>> images = [];
-  List<List<Map<String, dynamic>>> imageRows = [];
-  List<Map<String, dynamic>> normalImagesQueue = [];
-
-  final Set<String> imageUrls = <String>{}; // For de-duping
-  final ScrollController _scrollController = ScrollController();
-
-  final Set<String> _favoritedImages = {};
-  final Map<String, String> _favUrls = {};
-  final Map<String, String> _unfavUrls = {};
-  late final BrowseImageService _browseImageService;
-  final SubmissionFavoriteDetailsService _favoriteDetailsService =
-      const SubmissionFavoriteDetailsService();
-  final FavoriteService _favoriteService = FavoriteService();
-  final SfwModePreference _sfwModePreference = SfwModePreference();
-
-  bool _sfwEnabled = true;
-  late final Future<void> _sfwLoadFuture;
-  bool _isHandlingCloudflareChallenge = false;
-  double _nextPageTriggerOffset = double.infinity;
-  bool _pendingNextPageFetch = false;
-  bool _isNextPageFetchQueued = false;
+  int get currentPage => _controller.currentPage;
+  bool get isLoading => _controller.isLoading;
+  bool get hasMore => _controller.hasMore;
+  bool get _isError => _controller.isError;
+  String? get _errorMessage => _controller.errorMessage;
+  List<Map<String, dynamic>> get images => _controller.images;
+  List<List<Map<String, dynamic>>> get imageRows => _controller.imageRows;
+  List<Map<String, dynamic>> get normalImagesQueue =>
+      _controller.normalImagesQueue;
+  Set<String> get imageUrls => _controller.imageUrls;
+  Set<String> get _favoritedImages => _controller.favoritedImages;
+  ScrollController get _scrollController => _controller.scrollController;
 
   @override
   void initState() {
     super.initState();
-    _browseImageService = BrowseImageService();
-    _sfwLoadFuture = _loadSfwEnabled();
-    _fetchImages(currentPage);
-    _scrollController.addListener(_scrollListener);
+    _controller = BrowseImageGridController(
+      selectedFilters: widget.selectedFilters,
+      onCloudflareChallenge: (initialUrl) =>
+          _showCloudflareDialog(initialUrl: initialUrl),
+    );
+    _controller.addListener(_handleControllerChanged);
+    _controller.initialize();
   }
 
-  Future<void> _loadSfwEnabled() async {
-    _sfwEnabled = await _sfwModePreference.loadSfwEnabled();
+  void _handleControllerChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -91,389 +63,39 @@ class FAImageGridState extends State<FAImageGrid> {
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _controller.removeListener(_handleControllerChanged);
+    _controller.dispose();
     super.dispose();
   }
 
-  Future<void> scrollToTop({bool animate = true}) async {
-    if (!_scrollController.hasClients) return;
-    if (!animate) {
-      _scrollController.jumpTo(0);
-      return;
-    }
-    await _scrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
-  void _scrollListener() {
-    if (!_scrollController.hasClients ||
-        isLoading ||
-        _isNextPageFetchQueued ||
-        !hasMore ||
-        _isHandlingCloudflareChallenge) {
-      return;
-    }
-
-    if (!_hasReachedNextPageTrigger(_scrollController.position)) {
-      return;
-    }
-
-    _pendingNextPageFetch = true;
-    _tryStartPendingNextPageFetch();
-  }
+  Future<void> scrollToTop({bool animate = true}) =>
+      _controller.scrollToTop(animate: animate);
 
   Future<void> _refreshImages() async {
-    setState(() {
-      images.clear();
-      imageUrls.clear();
-      imageRows.clear();
-      normalImagesQueue.clear();
-      currentPage = 1;
-      hasMore = true;
-      _nextPageTriggerOffset = double.infinity;
-      _pendingNextPageFetch = false;
-      _isNextPageFetchQueued = false;
-      _favoritedImages.clear();
-      _favUrls.clear();
-      _unfavUrls.clear();
-      _isError = false;
-      _errorMessage = null;
-    });
-    await _fetchImages(currentPage, isRefresh: true);
-  }
-
-  Future<void> _fetchImages(
-    int pageNumber, {
-    bool isRefresh = false,
-    int remainingCloudflareRecoveries = 2,
-  }) async {
-    if (isLoading || !hasMore) return;
-    kDebugPrint('[Browse] Fetching page $pageNumber${isRefresh ? ' (refresh)' : ''}');
-    final previousMaxScrollExtent = isRefresh || !_scrollController.hasClients
-        ? 0.0
-        : _scrollController.position.maxScrollExtent;
-    final shouldRebuildImmediately = isRefresh || imageRows.isEmpty;
-    if (shouldRebuildImmediately) {
-      setState(() => isLoading = true);
-    } else {
-      isLoading = true;
-    }
-
-    try {
-      if (isRefresh) {
-        images.clear();
-        imageUrls.clear();
-        imageRows.clear();
-        normalImagesQueue.clear();
-        currentPage = 1;
-        hasMore = true;
-        _nextPageTriggerOffset = double.infinity;
-        _pendingNextPageFetch = false;
-        _isNextPageFetchQueued = false;
-      }
-
-      await _sfwLoadFuture;
-      final newImages = await _browseImageService.fetchImages(
-        pageNumber: pageNumber,
-        selectedFilters: widget.selectedFilters,
-        sfwEnabled: _sfwEnabled,
-      );
-      await _appendImages(
-        newImages,
-        previousMaxScrollExtent: previousMaxScrollExtent,
-      );
-    } on CloudflareChallengeException catch (e) {
-      kDebugPrint('Cloudflare challenge detected while fetching browse images.');
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
-
-      if (remainingCloudflareRecoveries <= 0) {
-        _pendingNextPageFetch = false;
-        _isNextPageFetchQueued = false;
-        _nextPageTriggerOffset = _scrollController.hasClients
-            ? _scrollController.position.pixels + 1
-            : double.infinity;
-        return;
-      }
-
-      final result = await _showCloudflareDialog(initialUrl: e.initialUrl);
-      if (result?.passed != true || !mounted) {
-        _pendingNextPageFetch = false;
-        _isNextPageFetchQueued = false;
-        _nextPageTriggerOffset = _scrollController.hasClients
-            ? _scrollController.position.pixels + 1
-            : double.infinity;
-        return;
-      }
-
-      final recoveredHtml = result?.pageHtml;
-      if (recoveredHtml != null && recoveredHtml.isNotEmpty) {
-        final recoveredImages = await parseBrowseImageHtml(recoveredHtml);
-        await _appendImages(
-          recoveredImages,
-          previousMaxScrollExtent: previousMaxScrollExtent,
-        );
-        return;
-      }
-
-      await _fetchImages(
-        pageNumber,
-        isRefresh: isRefresh,
-        remainingCloudflareRecoveries: remainingCloudflareRecoveries - 1,
-      );
-    } catch (e) {
-      setState(() {
-        _pendingNextPageFetch = false;
-        _isNextPageFetchQueued = false;
-        isLoading = false;
-        _isError = true;
-        _errorMessage = e.toString();
-      });
-      kDebugPrint('FAImageGrid: Error fetching images => $e');
-      _nextPageTriggerOffset = _scrollController.hasClients
-          ? _scrollController.position.pixels + 1
-          : double.infinity;
-    }
-  }
-
-  Future<void> _appendImages(
-    List<Map<String, dynamic>> newImages, {
-    required double previousMaxScrollExtent,
-  }) async {
-    final filtered =
-        newImages.where((img) => !imageUrls.contains(img['url'])).toList();
-    for (final img in filtered) {
-      imageUrls.add(img['url']);
-    }
-
-    final rowProcessing = await processFaImageRows(
-      newImages: filtered,
-      normalImagesQueue: normalImagesQueue,
-    );
-    final appendedRows = (rowProcessing['rows'] as List)
-        .map(
-          (row) => List<Map<String, dynamic>>.from(row as List),
-        )
-        .toList();
-    final nextQueue =
-        List<Map<String, dynamic>>.from(rowProcessing['queue'] as List);
-
-    if (!mounted) return;
-
-    setState(() {
-      _isError = false;
-      _errorMessage = null;
-      hasMore = newImages.isNotEmpty && filtered.isNotEmpty;
-      images.addAll(filtered);
-      imageRows.addAll(appendedRows);
-      normalImagesQueue = nextQueue;
-      _pendingNextPageFetch = false;
-      _isNextPageFetchQueued = false;
-      isLoading = false;
-    });
-
-    _scheduleNextPageTrigger(previousMaxScrollExtent: previousMaxScrollExtent);
-  }
-
-  void _scheduleNextPageTrigger({required double previousMaxScrollExtent}) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !hasMore) {
-        _pendingNextPageFetch = false;
-        _isNextPageFetchQueued = false;
-        _nextPageTriggerOffset = double.infinity;
-        return;
-      }
-
-      if (!_scrollController.hasClients) {
-        _scheduleNextPageTrigger(
-          previousMaxScrollExtent: previousMaxScrollExtent,
-        );
-        return;
-      }
-
-      final newMaxScrollExtent = _scrollController.position.maxScrollExtent;
-      final addedExtent = newMaxScrollExtent - previousMaxScrollExtent;
-      if (addedExtent <= 0) {
-        _pendingNextPageFetch = false;
-        _isNextPageFetchQueued = false;
-        _nextPageTriggerOffset = double.infinity;
-        return;
-      }
-
-      _nextPageTriggerOffset =
-          previousMaxScrollExtent + (addedExtent * 0.6);
-    });
+    await _controller.refresh(widget.selectedFilters);
   }
 
   bool _handleScrollNotification(ScrollNotification notification) {
-    if (notification.metrics.axis != Axis.vertical) return false;
-
-    if (!mounted ||
-        isLoading ||
-        _isNextPageFetchQueued ||
-        !hasMore ||
-        _isHandlingCloudflareChallenge) {
-      return false;
-    }
-
-    if (_hasReachedNextPageTrigger(notification.metrics)) {
-      _pendingNextPageFetch = true;
-      _tryStartPendingNextPageFetch();
-    }
-
-    return false;
-  }
-
-  void _tryStartPendingNextPageFetch() {
-    if (!_pendingNextPageFetch ||
-        !_scrollController.hasClients ||
-        isLoading ||
-        _isNextPageFetchQueued ||
-        !hasMore ||
-        _isHandlingCloudflareChallenge) {
-      return;
-    }
-    if (!_hasReachedNextPageTrigger(_scrollController.position)) {
-      return;
-    }
-
-    _pendingNextPageFetch = false;
-    _isNextPageFetchQueued = true;
-    _nextPageTriggerOffset = double.infinity;
-    final nextPage = currentPage + 1;
-    currentPage = nextPage;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        _isNextPageFetchQueued = false;
-        return;
-      }
-      unawaited(_fetchImages(nextPage));
-    });
-  }
-
-  bool _hasReachedNextPageTrigger(ScrollMetrics metrics) {
-    final reachedPageThreshold = metrics.pixels >= _nextPageTriggerOffset;
-    final reachedLeadThreshold =
-        metrics.extentAfter <= metrics.viewportDimension * _nextPageLeadScreens;
-    return reachedPageThreshold || reachedLeadThreshold;
+    return _controller.handleScrollNotification(notification);
   }
 
   Future<CloudflareCheckResult?> _showCloudflareDialog({
     String? initialUrl,
   }) async {
-    if (!mounted || _isHandlingCloudflareChallenge) return null;
-    _isHandlingCloudflareChallenge = true;
-    try {
-      return await showDialog<CloudflareCheckResult>(
-        context: context,
-        barrierDismissible: false,
-        useSafeArea: false,
-        builder: (_) => CloudflareCheckScreen(
-          initialUrl: initialUrl ?? 'https://www.furaffinity.net/',
-          returnPageHtml: true,
-        ),
-      );
-    } finally {
-      _isHandlingCloudflareChallenge = false;
-    }
-  }
-
-  Future<String> _getAllCookies() async {
-    await _sfwLoadFuture;
-    return _browseImageService.buildCookieHeader(
-      selectedFilters: widget.selectedFilters,
-      sfwEnabled: _sfwEnabled,
+    if (!mounted) return null;
+    return showDialog<CloudflareCheckResult>(
+      context: context,
+      barrierDismissible: false,
+      useSafeArea: false,
+      builder: (_) => CloudflareCheckScreen(
+        initialUrl: initialUrl ?? 'https://www.furaffinity.net/',
+        returnPageHtml: true,
+      ),
     );
-  }
-
-  /// Fetch post details (like /fav/ or /unfav/ links) for [uniqueNumber].
-  /// Also updates _favoritedImages if the post page indicates it's already faved.
-  Future<void> _fetchPostDetails(String uniqueNumber) async {
-    final links = await _favoriteDetailsService.fetchLinksForSubmissionId(
-      submissionId: uniqueNumber,
-      cookieHeaderProvider: _getAllCookies,
-    );
-    if (links == null) return;
-
-    if (links.hasAnyUrl) {
-      if (links.hasFavUrl) _favUrls[uniqueNumber] = links.favUrl;
-      if (links.hasUnfavUrl) _unfavUrls[uniqueNumber] = links.unfavUrl;
-      if (links.hasUnfavUrl && !links.hasFavUrl) {
-        _favoritedImages.add(uniqueNumber);
-      }
-      if (links.hasFavUrl && !links.hasUnfavUrl) {
-        _favoritedImages.remove(uniqueNumber);
-      }
-    }
-  }
-
-  /// Clears old links, re-fetches, and updates _favoritedImages.
-  Future<void> _refetchFavLinks(String uniqueNumber) async {
-    _favUrls[uniqueNumber] = '';
-    _unfavUrls[uniqueNumber] = '';
-    await _fetchPostDetails(uniqueNumber);
   }
 
   Future<void> _toggleFavorite(String uniqueNumber, bool wantFavorite) async {
-    bool hasFavUrl = _favUrls.containsKey(uniqueNumber) &&
-        _favUrls[uniqueNumber]!.isNotEmpty;
-    bool hasUnfavUrl = _unfavUrls.containsKey(uniqueNumber) &&
-        _unfavUrls[uniqueNumber]!.isNotEmpty;
-    if (!hasFavUrl && !hasUnfavUrl) {
-      await _fetchPostDetails(uniqueNumber);
-      hasFavUrl = _favUrls.containsKey(uniqueNumber) &&
-          _favUrls[uniqueNumber]!.isNotEmpty;
-      hasUnfavUrl = _unfavUrls.containsKey(uniqueNumber) &&
-          _unfavUrls[uniqueNumber]!.isNotEmpty;
-    }
-
-    final isCurrentlyFav = _favoritedImages.contains(uniqueNumber);
-
-    if (wantFavorite && isCurrentlyFav) {
-      debugPrint('Already favored; skipping POST for $uniqueNumber');
-      return;
-    } else if (!wantFavorite && !isCurrentlyFav) {
-      debugPrint('Already unfavored; skipping POST for $uniqueNumber');
-      return;
-    }
-
-    final urlToUse =
-        wantFavorite ? _favUrls[uniqueNumber] : _unfavUrls[uniqueNumber];
-    if (urlToUse == null || urlToUse.isEmpty) {
-      debugPrint(
-          'DEBUG: No URL found for fav/unfav operation on $uniqueNumber.');
-      return;
-    }
-
-    // optimistic UI
-    if (wantFavorite) {
-      _favoritedImages.add(uniqueNumber);
-    } else {
-      _favoritedImages.remove(uniqueNumber);
-    }
-    setState(() {});
-
-    final success = await _favoriteService.executePostWithRetry(urlToUse);
-    if (success) {
-      await _refetchFavLinks(
-          uniqueNumber); // re-parse the page to see updated state
-      setState(() {});
-    } else {
-      // rollback
-      if (wantFavorite) {
-        _favoritedImages.remove(uniqueNumber);
-      } else {
-        _favoritedImages.add(uniqueNumber);
-      }
-      setState(() {});
-    }
+    await _controller.toggleFavorite(uniqueNumber, wantFavorite);
   }
 
   @override

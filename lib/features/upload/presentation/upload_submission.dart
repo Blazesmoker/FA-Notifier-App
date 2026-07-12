@@ -7,16 +7,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:FANotifier/shared/widgets/tags_and_codes_webview_widget.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/features/upload/data/upload_file_webview_scripts.dart';
 import 'package:FANotifier/features/upload/data/upload_file_picker_service.dart';
-import 'package:FANotifier/features/upload/data/upload_js_result_decoder.dart';
-import 'package:FANotifier/features/upload/data/upload_page_webview_scripts.dart';
 import 'package:FANotifier/features/upload/data/upload_permission_service.dart';
 import 'package:FANotifier/features/upload/data/upload_submission_navigation_service.dart';
-import 'package:FANotifier/features/upload/data/upload_template_js_builder.dart';
+import 'package:FANotifier/features/upload/data/upload_webview_bridge.dart';
 import 'package:FANotifier/features/upload/data/upload_webview_navigation_policy.dart';
+import 'package:FANotifier/features/upload/data/submission_template_save_service.dart';
 import 'package:FANotifier/features/upload/data/submission_template_store.dart';
 import 'package:FANotifier/features/upload/domain/submission_template.dart';
+import 'package:FANotifier/features/upload/domain/upload_webview_results.dart';
 import 'package:FANotifier/features/upload/presentation/submission_templates_screen.dart';
 import 'package:FANotifier/shared/fa/fa_webview_cookie_service.dart';
 
@@ -30,7 +29,7 @@ class UploadSubmissionScreen extends StatefulWidget {
 class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with TickerProviderStateMixin {
   static const Color _accent = Color(0xFFE09321);
 
-  final UploadJsResultDecoder _jsResultDecoder = const UploadJsResultDecoder();
+  final UploadWebViewBridge _webViewBridge = UploadWebViewBridge();
   final UploadPermissionService _permissionService =
       const UploadPermissionService();
   final UploadFilePickerService _filePickerService =
@@ -40,11 +39,11 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   final UploadWebViewNavigationPolicy _webViewNavigationPolicy =
       const UploadWebViewNavigationPolicy();
   final SubmissionTemplateStore _templateStore = SubmissionTemplateStore();
+  late final SubmissionTemplateSaveService _templateSaveService;
   late final FAWebViewCookieService _webViewCookieService;
 
   String get initialUrl => _navigationService.initialUrl;
   String get finalizeUrl => _navigationService.finalizeUrl;
-  InAppWebViewController? _webViewController;
   final GlobalKey webViewKey = GlobalKey();
 
   bool _isWaitingToOpenSubmission = false;
@@ -63,6 +62,9 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   @override
   void initState() {
     super.initState();
+    _templateSaveService = SubmissionTemplateSaveService(
+      store: _templateStore,
+    );
     _webViewCookieService = const FAWebViewCookieService();
     _permissionService.requestInitialPermissions();
 
@@ -161,11 +163,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   }
 
   Future<void> _wrapSelection(String tag) async {
-    if (_webViewController == null) return;
-
-    await _webViewController!.evaluateJavascript(
-      source: buildUploadWrapSelectionScript(tag),
-    );
+    await _webViewBridge.wrapSelection(tag);
   }
 
   ContextMenu _buildContextMenu() {
@@ -213,19 +211,11 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   }
 
   Future<void> _injectInitialCss() async {
-    if (_webViewController == null) return;
-
-    await _webViewController!.evaluateJavascript(
-      source: buildUploadInitialPageScript(isIOS: Platform.isIOS),
-    );
+    await _webViewBridge.injectInitialPage(isIOS: Platform.isIOS);
   }
 
   Future<void> _injectFinalizeCss() async {
-    if (_webViewController == null) return;
-
-    await _webViewController!.evaluateJavascript(
-      source: buildUploadFinalizePageScript(isIOS: Platform.isIOS),
-    );
+    await _webViewBridge.injectFinalizePage(isIOS: Platform.isIOS);
   }
 
   void _showSnack(String message, {required bool isError}) {
@@ -241,18 +231,10 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   }
 
   Future<void> _clearFinalizeFormToDefaults() async {
-    if (_webViewController == null) return;
     try {
-      final res = await _webViewController!.evaluateJavascript(
-        source: buildClearFinalizeFormScript(),
-      );
-
-      final map = _jsResultDecoder.decodeMap(res);
-      if (map == null) {
-        _showSnack('Failed to clear form.', isError: true);
-        return;
-      }
-      if (map['ok'] == true) {
+      final result = await _webViewBridge.clearFinalizeForm();
+      if (result.status == UploadClearFormStatus.unavailable) return;
+      if (result.status == UploadClearFormStatus.cleared) {
         _showSnack('Form cleared.', isError: false);
       } else {
         _showSnack('Failed to clear form.', isError: true);
@@ -263,35 +245,8 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   }
 
   Future<SubmissionTemplateFields?> _readFinalizeFields() async {
-    if (_webViewController == null) return null;
-    try {
-      final res = await _webViewController!.evaluateJavascript(
-        source: buildReadSubmissionTemplateFieldsScript(),
-      );
-
-      final map = _jsResultDecoder.decodeMap(res);
-      if (map == null) {
-        debugPrint('Failed to decode JavaScript result');
-        return null;
-      }
-
-      if (map['ok'] != true) {
-        final error = map['error'] ?? 'Unknown error';
-        debugPrint('JavaScript error reading form: $error');
-        return null;
-      }
-
-      final fields = parseSubmissionTemplateFieldsFromJsMap(map);
-      if (fields == null) {
-        debugPrint('Fields is not a Map: ${map['fields']}');
-        return null;
-      }
-
-      return fields;
-    } catch (e) {
-      debugPrint('Exception in _readFinalizeFields: $e');
-      return null;
-    }
+    final result = await _webViewBridge.readFinalizeFields();
+    return result.fields;
   }
 
   Future<String?> _promptTemplateName() async {
@@ -374,17 +329,10 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
         return;
       }
 
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final template = SubmissionTemplate(
-        id: now.toString(),
+      await _templateSaveService.save(
         name: trimmed,
-        updatedAtMs: now,
         fields: fields,
       );
-
-      debugPrint('Saving template: ${template.name} (id: ${template.id})');
-      await _templateStore.upsertTemplate(template);
-      debugPrint('Template saved successfully');
 
       if (!mounted) return;
       _showSnack('Template saved.', isError: false);
@@ -410,26 +358,17 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
 
   Future<void> _applyTemplate(SubmissionTemplate template) async {
     try {
-      final res = await _webViewController!.evaluateJavascript(
-        source: buildApplySubmissionTemplateScript(template.fields),
-      );
-
-      final map = _jsResultDecoder.decodeMap(res);
-      if (map == null) {
+      final result = await _webViewBridge.applyTemplate(template.fields);
+      if (result.status == UploadTemplateApplyStatus.failed) {
         _showSnack('Failed to apply template.', isError: true);
         return;
       }
 
-      final ok = map['ok'] == true;
-      final failed = (map['failed'] is List) ? (map['failed'] as List).whereType<String>().toList() : <String>[];
-
-      if (!ok) {
-        _showSnack('Failed to apply template.', isError: true);
-        return;
-      }
-
-      if (failed.isNotEmpty) {
-        _showSnack('Could not apply: ${failed.join(', ')}', isError: true);
+      if (result.status == UploadTemplateApplyStatus.partiallyApplied) {
+        _showSnack(
+          'Could not apply: ${result.failedFields.join(', ')}',
+          isError: true,
+        );
       } else {
         _showSnack('Template applied.', isError: false);
       }
@@ -584,7 +523,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       initialSettings: settings,
       contextMenu: _buildContextMenu(),
       onWebViewCreated: (controller) async {
-        _webViewController = controller;
+        _webViewBridge.attach(controller);
         await _webViewCookieService.setCookies();
 
         controller.addJavaScriptHandler(
@@ -596,7 +535,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       },
 
       onLoadStart: (controller, uri) async {
-        _webViewController = controller;
+        _webViewBridge.attach(controller);
         await _handleLoadUrl(uri?.toString());
       },
       onLoadStop: (controller, uri) async {
@@ -621,11 +560,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   }
 
   Future<void> _injectFilePickerHandler() async {
-    if (_webViewController == null) return;
-
-    await _webViewController!.evaluateJavascript(
-      source: buildUploadFilePickerHandlerScript(),
-    );
+    await _webViewBridge.injectFilePickerHandler();
   }
 
   Future<void> _selectAndInjectFile() async {
@@ -692,14 +627,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
           : await _filePickerService.pickGalleryImage();
       if (selectedFile == null) return;
 
-      await _webViewController!.evaluateJavascript(
-        source: buildUploadFileInputScript(
-          base64Data: selectedFile.base64Data,
-          fileName: selectedFile.fileName,
-          extension: selectedFile.extension,
-          returnResult: false,
-        ),
-      );
+      await _webViewBridge.injectFile(selectedFile);
 
       debugPrint('File loaded successfully: ${selectedFile.fileName}');
     } catch (e) {

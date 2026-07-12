@@ -9,13 +9,10 @@ import 'package:flutter_html/flutter_html.dart';
 import 'package:provider/provider.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/features/notifications/data/fa_activities_polling_service.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
-import 'package:FANotifier/features/notifications/data/notification_shout_mapper.dart';
 import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
 import 'package:FANotifier/features/notifications/domain/notification_section_kind.dart';
 import 'package:FANotifier/features/notifications/data/notification_content_parser.dart';
-import 'package:FANotifier/features/notifications/data/notification_shouts_coordinator.dart';
 import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
@@ -24,7 +21,9 @@ import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_tab_badge_value.dart';
+import 'package:FANotifier/features/notifications/presentation/notification_activities_controller.dart';
+import 'package:FANotifier/features/notifications/presentation/notification_counter_settings_controller.dart';
+import 'package:FANotifier/features/notifications/presentation/notification_shouts_controller.dart';
 
 /// A widget that toggles between relative and absolute date formats when tapped.
 class ToggleableDate extends StatefulWidget {
@@ -117,14 +116,7 @@ class ShoutsSectionWidget extends StatefulWidget {
 
 class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
     with AutomaticKeepAliveClientMixin {
-  late Future<List<Shout>> _shoutsFuture;
-  List<Shout>? _shouts; // Local list of parsed shouts
-  bool _serviceListenerAttached = false;
-  NotificationShoutsCoordinator get _shoutsCoordinator =>
-      NotificationShoutsCoordinator(widget.service);
-  bool _isEnriching = false;
-  String? _enrichRequestedForSignature;
-  String? _autoEnrichScheduledForSignature;
+  late final NotificationShoutsController _controller;
 
   @override
   bool get wantKeepAlive => true;
@@ -132,50 +124,22 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
   @override
   void initState() {
     super.initState();
-    final cached = _shoutsCoordinator.currentShouts();
-    _shouts = cached;
-    _shoutsFuture = Future.value(cached);
-
-    // Keep shouts UI in sync with service updates (no network).
-    widget.service.addListener(_onServiceChanged);
-    _serviceListenerAttached = true;
-
-    // Only enrich when the Shouts tab is actually active.
-    _maybeAutoEnrich();
+    _controller = NotificationShoutsController(widget.service);
+    _controller.addListener(_onControllerChanged);
+    _controller.initialize(isActive: widget.isActive);
   }
 
   @override
   void didUpdateWidget(covariant ShoutsSectionWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isActive != widget.isActive) {
-      _maybeAutoEnrich();
+      _controller.updateActive(widget.isActive);
     }
   }
 
-  void _maybeAutoEnrich() {
-    if (!widget.isActive) return;
-    // Only enrich when needed (first open, or shout IDs changed since last enrich).
-    if (!widget.service.shoutsNeedEnrich) return;
-
-    final sig = widget.service.shoutsLightSignature;
-    if (sig.isNotEmpty && _enrichRequestedForSignature == sig) return;
-    _enrichRequestedForSignature = sig;
-
-    setState(() {
-      _isEnriching = true;
-      _shoutsFuture = widget.service
-          .enrichShoutsFromProfileIfNeeded(force: true)
-          .then((list) {
-        final unique = deduplicateNotificationShouts(list);
-        _shouts = unique;
-        return unique;
-      }).whenComplete(() {
-        if (!mounted) return;
-        setState(() {
-          _isEnriching = false;
-        });
-      });
-    });
+  void _onControllerChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   Widget _buildLoadingList(String label) {
@@ -198,76 +162,24 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
 
   @override
   void dispose() {
-    if (_serviceListenerAttached) {
-      widget.service.removeListener(_onServiceChanged);
-    }
+    _controller.removeListener(_onControllerChanged);
+    _controller.dispose();
     super.dispose();
   }
 
-  void _onServiceChanged() {
-    if (!mounted) return;
-    final latest = _shoutsCoordinator.currentShouts();
-    if (latest.isEmpty) return;
-    final unique = latest;
-    final prev = _shouts;
-    final changed = _shoutsCoordinator.hasShoutListChanged(prev, unique);
-    if (!changed) return;
-    if (widget.isActive &&
-        _enrichRequestedForSignature == null &&
-        widget.service.shoutsNeedEnrich) {
-      _shouts = unique;
-      _maybeAutoEnrich();
-      return;
-    }
-
-    setState(() {
-      _shouts = unique;
-      _shoutsFuture = Future.value(unique);
-    });
-  }
-
-  /// Force a fresh fetch of the Shouts from FA
-  Future<List<Shout>> _refreshShouts() async {
-    final uniqueShouts = await _shoutsCoordinator.refresh();
-    setState(() {
-      _shouts = uniqueShouts;
-      _shoutsFuture = Future.value(uniqueShouts);
-    });
-    _shoutsCoordinator.commitRefreshedShouts(uniqueShouts);
-    return uniqueShouts;
-  }
-
   /// Called when user taps "Select All"
-  Future<void> toggleSelectAll() async {
-    final localShouts = _shouts;
-    if (localShouts == null ||
-        !_shoutsCoordinator.toggleSelectAll(localShouts)) {
-      return;
-    }
-    setState(() {
-      _shouts = localShouts;
-    });
-  }
+  Future<void> toggleSelectAll() => _controller.toggleSelectAll();
 
   /// Called when user taps "Remove Selected"
-  Future<void> removeSelected() async {
-    if (!await _shoutsCoordinator.removeSelected()) return;
-    await _refreshShouts();
-  }
+  Future<void> removeSelected() => _controller.removeSelected();
 
   /// Called when user taps "Nuke" for the entire "Shouts" section
-  Future<void> nukeSection() async {
-    if (!await _shoutsCoordinator.nukeSection()) return;
-    await _refreshShouts();
-  }
+  Future<void> nukeSection() => _controller.nukeSection();
 
   /// Called when the checkbox is toggled
   void _onCheckboxChanged(Shout s, bool? val) {
     if (val == null) return;
-    setState(() {
-      s.isChecked = val;
-    });
-    _shoutsCoordinator.setChecked(s.id, val);
+    _controller.setChecked(s, val);
   }
 
   @override
@@ -276,38 +188,33 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
     return RefreshIndicator(
       color: const Color(0xFFE09321),
       backgroundColor: Colors.black,
-      onRefresh: _refreshShouts,
+      onRefresh: _controller.refresh,
       child: Column(
         children: [
           const Divider(height: 4.0, color: Color(0xFF111111), thickness: 4.0),
           Expanded(
             child: FutureBuilder<List<Shout>>(
-              future: _shoutsFuture,
+              future: _controller.shoutsFuture,
               builder: (ctx, snapshot) {
                 // If we know we need enrichment, show a loader immediately and don't
                 // render the "light" msg/others view (default avatars / empty text),
                 // even for a single frame.
-                final sig = widget.service.shoutsLightSignature;
-                final shouldBlockLightView = widget.service.shoutsNeedEnrich &&
-                    !_isEnriching &&
-                    sig.isNotEmpty &&
-                    _enrichRequestedForSignature != sig;
+                final sig = _controller.lightSignature;
+                final shouldBlockLightView =
+                    _controller.shouldBlockLightView;
 
                 if (shouldBlockLightView) {
                   // Start enrichment once the tab is actually active (avoid background fetch).
-                  if (widget.isActive &&
-                      _autoEnrichScheduledForSignature != sig) {
-                    _autoEnrichScheduledForSignature = sig;
+                  if (_controller.scheduleAutoEnrich(sig)) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (!mounted) return;
-                      _autoEnrichScheduledForSignature = null;
-                      _maybeAutoEnrich();
+                      _controller.runScheduledAutoEnrich();
                     });
                   }
                   return _buildLoadingList('Loading shouts…');
                 }
 
-                if (widget.isActive && _isEnriching) {
+                if (widget.isActive && _controller.isEnriching) {
                   return _buildLoadingList('Loading shouts…');
                 }
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -329,9 +236,9 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                 }
 
                 final data = snapshot.data ?? [];
-                _shouts = deduplicateNotificationShouts(data);
+                final shouts = _controller.acceptSnapshotData(data);
 
-                if (_shouts!.isEmpty) {
+                if (shouts.isEmpty) {
                   return ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     children: const [
@@ -350,9 +257,9 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
 
                 return ListView.builder(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  itemCount: _shouts!.length,
+                  itemCount: shouts.length,
                   itemBuilder: (ctx2, index) {
-                    final s = _shouts![index];
+                    final s = shouts[index];
 
                     // The container for each Shout
                     return Padding(
@@ -560,8 +467,13 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
 /// Widget for non-shouts sections.
 class NotificationSectionWidget extends StatelessWidget {
   final int sectionIndex;
+  final NotificationActivitiesController controller;
   final SfwModePreference _sfwModePreference = const SfwModePreference();
-  const NotificationSectionWidget({Key? key, required this.sectionIndex})
+  const NotificationSectionWidget({
+    Key? key,
+    required this.sectionIndex,
+    required this.controller,
+  })
       : super(key: key);
 
   Future<bool> isSfwModeEnabled() async {
@@ -571,13 +483,12 @@ class NotificationSectionWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Consumer<FANotificationService>(
-      builder: (context, service, child) {
-        final section = service.sections[sectionIndex];
+      builder: (context, _, child) {
+        final section = controller.sections[sectionIndex];
         return RefreshIndicator(
           color: const Color(0xFFE09321),
           backgroundColor: Colors.black,
-          onRefresh: () => FaActivitiesPollingService().triggerNow(
-            resetTimer: true,
+          onRefresh: () => controller.refresh(
             source: 'notifications_refresh_indicator',
           ),
           child: section.items.isEmpty
@@ -629,7 +540,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                     builder: (context, constraints) {
                                       return InkWell(
                                         onTap: () {
-                                          service.setItemChecked(
+                                          controller.setItemChecked(
                                             item,
                                             !item.isChecked,
                                           );
@@ -647,7 +558,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                               value: item.isChecked,
                                               onChanged: (bool? value) {
                                                 if (value != null) {
-                                                  service.setItemChecked(
+                                                  controller.setItemChecked(
                                                     item,
                                                     value,
                                                   );
@@ -739,7 +650,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                     } else if (sectionKind ==
                                         NotificationSectionKind.shouts) {
                                       final username =
-                                          service.currentUsernameFromLink;
+                                          controller.currentUsernameFromLink;
                                       debugPrint("shout clicked: $username");
 
                                       if (username != null) {
@@ -1085,10 +996,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     with TickerProviderStateMixin {
   TabController? _tabController;
   int _initialTabIndex = 0;
-  bool _didAutoRefetch = false;
   bool _isDraggingFromEdge = false;
   int _previousSectionCount = 0;
   int _lastTabIndex = -1;
+  late NotificationActivitiesController _activitiesController;
+  bool _activitiesControllerInitialized = false;
 
   final GlobalKey<ShoutsSectionWidgetState> _shoutsSectionKey =
       GlobalKey<ShoutsSectionWidgetState>();
@@ -1098,41 +1010,32 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final service = Provider.of<FANotificationService>(
-        context,
-        listen: false,
-      );
-      if (service.hasFetched) return;
-      unawaited(
-        FaActivitiesPollingService().triggerNow(
-          resetTimer: false,
-          source: 'notifications_first_open',
-        ),
-      );
+      unawaited(_activitiesController.loadOnFirstOpen());
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final service = Provider.of<FANotificationService>(context, listen: false);
+    if (!_activitiesControllerInitialized) {
+      _activitiesController = NotificationActivitiesController(service);
+      _activitiesControllerInitialized = true;
+    }
   }
 
   @override
   void dispose() {
     _tabController?.dispose();
-    FaActivitiesPollingService().setNotificationsScreenVisible(false);
+    _activitiesController.setScreenVisible(false);
     super.dispose();
   }
 
-  String? _currentSectionTitle(FANotificationService service) {
-    final controller = _tabController;
-    if (controller == null || service.sections.isEmpty) return null;
-    final index = controller.index;
-    if (index < 0 || index >= service.sections.length) return null;
-    return service.sections[index].title;
+  void _syncActiveNotificationSection() {
+    _activitiesController.setActiveSection(_tabController?.index);
   }
 
-  void _syncActiveNotificationSection(FANotificationService service) {
-    FaActivitiesPollingService()
-        .setNotificationsScreenActiveSection(_currentSectionTitle(service));
-  }
-
-  void _showNotificationSettingsDialog(FANotificationService service) {
+  void _showNotificationSettingsDialog() {
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
@@ -1140,6 +1043,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           title: const Text('Notification Counter Settings'),
           content: Consumer<NotificationSettingsProvider>(
             builder: (context, settings, child) {
+              final counterSettings =
+                  NotificationCounterSettingsController(settings);
               return SizedBox(
                 width: 300,
                 child: SingleChildScrollView(
@@ -1149,42 +1054,42 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                       SwitchListTile(
                         activeThumbColor: const Color(0xFFE09321),
                         title: const Text('Watchers'),
-                        value: settings.watchersEnabled,
+                        value: counterSettings.watchersEnabled,
                         onChanged: (bool value) {
-                          settings.setWatchersEnabled(value);
+                          counterSettings.setWatchersEnabled(value);
                         },
                       ),
                       SwitchListTile(
                         activeThumbColor: const Color(0xFFE09321),
                         title: const Text('Journals'),
-                        value: settings.journalsEnabled,
+                        value: counterSettings.journalsEnabled,
                         onChanged: (bool value) {
-                          settings.setJournalsEnabled(value);
+                          counterSettings.setJournalsEnabled(value);
                         },
                       ),
                       SwitchListTile(
                         activeThumbColor: const Color(0xFFE09321),
                         title: const Text('Comments'),
                         subtitle: const Text('(includes journal + submission)'),
-                        value: settings.commentsEnabled,
+                        value: counterSettings.commentsEnabled,
                         onChanged: (bool value) {
-                          settings.setCommentsEnabled(value);
+                          counterSettings.setCommentsEnabled(value);
                         },
                       ),
                       SwitchListTile(
                         activeThumbColor: const Color(0xFFE09321),
                         title: const Text('Favorites'),
-                        value: settings.favoritesEnabled,
+                        value: counterSettings.favoritesEnabled,
                         onChanged: (bool value) {
-                          settings.setFavoritesEnabled(value);
+                          counterSettings.setFavoritesEnabled(value);
                         },
                       ),
                       SwitchListTile(
                         activeThumbColor: const Color(0xFFE09321),
                         title: const Text('Shouts'),
-                        value: settings.shoutsEnabled,
+                        value: counterSettings.shoutsEnabled,
                         onChanged: (bool value) {
-                          settings.setShoutsEnabled(value);
+                          counterSettings.setShoutsEnabled(value);
                         },
                       ),
                     ],
@@ -1204,32 +1109,24 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 
-  void _initializeTabController(
-      int sectionCount, FANotificationService service) {
+  void _initializeTabController(int sectionCount) {
     _tabController?.dispose();
-    _initialTabIndex = 0;
-    if (widget.initialSection != null) {
-      final desiredIndex = notificationSectionIndexForInitialTitle(
-        service.sections.map((section) => section.title),
-        widget.initialSection!,
-      );
-      if (desiredIndex != -1) {
-        _initialTabIndex = desiredIndex;
-      }
-    }
+    _initialTabIndex = _activitiesController.initialTabIndex(
+      widget.initialSection,
+    );
     if (_initialTabIndex >= sectionCount) {
       _initialTabIndex = sectionCount > 0 ? sectionCount - 1 : 0;
     }
     _tabController = TabController(
         length: sectionCount, vsync: this, initialIndex: _initialTabIndex);
     _lastTabIndex = _tabController!.index;
-    _syncActiveNotificationSection(service);
+    _syncActiveNotificationSection();
     _tabController!.addListener(() {
       if (!mounted) return;
       final idx = _tabController!.index;
       if (idx != _lastTabIndex) {
         _lastTabIndex = idx;
-        _syncActiveNotificationSection(service);
+        _syncActiveNotificationSection();
         setState(() {});
       }
     });
@@ -1242,20 +1139,17 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     return VisibilityDetector(
       key: const Key('notifications_screen_visibility'),
       onVisibilityChanged: (info) {
-        final service = Provider.of<FANotificationService>(
-          context,
-          listen: false,
-        );
-        FaActivitiesPollingService().setNotificationsScreenVisible(
+        _activitiesController.setScreenVisible(
           info.visibleFraction > 0.01,
-          activeSectionTitle: _currentSectionTitle(service),
+          activeIndex: _tabController?.index,
         );
       },
       child: Consumer<FANotificationService>(
         builder: (context, service, child) {
-          final hasFetched = service.hasFetched;
-          final sections = service.sections;
-          final showInitialLoading = !hasFetched && sections.isEmpty;
+          _activitiesController.updateService(service);
+          final sections = _activitiesController.sections;
+          final showInitialLoading =
+              _activitiesController.showInitialLoading;
           if (showInitialLoading) {
             return Scaffold(
               appBar: AppBar(
@@ -1270,7 +1164,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   IconButton(
                     icon: const Icon(Icons.settings),
                     onPressed: () {
-                      _showNotificationSettingsDialog(service);
+                      _showNotificationSettingsDialog();
                     },
                   ),
                 ],
@@ -1283,18 +1177,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           if (sections.isEmpty) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted) return;
-              FaActivitiesPollingService()
-                  .setNotificationsScreenActiveSection(null);
+              _activitiesController.setActiveSection(null);
             });
-            if (!_didAutoRefetch) {
-              _didAutoRefetch = true;
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                FaActivitiesPollingService().triggerNow(
-                  resetTimer: false,
-                  source: 'notifications_empty_autorefresh',
-                );
-              });
-            }
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _activitiesController.triggerEmptyAutoRefresh();
+            });
             return Scaffold(
               appBar: AppBar(
                 title: const Text('Notifications'),
@@ -1313,7 +1200,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   IconButton(
                     icon: const Icon(Icons.settings),
                     onPressed: () {
-                      _showNotificationSettingsDialog(service);
+                      _showNotificationSettingsDialog();
                     },
                   ),
                 ],
@@ -1321,8 +1208,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               body: RefreshIndicator(
                 color: const Color(0xFFE09321),
                 backgroundColor: Colors.black,
-                onRefresh: () => FaActivitiesPollingService().triggerNow(
-                  resetTimer: true,
+                onRefresh: () => _activitiesController.refresh(
                   source: 'notifications_empty_refresh_indicator',
                 ),
                 child: ListView(
@@ -1338,7 +1224,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           }
           if (sections.length != _previousSectionCount) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              _initializeTabController(sections.length, service);
+              _initializeTabController(sections.length);
             });
           }
           if (_tabController == null ||
@@ -1347,7 +1233,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           }
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
-            _syncActiveNotificationSection(service);
+            _syncActiveNotificationSection();
           });
           return Scaffold(
           appBar: AppBar(
@@ -1379,14 +1265,14 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                     ),
                   );
                   if (confirm) {
-                    await service.removeAllNotifications();
+                    await _activitiesController.removeAll();
                   }
                 },
               ),
               IconButton(
                 icon: const Icon(Icons.settings),
                 onPressed: () {
-                  _showNotificationSettingsDialog(service);
+                  _showNotificationSettingsDialog();
                 },
               ),
             ],
@@ -1403,7 +1289,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 0.0),
                       child: Consumer<FANotificationService>(
-                        builder: (context, service, child) {
+                        builder: (context, _, child) {
                           return TabBar(
                             controller: _tabController,
                             isScrollable: true,
@@ -1420,11 +1306,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                             dividerColor: Colors.black,
                             dividerHeight: 3.7,
                             tabs: sections.map((section) {
-                              final badgeValue = notificationTabBadgeValue(
-                                sectionTitle: section.title,
-                                itemCount: section.items.length,
-                                messageBarCounts: service.messageBarCounts,
-                              );
+                              final badgeValue =
+                                  _activitiesController.badgeValueFor(section);
                               final rawCount = badgeValue.rawCount;
                               final displayText = badgeValue.displayText;
 
@@ -1485,12 +1368,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                               onPressed: () {
                                 final currentTabIndex =
                                     _tabController?.index ?? 0;
-                                if (isShoutsNotificationSectionTitle(
-                                    sections[currentTabIndex].title)) {
+                                if (_activitiesController
+                                    .isShoutsSection(currentTabIndex)) {
                                   _shoutsSectionKey.currentState
                                       ?.toggleSelectAll();
                                 } else {
-                                  service.toggleSelectAll(currentTabIndex);
+                                  _activitiesController
+                                      .toggleSelectAll(currentTabIndex);
                                 }
                               },
                               style: ElevatedButton.styleFrom(
@@ -1512,12 +1396,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                               onPressed: () async {
                                 final currentTabIndex =
                                     _tabController?.index ?? 0;
-                                if (isShoutsNotificationSectionTitle(
-                                    sections[currentTabIndex].title)) {
+                                if (_activitiesController
+                                    .isShoutsSection(currentTabIndex)) {
                                   await _shoutsSectionKey.currentState
                                       ?.removeSelected();
                                 } else {
-                                  await service.removeSelected(currentTabIndex);
+                                  await _activitiesController
+                                      .removeSelected(currentTabIndex);
                                 }
                               },
                               style: ElevatedButton.styleFrom(
@@ -1561,13 +1446,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                   ),
                                 );
                                 if (confirm) {
-                                  if (isShoutsNotificationSectionTitle(
-                                      sections[currentTabIndex].title)) {
+                                  if (_activitiesController
+                                      .isShoutsSection(currentTabIndex)) {
                                     await _shoutsSectionKey.currentState
                                         ?.nukeSection();
                                   } else {
-                                    await service.nukeSection(currentTabIndex);
-                                    await service.fetchNotifications();
+                                    await _activitiesController
+                                        .nukeSection(currentTabIndex);
                                   }
                                 }
                               },
@@ -1614,7 +1499,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                 );
                               } else {
                                 return NotificationSectionWidget(
-                                    sectionIndex: index);
+                                  sectionIndex: index,
+                                  controller: _activitiesController,
+                                );
                               }
                             },
                           ),

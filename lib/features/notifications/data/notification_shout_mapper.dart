@@ -1,30 +1,18 @@
 import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:FANotifier/features/notifications/domain/notification_shout_merge_policy.dart';
+
+const NotificationShoutMergePolicy _shoutMergePolicy =
+    NotificationShoutMergePolicy();
 
 List<Shout> notificationShoutsFromSections(
   List<NotificationSection> sections,
 ) {
   try {
-    final index = sections.indexWhere(
-      (section) => section.title.toLowerCase().contains('shouts'),
-    );
+    final index = _shoutMergePolicy.shoutSectionIndex(sections);
     if (index == -1) return const <Shout>[];
     final items = sections[index].items;
     if (items.isEmpty) return const <Shout>[];
-    return items.map((item) {
-      return Shout(
-        id: item.id,
-        nickname: item.username ?? '',
-        nicknameLink: item.linkUsername ?? '',
-        postedTitle: item.fullDate,
-        avatarUrl: item.avatarUrl ?? '',
-        postedAgo: item.date,
-        textContent: item.content,
-        isRemoved: item.content
-            .toLowerCase()
-            .contains('shout has been removed'),
-        isChecked: item.isChecked,
-      );
-    }).toList();
+    return _shoutMergePolicy.shoutsFromItems(items);
   } catch (_) {
     return const <Shout>[];
   }
