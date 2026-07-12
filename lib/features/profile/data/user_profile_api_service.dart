@@ -9,8 +9,8 @@ import 'package:FANotifier/features/profile/data/user_profile_shouts_parser.dart
 import 'package:FANotifier/features/profile/data/user_profile_controls_shout_matcher.dart';
 import 'package:FANotifier/features/profile/data/user_profile_controls_shouts_parser.dart';
 import 'package:FANotifier/features/profile/domain/user_profile_api_models.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
 import 'package:FANotifier/shared/fa/fa_username.dart';
 import 'package:flutter/material.dart';
 

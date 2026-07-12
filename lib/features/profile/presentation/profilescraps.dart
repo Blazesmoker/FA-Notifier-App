@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'dart:async';
-import 'package:FANotifier/features/profile/data/profile_image_row_layout.dart';
-import 'package:FANotifier/features/profile/data/profile_scraps_service.dart';
+import 'package:provider/provider.dart';
+import 'package:FANotifier/features/profile/presentation/profile_image_row_layout.dart';
+import 'package:FANotifier/features/profile/domain/profile_scraps_repository.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/features/submissions/data/favorite_service.dart';
+import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:FANotifier/shared/widgets/heart_animation.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
 
@@ -30,19 +31,21 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   final List<List<Map<String, dynamic>>> _imageRows = [];
   final List<Map<String, dynamic>> _normalImagesQueue = [];
 
-  final ProfileScrapsService _profileScrapsService = ProfileScrapsService();
+  late final ProfileScrapsRepository _profileScrapsRepository;
 
   // Favorite functionality
   final Set<String> _favoritedImages = {};
   final Map<String, String> _favUrls = {};
   final Map<String, String> _unfavUrls = {};
-  final FavoriteService _favoriteService = FavoriteService();
+  late final SubmissionFavoriteRepository _favoriteRepository;
 
   @override
   void initState() {
     super.initState();
+    _profileScrapsRepository = context.read<ProfileScrapsRepository>();
+    _favoriteRepository = context.read<SubmissionFavoriteRepository>();
     _nextPageUrl =
-        _profileScrapsService.buildInitialScrapsPageUrl(widget.username);
+        _profileScrapsRepository.buildInitialScrapsPageUrl(widget.username);
     unawaited(_fetchImages());
   }
 
@@ -59,7 +62,7 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     _fetchGeneration++;
     setState(() {
       _nextPageUrl =
-          _profileScrapsService.buildInitialScrapsPageUrl(widget.username);
+          _profileScrapsRepository.buildInitialScrapsPageUrl(widget.username);
       _isLoading = false;
       _hasMore = true;
       _images.clear();
@@ -78,7 +81,8 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     setState(() => _isLoading = true);
 
     try {
-      final result = await _profileScrapsService.fetchScrapsPage(_nextPageUrl!);
+      final result =
+          await _profileScrapsRepository.fetchScrapsPage(_nextPageUrl!);
       if (!mounted || fetchGeneration != _fetchGeneration) return;
       setState(() {
         _images.addAll(result.posts);
@@ -111,8 +115,10 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   // Favorite logic
   Future<void> _fetchPostDetails(String uniqueNumber) async {
     try {
-      final links =
-          await _profileScrapsService.fetchPostFavoriteLinks(uniqueNumber);
+      final links = await _favoriteRepository.fetchLinksForSubmissionId(
+        submissionId: uniqueNumber,
+        cookieHeaderProvider: _profileScrapsRepository.buildCookieHeader,
+      );
       if (links != null) {
         if (links.hasAnyUrl) {
           if (links.hasFavUrl) _favUrls[uniqueNumber] = links.favUrl;
@@ -167,7 +173,7 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     }
     setState(() {});
 
-    final success = await _favoriteService.executePostWithRetry(urlToUse);
+    final success = await _favoriteRepository.executePostWithRetry(urlToUse);
     if (success) {
       await _refetchFavLinks(uniqueNumber);
       setState(() {});

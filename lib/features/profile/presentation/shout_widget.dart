@@ -4,7 +4,7 @@ import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:FANotifier/features/profile/domain/shout.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:FANotifier/shared/utils/fa_link_handler.dart';
+import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
 
 class ShoutWidget extends StatefulWidget {
   final Shout shout;

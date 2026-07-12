@@ -1,5 +1,15 @@
 import 'package:flutter/material.dart';
 
+class CommentTreeLevels {
+  const CommentTreeLevels({
+    required this.previous,
+    required this.next,
+  });
+
+  final int previous;
+  final int next;
+}
+
 class CommentTreePainter extends CustomPainter {
   final int nestingLevel;
   final int previousNestingLevel;
@@ -13,7 +23,7 @@ class CommentTreePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (nestingLevel <= 0) {
+    if (nestingLevel <= 0 && nextNestingLevel <= 0) {
       return;
     }
 
@@ -21,7 +31,7 @@ class CommentTreePainter extends CustomPainter {
     const lineWidth = 3.0;
     const bottomSpacing = 6.0;
     final paint = Paint()
-      ..color = const Color(0xFF1C1B1B)
+      ..color = const Color(0xFF191818)
       ..strokeWidth = lineWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.butt;
@@ -29,6 +39,16 @@ class CommentTreePainter extends CustomPainter {
         (size.height - bottomSpacing).clamp(0.0, size.height).toDouble();
     final currentX = nestingLevel * indentWidth - (indentWidth / 2);
     final topJoinY = -bottomSpacing;
+
+    if (nextNestingLevel > nestingLevel) {
+      final nextX =
+          nextNestingLevel * indentWidth - (indentWidth / 2);
+      canvas.drawLine(
+        Offset(nextX, contentHeight),
+        Offset(nextX, size.height),
+        paint,
+      );
+    }
 
     for (int level = 1; level < nestingLevel; level++) {
       final x = level * indentWidth - (indentWidth / 2);

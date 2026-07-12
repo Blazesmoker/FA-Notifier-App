@@ -1,0 +1,274 @@
+// lib/services/fa_service.dart
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:html/parser.dart' as html_parser;
+import 'package:FANotifier/shared/fa/domain/user_profile.dart';
+import 'package:FANotifier/shared/fa/domain/notifications.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:FANotifier/shared/fa/parsing_utils.dart';
+
+class FaService {
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    iOptions: IOSOptions(
+    accountName: 'flutter_secure_storage_service',
+    accessibility: KeychainAccessibility.first_unlock),
+  );
+
+  /// Fetches the user profile information (display name and profile picture).
+  Future<UserProfile?> fetchUserProfile({
+    String? homeHtml,
+  }) async {
+    String? cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    String? cfClearance = await _secureStorage.read(key: 'fa_cookie_cf_clearance');
+
+    debugPrint('[FaService] fetchUserProfile: cookieA=$cookieA, cookieB=$cookieB, cf_clearance=$cfClearance');
+
+    if (cookieA == null || cookieB == null) {
+      debugPrint('[FaService] No cookies found. User might not be logged in.');
+      return null;
+    }
+
+
+    String cookiesHeader = 'a=$cookieA; b=$cookieB';
+    if (cfClearance != null && cfClearance.isNotEmpty) {
+      cookiesHeader += '; cf_clearance=$cfClearance';
+    }
+
+    const String url = 'https://www.furaffinity.net/';
+    if (homeHtml == null) {
+      debugPrint('[FaService] Making HTTP GET request to $url with cookies: $cookiesHeader');
+    } else {
+      debugPrint('[FaService] Parsing user profile from startup home HTML');
+    }
+
+    final response = homeHtml == null
+        ? await FAHttp.get(
+            Uri.parse(url),
+            headers: {
+              'Cookie': cookiesHeader,
+              'User-Agent': FAHttp.userAgent,
+            },
+          )
+        : null;
+    final statusCode = response?.statusCode ?? 200;
+    final body = homeHtml ?? response!.body;
+
+    debugPrint('[FaService] Response received: statusCode=$statusCode');
+    debugPrint('[FaService] Response body snippet: ${body.substring(0, body.length < 100 ? body.length : 100)}');
+
+    if (statusCode == 200) {
+      final document = html_parser.parse(body);
+
+      final bool isClassic = (document.querySelector('body')
+          ?.attributes['data-static-path']
+          ?.contains('classic')) ??
+          false;
+
+      final myUsernameAnchor = document.querySelector('a#my-username');
+      if (myUsernameAnchor != null) {
+        final profilePath = myUsernameAnchor.attributes['href'];
+        final profileUrl = profilePath == null
+            ? null
+            : profilePath.startsWith('http')
+                ? profilePath
+                : 'https://www.furaffinity.net$profilePath';
+        String displayName;
+        if (!isClassic) {
+
+          myUsernameAnchor.querySelectorAll('span.hideondesktop').forEach((element) {
+            element.remove();
+          });
+          displayName = myUsernameAnchor.text.trim();
+        } else {
+          displayName = myUsernameAnchor.text.trim();
+        }
+
+        String? profileImageUrl;
+        if (!isClassic) {
+          final avatarImg = document.querySelector(
+            'div.floatleft.hideonmobile > a[href^="/user/"] img.loggedin_user_avatar.avatar',
+          );
+          profileImageUrl = normalizeFaUrl(avatarImg?.attributes['src']);
+        } else {
+          if (profilePath != null) {
+            debugPrint('[FaService] Fetching classic profile page: $profileUrl');
+            final profileResponse = await FAHttp.get(
+              Uri.parse(profileUrl!),
+              headers: {
+                'Cookie': cookiesHeader,
+                'User-Agent': FAHttp.userAgent,
+              },
+            );
+            debugPrint('[FaService] Classic profile page response: ${profileResponse.statusCode}');
+            if (profileResponse.statusCode == 200) {
+              final profileDoc = html_parser.parse(profileResponse.body);
+              final avatarElement = profileDoc.querySelector('img.avatar');
+              profileImageUrl = avatarElement?.attributes['src'];
+              if (profileImageUrl != null && profileImageUrl.startsWith('//')) {
+                profileImageUrl = 'https:' + profileImageUrl;
+              }
+            } else {
+              debugPrint('[FaService] Failed to load user profile page: ${profileResponse.statusCode}');
+            }
+          }
+        }
+
+        if (displayName.isNotEmpty && profileImageUrl != null) {
+          debugPrint('[FaService] Parsed user profile: $displayName, avatar: $profileImageUrl');
+          return UserProfile(
+            username: displayName,
+            profileImageUrl: profileImageUrl,
+            profileUrl: profileUrl,
+          );
+        }
+      }
+      debugPrint('[FaService] Could not parse user profile.');
+      return null;
+    } else if (statusCode == 403 && body.contains('Just a moment')) {
+      debugPrint('[FaService] 403 with Cloudflare challenge for user profile.');
+      return null;
+    } else {
+      debugPrint('[FaService] fetchUserProfile received unexpected status code: $statusCode');
+      debugPrint('URL: $url');
+      debugPrint('Body: ${body.substring(0, body.length < 100 ? body.length : 100)}');
+    }
+    return null;
+  }
+
+
+
+  /// Fetches the user's notifications and the number of registered users online.
+  Future<Notifications?> fetchNotifications() async {
+    final cookieKeys = ['a', 'b', 'cc', 'cf_clearance', 'folder', 'nodesc', 'sz', 'sfw'];
+    String cookies = '';
+    for (var key in cookieKeys) {
+      final val = await _secureStorage.read(key: 'fa_cookie_$key');
+      if (val != null && val.isNotEmpty) {
+        cookies += '$key=$val; ';
+      }
+    }
+
+    if (cookies.isEmpty) {
+      debugPrint('[FaService] No cookies => not logged in.');
+      return null;
+    }
+
+    debugPrint('[FaService] Sending notifications request with cookies: $cookies');
+
+    const String notificationsUrl = 'https://www.furaffinity.net/';
+    final response = await FAHttp.get(
+      Uri.parse(notificationsUrl),
+      headers: {
+        'Cookie': cookies,
+        'User-Agent': FAHttp.userAgent,
+      },
+    );
+
+    debugPrint('[FaService] fetchNotifications => ${response.statusCode}');
+    debugPrint('[FaService] Response snippet: ${response.body.substring(0, 100)}');
+
+    if (response.statusCode == 200) {
+      final doc = html_parser.parse(response.body);
+      bool isClassic = (doc.querySelector('body')?.attributes['data-static-path']?.contains('classic')) ?? false;
+
+      String submissions = '0';
+      String watches = '0';
+      String journals = '0';
+      String notes = '0';
+      String comments = '0';
+      String favorites = '0';
+
+
+
+      if (isClassic) {
+        final notifContainer = doc.querySelector('li.noblock');
+        if (notifContainer != null) {
+          final links = notifContainer.querySelectorAll('a.notification-container');
+          for (var link in links) {
+            final title = link.attributes['title'] ?? '';
+            final count = _extractNumber(title);
+            if (title.contains('Submission')) submissions = count;
+            else if (title.contains('Watch')) watches = count;
+            else if (title.contains('Journal')) journals = count;
+            else if (title.contains('Note')) notes = count;
+            else if (title.contains('Comment')) comments = count;
+            else if (title.contains('Favorite')) favorites = count;
+          }
+        }
+      } else {
+        final messageBar = doc.querySelector('li.message-bar-desktop');
+        if (messageBar != null) {
+          final links = messageBar.querySelectorAll('a.notification-container.inline');
+          for (var link in links) {
+            final title = link.attributes['title'] ?? '';
+            final count = _extractNumber(title);
+            if (title.contains('Submission')) submissions = count;
+            else if (title.contains('Watch')) watches = count;
+            else if (title.contains('Journal')) journals = count;
+            else if (title.contains('Note')) notes = count;
+            else if (title.contains('Comment')) comments = count;
+            else if (title.contains('Favorite')) favorites = count;
+          }
+        }
+      }
+
+      // Extract the number of registered users online
+      String registeredUsersOnline = '0';
+      if (isClassic) {
+        final center = doc.querySelector('div.footer center');
+        if (center != null) {
+          final text = center.text;
+          final match = RegExp(r'(\d+)\s+registered').firstMatch(text);
+          if (match != null) {
+            registeredUsersOnline = match.group(1)?.replaceAll(',', '') ?? '0';
+          }
+        }
+      } else {
+        final statsDiv = doc.querySelector('div.online-stats');
+        if (statsDiv != null) {
+          final text = statsDiv.text;
+          final match = RegExp(r'(\d+)\s+registered').firstMatch(text);
+          if (match != null) {
+            registeredUsersOnline = match.group(1)?.replaceAll(',', '') ?? '0';
+          }
+        }
+      }
+
+      debugPrint('[FaService] Notifications parsed: sub=$submissions, watch=$watches, journal=$journals, note=$notes, comment=$comments, fav=$favorites, online=$registeredUsersOnline');
+      return Notifications(
+        submissions: submissions,
+        watches: watches,
+        journals: journals,
+        notes: notes,
+        comments: comments,
+        favorites: favorites,
+        registeredUsersOnline: registeredUsersOnline,
+      );
+    } else if (response.statusCode == 403 && response.body.contains('Just a moment')) {
+      debugPrint('[FaService] 403 with Cloudflare challenge for notifications.');
+
+      return null;
+    } else {
+      debugPrint('[FaService] fetchNotifications => ${response.statusCode}');
+      debugPrint('URL: $notificationsUrl');
+      debugPrint('Body: ${response.body.substring(0, 100)}');
+    }
+
+    return null;
+  }
+
+  /// Helper method to extract a number from a given text.
+  String _extractNumber(String text) {
+    // Matches sequences like '1,123', '123,789', '12345'
+    final Match? match = RegExp(r'\d{1,3}(?:[,.]\d{3})*').firstMatch(text);
+    if (match == null) return '0';
+
+    // Remove commas/dots and return as a clean number (e.g., '1,234' → '1234')
+    return match.group(0)!
+        .replaceAll(RegExp(r'[,.]'), ''); // Remove commas and dots
+  }
+
+
+}

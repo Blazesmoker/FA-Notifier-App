@@ -1,7 +1,7 @@
 import 'package:FANotifier/features/profile/domain/shout.dart';
-import 'package:FANotifier/features/profile/data/shout_text_parser.dart';
+import 'package:FANotifier/features/profile/domain/profile_shout_text_repository.dart';
 import 'package:FANotifier/features/profile/presentation/shout_widget.dart';
-import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
 import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/shared/translation/translation_service.dart';
@@ -109,14 +109,21 @@ class UserProfileShoutsSection extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10.0),
                         ),
                         child: Row(
-                          children: const [
+                          children: [
                             Expanded(
-                              child: Text(
-                                'Type here to leave a shout!',
-                                style: TextStyle(color: Colors.white54),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(right: 12.0),
+                                  child: Text(
+                                    'Type here to leave a shout!',
+                                    style: const TextStyle(color: Colors.white54),
+                                  ),
+                                ),
                               ),
                             ),
-                            Icon(Icons.send, color: Colors.white54),
+                            const Icon(Icons.send, color: Colors.white54),
                           ],
                         ),
                       ),
@@ -125,6 +132,7 @@ class UserProfileShoutsSection extends StatelessWidget {
                 ],
               ),
             ),
+
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 220),
               switchInCurve: Curves.easeOutCubic,
@@ -189,8 +197,9 @@ class UserProfileShoutsSection extends StatelessWidget {
                         onLongPress: isSelectionMode
                             ? () => onToggleShoutSelection(shout)
                             : () async {
-                                final plainText =
-                                    plainTextFromShoutHtml(shout.text);
+                                final plainText = context
+                                    .read<ProfileShoutTextRepository>()
+                                    .plainTextFromHtml(shout.text);
                                 final translatorSettings =
                                     context.read<TranslatorSettingsProvider>();
                                 final translationService =

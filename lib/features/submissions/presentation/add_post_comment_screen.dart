@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/comments/data/submission_comment_service.dart';
+import 'package:provider/provider.dart';
+
+import 'package:FANotifier/shared/fa/domain/submission_comment_repository.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 
@@ -7,11 +9,13 @@ class AddPostCommentScreen extends StatefulWidget {
   final String submissionTitle;
   final Function(String) onSendComment;
   final String uniqueNumber;
+  final SubmissionCommentRepository? commentRepository;
 
   const AddPostCommentScreen({
     required this.submissionTitle,
     required this.onSendComment,
     required this.uniqueNumber,
+    this.commentRepository,
     Key? key,
   }) : super(key: key);
 
@@ -22,7 +26,6 @@ class AddPostCommentScreen extends StatefulWidget {
 class _AddPostCommentScreenState extends State<AddPostCommentScreen>
     with WidgetsBindingObserver {
   final TextEditingController _commentController = TextEditingController();
-  final PostCommentService _commentService = PostCommentService();
   final ValueNotifier<double> _keyboardInset = ValueNotifier<double>(0);
   final ValueNotifier<double> _navBarInset = ValueNotifier<double>(0);
   bool _isSending = false;
@@ -45,7 +48,9 @@ class _AddPostCommentScreenState extends State<AddPostCommentScreen>
     });
 
     try {
-      final success = await _commentService.submitComment(
+      final commentRepository = widget.commentRepository ??
+          context.read<SubmissionCommentRepository>();
+      final success = await commentRepository.submitComment(
         message: commentText,
         submissionId: widget.uniqueNumber,
       );

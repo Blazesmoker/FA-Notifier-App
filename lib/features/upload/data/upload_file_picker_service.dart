@@ -4,11 +4,13 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'package:FANotifier/features/upload/domain/upload_file_picker_gateway.dart';
 import 'package:FANotifier/features/upload/domain/upload_selected_file.dart';
 
-class UploadFilePickerService {
+class UploadFilePickerService implements UploadFilePickerGateway {
   const UploadFilePickerService();
 
+  @override
   Future<UploadSelectedFile?> pickFile() async {
     final file = await FilePicker.pickFile(
       type: FileType.custom,
@@ -22,6 +24,7 @@ class UploadFilePickerService {
     return _createSelectedFile(fileName: file.name, bytes: bytes);
   }
 
+  @override
   Future<UploadSelectedFile?> pickGalleryImage() async {
     final pickedFile = await ImagePicker().pickImage(
       source: ImageSource.gallery,

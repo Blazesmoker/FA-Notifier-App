@@ -4,15 +4,15 @@ import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_switch/flutter_switch.dart';
 import 'package:url_launcher/url_launcher_string.dart';
-import 'package:FANotifier/features/drawer/data/app_update_service.dart';
-import 'package:FANotifier/features/drawer/data/nsfw_confirmation_preference.dart';
+import 'package:FANotifier/features/drawer/domain/app_update_repository.dart';
+import 'package:FANotifier/features/drawer/domain/nsfw_confirmation_repository.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/features/profile/domain/user_profile.dart';
-import 'package:FANotifier/features/notifications/domain/notifications.dart';
+import 'package:FANotifier/shared/fa/domain/user_profile.dart';
+import 'package:FANotifier/shared/fa/domain/notifications.dart';
 import 'package:FANotifier/features/search/presentation/find_source_screen.dart';
 import 'package:FANotifier/features/settings/presentation/settings_screen.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
+import 'package:FANotifier/features/notifications/presentation/fa_notification_service.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_list.dart';
 import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
 import 'package:FANotifier/core/links/app_external_links.dart';
@@ -20,8 +20,8 @@ import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/StarBurstAnimation.dart';
 import 'package:FANotifier/features/notifications/presentation/notification_badge.dart';
 import 'dart:async';
-import 'package:FANotifier/app/app_theme.dart';
-import 'package:FANotifier/shared/utils/fa_link_handler.dart';
+import 'package:FANotifier/shared/theme/app_theme.dart';
+import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
 import 'package:provider/provider.dart';
 
 class HomeDrawer extends StatefulWidget {
@@ -69,8 +69,8 @@ class _HomeDrawerState extends State<HomeDrawer> {
 
   FANotificationService? _faNotificationService;
   final SfwModePreference _sfwModePreference = SfwModePreference();
-  final NsfwConfirmationPreference _nsfwConfirmationPreference =
-      NsfwConfirmationPreference();
+  late final AppUpdateRepository _appUpdateRepository;
+  late final NsfwConfirmationRepository _nsfwConfirmationRepository;
   bool _sfwEnabled = true;
 
   GlobalKey _kofiKey = GlobalKey();
@@ -84,6 +84,9 @@ class _HomeDrawerState extends State<HomeDrawer> {
   @override
   void initState() {
     super.initState();
+    _appUpdateRepository = context.read<AppUpdateRepository>();
+    _nsfwConfirmationRepository =
+        context.read<NsfwConfirmationRepository>();
     setDrawerListArray();
     _loadSfwEnabled();
     _faNotificationService =
@@ -105,7 +108,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
   }
 
   Future<void> _checkForUpdate() async {
-    final updateInfo = await fetchLatestAppUpdateInfo();
+    final updateInfo = await _appUpdateRepository.fetchLatest();
     if (!mounted || updateInfo == null) return;
 
     setState(() {
@@ -527,7 +530,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
 
     if (result == true) {
       if (_dontAskAgain) {
-        await _nsfwConfirmationPreference.saveDisabled(true);
+        await _nsfwConfirmationRepository.saveDisabled(true);
       }
       await _toggleNsfwMode();
     }
@@ -959,7 +962,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
                               showOnOff: true,
                               onToggle: (val) async {
                                 bool confirmationDisabled =
-                                    await _nsfwConfirmationPreference
+                                    await _nsfwConfirmationRepository
                                         .loadDisabled();
                                 if (confirmationDisabled) {
                                   await _toggleNsfwMode();

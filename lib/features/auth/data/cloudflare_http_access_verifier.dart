@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 

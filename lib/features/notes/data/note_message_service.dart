@@ -7,11 +7,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:FANotifier/features/notes/data/message_detail_parser.dart';
 import 'package:FANotifier/features/notes/domain/note_message_models.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
+import 'package:FANotifier/features/notes/domain/note_message_repository.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:FANotifier/core/network/fa_request_coordinator.dart';
 
-class NoteMessageService {
+class NoteMessageService implements NoteMessageRepository {
   NoteMessageService({
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ??
@@ -28,10 +29,12 @@ class NoteMessageService {
   final Dio _dio = Dio();
   final CookieJar _cookieJar = CookieJar();
 
+  @override
   void close() {
     _dio.close();
   }
 
+  @override
   Future<NoteMessageFetchResult> fetchMessageDetails({
     required String messageLink,
     required String folder,
@@ -77,6 +80,7 @@ class NoteMessageService {
     return NoteMessageFetchResult(statusCode: response.statusCode);
   }
 
+  @override
   Future<int?> markAsUnread({
     required String folder,
     required String messageId,

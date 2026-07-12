@@ -2,7 +2,7 @@ import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/profile/domain/fa_folder.dart';
 import 'package:FANotifier/features/profile/domain/profile_folder_selection_resolver.dart';
 import 'package:FANotifier/features/profile/domain/shout.dart';
-import 'package:FANotifier/features/profile/domain/user_link.dart';
+import 'package:FANotifier/shared/fa/domain/user_link.dart';
 import 'package:FANotifier/features/profile/domain/user_profile_api_models.dart';
 import 'package:FANotifier/features/profile/domain/user_profile_load_result.dart';
 import 'package:FANotifier/features/profile/domain/user_profile_repository.dart';

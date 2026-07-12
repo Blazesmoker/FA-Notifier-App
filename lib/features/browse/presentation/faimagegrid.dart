@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart';
+import 'package:provider/provider.dart';
+import 'package:FANotifier/features/browse/domain/browse_repository.dart';
 import 'package:FANotifier/features/browse/presentation/browse_image_grid_controller.dart';
+import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation.dart';
@@ -44,6 +47,8 @@ class FAImageGridState extends State<FAImageGrid> {
       selectedFilters: widget.selectedFilters,
       onCloudflareChallenge: (initialUrl) =>
           _showCloudflareDialog(initialUrl: initialUrl),
+      repository: context.read<BrowseRepository>(),
+      favoriteRepository: context.read<SubmissionFavoriteRepository>(),
     );
     _controller.addListener(_handleControllerChanged);
     _controller.initialize();

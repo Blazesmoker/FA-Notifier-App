@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
 
 class FreshHttpOverrides extends HttpOverrides {
   @override

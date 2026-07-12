@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
+import 'package:provider/provider.dart';
+
+import 'package:FANotifier/features/journals/domain/openjournal_repository.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 
@@ -7,11 +9,13 @@ class AddJournalCommentScreen extends StatefulWidget {
   final String submissionTitle;
   final Function(String) onSendComment;
   final String uniqueNumber; // This is the submissionId
+  final OpenJournalRepository? repository;
 
   const AddJournalCommentScreen({
     required this.submissionTitle,
     required this.onSendComment,
     required this.uniqueNumber,
+    this.repository,
     Key? key,
   }) : super(key: key);
 
@@ -21,7 +25,6 @@ class AddJournalCommentScreen extends StatefulWidget {
 
 class _AddCommentScreenState extends State<AddJournalCommentScreen> {
   final TextEditingController _commentController = TextEditingController();
-  final JournalCommentService _commentService = JournalCommentService();
   bool _isSending = false;
 
 
@@ -34,7 +37,9 @@ class _AddCommentScreenState extends State<AddJournalCommentScreen> {
     });
 
     try {
-      bool success = await _commentService.submitComment(
+      final repository =
+          widget.repository ?? context.read<OpenJournalRepository>();
+      bool success = await repository.submitComment(
         message: commentText,
         journalId: widget.uniqueNumber,
       );

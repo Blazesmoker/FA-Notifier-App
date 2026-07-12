@@ -4,26 +4,26 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/features/submissions/data/favorite_service.dart';
-import 'package:FANotifier/features/submissions/data/submissions_service.dart';
+import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:FANotifier/features/submissions/domain/submission_fetch_models.dart';
 import 'package:FANotifier/features/submissions/domain/submission_image_group.dart';
 import 'package:FANotifier/features/submissions/domain/submission_list_item.dart';
 import 'package:FANotifier/features/submissions/domain/submissions_listing_parse_result.dart';
+import 'package:FANotifier/features/submissions/domain/submissions_repository.dart';
 
 class SubmissionsController extends ChangeNotifier {
   SubmissionsController({
-    SubmissionsService? submissionsService,
-    FavoriteService? favoriteService,
+    required SubmissionsRepository repository,
+    required SubmissionFavoriteRepository favoriteRepository,
     SfwModePreference? sfwModePreference,
-  })  : _submissionsService = submissionsService ?? SubmissionsService(),
-        _favoriteService = favoriteService ?? FavoriteService(),
+  })  : _repository = repository,
+        _favoriteRepository = favoriteRepository,
         _sfwModePreference = sfwModePreference ?? SfwModePreference();
 
   static const int _maxConcurrentFetches = 5;
 
-  final SubmissionsService _submissionsService;
-  final FavoriteService _favoriteService;
+  final SubmissionsRepository _repository;
+  final SubmissionFavoriteRepository _favoriteRepository;
   final SfwModePreference _sfwModePreference;
   final List<DateImageGroup> _dateGroups = [];
   final List<Map<String, dynamic>> _flatSubmissionsList = [];
@@ -86,7 +86,7 @@ class SubmissionsController extends ChangeNotifier {
     _notifyChanged();
 
     try {
-      if (!await _submissionsService.hasAuthCookies()) {
+      if (!await _repository.hasAuthCookies()) {
         debugPrint('[Submissions] Missing FA cookies, abort fetch.');
         _isLoading = false;
         _isError = true;
@@ -95,7 +95,7 @@ class SubmissionsController extends ChangeNotifier {
         return;
       }
 
-      final parsed = await _submissionsService.fetchListing(
+      final parsed = await _repository.fetchListing(
         nextPageUrl: _nextPageUrl,
         baseSubmissionsUrl: _baseSubmissionsUrl,
         sfwEnabled: _sfwEnabled,
@@ -147,7 +147,7 @@ class SubmissionsController extends ChangeNotifier {
 
   Future<void> nukeSubmissions() async {
     try {
-      final success = await _submissionsService.nukeSubmissions(
+      final success = await _repository.nukeSubmissions(
         baseSubmissionsUrl: _baseSubmissionsUrl,
       );
       if (success) {
@@ -167,12 +167,12 @@ class SubmissionsController extends ChangeNotifier {
 
   Future<void> deleteSelectedSubmissions() async {
     try {
-      if (!await _submissionsService.hasAuthCookies()) {
+      if (!await _repository.hasAuthCookies()) {
         debugPrint('[Submissions] Missing cookies, cannot delete.');
         return;
       }
 
-      final success = await _submissionsService.deleteSubmissions(
+      final success = await _repository.deleteSubmissions(
         baseSubmissionsUrl: _baseSubmissionsUrl,
         submissionIds: _selectedSubmissions,
       );
@@ -251,7 +251,8 @@ class SubmissionsController extends ChangeNotifier {
         return;
       }
 
-      final success = await _favoriteService.executePostWithRetry(urlToSend);
+      final success =
+          await _favoriteRepository.executePostWithRetry(urlToSend);
       if (!success && !_disposed) {
         debugPrint('[Submissions] Fav/unfav failed => revert');
         item['isFav'] = !finalState;
@@ -349,7 +350,7 @@ class SubmissionsController extends ChangeNotifier {
         item['detailFetchInProgress'] = true;
       }
 
-      _submissionsService.fetchSubmissionData(postUrl).then((data) {
+      _repository.fetchSubmissionData(postUrl).then((data) {
         debugPrint('[Submissions] Fetched detail => $postUrl');
         if (_disposed) return;
         if (queueItem.indexInFlatList >= 0 &&
@@ -382,7 +383,7 @@ class SubmissionsController extends ChangeNotifier {
   Future<void> _refreshLinksAfterPost(Map<String, dynamic> item) async {
     try {
       final newData =
-          await _submissionsService.fetchSubmissionData(item['postUrl']);
+          await _repository.fetchSubmissionData(item['postUrl']);
       if (_disposed) return;
       item['isFav'] = newData.isFav;
       item['favUrl'] = newData.favUrl;

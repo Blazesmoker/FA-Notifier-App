@@ -4,8 +4,8 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
 
 /// Service to handle favorite/unfavorite operations with retry logic.
 class FavoriteService {

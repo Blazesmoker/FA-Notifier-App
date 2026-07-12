@@ -1,4 +1,4 @@
-import 'package:FANotifier/shared/fa/fa_media_auth.dart';
+import 'package:FANotifier/core/fa/fa_media_auth.dart';
 import 'package:html/parser.dart' as html_parser;
 
 Future<String> inlineFaIconUsernameImages(String html) {

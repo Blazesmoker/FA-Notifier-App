@@ -4,12 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:FANotifier/features/submissions/data/submission_description_service.dart';
-import 'package:FANotifier/features/submissions/data/submission_description_webview_html_builder.dart';
+import 'package:provider/provider.dart';
+import 'package:FANotifier/features/submissions/domain/submission_description_repository.dart';
 import 'package:FANotifier/features/submissions/domain/submission_description_webview_content.dart';
 import 'package:FANotifier/shared/fa/fa_webview_document_scripts.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/shared/utils/fa_link_handler.dart';
+import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
 
 class SubmissionDescriptionWebView extends StatefulWidget {
@@ -22,6 +22,7 @@ class SubmissionDescriptionWebView extends StatefulWidget {
   final bool fillAvailableHeight;
   final void Function(double height)? onHeightChanged;
   final bool routeDetached;
+  final SubmissionDescriptionRepository? repository;
 
   const SubmissionDescriptionWebView({
     required this.submissionId,
@@ -33,6 +34,7 @@ class SubmissionDescriptionWebView extends StatefulWidget {
     this.fillAvailableHeight = false,
     this.onHeightChanged,
     this.routeDetached = false,
+    this.repository,
     Key? key,
   }) : super(key: key);
 
@@ -46,8 +48,7 @@ class SubmissionDescriptionWebViewState
     with AutomaticKeepAliveClientMixin<SubmissionDescriptionWebView> {
   static const Color background = Color(0xFF121212);
 
-  late final SubmissionDescriptionService _submissionDescriptionService =
-      SubmissionDescriptionService();
+  late final SubmissionDescriptionRepository _submissionDescriptionRepository;
   late Future<SubmissionDescriptionWebViewContent>
       _submissionDescriptionFuture;
   InAppWebViewController? _controller;
@@ -63,6 +64,8 @@ class SubmissionDescriptionWebViewState
   @override
   void initState() {
     super.initState();
+    _submissionDescriptionRepository = widget.repository ??
+        context.read<SubmissionDescriptionRepository>();
     _mountWebView = !widget.routeDetached;
     if (widget.initialHtml != null) {
       _submissionDescriptionFuture = _processInitialHtml(widget.initialHtml!);
@@ -181,28 +184,19 @@ class SubmissionDescriptionWebViewState
 
   Future<SubmissionDescriptionWebViewContent> _processInitialHtml(
       String html) async {
-    final descriptionHtml =
-        await _submissionDescriptionService.extractInitialHtml(html);
-    final htmlWithInlinedIcons =
-        await _submissionDescriptionService.inlineIcons(descriptionHtml);
-    _submissionDescriptionHtml = htmlWithInlinedIcons;
-    return _submissionDescriptionService.buildWebViewContent(
-      htmlWithInlinedIcons,
-    );
+    final content =
+        await _submissionDescriptionRepository.processInitialHtml(html);
+    _submissionDescriptionHtml = content.html;
+    return content;
   }
 
   /// Fetches and cleans the HTML content for the submission description.
   Future<SubmissionDescriptionWebViewContent> _fetchCleanHTML() async {
-    final descriptionHtml =
-        await _submissionDescriptionService.fetchDescriptionHtml(
+    final content = await _submissionDescriptionRepository.fetchContent(
       widget.submissionId,
     );
-    final htmlWithInlinedIcons =
-        await _submissionDescriptionService.inlineIcons(descriptionHtml);
-    _submissionDescriptionHtml = htmlWithInlinedIcons;
-    return _submissionDescriptionService.buildWebViewContent(
-      htmlWithInlinedIcons,
-    );
+    _submissionDescriptionHtml = content.html;
+    return content;
   }
 
   /// Searches the provided HTML for a truncated URL and returns the full URL.
@@ -212,12 +206,15 @@ class SubmissionDescriptionWebViewState
       {String? htmlSource}) {
     final String? source = htmlSource ?? _submissionDescriptionHtml;
     if (source == null) return truncatedUrl;
-    return _submissionDescriptionService.findFullLink(source, truncatedUrl);
+    return _submissionDescriptionRepository.findFullLink(
+      source,
+      truncatedUrl,
+    );
   }
 
   Future<String?> getPlainText() async {
     if (_submissionDescriptionHtml == null) return null;
-    return _submissionDescriptionService.plainText(
+    return _submissionDescriptionRepository.plainText(
       _submissionDescriptionHtml!,
     );
   }
@@ -284,7 +281,7 @@ class SubmissionDescriptionWebViewState
                     }
                   : null,
               initialData: InAppWebViewInitialData(
-                data: buildSubmissionDescriptionWebViewHtml(
+                data: _submissionDescriptionRepository.buildWebViewHtml(
                   submissionDescriptionHtml: cleanHtml,
                   faThemeCss: faThemeCss,
                   enableTextSelection: widget.enableTextSelection,

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:provider/provider.dart';
 
-import 'package:FANotifier/features/auth/data/cloudflare_http_access_verifier.dart';
-import 'package:FANotifier/features/auth/data/cloudflare_webview_cookie_service.dart';
+import 'package:FANotifier/features/auth/domain/cloudflare_check_gateway.dart';
 import 'package:FANotifier/features/auth/domain/cloudflare_check_result.dart';
 import 'package:FANotifier/shared/fa/fa_webview_document_scripts.dart';
 
@@ -23,26 +23,30 @@ class CloudflareCheckScreen extends StatefulWidget {
 class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
   InAppWebViewController? _controller;
   bool _didComplete = false;
-  late final CloudflareHttpAccessVerifier _httpAccessVerifier;
-  late final CloudflareWebViewCookieService _webViewCookieService;
+  late final CloudflareCheckGateway _gateway;
 
   @override
   void initState() {
     super.initState();
-    _httpAccessVerifier = const CloudflareHttpAccessVerifier();
-    _webViewCookieService = const CloudflareWebViewCookieService();
+    _gateway = context.read<CloudflareCheckGateway>();
   }
 
   Future<void> _setCookiesFromSecureStorage() async {
-    await _webViewCookieService.setStoredCookies();
+    await _gateway.setStoredCookies();
   }
 
   Future<void> _saveCookiesToSecureStorage() async {
-    await _webViewCookieService.saveCurrentCookies(controller: _controller);
+    final controller = _controller;
+    await _gateway.saveCurrentCookies(
+      evaluateJavascript: controller == null
+          ? null
+          : (source) async =>
+              await controller.evaluateJavascript(source: source),
+    );
   }
 
   Future<bool> _verifyHttpAccess(String url) async {
-    return _httpAccessVerifier.verify(
+    return _gateway.verifyHttpAccess(
       url: url,
       beforeRetryAttempt: _saveCookiesToSecureStorage,
     );
@@ -55,7 +59,7 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
         urlOverride ?? (await _controller!.getUrl())?.toString() ?? '';
     if (currentUrl.isEmpty ||
         currentUrl == 'about:blank' ||
-        !currentUrl.contains('furaffinity.net')) {
+        !_gateway.isFaUrl(currentUrl)) {
       return;
     }
 
@@ -69,7 +73,7 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
       return;
     }
 
-    final isChallenge = _webViewCookieService.isChallengePage(
+    final isChallenge = _gateway.isChallengePage(
       url: currentUrl,
       body: body,
     );
@@ -144,7 +148,7 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
             javaScriptEnabled: true,
             useShouldOverrideUrlLoading: true,
             supportZoom: true,
-            userAgent: _httpAccessVerifier.userAgent,
+            userAgent: _gateway.userAgent,
           ),
           shouldOverrideUrlLoading: (controller, navigationAction) async {
             return NavigationActionPolicy.ALLOW;
@@ -160,7 +164,7 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
           },
           onLoadStop: (controller, url) async {
             final currentUrl = url?.toString() ?? '';
-            if (!currentUrl.contains('furaffinity.net')) {
+            if (!_gateway.isFaUrl(currentUrl)) {
               return;
             }
             await _saveCookiesToSecureStorage();

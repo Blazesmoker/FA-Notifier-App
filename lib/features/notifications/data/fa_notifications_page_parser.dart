@@ -5,24 +5,10 @@ import 'package:FANotifier/features/notifications/data/fa_notification_link_pars
 import 'package:FANotifier/features/notifications/data/notification_section_parser_helpers.dart';
 import 'package:FANotifier/features/notifications/data/notification_shout_parser.dart';
 import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:FANotifier/features/notifications/domain/fa_notifications_page_parser_state.dart';
 import 'package:FANotifier/features/notifications/domain/fa_notifications_page_snapshot.dart';
-import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
-import 'package:FANotifier/features/notifications/domain/notifications.dart';
-
-class FaNotificationsPageParserState {
-  FaNotificationsPageParserState({
-    this.linkUsername,
-    this.displayName,
-  });
-
-  String? linkUsername;
-  String? displayName;
-  NotificationCounts? latestCounts;
-  Notifications? latestTopBarNotifications;
-  String? currentUsername;
-  bool hasValidLatestCountsSnapshot = false;
-  bool hasParsedCurrentUsername = false;
-}
+import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
+import 'package:FANotifier/shared/fa/domain/notifications.dart';
 
 FaNotificationsPageSnapshot parseFaNotificationsPage(
   String htmlBody, {

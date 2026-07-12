@@ -1,18 +1,18 @@
 import 'package:flutter/foundation.dart';
 
+import 'package:FANotifier/features/journals/data/openjournal_api_service.dart';
 import 'package:FANotifier/features/journals/domain/journal_availability_detector.dart';
 import 'package:FANotifier/features/journals/domain/openjournal_load_result.dart';
-import 'package:FANotifier/features/journals/domain/openjournal_repository.dart';
 
 class OpenJournalLoadCoordinator {
   const OpenJournalLoadCoordinator({
-    required OpenJournalRepository repository,
-  }) : _repository = repository;
+    required OpenJournalApiService api,
+  }) : _api = api;
 
-  final OpenJournalRepository _repository;
+  final OpenJournalApiService _api;
 
   Future<OpenJournalLoadResult> load(String uniqueNumber) async {
-    final journal = await _repository.fetchJournal(uniqueNumber);
+    final journal = await _api.fetchJournal(uniqueNumber);
 
     try {
       final unavailable = looksLikeUnavailableJournal(
@@ -31,6 +31,6 @@ class OpenJournalLoadCoordinator {
   }
 
   Future<List<Map<String, dynamic>>> fetchFallbackComments(String body) {
-    return _repository.fetchCommentsFromBody(body);
+    return _api.fetchCommentsFromBody(body);
   }
 }

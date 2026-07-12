@@ -13,12 +13,13 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
+import 'package:FANotifier/features/notes/domain/notes_trash_repository.dart';
+import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
 import 'package:FANotifier/core/utils/utils.dart';
 import 'package:FANotifier/shared/utils/notes_notifications_text_edit.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:FANotifier/core/network/fa_request_coordinator.dart';
 import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 
 class NotesPageSnapshot {
@@ -31,7 +32,7 @@ class NotesPageSnapshot {
   final NotificationCounts? topbarCounts;
 }
 
-class NotesApiService {
+class NotesApiService implements NotesTrashRepository {
   NotesApiService({
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ??
@@ -392,17 +393,20 @@ class NotesApiService {
   }
 
   /// Fetches trash notes. Uses folder=trash in cookie with /msg/pms/.
+  @override
   Future<List<Message>> fetchTrashPage({required int page}) async {
     return fetchNotesPage(folder: 'trash', page: page);
   }
 
   /// Restores notes from Trash. POST with move_to=restore, folder=trash in cookie.
+  @override
   Future<void> restoreNotesFromTrash({required List<String> ids}) async {
     if (ids.isEmpty) return;
     await _moveNotesInTrash(ids: ids, moveTo: 'restore');
   }
 
   /// Permanently deletes notes from Trash. POST with move_to=delete, folder=trash in cookie.
+  @override
   Future<void> deleteNotesPermanently({required List<String> ids}) async {
     if (ids.isEmpty) return;
     await _moveNotesInTrash(ids: ids, moveTo: 'delete');

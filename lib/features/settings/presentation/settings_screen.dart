@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/app/app_theme.dart'; // If you need to reference AppTheme.fontName, etc.
+import 'package:FANotifier/shared/theme/app_theme.dart';
 import 'package:FANotifier/core/links/app_external_links.dart';
-import 'package:FANotifier/features/settings/data/settings_app_info_service.dart';
+import 'package:FANotifier/features/settings/domain/settings_app_info_repository.dart';
 import 'package:FANotifier/shared/utils/external_link_launcher.dart';
+import 'package:provider/provider.dart';
 
 import 'package:FANotifier/features/settings/presentation/siteSettings.dart';
 import 'package:FANotifier/features/settings/presentation/appSettings.dart';
 
 class SettingsScreen extends StatelessWidget {
   final Function onLogout;
-  static const SettingsAppInfoService _appInfoService =
-      SettingsAppInfoService();
 
   const SettingsScreen({
     Key? key,
@@ -60,6 +59,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const String telegramDisplayText = 'Join our Telegram Group!';
+    final userAgent = context.read<SettingsAppInfoRepository>().userAgent;
     return SafeArea(
       top: false,
       child: Scaffold(
@@ -171,7 +171,7 @@ class SettingsScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 16.0),
               child: Text(
-                _appInfoService.userAgent,
+                userAgent,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: AppTheme.fontName,

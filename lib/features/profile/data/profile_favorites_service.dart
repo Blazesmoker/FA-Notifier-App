@@ -3,12 +3,12 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:FANotifier/features/profile/domain/profile_favorites_repository.dart';
 import 'package:FANotifier/features/profile/domain/profile_posts_parse_result.dart';
 import 'package:FANotifier/features/profile/data/profile_posts_parser.dart';
-import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
 
-class ProfileFavoritesService {
+class ProfileFavoritesService implements ProfileFavoritesRepository {
   ProfileFavoritesService({
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ??
@@ -22,12 +22,14 @@ class ProfileFavoritesService {
   final FlutterSecureStorage _secureStorage;
   final SfwModePreference _sfwModePreference = SfwModePreference();
 
+  @override
   String buildInitialFavoritesPageUrl(String username) {
     return 'https://www.furaffinity.net/favorites/$username/';
   }
 
+  @override
   Future<ProfilePostsParseResult> fetchFavoritesPage(String url) async {
-    final cookieHeader = await _getAllCookies();
+    final cookieHeader = await buildCookieHeader();
     final response = await FAHttp.get(
       Uri.parse(url),
       headers: {
@@ -44,25 +46,8 @@ class ProfileFavoritesService {
     return parseProfileFavoritePostsHtml(decodedBody, url);
   }
 
-  Future<SubmissionFavoriteLinks?> fetchPostFavoriteLinks(
-    String uniqueNumber,
-  ) async {
-    final postUrl = 'https://www.furaffinity.net/view/$uniqueNumber/';
-    final cookieHeader = await _getAllCookies();
-    final response = await FAHttp.get(
-      Uri.parse(postUrl),
-      headers: {
-        'Cookie': cookieHeader,
-        'User-Agent': FAHttp.userAgent,
-      },
-    );
-    if (response.statusCode == 200) {
-      return parseSubmissionFavoriteLinksFromHtml(response.body);
-    }
-    return null;
-  }
-
-  Future<String> _getAllCookies() async {
+  @override
+  Future<String> buildCookieHeader() async {
     final cookieNames = [
       'a',
       'b',

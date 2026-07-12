@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import 'package:FANotifier/features/profile/data/profile_gallery_service.dart';
 import 'package:FANotifier/features/profile/domain/fa_folder.dart';
+import 'package:FANotifier/features/profile/domain/profile_gallery_repository.dart';
 import 'package:FANotifier/features/profile/presentation/profilegallery.dart';
 
 class UserProfileGallerySection extends StatefulWidget {
@@ -46,9 +47,10 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final galleryRepository = context.read<ProfileGalleryRepository>();
     final galleryUrl = widget.selectedFolderUrl.isNotEmpty
         ? widget.selectedFolderUrl
-        : buildDefaultProfileGalleryUrl(widget.sanitizedUsername);
+        : galleryRepository.buildDefaultGalleryUrl(widget.sanitizedUsername);
 
     return RefreshIndicator(
       color: const Color(0xFFE09321),

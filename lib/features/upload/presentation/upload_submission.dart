@@ -7,17 +7,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:FANotifier/shared/widgets/tags_and_codes_webview_widget.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/features/upload/data/upload_file_picker_service.dart';
-import 'package:FANotifier/features/upload/data/upload_permission_service.dart';
-import 'package:FANotifier/features/upload/data/upload_submission_navigation_service.dart';
-import 'package:FANotifier/features/upload/data/upload_webview_bridge.dart';
-import 'package:FANotifier/features/upload/data/upload_webview_navigation_policy.dart';
-import 'package:FANotifier/features/upload/data/submission_template_save_service.dart';
-import 'package:FANotifier/features/upload/data/submission_template_store.dart';
 import 'package:FANotifier/features/upload/domain/submission_template.dart';
+import 'package:FANotifier/features/upload/domain/submission_template_repository.dart';
+import 'package:FANotifier/features/upload/domain/upload_file_picker_gateway.dart';
+import 'package:FANotifier/features/upload/domain/upload_navigation_repository.dart';
+import 'package:FANotifier/features/upload/domain/upload_permission_gateway.dart';
 import 'package:FANotifier/features/upload/domain/upload_webview_results.dart';
+import 'package:FANotifier/features/upload/domain/upload_webview_script_repository.dart';
+import 'package:FANotifier/features/upload/domain/upload_webview_session_gateway.dart';
 import 'package:FANotifier/features/upload/presentation/submission_templates_screen.dart';
-import 'package:FANotifier/shared/fa/fa_webview_cookie_service.dart';
+import 'package:FANotifier/features/upload/presentation/upload_webview_bridge.dart';
+import 'package:provider/provider.dart';
 
 class UploadSubmissionScreen extends StatefulWidget {
   const UploadSubmissionScreen({Key? key}) : super(key: key);
@@ -29,21 +29,15 @@ class UploadSubmissionScreen extends StatefulWidget {
 class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with TickerProviderStateMixin {
   static const Color _accent = Color(0xFFE09321);
 
-  final UploadWebViewBridge _webViewBridge = UploadWebViewBridge();
-  final UploadPermissionService _permissionService =
-      const UploadPermissionService();
-  final UploadFilePickerService _filePickerService =
-      const UploadFilePickerService();
-  final UploadSubmissionNavigationService _navigationService =
-      const UploadSubmissionNavigationService();
-  final UploadWebViewNavigationPolicy _webViewNavigationPolicy =
-      const UploadWebViewNavigationPolicy();
-  final SubmissionTemplateStore _templateStore = SubmissionTemplateStore();
-  late final SubmissionTemplateSaveService _templateSaveService;
-  late final FAWebViewCookieService _webViewCookieService;
+  late final UploadWebViewBridge _webViewBridge;
+  late final UploadPermissionGateway _permissionGateway;
+  late final UploadFilePickerGateway _filePickerGateway;
+  late final UploadNavigationRepository _navigationRepository;
+  late final SubmissionTemplateRepository _templateRepository;
+  late final UploadWebViewSessionGateway _webViewSessionGateway;
 
-  String get initialUrl => _navigationService.initialUrl;
-  String get finalizeUrl => _navigationService.finalizeUrl;
+  String get initialUrl => _navigationRepository.initialUrl;
+  String get finalizeUrl => _navigationRepository.finalizeUrl;
   final GlobalKey webViewKey = GlobalKey();
 
   bool _isWaitingToOpenSubmission = false;
@@ -62,11 +56,15 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   @override
   void initState() {
     super.initState();
-    _templateSaveService = SubmissionTemplateSaveService(
-      store: _templateStore,
+    _webViewBridge = UploadWebViewBridge(
+      scriptRepository: context.read<UploadWebViewScriptRepository>(),
     );
-    _webViewCookieService = const FAWebViewCookieService();
-    _permissionService.requestInitialPermissions();
+    _permissionGateway = context.read<UploadPermissionGateway>();
+    _filePickerGateway = context.read<UploadFilePickerGateway>();
+    _navigationRepository = context.read<UploadNavigationRepository>();
+    _templateRepository = context.read<SubmissionTemplateRepository>();
+    _webViewSessionGateway = context.read<UploadWebViewSessionGateway>();
+    _permissionGateway.requestInitialPermissions();
 
     _toolsMenuController = AnimationController(
       vsync: this,
@@ -125,13 +123,14 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     if (url == null) return;
 
     debugPrint("Page loading: $url");
-    _setFinalizeReady(_navigationService.isFinalizeUrl(url));
+    _setFinalizeReady(_navigationRepository.isFinalizeUrl(url));
 
     // Prevent double-triggering
-    if (url.contains('upload-successful') && !_isProcessingUploadSuccess) {
+    if (_navigationRepository.isUploadSuccessfulUrl(url) &&
+        !_isProcessingUploadSuccess) {
       _isProcessingUploadSuccess = true;
 
-      final submissionId = _navigationService.extractSubmissionId(url);
+      final submissionId = _navigationRepository.extractSubmissionId(url);
 
       if (submissionId != null) {
 
@@ -155,9 +154,9 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       } else {
         _isProcessingUploadSuccess = false;
       }
-    } else if (_navigationService.isInitialSubmitUrl(url)) {
+    } else if (_navigationRepository.isInitialSubmitUrl(url)) {
       await _injectInitialCss();
-    } else if (_navigationService.isFinalizeUrl(url)) {
+    } else if (_navigationRepository.isFinalizeUrl(url)) {
       await _injectFinalizeCss();
     }
   }
@@ -329,7 +328,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
         return;
       }
 
-      await _templateSaveService.save(
+      await _templateRepository.saveTemplate(
         name: trimmed,
         fields: fields,
       );
@@ -348,7 +347,9 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     final selected = await Navigator.push<SubmissionTemplate?>(
       context,
       MaterialPageRoute(
-        builder: (context) => SubmissionTemplatesScreen(store: _templateStore),
+        builder: (context) => SubmissionTemplatesScreen(
+          repository: _templateRepository,
+        ),
       ),
     );
 
@@ -524,7 +525,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       contextMenu: _buildContextMenu(),
       onWebViewCreated: (controller) async {
         _webViewBridge.attach(controller);
-        await _webViewCookieService.setCookies();
+        await _webViewSessionGateway.setCookies();
 
         controller.addJavaScriptHandler(
           handlerName: 'selectFile',
@@ -548,7 +549,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
 
         if (Platform.isIOS &&
             uri != null &&
-            _webViewNavigationPolicy.shouldBlockIosHost(uri.host)) {
+            _navigationRepository.shouldBlockIosHost(uri.host)) {
           debugPrint('Blocking ad/tracker request on iOS: ${uri.host}');
           return NavigationActionPolicy.CANCEL;
         }
@@ -623,8 +624,8 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       }
 
       final selectedFile = source == 'files'
-          ? await _filePickerService.pickFile()
-          : await _filePickerService.pickGalleryImage();
+          ? await _filePickerGateway.pickFile()
+          : await _filePickerGateway.pickGalleryImage();
       if (selectedFile == null) return;
 
       await _webViewBridge.injectFile(selectedFile);

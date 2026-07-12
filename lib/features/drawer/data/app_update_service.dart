@@ -2,19 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-class AppUpdateInfo {
-  const AppUpdateInfo({
-    required this.currentVersion,
-    required this.latestVersion,
-    required this.updateAvailable,
-    required this.currentVersionAllowed,
-  });
+import 'package:FANotifier/features/drawer/domain/app_update_info.dart';
 
-  final String currentVersion;
-  final String latestVersion;
-  final bool updateAvailable;
-  final bool currentVersionAllowed;
-}
+export 'package:FANotifier/features/drawer/domain/app_update_info.dart';
 
 AppUpdateInfo? _cachedUpdateInfo;
 Future<AppUpdateInfo?>? _inFlightUpdateInfoFuture;

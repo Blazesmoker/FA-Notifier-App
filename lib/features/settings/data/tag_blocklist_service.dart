@@ -5,8 +5,8 @@ import 'package:http/http.dart';
 
 import 'package:FANotifier/features/settings/data/tag_blocklist_api_service.dart';
 import 'package:FANotifier/features/settings/domain/tag_blocklist_parse_result.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
 import 'package:FANotifier/shared/fa/parsing_utils.dart';
 
 const tagBlocklistProfileUrl = 'https://www.furaffinity.net/controls/profile/';

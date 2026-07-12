@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
+import 'package:FANotifier/features/notifications/domain/activity_count_change_policy.dart';
+import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
 
 class ActivitiesNotificationStateStore {
   static final ActivitiesNotificationStateStore _i =
@@ -14,6 +15,18 @@ class ActivitiesNotificationStateStore {
   static const String _kFavorites = 'last_seen_activities_favorites';
   static const String _kJournals = 'last_seen_activities_journals';
   static const String _kNotes = 'last_seen_activities_notes';
+
+  static const String _kObservedSubmissions =
+      'last_observed_activities_submissions';
+  static const String _kObservedWatches = 'last_observed_activities_watches';
+  static const String _kObservedComments = 'last_observed_activities_comments';
+  static const String _kObservedFavorites =
+      'last_observed_activities_favorites';
+  static const String _kObservedJournals = 'last_observed_activities_journals';
+  static const String _kObservedNotes = 'last_observed_activities_notes';
+  static const String _kObservedSchemaVersion =
+      'activities_observed_schema_version';
+  static const int _observedSchemaVersion = 1;
 
   static const String _kLastShownSubmissions =
       'last_shown_activities_submissions';
@@ -37,6 +50,9 @@ class ActivitiesNotificationStateStore {
   static const String _kBaselineSchemaVersion =
       'activities_baseline_schema_version';
   static const int _baselineSchemaVersion = 1;
+
+  static const ActivityCountChangePolicy _countChangePolicy =
+      ActivityCountChangePolicy();
 
   static const String kLastSeenUpdatedAtMsKey = 'last_seen_activities_at_ms';
   static const String kLastShownUpdatedAtMsKey = 'last_shown_activities_at_ms';
@@ -62,8 +78,9 @@ class ActivitiesNotificationStateStore {
     );
   }
 
-  Future<ActivitiesDiff> diffFromAcknowledged({
+  Future<ActivitiesDiff> recordAndDiffCurrentCounts({
     required NotificationCounts currentCounts,
+    required bool useObservedCounts,
   }) async {
     return _withMutex(() async {
       final prefs = await SharedPreferences.getInstance();
@@ -79,17 +96,10 @@ class ActivitiesNotificationStateStore {
           prefs.containsKey(_kNotes);
       if (!hasBaseline) {
         await _saveLastSeenCounts(prefs, currentCounts);
-        return ActivitiesDiff(
+        await _saveLastObservedCounts(prefs, currentCounts);
+        return _countChangePolicy.diff(
           previous: currentCounts,
           current: currentCounts,
-          increasedBy: NotificationCounts(
-            submissions: 0,
-            watches: 0,
-            comments: 0,
-            favorites: 0,
-            journals: 0,
-            notes: 0,
-          ),
         );
       }
 
@@ -109,23 +119,15 @@ class ActivitiesNotificationStateStore {
         notes: prevNotes,
       );
 
-      final increasedBy = NotificationCounts(
-        submissions: currentCounts.submissions > prevSubmissions
-            ? currentCounts.submissions - prevSubmissions
-            : 0,
-        watches: currentCounts.watches > prevWatches
-            ? currentCounts.watches - prevWatches
-            : 0,
-        comments: currentCounts.comments > prevComments
-            ? currentCounts.comments - prevComments
-            : 0,
-        favorites: currentCounts.favorites > prevFavorites
-            ? currentCounts.favorites - prevFavorites
-            : 0,
-        journals: currentCounts.journals > prevJournals
-            ? currentCounts.journals - prevJournals
-            : 0,
-        notes: currentCounts.notes > prevNotes ? currentCounts.notes - prevNotes : 0,
+      final previousObservedCounts = useObservedCounts
+          ? _loadPreviousObservedCounts(
+              prefs,
+              fallback: previousCounts,
+            )
+          : previousCounts;
+      final diff = _countChangePolicy.diff(
+        previous: previousObservedCounts,
+        current: currentCounts,
       );
 
       await _lowerBaselineForDecreases(
@@ -133,12 +135,9 @@ class ActivitiesNotificationStateStore {
         previousCounts: previousCounts,
         currentCounts: currentCounts,
       );
+      await _saveLastObservedCounts(prefs, currentCounts);
 
-      return ActivitiesDiff(
-        previous: previousCounts,
-        current: currentCounts,
-        increasedBy: increasedBy,
-      );
+      return diff;
     });
   }
 
@@ -148,6 +147,7 @@ class ActivitiesNotificationStateStore {
     return _withMutex(() async {
       final prefs = await SharedPreferences.getInstance();
       await _saveLastSeenCounts(prefs, currentCounts);
+      await _saveLastObservedCounts(prefs, currentCounts);
       await _clearLastShownNotification(prefs);
       await _clearDeferredActivityNotification(prefs);
     });
@@ -155,6 +155,7 @@ class ActivitiesNotificationStateStore {
 
   Future<void> deferActivityNotification({
     required NotificationCounts currentCounts,
+    required NotificationCounts previousObservedCounts,
     required String body,
   }) {
     return _withMutex(() async {
@@ -170,6 +171,7 @@ class ActivitiesNotificationStateStore {
         _kDeferredUpdatedAtMs,
         DateTime.now().millisecondsSinceEpoch,
       );
+      await _saveLastObservedCounts(prefs, previousObservedCounts);
     });
   }
 
@@ -424,6 +426,63 @@ class ActivitiesNotificationStateStore {
     });
   }
 
+  NotificationCounts _loadPreviousObservedCounts(
+    SharedPreferences prefs, {
+    required NotificationCounts fallback,
+  }) {
+    final hasObservedCounts =
+        prefs.getInt(_kObservedSchemaVersion) == _observedSchemaVersion &&
+            prefs.containsKey(_kObservedSubmissions) &&
+            prefs.containsKey(_kObservedWatches) &&
+            prefs.containsKey(_kObservedComments) &&
+            prefs.containsKey(_kObservedFavorites) &&
+            prefs.containsKey(_kObservedJournals) &&
+            prefs.containsKey(_kObservedNotes);
+    if (hasObservedCounts) {
+      return NotificationCounts(
+        submissions: prefs.getInt(_kObservedSubmissions)!,
+        watches: prefs.getInt(_kObservedWatches)!,
+        comments: prefs.getInt(_kObservedComments)!,
+        favorites: prefs.getInt(_kObservedFavorites)!,
+        journals: prefs.getInt(_kObservedJournals)!,
+        notes: prefs.getInt(_kObservedNotes)!,
+      );
+    }
+
+    final hasLastShownCounts = prefs.getString(_kLastShownBody) != null &&
+        prefs.containsKey(_kLastShownSubmissions) &&
+        prefs.containsKey(_kLastShownWatches) &&
+        prefs.containsKey(_kLastShownComments) &&
+        prefs.containsKey(_kLastShownFavorites) &&
+        prefs.containsKey(_kLastShownJournals) &&
+        prefs.containsKey(_kLastShownNotes);
+    if (hasLastShownCounts) {
+      return NotificationCounts(
+        submissions: prefs.getInt(_kLastShownSubmissions)!,
+        watches: prefs.getInt(_kLastShownWatches)!,
+        comments: prefs.getInt(_kLastShownComments)!,
+        favorites: prefs.getInt(_kLastShownFavorites)!,
+        journals: prefs.getInt(_kLastShownJournals)!,
+        notes: prefs.getInt(_kLastShownNotes)!,
+      );
+    }
+
+    return fallback;
+  }
+
+  Future<void> _saveLastObservedCounts(
+    SharedPreferences prefs,
+    NotificationCounts counts,
+  ) async {
+    await prefs.setInt(_kObservedSubmissions, counts.submissions);
+    await prefs.setInt(_kObservedWatches, counts.watches);
+    await prefs.setInt(_kObservedComments, counts.comments);
+    await prefs.setInt(_kObservedFavorites, counts.favorites);
+    await prefs.setInt(_kObservedJournals, counts.journals);
+    await prefs.setInt(_kObservedNotes, counts.notes);
+    await prefs.setInt(_kObservedSchemaVersion, _observedSchemaVersion);
+  }
+
   Future<void> markActivityNotificationShown({
     required NotificationCounts currentCounts,
     required String body,
@@ -465,34 +524,5 @@ class ActivitiesNotificationStateStore {
       );
       await _clearDeferredActivityNotification(prefs);
     });
-  }
-}
-
-class ActivitiesDiff {
-  final NotificationCounts previous;
-  final NotificationCounts current;
-  final NotificationCounts increasedBy;
-
-  const ActivitiesDiff({
-    required this.previous,
-    required this.current,
-    required this.increasedBy,
-  });
-
-  bool get hasAnyIncrease =>
-      increasedBy.submissions > 0 ||
-      increasedBy.watches > 0 ||
-      increasedBy.comments > 0 ||
-      increasedBy.favorites > 0 ||
-      increasedBy.journals > 0 ||
-      increasedBy.notes > 0;
-
-  bool hasNonZeroPreviousIncrease(NotificationCounts enabledIncreases) {
-    return (enabledIncreases.submissions > 0 && previous.submissions > 0) ||
-        (enabledIncreases.watches > 0 && previous.watches > 0) ||
-        (enabledIncreases.comments > 0 && previous.comments > 0) ||
-        (enabledIncreases.favorites > 0 && previous.favorites > 0) ||
-        (enabledIncreases.journals > 0 && previous.journals > 0) ||
-        (enabledIncreases.notes > 0 && previous.notes > 0);
   }
 }

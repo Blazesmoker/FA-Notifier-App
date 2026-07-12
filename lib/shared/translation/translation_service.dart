@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_language_id/google_mlkit_language_id.dart';
 import 'package:html/parser.dart' as html_parser;

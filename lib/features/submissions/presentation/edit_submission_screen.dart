@@ -3,16 +3,17 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:FANotifier/features/submissions/data/edit_submission_navigation_service.dart';
-import 'package:FANotifier/features/submissions/data/edit_submission_webview_scripts.dart';
-import 'package:FANotifier/shared/fa/fa_webview_cookie_service.dart';
+import 'package:provider/provider.dart';
+import 'package:FANotifier/features/submissions/domain/edit_submission_page_repository.dart';
 
 class EditSubmissionScreen extends StatefulWidget {
   final String initialUrl;
+  final EditSubmissionPageRepository? repository;
 
   const EditSubmissionScreen({
     Key? key,
     required this.initialUrl,
+    this.repository,
   }) : super(key: key);
 
   @override
@@ -20,32 +21,31 @@ class EditSubmissionScreen extends StatefulWidget {
 }
 
 class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
-  final EditSubmissionNavigationService _navigationService =
-      const EditSubmissionNavigationService();
-  late final FAWebViewCookieService _webViewCookieService;
+  late final EditSubmissionPageRepository _repository;
 
   InAppWebViewController? _webViewController;
   final GlobalKey webViewKey = GlobalKey();
 
   bool get _isUpdateSubmissionScreen =>
-      _navigationService.isUpdateSubmissionUrl(widget.initialUrl);
+      _repository.isUpdateSubmissionUrl(widget.initialUrl);
 
   @override
   void initState() {
     super.initState();
-    _webViewCookieService = FAWebViewCookieService();
+    _repository =
+        widget.repository ?? context.read<EditSubmissionPageRepository>();
   }
 
   Future<void> _injectCustomCssAndJs() async {
     if (_webViewController == null) return;
 
     await _webViewController!.evaluateJavascript(
-      source: buildEditSubmissionBaseScript(),
+      source: _repository.buildBaseScript(),
     );
 
     if (_isUpdateSubmissionScreen) {
       await _webViewController!.evaluateJavascript(
-        source: buildMoveSubmissionFileCellScript(),
+        source: _repository.buildMoveSubmissionFileCellScript(),
       );
     }
   }
@@ -54,7 +54,7 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
     if (_webViewController == null) return;
 
     await _webViewController!.evaluateJavascript(
-      source: buildWrapSelectionScript(tag),
+      source: _repository.buildWrapSelectionScript(tag),
     );
   }
 
@@ -96,7 +96,7 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
           contextMenu: _buildContextMenu(),
           onWebViewCreated: (controller) async {
             _webViewController = controller;
-            await _webViewCookieService.setCookies();
+            await _repository.prepareWebViewSession();
           },
           onLoadStart: (controller, uri) async {
             await _injectCustomCssAndJs();
@@ -104,7 +104,7 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
           onLoadStop: (controller, uri) async {
             await _injectCustomCssAndJs();
             if (uri != null &&
-                _navigationService.isSubmissionViewUrl(uri.toString())) {
+                _repository.isSubmissionViewUrl(uri.toString())) {
               await Future.delayed(const Duration(milliseconds: 50));
               if (mounted) Navigator.pop(context, true);
             }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/settings/data/thumbnail_display_settings_provider.dart';
+import 'package:FANotifier/core/preferences/thumbnail_display_settings_provider.dart';
 
 class ThumbnailDisplaySettingsScreen extends StatelessWidget {
   const ThumbnailDisplaySettingsScreen({super.key});

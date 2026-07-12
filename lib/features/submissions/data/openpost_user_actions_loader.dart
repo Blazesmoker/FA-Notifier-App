@@ -1,23 +1,13 @@
 import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
-import 'package:http/http.dart';
-
-class OpenPostUserActionsLoadResult {
-  const OpenPostUserActionsLoadResult({
-    required this.statusCode,
-    this.actions,
-  });
-
-  final int statusCode;
-  final OpenPostUserPageActions? actions;
-}
+import 'package:FANotifier/features/submissions/domain/openpost_page_response.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_user_actions_load_result.dart';
 
 class OpenPostUserActionsLoader {
   const OpenPostUserActionsLoader();
 
   Future<OpenPostUserActionsLoadResult> load({
     required String url,
-    required Future<Response> Function(String url) fetch,
+    required OpenPostPageFetcher fetch,
   }) async {
     final response = await fetch(url);
     if (response.statusCode != 200) {

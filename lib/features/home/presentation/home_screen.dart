@@ -1,17 +1,18 @@
 import 'dart:async';
-import 'package:FANotifier/features/notifications/data/NotificationNavigationProvider.dart';
+import 'package:FANotifier/features/notifications/presentation/notification_navigation_provider.dart';
 import 'package:FANotifier/features/browse/presentation/faimagegrid.dart';
 import 'package:FANotifier/features/browse/presentation/filters_screen.dart';
+import 'package:FANotifier/features/notes/domain/notes_repository.dart';
 import 'package:FANotifier/features/notes/presentation/notesscreen.dart';
 import 'package:FANotifier/features/notifications/presentation/notifications_screen.dart';
 import 'package:FANotifier/features/search/presentation/search_screen.dart';
 import 'package:FANotifier/features/submissions/presentation/submissions_screen.dart';
 import 'package:FANotifier/features/upload/presentation/upload_submission.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:FANotifier/features/notifications/data/fa_activities_polling_service.dart';
-import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
-import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
-import 'package:FANotifier/features/notifications/data/notification_refresh_service.dart';
+import 'package:FANotifier/shared/fa/domain/fa_activities_polling_port.dart';
+import 'package:FANotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:FANotifier/features/notes/domain/notes_refresh_port.dart';
+import 'package:FANotifier/features/notifications/domain/notification_refresh_port.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:flutter/foundation.dart';
@@ -22,27 +23,23 @@ import 'package:provider/provider.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:FANotifier/shared/utils/content_rating_filters.dart';
 import 'package:FANotifier/shared/utils/external_link_launcher.dart';
-import 'package:FANotifier/features/settings/data/home_start_screen_preference.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
-import 'package:FANotifier/app/app_theme.dart';
-import 'package:FANotifier/features/profile/domain/user_profile.dart';
-import 'package:FANotifier/features/notifications/domain/notifications.dart';
-import 'package:FANotifier/features/notifications/data/pending_navigation_store.dart';
-import 'package:FANotifier/shared/fa/fa_service.dart';
-import 'package:FANotifier/features/auth/data/startup_cloudflare_check_service.dart';
-import 'package:FANotifier/features/home/data/home_auth_cookie_service.dart';
-import 'package:FANotifier/features/home/data/home_login_webview_load_throttle.dart';
-import 'package:FANotifier/features/home/data/home_login_webview_navigation_policy.dart';
-import 'package:FANotifier/features/home/data/home_login_webview_scripts.dart';
-import 'package:FANotifier/features/home/data/home_profile_cache.dart';
-import 'package:FANotifier/features/home/data/home_session_preference.dart';
-import 'package:FANotifier/features/home/data/home_login_html_detector.dart';
-import 'package:FANotifier/features/home/data/home_logout_cleanup_service.dart';
+import 'package:FANotifier/shared/theme/app_theme.dart';
+import 'package:FANotifier/shared/fa/domain/user_profile.dart';
+import 'package:FANotifier/shared/fa/domain/notifications.dart';
+import 'package:FANotifier/features/notifications/domain/pending_navigation_repository.dart';
+import 'package:FANotifier/features/home/domain/home_login_webview_support.dart';
+import 'package:FANotifier/features/home/domain/home_profile_repository.dart';
+import 'package:FANotifier/features/home/domain/home_session_repository.dart';
+import 'package:FANotifier/features/home/domain/home_start_screen_preference.dart';
+import 'package:FANotifier/features/home/domain/home_start_screen_preference_repository.dart';
 import 'package:FANotifier/features/home/domain/pending_home_destination.dart';
+import 'package:FANotifier/features/auth/domain/startup_cloudflare_checker.dart';
 import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
-import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
+import 'package:FANotifier/features/notifications/presentation/notification_settings_provider.dart';
+import 'package:FANotifier/features/notifications/domain/enabled_notification_items_count.dart';
 
 import '../../auth/domain/cloudflare_check_result.dart';
 
@@ -69,14 +66,16 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _forceNotesRefresh = false;
   bool _sfwEnabled = true;
   final SfwModePreference _sfwModePreference = SfwModePreference();
-  final HomeSessionPreference _homeSessionPreference = HomeSessionPreference();
-  final HomeLoginWebViewLoadThrottle _homeLoginWebViewLoadThrottle =
-      const HomeLoginWebViewLoadThrottle();
-  final HomeLoginWebViewNavigationPolicy _homeLoginWebViewNavigationPolicy =
-      const HomeLoginWebViewNavigationPolicy();
-  final HomeProfileCache _homeProfileCache = const HomeProfileCache();
-  final PendingNavigationStore _pendingNavigationStore =
-      PendingNavigationStore();
+  late final HomeSessionRepository _homeSessionRepository;
+  late final HomeProfileRepository _homeProfileRepository;
+  late final HomeLoginWebViewSupport _homeLoginWebViewSupport;
+  late final HomeStartScreenPreferenceRepository
+      _homeStartScreenPreferenceRepository;
+  late final StartupCloudflareChecker _startupCloudflareChecker;
+  late final PendingNavigationRepository _pendingNavigationRepository;
+  late final FaActivitiesPollingPort _activitiesPolling;
+  late final NotesRefreshPort _notesRefresh;
+  late final NotificationRefreshPort _notificationRefresh;
   HomeStartScreenPreference _homeStartScreenPreference =
       HomeStartScreenPreference.browse;
   Future<void>? _homeStartPreferenceFuture;
@@ -106,12 +105,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   InAppWebViewController? _webViewController;
 
-  final String loginUrl = 'https://www.furaffinity.net/login';
-  final FaService _faService = FaService();
-  final HomeAuthCookieService _homeAuthCookieService =
-      const HomeAuthCookieService();
-  late final HomeLogoutCleanupService _homeLogoutCleanupService;
-  late final StartupCloudflareCheckService _startupCloudflareCheckService;
   Timer? _dataRefreshTimer;
 
   int _unreadCount = 0;
@@ -134,13 +127,17 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _homeLogoutCleanupService = HomeLogoutCleanupService(
-      authCookieService: _homeAuthCookieService,
-      sessionPreference: _homeSessionPreference,
-      profileCache: _homeProfileCache,
-    );
-    _startupCloudflareCheckService =
-        const StartupCloudflareCheckService();
+    _homeSessionRepository = context.read<HomeSessionRepository>();
+    _homeProfileRepository = context.read<HomeProfileRepository>();
+    _homeLoginWebViewSupport = context.read<HomeLoginWebViewSupport>();
+    _homeStartScreenPreferenceRepository =
+        context.read<HomeStartScreenPreferenceRepository>();
+    _startupCloudflareChecker = context.read<StartupCloudflareChecker>();
+    _pendingNavigationRepository =
+        context.read<PendingNavigationRepository>();
+    _activitiesPolling = context.read<FaActivitiesPollingPort>();
+    _notesRefresh = context.read<NotesRefreshPort>();
+    _notificationRefresh = context.read<NotificationRefreshPort>();
     _navProvider =
         Provider.of<NotificationNavigationProvider>(context, listen: false);
     _navProvider.addListener(_handleNavProviderChange);
@@ -189,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadHomeStartScreenPreference() async {
-    final preference = await loadHomeStartScreenPreference();
+    final preference = await _homeStartScreenPreferenceRepository.load();
     if (!mounted) {
       return;
     }
@@ -210,10 +207,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _handlePendingNavigation() async {
     if (!mounted) return;
     final String? pendingPayload =
-        await _pendingNavigationStore.loadPayload(reload: true);
+        await _pendingNavigationRepository.loadPayload(reload: true);
     if (pendingPayload == null) return;
     if (pendingPayload.isEmpty) {
-      await _pendingNavigationStore.clearPayload();
+      await _pendingNavigationRepository.clearPayload();
       return;
     }
 
@@ -225,19 +222,19 @@ class _HomeScreenState extends State<HomeScreen> {
           () => _forceNotesRefresh = true);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        NotesRefreshService().triggerRefresh();
+        _notesRefresh.triggerRefresh();
         debugPrint("NOTES REFRESH TRIGGERED_home_postframe");
       });
     } else if (destination == PendingHomeDestination.notifications) {
       _navProvider.setTargetIndex(3);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        NotificationRefreshService().triggerRefresh();
+        _notificationRefresh.triggerRefresh();
         debugPrint("ACTIVITIES REFRESH TRIGGERED_home_postframe");
       });
     }
 
-    await _pendingNavigationStore.clearPayload();
+    await _pendingNavigationRepository.clearPayload();
   }
 
   Future<void> _initializeAndLoadLoginState() async {
@@ -282,7 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<bool> _runStartupCloudflareCheck() async {
-    final check = await _startupCloudflareCheckService.checkHome();
+    final check = await _startupCloudflareChecker.checkHome();
     _startupHomeHtml = isLoggedIn ? check.homeHtml : null;
     if (!check.needsChallenge) {
       return true;
@@ -306,9 +303,9 @@ class _HomeScreenState extends State<HomeScreen> {
   void _startActivitiesPolling({required bool triggerImmediate}) {
     try {
       final svc = Provider.of<FANotificationService>(context, listen: false);
-      FaActivitiesPollingService().start(faNotificationService: svc);
+      _activitiesPolling.start(faNotificationService: svc);
       if (triggerImmediate) {
-        unawaited(FaActivitiesPollingService().triggerNow(
+        unawaited(_activitiesPolling.triggerNow(
           resetTimer: true,
           source: 'login_established',
         ));
@@ -317,7 +314,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadCachedUserProfile() async {
-    final cachedProfile = await _homeProfileCache.load();
+    final cachedProfile = await _homeSessionRepository.loadCachedUserProfile();
     if (!mounted || cachedProfile == null) return;
     setState(() {
       _userProfile = cachedProfile;
@@ -330,12 +327,11 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final startupHomeHtml = _startupHomeHtml;
       _startupHomeHtml = null;
-      UserProfile? profile = await _faService.fetchUserProfile(
-        context: context,
+      UserProfile? profile = await _homeProfileRepository.fetchUserProfile(
         homeHtml: startupHomeHtml,
       );
       if (profile != null) {
-        await _homeProfileCache.save(profile);
+        await _homeSessionRepository.saveCachedUserProfile(profile);
       }
       if (!mounted) return;
       setState(() {
@@ -355,11 +351,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _saveLoginState(bool value) async {
-    await _homeSessionPreference.saveIsLoggedIn(value);
+    await _homeSessionRepository.saveIsLoggedIn(value);
   }
 
   Future<void> _loadLoginState() async {
-    bool savedLoginState = await _homeSessionPreference.loadIsLoggedIn();
+    bool savedLoginState = await _homeSessionRepository.loadIsLoggedIn();
     setState(() {
       isLoggedIn = savedLoginState;
       if (!savedLoginState) {
@@ -391,21 +387,14 @@ class _HomeScreenState extends State<HomeScreen> {
     NotificationSettingsProvider settings,
     FANotificationService faNotificationService,
   ) {
-    int visible = 0;
-    for (final section in faNotificationService.sections) {
-      final title = section.title;
-      final n = section.items.length;
-      if (title.contains('Watches') && settings.watchersEnabled) visible += n;
-      if (title.contains('Journals') && settings.journalsEnabled) visible += n;
-      if (title.contains('Submission Comments') && settings.commentsEnabled)
-        visible += n;
-      if (title.contains('Journal Comments') && settings.commentsEnabled)
-        visible += n;
-      if (title.contains('Favorites') && settings.favoritesEnabled)
-        visible += n;
-      if (title.contains('Shouts') && settings.shoutsEnabled) visible += n;
-    }
-    return visible;
+    return enabledNotificationItemsCount(
+      sections: faNotificationService.sections,
+      watchersEnabled: settings.watchersEnabled,
+      journalsEnabled: settings.journalsEnabled,
+      commentsEnabled: settings.commentsEnabled,
+      favoritesEnabled: settings.favoritesEnabled,
+      shoutsEnabled: settings.shoutsEnabled,
+    );
   }
 
   void _onNotificationsUpdated(Notifications _) {
@@ -520,7 +509,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildWebView() {
     return InAppWebView(
       initialData: InAppWebViewInitialData(
-        data: homeLoginInitialHtml,
+        data: _homeLoginWebViewSupport.assets.initialHtml,
         baseUrl: WebUri('about:blank'),
       ),
       initialSettings: InAppWebViewSettings(
@@ -537,7 +526,7 @@ class _HomeScreenState extends State<HomeScreen> {
         debugPrint(
             'WebView Loading Started: ${url?.toString() ?? "Unknown URL"}');
         _cancelStabilityTimer();
-        if (url?.toString().startsWith(loginUrl) == true) {
+        if (_homeLoginWebViewSupport.isLoginUrl(url?.toString())) {
           await _injectLoginCss();
         }
       },
@@ -553,17 +542,17 @@ class _HomeScreenState extends State<HomeScreen> {
       onLoadStop: (controller, url) async {
         final pageUrl = url?.toString() ?? '';
         debugPrint('Load stopped at: $pageUrl');
-        if (url?.toString().startsWith(loginUrl) == true) {
+        if (_homeLoginWebViewSupport.isLoginUrl(url?.toString())) {
           await _injectLoginCss();
         }
 
-        if (pageUrl.startsWith("https://www.furaffinity.net/") ||
-            pageUrl == "https://www.furaffinity.net") {
-          if (await _homeAuthCookieService.hasWebViewAuthCookie()) {
-            await _homeAuthCookieService.saveCookiesFromWebView();
+        if (_homeLoginWebViewSupport.isAuthenticatedHomeUrl(pageUrl)) {
+          if (await _homeSessionRepository.hasWebViewAuthCookie()) {
+            await _homeSessionRepository.saveCookiesFromWebView();
 
             // Read previous login state BEFORE we set true
-            final wasLoggedIn = await _homeSessionPreference.loadIsLoggedIn();
+            final wasLoggedIn =
+                await _homeSessionRepository.loadIsLoggedIn();
 
             await _saveLoginState(true);
             setState(() {
@@ -603,7 +592,7 @@ class _HomeScreenState extends State<HomeScreen> {
       shouldOverrideUrlLoading: (controller, navigationAction) async {
         var uri = navigationAction.request.url;
         debugPrint("Navigating to: $uri");
-        if (_homeLoginWebViewNavigationPolicy.isPasswordRecoveryUrl(uri)) {
+        if (_homeLoginWebViewSupport.isPasswordRecoveryUrl(uri)) {
           debugPrint("Password recovery URL detected.");
           if (await tryLaunchExternalUri(uri!)) {
             debugPrint('Opened Password Recovery in external browser.');
@@ -627,13 +616,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadInitialLoginUrl(InAppWebViewController controller) {
     final next = _loginWebViewLoadQueue.catchError((_) {}).then((_) async {
       final loadSlot =
-          await _homeLoginWebViewLoadThrottle.waitForAvailableSlot();
+          await _homeLoginWebViewSupport.waitForAvailableLoadSlot();
       if (!mounted || isLoggedIn || _webViewController != controller) {
         return;
       }
       await loadSlot.recordLoadStart();
       await controller.loadUrl(
-        urlRequest: URLRequest(url: WebUri(loginUrl)),
+        urlRequest: URLRequest(url: WebUri(_homeLoginWebViewSupport.loginUrl)),
       );
     });
     _loginWebViewLoadQueue = next.catchError((_) {});
@@ -647,9 +636,12 @@ class _HomeScreenState extends State<HomeScreen> {
       if (_webViewController == null) return;
 
       String? html = await _webViewController!
-          .evaluateJavascript(source: homeLoginOuterHtmlScript);
+          .evaluateJavascript(
+            source: _homeLoginWebViewSupport.assets.outerHtmlScript,
+          );
 
-      final elementFound = hasLoggedInHomeElement(html);
+      final elementFound =
+          _homeLoginWebViewSupport.hasLoggedInHomeElement(html);
 
       if (elementFound) {
         if (_firstTimeElementFound == null) {
@@ -663,9 +655,10 @@ class _HomeScreenState extends State<HomeScreen> {
             });
             _cancelStabilityTimer();
 
-            await _homeAuthCookieService.saveCookiesFromWebView();
+            await _homeSessionRepository.saveCookiesFromWebView();
 
-            final wasLoggedIn = await _homeSessionPreference.loadIsLoggedIn();
+            final wasLoggedIn =
+                await _homeSessionRepository.loadIsLoggedIn();
 
             await _saveLoginState(true);
             _startActivitiesPolling(triggerImmediate: false);
@@ -714,7 +707,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 350));
     if (!mounted || !isLoggedIn) return;
 
-    await FaActivitiesPollingService().triggerNow(
+    await _activitiesPolling.triggerNow(
       resetTimer: true,
       source: 'startup_warmup',
     );
@@ -775,7 +768,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _setCookiesFromPrefs() async {
-    await _homeAuthCookieService.setStoredCookies();
+    await _homeSessionRepository.setStoredCookies();
   }
 
   Widget _buildHomeStackChild(int index, Widget Function() builder) {
@@ -873,6 +866,7 @@ class _HomeScreenState extends State<HomeScreen> {
           4,
           () => NotesScreen(
             drawerKey: _drawerKey,
+            repositoryFactory: context.read<NotesRepositoryFactory>(),
             forceRefresh: shouldForceRefresh,
             key: _notesKey,
           ),
@@ -945,8 +939,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     try {
-      FaActivitiesPollingService().stop();
-      await _homeLogoutCleanupService.clearLocalSession();
+      _activitiesPolling.stop();
+      await _homeSessionRepository.clearLocalSession();
 
       final faNotificationService =
           Provider.of<FANotificationService>(context, listen: false);
@@ -991,12 +985,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _injectLoginCss() async {
     await _webViewController?.injectCSSCode(
-      source: homeLoginCss,
+      source: _homeLoginWebViewSupport.assets.css,
     );
   }
 
   Future<void> _setSfwCookieToNSFW() async {
-    await _homeAuthCookieService.setSfwCookieToNsfw();
+    await _homeSessionRepository.setSfwCookieToNsfw();
   }
 
   Future<void> _onRequestCloseApp() async {

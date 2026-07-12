@@ -5,11 +5,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:FANotifier/features/profile/data/shout_form_parser.dart';
 import 'package:FANotifier/features/profile/domain/post_shout_result.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
+import 'package:FANotifier/features/profile/domain/profile_shout_repository.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:FANotifier/core/network/fa_request_coordinator.dart';
 
-class ShoutService {
+class ShoutService implements ProfileShoutRepository {
   ShoutService({
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ??
@@ -26,6 +27,7 @@ class ShoutService {
   bool _initialized = false;
   Future<void>? _initializing;
 
+  @override
   Future<void> initialize() async {
     if (_initialized) return;
     if (_initializing != null) {
@@ -54,10 +56,12 @@ class ShoutService {
     _initializing = null;
   }
 
+  @override
   void close() {
     _dio.close();
   }
 
+  @override
   Future<PostShoutResult> postShout({
     required String username,
     required String shout,

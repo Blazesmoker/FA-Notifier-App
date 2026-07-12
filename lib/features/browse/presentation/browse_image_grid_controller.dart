@@ -5,10 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:FANotifier/core/logging/app_logging.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/auth/domain/cloudflare_check_result.dart';
-import 'package:FANotifier/features/browse/data/browse_image_parser.dart';
-import 'package:FANotifier/features/browse/data/browse_image_service.dart';
-import 'package:FANotifier/features/submissions/data/favorite_service.dart';
-import 'package:FANotifier/features/submissions/data/submission_favorite_details_service.dart';
+import 'package:FANotifier/features/browse/domain/browse_repository.dart';
+import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:FANotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:FANotifier/shared/fa/fa_thumbnail_processing.dart';
 
@@ -19,24 +17,20 @@ class BrowseImageGridController extends ChangeNotifier {
   BrowseImageGridController({
     required Map<String, String> selectedFilters,
     required BrowseCloudflareChallengeHandler onCloudflareChallenge,
-    BrowseImageService? browseImageService,
-    SubmissionFavoriteDetailsService? favoriteDetailsService,
-    FavoriteService? favoriteService,
+    required BrowseRepository repository,
+    required SubmissionFavoriteRepository favoriteRepository,
     SfwModePreference? sfwModePreference,
   })  : _selectedFilters = selectedFilters,
         _onCloudflareChallenge = onCloudflareChallenge,
-        _browseImageService = browseImageService ?? BrowseImageService(),
-        _favoriteDetailsService = favoriteDetailsService ??
-            const SubmissionFavoriteDetailsService(),
-        _favoriteService = favoriteService ?? FavoriteService(),
+        _repository = repository,
+        _favoriteRepository = favoriteRepository,
         _sfwModePreference = sfwModePreference ?? SfwModePreference();
 
   static const double _nextPageLeadScreens = 2.5;
 
   final BrowseCloudflareChallengeHandler _onCloudflareChallenge;
-  final BrowseImageService _browseImageService;
-  final SubmissionFavoriteDetailsService _favoriteDetailsService;
-  final FavoriteService _favoriteService;
+  final BrowseRepository _repository;
+  final SubmissionFavoriteRepository _favoriteRepository;
   final SfwModePreference _sfwModePreference;
   final ScrollController scrollController = ScrollController();
   final List<Map<String, dynamic>> _images = [];
@@ -162,7 +156,7 @@ class BrowseImageGridController extends ChangeNotifier {
       }
 
       await _sfwLoadFuture;
-      final newImages = await _browseImageService.fetchImages(
+      final newImages = await _repository.fetchImages(
         pageNumber: pageNumber,
         selectedFilters: _selectedFilters,
         sfwEnabled: _sfwEnabled,
@@ -197,7 +191,8 @@ class BrowseImageGridController extends ChangeNotifier {
 
       final recoveredHtml = result?.pageHtml;
       if (recoveredHtml != null && recoveredHtml.isNotEmpty) {
-        final recoveredImages = await parseBrowseImageHtml(recoveredHtml);
+        final recoveredImages =
+            await _repository.parseRecoveredHtml(recoveredHtml);
         await _appendImages(
           recoveredImages,
           previousMaxScrollExtent: previousMaxScrollExtent,
@@ -360,14 +355,14 @@ class BrowseImageGridController extends ChangeNotifier {
 
   Future<String> _getAllCookies() async {
     await _sfwLoadFuture;
-    return _browseImageService.buildCookieHeader(
+    return _repository.buildCookieHeader(
       selectedFilters: _selectedFilters,
       sfwEnabled: _sfwEnabled,
     );
   }
 
   Future<void> _fetchPostDetails(String uniqueNumber) async {
-    final links = await _favoriteDetailsService.fetchLinksForSubmissionId(
+    final links = await _favoriteRepository.fetchLinksForSubmissionId(
       submissionId: uniqueNumber,
       cookieHeaderProvider: _getAllCookies,
     );
@@ -429,7 +424,8 @@ class BrowseImageGridController extends ChangeNotifier {
     }
     _notifyChanged();
 
-    final success = await _favoriteService.executePostWithRetry(urlToUse);
+    final success =
+        await _favoriteRepository.executePostWithRetry(urlToUse);
     if (success) {
       await _refetchFavLinks(uniqueNumber);
       _notifyChanged();

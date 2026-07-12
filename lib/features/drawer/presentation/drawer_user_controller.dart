@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:FANotifier/features/drawer/presentation/home_drawer.dart';
 import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
-import 'package:FANotifier/features/profile/domain/user_profile.dart';
-import 'package:FANotifier/app/app_theme.dart';
-import 'package:FANotifier/features/notifications/domain/notifications.dart';
+import 'package:FANotifier/shared/fa/domain/user_profile.dart';
+import 'package:FANotifier/shared/theme/app_theme.dart';
+import 'package:FANotifier/shared/fa/domain/notifications.dart';
 
 class DrawerUserController extends StatefulWidget {
 

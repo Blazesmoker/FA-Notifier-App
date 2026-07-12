@@ -1,4 +1,5 @@
 import 'package:extended_text/extended_text.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:FANotifier/shared/widgets/comment_tree_painter.dart';
@@ -11,8 +12,11 @@ import 'package:FANotifier/features/profile/presentation/user_profile_screen.dar
 /// Comment display widget extracted from openpost.dart
 class CommentWidget extends StatefulWidget {
   final Map<String, dynamic> comment;
-  final int previousNestingLevel;
-  final int nextNestingLevel;
+  final ValueListenable<CommentTreeLevels> treeLevels;
+  final ValueListenable<bool> collapsed;
+  final VoidCallback? onToggleCollapse;
+  final Duration animationDuration;
+  final Curve animationCurve;
   final VoidCallback? onHide;
   final VoidCallback? onEdit;
   final VoidCallback? onReply;
@@ -20,6 +24,7 @@ class CommentWidget extends StatefulWidget {
   final Future<void> Function(String url)? handleLink;
   final GlobalKey<SelectionAreaState>? selectionAreaKey;
   final ValueChanged<SelectedContent?>? onSelectionChanged;
+  final bool Function()? hasAnyCommentSelection;
   final Widget Function(BuildContext, SelectableRegionState)?
       contextMenuBuilder;
   final bool showTranslateButton;
@@ -28,8 +33,11 @@ class CommentWidget extends StatefulWidget {
   const CommentWidget({
     Key? key,
     required this.comment,
-    required this.previousNestingLevel,
-    required this.nextNestingLevel,
+    required this.treeLevels,
+    required this.collapsed,
+    required this.onToggleCollapse,
+    required this.animationDuration,
+    required this.animationCurve,
     this.onHide,
     this.onEdit,
     this.onReply,
@@ -37,6 +45,7 @@ class CommentWidget extends StatefulWidget {
     this.handleLink,
     this.selectionAreaKey,
     this.onSelectionChanged,
+    this.hasAnyCommentSelection,
     this.contextMenuBuilder,
     this.showTranslateButton = false,
     this.onTranslateToggle,
@@ -51,6 +60,8 @@ class _CommentWidgetState extends State<CommentWidget> {
   String? _lastCommentHtml;
   bool _hasHtml = false;
   String _normalizedCommentHtml = '';
+  bool _hasActiveSelection = false;
+  bool _suppressNextCollapseTap = false;
 
   @override
   void initState() {
@@ -78,8 +89,166 @@ class _CommentWidgetState extends State<CommentWidget> {
     }
   }
 
+  void _handleCommentSelectionChanged(SelectedContent? content) {
+    _hasActiveSelection = content?.plainText.isNotEmpty ?? false;
+    widget.onSelectionChanged?.call(content);
+  }
+
+  void _handleCommentPointerDown(PointerDownEvent _) {
+    _suppressNextCollapseTap =
+        _hasActiveSelection || (widget.hasAnyCommentSelection?.call() ?? false);
+  }
+
+  void _handleCollapseTap() {
+    if (_suppressNextCollapseTap) {
+      _suppressNextCollapseTap = false;
+      return;
+    }
+    widget.onToggleCollapse?.call();
+  }
+
+  Widget _buildCommentBody(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(
+          left: 0.0, right: 0.0, top: 8.0, bottom: 1.0),
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          textSelectionTheme: TextSelectionThemeData(
+            selectionColor:
+                const Color(0xFFE09321).withValues(alpha: 0.4),
+            selectionHandleColor: const Color(0xFFE09321),
+          ),
+        ),
+        child: SelectionArea(
+          key: widget.selectionAreaKey,
+          onSelectionChanged: _handleCommentSelectionChanged,
+          contextMenuBuilder: widget.contextMenuBuilder,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: _handleCollapseTap,
+            child: _hasHtml
+                ? Html(
+                  data: _normalizedCommentHtml,
+                  onLinkTap: (url, _, __) {
+                    if (url != null) {
+                      widget.handleLink?.call(url);
+                    }
+                  },
+                  extensions: [
+                    faHtmlImageExtension(),
+                    TagExtension.inline(
+                      tagsToExtend: {'i'},
+                      builder: (context) {
+                        final assetPath = emojiAssetForSmilieClass(
+                            context.attributes['class']);
+                        if (assetPath != null) {
+                          return WidgetSpan(
+                            child: Image.asset(
+                              assetPath,
+                              width: 20,
+                              height: 20,
+                            ),
+                          );
+                        }
+                        return TextSpan(
+                          style: const TextStyle(
+                              fontStyle: FontStyle.italic),
+                          children: context.inlineSpanChildren ??
+                              const <InlineSpan>[],
+                        );
+                      },
+                    ),
+                  ],
+                  style: {
+                    "body": Style(
+                      margin: Margins.zero,
+                      padding: HtmlPaddings.zero,
+                      color: Colors.grey.shade300,
+                      fontSize: FontSize(14),
+                    ),
+                    ".bbcode_center": Style(
+                      display: Display.block,
+                      textAlign: TextAlign.center,
+                    ),
+                    ".bbcode_left": Style(
+                      display: Display.block,
+                      textAlign: TextAlign.left,
+                    ),
+                    ".bbcode_right": Style(
+                      display: Display.block,
+                      textAlign: TextAlign.right,
+                    ),
+                    "code": Style(
+                      backgroundColor: Colors.transparent,
+                      padding: HtmlPaddings.zero,
+                      margin: Margins.zero,
+                      fontFamily: 'inherit',
+                      fontSize: FontSize(14),
+                      color: Colors.grey.shade300,
+                    ),
+                    "strong": Style(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade300,
+                    ),
+                    "em": Style(
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey.shade300,
+                    ),
+                    ".bbcode_u": Style(
+                      textDecoration: TextDecoration.underline,
+                      color: Colors.grey.shade300,
+                    ),
+                    "a": Style(
+                      color: const Color(0xFFE09321),
+                      textDecoration: TextDecoration.none,
+                    ),
+                  },
+                )
+                : ExtendedText(
+                    widget.comment['text'] ?? '',
+                    specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
+                      onTapLink: widget.handleLink,
+                    ),
+                    style:
+                        TextStyle(fontSize: 14, color: Colors.grey.shade300),
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final body = widget.comment['deleted'] == true
+        ? null
+        : _buildCommentBody(context);
+    return ValueListenableBuilder<CommentTreeLevels>(
+      valueListenable: widget.treeLevels,
+      child: body,
+      builder: (context, treeLevels, body) {
+        return ValueListenableBuilder<bool>(
+          valueListenable: widget.collapsed,
+          child: body,
+          builder: (context, collapsed, body) {
+            return _buildComment(
+              context,
+              treeLevels: treeLevels,
+              collapsed: collapsed,
+              body: body,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildComment(
+    BuildContext context, {
+    required CommentTreeLevels treeLevels,
+    required bool collapsed,
+    required Widget? body,
+  }) {
     final double widthPercent = (widget.comment['width'] ?? 100).toDouble();
     final int nestingLevel =
         ((100.0 - widthPercent) / 3.0).round().clamp(0, 4).toInt();
@@ -97,44 +266,57 @@ class _CommentWidgetState extends State<CommentWidget> {
       return CustomPaint(
         foregroundPainter: CommentTreePainter(
           nestingLevel: nestingLevel,
-          previousNestingLevel: widget.previousNestingLevel,
-          nextNestingLevel: widget.nextNestingLevel,
+          previousNestingLevel: treeLevels.previous,
+          nextNestingLevel: treeLevels.next,
         ),
         child: Padding(
           padding: EdgeInsets.only(left: leftPadding, bottom: 6.0),
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(vertical: 16.0, horizontal: 12.0),
-            decoration: decoration,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: SelectionArea(
-                    key: widget.selectionAreaKey,
-                    onSelectionChanged: widget.onSelectionChanged,
-                    contextMenuBuilder: widget.contextMenuBuilder,
-                    child: Text(
-                      widget.comment['text'] ?? '',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                      textAlign: TextAlign.left,
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: _handleCommentPointerDown,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _handleCollapseTap,
+              child: Container(
+              padding:
+                  const EdgeInsets.symmetric(vertical: 16.0, horizontal: 12.0),
+              decoration: decoration,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: SelectionArea(
+                      key: widget.selectionAreaKey,
+                      onSelectionChanged: _handleCommentSelectionChanged,
+                      contextMenuBuilder: widget.contextMenuBuilder,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: _handleCollapseTap,
+                        child: Text(
+                          widget.comment['text'] ?? '',
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.grey),
+                          textAlign: TextAlign.left,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                if (widget.comment['hideLink'] != null)
-                  TextButton(
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  if (widget.comment['hideLink'] != null)
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 0),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: widget.onUnhide,
+                      child: const Text(
+                        'Unhide',
+                        style: TextStyle(color: Colors.white, fontSize: 14),
+                      ),
                     ),
-                    onPressed: widget.onUnhide,
-                    child: const Text(
-                      'Unhide',
-                      style: TextStyle(color: Colors.white, fontSize: 14),
-                    ),
-                  ),
-              ],
+                ],
+              ),
+              ),
             ),
           ),
         ),
@@ -144,16 +326,29 @@ class _CommentWidgetState extends State<CommentWidget> {
     return CustomPaint(
       foregroundPainter: CommentTreePainter(
         nestingLevel: nestingLevel,
-        previousNestingLevel: widget.previousNestingLevel,
-        nextNestingLevel: widget.nextNestingLevel,
+        previousNestingLevel: treeLevels.previous,
+        nextNestingLevel: treeLevels.next,
       ),
       child: Padding(
         padding: EdgeInsets.only(left: leftPadding, bottom: 6.0),
-        child: Container(
-          padding: const EdgeInsets.only(
-              right: 12.0, left: 12.0, top: 8.0, bottom: 2.0),
-          decoration: decoration,
-          child: Column(
+        child: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: _handleCommentPointerDown,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _handleCollapseTap,
+            child: AnimatedSize(
+            duration: widget.animationDuration,
+            curve: widget.animationCurve,
+            alignment: Alignment.topCenter,
+            child: Container(
+              padding: EdgeInsets.only(
+                  right: 12.0,
+                  left: 12.0,
+                  top: 8.0,
+                  bottom: collapsed ? 10.0 : 2.0),
+              decoration: decoration,
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -172,28 +367,39 @@ class _CommentWidgetState extends State<CommentWidget> {
                             );
                           }
                         },
-                        child: FaNetworkImage(
-                          widget.comment['profileImage'],
-                          width: 46,
-                          height: 46,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) {
-                              return child;
-                            }
-                            return Image.asset(
-                              'assets/images/defaultpic.gif',
-                              width: 46,
-                              height: 46,
+                        child: TweenAnimationBuilder<double>(
+                          duration: widget.animationDuration,
+                          curve: widget.animationCurve,
+                          tween: Tween<double>(
+                            begin: collapsed ? 30 : 46,
+                            end: collapsed ? 30 : 46,
+                          ),
+                          builder: (context, avatarSize, _) {
+                            return FaNetworkImage(
+                              widget.comment['profileImage'],
+                              width: avatarSize,
+                              height: avatarSize,
                               fit: BoxFit.cover,
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            return Image.asset(
-                              'assets/images/defaultpic.gif',
-                              width: 46,
-                              height: 46,
-                              fit: BoxFit.cover,
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
+                                if (loadingProgress == null) {
+                                  return child;
+                                }
+                                return Image.asset(
+                                  'assets/images/defaultpic.gif',
+                                  width: avatarSize,
+                                  height: avatarSize,
+                                  fit: BoxFit.cover,
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                return Image.asset(
+                                  'assets/images/defaultpic.gif',
+                                  width: avatarSize,
+                                  height: avatarSize,
+                                  fit: BoxFit.cover,
+                                );
+                              },
                             );
                           },
                         ),
@@ -266,121 +472,30 @@ class _CommentWidgetState extends State<CommentWidget> {
                             color: Color(0xFFE09321),
                           ),
                         ),
-                        if ((widget.comment['userTitle'] ?? '').isNotEmpty)
-                          Text(
-                            widget.comment['userTitle'],
+                        _animatedSection(
+                          visible: !collapsed &&
+                              (widget.comment['userTitle'] ?? '').isNotEmpty,
+                          child: Text(
+                            widget.comment['userTitle'] ?? '',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey.shade400,
                             ),
                           ),
+                        ),
                       ],
                     ),
                   ),
                 ],
               ),
-              Padding(
-                padding: const EdgeInsets.only(
-                    left: 0.0, right: 0.0, top: 8.0, bottom: 1.0),
-                child: Theme(
-                  data: Theme.of(context).copyWith(
-                    textSelectionTheme: TextSelectionThemeData(
-                      selectionColor: const Color(0xFFE09321).withValues(alpha: 0.4),
-                      selectionHandleColor: const Color(0xFFE09321),
-                    ),
-                  ),
-                  child: SelectionArea(
-                    key: widget.selectionAreaKey,
-                    onSelectionChanged: widget.onSelectionChanged,
-                    contextMenuBuilder: widget.contextMenuBuilder,
-                    child: _hasHtml
-                        ? Html(
-                            data: _normalizedCommentHtml,
-                            onLinkTap: (url, _, __) {
-                              if (url != null) {
-                                widget.handleLink?.call(url);
-                              }
-                            },
-                            extensions: [
-                              faHtmlImageExtension(),
-                              TagExtension.inline(
-                                tagsToExtend: {'i'},
-                                builder: (context) {
-                                  final assetPath = emojiAssetForSmilieClass(
-                                      context.attributes['class']);
-                                  if (assetPath != null) {
-                                    return WidgetSpan(
-                                      child: Image.asset(assetPath,
-                                          width: 20, height: 20),
-                                    );
-                                  }
-                                  return TextSpan(
-                                    style: const TextStyle(
-                                        fontStyle: FontStyle.italic),
-                                    children: context.inlineSpanChildren ??
-                                        const <InlineSpan>[],
-                                  );
-                                },
-                              ),
-                            ],
-                            style: {
-                              "body": Style(
-                                margin: Margins.zero,
-                                padding: HtmlPaddings.zero,
-                                color: Colors.grey.shade300,
-                                fontSize: FontSize(14),
-                              ),
-                              ".bbcode_center": Style(
-                                display: Display.block,
-                                textAlign: TextAlign.center,
-                              ),
-                              ".bbcode_left": Style(
-                                display: Display.block,
-                                textAlign: TextAlign.left,
-                              ),
-                              ".bbcode_right": Style(
-                                display: Display.block,
-                                textAlign: TextAlign.right,
-                              ),
-                              "code": Style(
-                                backgroundColor: Colors.transparent,
-                                padding: HtmlPaddings.zero,
-                                margin: Margins.zero,
-                                fontFamily: 'inherit',
-                                fontSize: FontSize(14),
-                                color: Colors.grey.shade300,
-                              ),
-                              "strong": Style(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey.shade300,
-                              ),
-                              "em": Style(
-                                fontStyle: FontStyle.italic,
-                                color: Colors.grey.shade300,
-                              ),
-                              ".bbcode_u": Style(
-                                textDecoration: TextDecoration.underline,
-                                color: Colors.grey.shade300,
-                              ),
-                              "a": Style(
-                                color: const Color(0xFFE09321),
-                                textDecoration: TextDecoration.none,
-                              ),
-                            },
-                          )
-                        : ExtendedText(
-                            widget.comment['text'] ?? '',
-                            specialTextSpanBuilder: EmojiSpecialTextSpanBuilder(
-                              onTapLink: widget.handleLink,
-                            ),
-                            style: TextStyle(
-                                fontSize: 14, color: Colors.grey.shade300),
-                          ),
-                  ),
-                ),
+              _animatedSection(
+                visible: !collapsed,
+                child: body!,
               ),
-              Row(
-                children: [
+              _animatedSection(
+                visible: !collapsed,
+                child: Row(
+                  children: [
                   Expanded(
                     child: GestureDetector(
                       onTap: () {
@@ -476,14 +591,47 @@ class _CommentWidgetState extends State<CommentWidget> {
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
+              ),
+            ),
           ),
         ),
       ),
+      ),
+    );
+  }
+
+  Widget _animatedSection({
+    required bool visible,
+    required Widget child,
+  }) {
+    return AnimatedSwitcher(
+      duration: widget.animationDuration,
+      switchInCurve: widget.animationCurve,
+      switchOutCurve: widget.animationCurve,
+      transitionBuilder: (child, animation) {
+        return SizeTransition(
+          sizeFactor: animation,
+          axisAlignment: -1,
+          child: FadeTransition(
+            opacity: animation,
+            child: child,
+          ),
+        );
+      },
+      child: visible
+          ? KeyedSubtree(
+              key: const ValueKey<String>('visible'),
+              child: child,
+            )
+          : const SizedBox.shrink(
+              key: ValueKey<String>('hidden'),
+            ),
     );
   }
 }

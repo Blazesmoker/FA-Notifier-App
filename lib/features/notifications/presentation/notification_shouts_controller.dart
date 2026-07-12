@@ -1,13 +1,20 @@
 import 'package:flutter/foundation.dart';
-import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
-import 'package:FANotifier/features/notifications/data/notification_shout_mapper.dart';
-import 'package:FANotifier/features/notifications/data/notification_shouts_coordinator.dart';
+import 'package:FANotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:FANotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:FANotifier/features/notifications/domain/notification_shout_mapper.dart';
+import 'package:FANotifier/features/notifications/presentation/notification_shouts_coordinator.dart';
 
 class NotificationShoutsController extends ChangeNotifier {
-  NotificationShoutsController(FANotificationService service)
+  NotificationShoutsController(
+    FANotificationService service,
+    FaActivitiesPollingPort pollingService,
+  )
       : _service = service,
-        _coordinator = NotificationShoutsCoordinator(service) {
+        _coordinator = NotificationShoutsCoordinator(
+          service,
+          pollingService,
+        ) {
     final cached = _coordinator.currentShouts();
     _shouts = cached;
     _shoutsFuture = Future.value(cached);

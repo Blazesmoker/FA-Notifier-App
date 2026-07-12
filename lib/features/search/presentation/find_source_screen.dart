@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:FANotifier/features/search/data/find_source_image_input_service.dart';
-import 'package:FANotifier/features/search/data/find_source_service.dart';
+import 'package:provider/provider.dart';
 import 'package:FANotifier/features/search/domain/find_source_models.dart';
-import 'package:FANotifier/shared/utils/fa_link_handler.dart';
+import 'package:FANotifier/features/search/domain/find_source_repository.dart';
+import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
 
 class FindSourceScreen extends StatefulWidget {
   const FindSourceScreen({Key? key}) : super(key: key);
@@ -29,10 +29,6 @@ class _FindSourceScreenState extends State<FindSourceScreen>
   DateTime? _lastRequestTime;
   String? _lastImageHash;
   static const Duration _cooldown = Duration(seconds: 10);
-  final FindSourceService _findSourceService = FindSourceService();
-  final FindSourceImageInputService _imageInputService =
-      const FindSourceImageInputService();
-
   static const Color _orange = Color(0xFFE09321);
 
   static final Color _selectedBg = _orange.withValues(alpha: 0.15);
@@ -59,7 +55,8 @@ class _FindSourceScreenState extends State<FindSourceScreen>
   }
 
   Future<void> _pickImage() async {
-    final imagePath = await _imageInputService.pickImagePath();
+    final imagePath =
+        await context.read<FindSourceRepository>().pickImagePath();
 
     if (imagePath == null) return;
 
@@ -92,8 +89,8 @@ class _FindSourceScreenState extends State<FindSourceScreen>
       return;
     }
 
-    final file = File(_imagePath!);
-    final hash = await _imageInputService.hashImage(file);
+    final repository = context.read<FindSourceRepository>();
+    final hash = await repository.hashImagePath(_imagePath!);
 
     if (hash == _lastImageHash) {
       setState(() => _error = 'This image was already searched');
@@ -113,7 +110,7 @@ class _FindSourceScreenState extends State<FindSourceScreen>
     });
 
     try {
-      final searchResult = await _findSourceService.searchSources(file);
+      final searchResult = await repository.searchSources(_imagePath!);
 
       if (searchResult.combinedResults.isEmpty) {
         setState(() => _error = 'Couldn\'t find source from FurAffinity.net');

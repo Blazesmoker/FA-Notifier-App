@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'package:FANotifier/main.dart';
-import 'package:FANotifier/features/notes/data/notes_repository.dart';
+import 'package:FANotifier/app/navigation/app_navigation.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/notes/presentation/message_detail_screen.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
+import 'package:FANotifier/features/notes/domain/notes_repository.dart';
 import 'package:FANotifier/features/notes/presentation/new_message.dart';
 import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
 import 'package:FANotifier/features/notes/domain/notes_screen_view_state.dart';
@@ -18,10 +18,12 @@ import 'package:FANotifier/features/notes/presentation/trash_screen.dart';
 class NotesScreen extends StatefulWidget {
   final GlobalKey<DrawerUserControllerState> drawerKey;
   final bool forceRefresh;
+  final NotesRepository Function() repositoryFactory;
 
   NotesScreen({
     Key? key,
     required this.drawerKey,
+    required this.repositoryFactory,
     this.forceRefresh = false,
   }) : super(key: key);
 
@@ -68,7 +70,7 @@ class NotesScreenState extends State<NotesScreen>
     WidgetsBinding.instance.addObserver(this);
 
     _notesController = NotesScreenController(
-      repository: NotesRepository.create(),
+      repository: widget.repositoryFactory(),
       updateState: (update) => setState(update),
     );
     _tabController = TabController(length: 2, vsync: this);

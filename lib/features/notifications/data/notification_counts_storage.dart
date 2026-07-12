@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
+import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
 
 class NotificationCountsStorage {
   static const _keySubmissions = 'notif_submissions';

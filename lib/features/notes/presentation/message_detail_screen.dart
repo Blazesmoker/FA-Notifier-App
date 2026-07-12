@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:FANotifier/features/notes/data/note_message_service.dart';
-import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
-import 'package:FANotifier/main.dart';
+import 'package:FANotifier/features/notes/domain/note_message_repository.dart';
+import 'package:FANotifier/features/notes/domain/notes_refresh_port.dart';
+import 'package:FANotifier/app/navigation/app_navigation.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/notes/presentation/note_reply_screen.dart';
-import 'package:FANotifier/shared/utils/fa_link_handler.dart';
+import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
-import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
 import 'package:provider/provider.dart';
 
 class MessageDetailScreen extends StatefulWidget {
@@ -29,8 +29,8 @@ class MessageDetailScreen extends StatefulWidget {
 }
 
 class _MessageDetailScreenState extends State<MessageDetailScreen> {
-  late final NoteMessageService _noteMessageService =
-      NoteMessageService();
+  late final NoteMessageRepository _noteMessageRepository;
+  late final NotesRefreshPort _notesRefreshPort;
 
   bool isLoading = true;
   String errorMessage = '';
@@ -55,18 +55,20 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _noteMessageRepository = context.read<NoteMessageRepositoryFactory>()();
+    _notesRefreshPort = context.read<NotesRefreshPort>();
     _fetchMessageDetails();
   }
 
   @override
   void dispose() {
-    _noteMessageService.close();
+    _noteMessageRepository.close();
     super.dispose();
   }
 
   Future<void> _fetchMessageDetails() async {
     try {
-      final result = await _noteMessageService.fetchMessageDetails(
+      final result = await _noteMessageRepository.fetchMessageDetails(
         messageLink: widget.messageLink,
         folder: widget.folder,
       );
@@ -117,7 +119,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
   Future<void> _markAsUnread() async {
     if (messageId == null) return;
     try {
-      final statusCode = await _noteMessageService.markAsUnread(
+      final statusCode = await _noteMessageRepository.markAsUnread(
         folder: widget.folder,
         messageId: messageId!,
         pageNumber: pageNumber,
@@ -147,7 +149,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
   void _triggerNotesRefreshOnce() {
     if (_didTriggerRefreshOnExit) return;
     _didTriggerRefreshOnExit = true;
-    NotesRefreshService().triggerRefresh();
+    _notesRefreshPort.triggerRefresh();
   }
 
   void _clearSelection() {

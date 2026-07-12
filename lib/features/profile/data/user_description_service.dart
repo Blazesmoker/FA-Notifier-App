@@ -4,13 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:FANotifier/features/profile/data/user_description_parser.dart';
+import 'package:FANotifier/features/profile/data/user_description_webview_html_builder.dart';
 import 'package:FANotifier/features/profile/domain/user_description_webview_content.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/features/profile/domain/user_description_repository.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
 import 'package:FANotifier/shared/fa/fa_theme_css_loader.dart';
 import 'package:FANotifier/shared/utils/fa_icon_image_inliner.dart';
 
-class UserDescriptionService {
+class UserDescriptionService implements UserDescriptionRepository {
   UserDescriptionService({
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ??
@@ -23,14 +25,17 @@ class UserDescriptionService {
 
   final FlutterSecureStorage _secureStorage;
 
+  @override
   Future<String> extractInitialHtml(String html) {
     return compute(extractUserDescriptionHtmlWithBodyFallback, html);
   }
 
+  @override
   Future<String> inlineIcons(String html) {
     return inlineFaIconUsernameImages(html);
   }
 
+  @override
   Future<UserDescriptionWebViewContent> buildWebViewContent(
     String html,
   ) async {
@@ -40,14 +45,17 @@ class UserDescriptionService {
     );
   }
 
+  @override
   String findFullLink(String htmlSource, String truncatedUrl) {
     return findFullAutoShortenedLink(htmlSource, truncatedUrl) ?? truncatedUrl;
   }
 
+  @override
   String plainText(String html) {
     return plainTextFromHtml(html);
   }
 
+  @override
   Future<String> fetchCleanHtml(String sanitizedUsername) async {
     final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
@@ -73,5 +81,18 @@ class UserDescriptionService {
 
     final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
     return compute(extractUserDescriptionHtmlDefault, decodedBody);
+  }
+
+  @override
+  String buildWebViewHtml({
+    required String userDescriptionHtml,
+    required String faThemeCss,
+    required bool enableTextSelection,
+  }) {
+    return buildUserDescriptionWebViewHtml(
+      userDescriptionHtml: userDescriptionHtml,
+      faThemeCss: faThemeCss,
+      enableTextSelection: enableTextSelection,
+    );
   }
 }

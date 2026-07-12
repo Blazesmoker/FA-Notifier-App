@@ -4,8 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:provider/provider.dart';
 
-import 'package:FANotifier/features/profile/data/image_inspect_media_export_service.dart';
+import 'package:FANotifier/features/profile/domain/profile_media_export_repository.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
 class ImageInspectScreen extends StatefulWidget {
@@ -35,8 +36,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
     with SingleTickerProviderStateMixin {
   final TransformationController _transformationController =
       TransformationController();
-  final ImageInspectMediaExportService _mediaExportService =
-      const ImageInspectMediaExportService();
+  late final ProfileMediaExportRepository _mediaExportRepository;
   late final AnimationController _doubleTapZoomAnimationController;
   Matrix4 _zoomAnimationStart = Matrix4.identity();
   Matrix4 _zoomAnimationEnd = Matrix4.identity();
@@ -72,6 +72,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
   @override
   void initState() {
     super.initState();
+    _mediaExportRepository = context.read<ProfileMediaExportRepository>();
     _doubleTapZoomAnimationController = AnimationController(
       vsync: this,
       duration: _doubleTapZoomDuration,
@@ -108,7 +109,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
   Future<void> _downloadImage(BuildContext context) async {
     try {
       final isPermissionGranted =
-          await _mediaExportService.requestImageExportPermission();
+          await _mediaExportRepository.requestImageExportPermission();
 
       if (!isPermissionGranted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -117,8 +118,10 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
         return;
       }
 
-      final imageData = await _mediaExportService.fetchImageData(widget.imageUrl);
-      final isSaved = await _mediaExportService.saveImageToGallery(imageData);
+      final imageData =
+          await _mediaExportRepository.fetchImageData(widget.imageUrl);
+      final isSaved =
+          await _mediaExportRepository.saveImageToGallery(imageData);
 
       if (isSaved) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -139,7 +142,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
   Future<void> _shareImage(BuildContext context) async {
     try {
       final isPermissionGranted =
-          await _mediaExportService.requestImageExportPermission();
+          await _mediaExportRepository.requestImageExportPermission();
 
       if (!isPermissionGranted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -148,8 +151,9 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
         return;
       }
 
-      final imageData = await _mediaExportService.fetchImageData(widget.imageUrl);
-      await _mediaExportService.shareImage(imageData);
+      final imageData =
+          await _mediaExportRepository.fetchImageData(widget.imageUrl);
+      await _mediaExportRepository.shareImage(imageData);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to share image: $e'), backgroundColor: Colors.red),

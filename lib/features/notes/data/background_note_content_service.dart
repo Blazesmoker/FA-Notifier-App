@@ -6,9 +6,9 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:FANotifier/features/notes/data/background_note_content_parser.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:FANotifier/core/network/fa_request_coordinator.dart';
 
 class BackgroundNoteContentService {
   BackgroundNoteContentService({

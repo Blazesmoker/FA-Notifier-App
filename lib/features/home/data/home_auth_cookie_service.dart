@@ -1,7 +1,7 @@
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'package:FANotifier/shared/fa/fa_media_auth.dart';
+import 'package:FANotifier/core/fa/fa_media_auth.dart';
 
 class HomeAuthCookieService {
   const HomeAuthCookieService({

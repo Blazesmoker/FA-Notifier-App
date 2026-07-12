@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
-import 'package:FANotifier/features/profile/data/profile_favorites_service.dart';
-import 'package:FANotifier/features/profile/data/profile_image_row_layout.dart';
+import 'package:provider/provider.dart';
+import 'package:FANotifier/features/profile/domain/profile_favorites_repository.dart';
+import 'package:FANotifier/features/profile/presentation/profile_image_row_layout.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/features/submissions/data/favorite_service.dart';
+import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:FANotifier/shared/widgets/heart_animation.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
 
@@ -31,20 +32,22 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
 
   final List<Map<String, dynamic>> _normalImagesQueue = [];
 
-  final ProfileFavoritesService _profileFavoritesService =
-      ProfileFavoritesService();
+  late final ProfileFavoritesRepository _profileFavoritesRepository;
 
 
   final Set<String> _favoritedImages = {};
   final Map<String, String> _favUrls = {};
   final Map<String, String> _unfavUrls = {};
-  final FavoriteService _favoriteService = FavoriteService();
+  late final SubmissionFavoriteRepository _favoriteRepository;
 
   @override
   void initState() {
     super.initState();
+    _profileFavoritesRepository =
+        context.read<ProfileFavoritesRepository>();
+    _favoriteRepository = context.read<SubmissionFavoriteRepository>();
 
-    _nextPageUrl = _profileFavoritesService.buildInitialFavoritesPageUrl(
+    _nextPageUrl = _profileFavoritesRepository.buildInitialFavoritesPageUrl(
       widget.username,
     );
     unawaited(_fetchImages());
@@ -62,7 +65,7 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
     if (!mounted) return;
     _fetchGeneration++;
     setState(() {
-      _nextPageUrl = _profileFavoritesService.buildInitialFavoritesPageUrl(
+      _nextPageUrl = _profileFavoritesRepository.buildInitialFavoritesPageUrl(
         widget.username,
       );
       _isLoading = false;
@@ -84,7 +87,7 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
 
     try {
       final parseResult =
-          await _profileFavoritesService.fetchFavoritesPage(_nextPageUrl!);
+          await _profileFavoritesRepository.fetchFavoritesPage(_nextPageUrl!);
       if (!mounted || fetchGeneration != _fetchGeneration) return;
       setState(() {
         _images.addAll(parseResult.posts);
@@ -119,8 +122,10 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
   /// Fetch the /fav/ or /unfav/ links for a given post.
   Future<void> _fetchPostDetails(String uniqueNumber) async {
     try {
-      final links =
-          await _profileFavoritesService.fetchPostFavoriteLinks(uniqueNumber);
+      final links = await _favoriteRepository.fetchLinksForSubmissionId(
+        submissionId: uniqueNumber,
+        cookieHeaderProvider: _profileFavoritesRepository.buildCookieHeader,
+      );
       if (links != null) {
         if (links.hasAnyUrl) {
           if (links.hasFavUrl) _favUrls[uniqueNumber] = links.favUrl;
@@ -167,7 +172,7 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
       _favoritedImages.remove(uniqueNumber);
     }
     setState(() {});
-    final success = await _favoriteService.executePostWithRetry(urlToUse);
+    final success = await _favoriteRepository.executePostWithRetry(urlToUse);
     if (success) {
       await _refetchFavLinks(uniqueNumber);
       setState(() {});

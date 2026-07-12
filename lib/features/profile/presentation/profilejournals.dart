@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_html/flutter_html.dart';
-import 'package:FANotifier/features/profile/data/profile_journals_service.dart';
+import 'package:provider/provider.dart';
+import 'package:FANotifier/features/profile/domain/profile_journals_repository.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
@@ -22,12 +23,12 @@ class ProfileJournalsState extends State<ProfileJournals> {
   bool hasMore = true;
   int _fetchGeneration = 0;
 
-  final ProfileJournalsService _profileJournalsService =
-      ProfileJournalsService();
+  late final ProfileJournalsRepository _profileJournalsRepository;
 
   @override
   void initState() {
     super.initState();
+    _profileJournalsRepository = context.read<ProfileJournalsRepository>();
     unawaited(_fetchJournals(currentPage));
   }
 
@@ -82,7 +83,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
       isLoading = true;
     });
     try {
-      final page = await _profileJournalsService.fetchJournalsPage(
+      final page = await _profileJournalsRepository.fetchJournalsPage(
         username: widget.username,
         pageNumber: pageNumber,
       );

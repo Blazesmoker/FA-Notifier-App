@@ -3,12 +3,13 @@
 import 'dart:async';
 import 'dart:collection';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'package:FANotifier/features/profile/data/profile_gallery_service.dart';
+import 'package:FANotifier/features/profile/domain/profile_gallery_repository.dart';
+import 'package:FANotifier/features/profile/domain/profile_gallery_favorite_repository.dart';
 import 'package:FANotifier/features/profile/domain/fa_folder.dart';
-import 'package:FANotifier/features/submissions/data/favorite_gallery_service.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation_optimized.dart';
 import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
@@ -35,8 +36,7 @@ class ProfileGallerySliver extends StatefulWidget {
 }
 
 class ProfileGallerySliverState extends State<ProfileGallerySliver> {
-  late final ProfileGalleryService _profileGalleryService =
-      ProfileGalleryService();
+  late final ProfileGalleryRepository _profileGalleryRepository;
 
   final List<Map<String, dynamic>> _images = [];
   bool _isLoading = false;
@@ -56,17 +56,19 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
   bool _isDisposed = false;
 
-  final FavoriteGalleryService _favoriteGalleryService = FavoriteGalleryService();
+  late final ProfileGalleryFavoriteRepository _favoriteRepository;
 
   @override
   void initState() {
     super.initState();
+    _profileGalleryRepository = context.read<ProfileGalleryRepository>();
+    _favoriteRepository = context.read<ProfileGalleryFavoriteRepository>();
 
     if (widget.selectedFolderUrl != null && widget.selectedFolderUrl!.isNotEmpty) {
       _selectedFolderUrl = widget.selectedFolderUrl!;
     } else {
       _selectedFolderUrl =
-          _profileGalleryService.buildDefaultGalleryUrl(widget.username);
+          _profileGalleryRepository.buildDefaultGalleryUrl(widget.username);
     }
     _nextPageUrl = _buildInitialUrl();
     unawaited(refresh());
@@ -78,8 +80,9 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
     if (oldWidget.username != widget.username ||
         oldWidget.selectedFolderUrl != widget.selectedFolderUrl) {
       _selectedFolderUrl = (widget.selectedFolderUrl == null || widget.selectedFolderUrl!.isEmpty)
-          ? _profileGalleryService.buildDefaultGalleryUrl(widget.username)
-          : _profileGalleryService.normalizeFolderUrl(widget.selectedFolderUrl!);
+          ? _profileGalleryRepository.buildDefaultGalleryUrl(widget.username)
+          : _profileGalleryRepository
+              .normalizeFolderUrl(widget.selectedFolderUrl!);
       _nextPageUrl = _buildInitialUrl();
       unawaited(refresh());
     }
@@ -93,7 +96,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
 
   String _buildInitialUrl() {
-    return _profileGalleryService.buildInitialGalleryUrl(
+    return _profileGalleryRepository.buildInitialGalleryUrl(
       widget.username,
       _selectedFolderUrl,
     );
@@ -122,7 +125,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
     setState(() => _isLoading = true);
 
     try {
-      final result = await _profileGalleryService.fetchGalleryPage(
+      final result = await _profileGalleryRepository.fetchGalleryPage(
         url: _nextPageUrl!,
         selectedFolderUrl: widget.selectedFolderUrl,
       );
@@ -165,7 +168,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
       _activeFetches++;
       final postUrl = _images[index]['postUrl'] as String;
       final fetchGeneration = _fetchGeneration;
-      _profileGalleryService.fetchSubmissionData(postUrl).then((data) {
+      _profileGalleryRepository.fetchSubmissionData(postUrl).then((data) {
         if (_isDisposed || fetchGeneration != _fetchGeneration) return;
         setState(() {
           _images[index]['hqUrl'] = data.hqUrl;
@@ -190,7 +193,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   // Fav toggle logic
 
   void _handleToggleFavorite(int index, bool isFav) async {
-    if (!await _favoriteGalleryService.hasAuthCookies()) {
+    if (!await _favoriteRepository.hasAuthCookies()) {
       debugPrint('[DEBUG] Missing cookies for fav/unfav POST request.');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -207,7 +210,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
     final favUrl = _images[index]['favUrl'] as String? ?? '';
     final unfavUrl = _images[index]['unfavUrl'] as String? ?? '';
 
-    _favoriteGalleryService.toggleFavorite(
+    _favoriteRepository.toggleFavorite(
       uniqueNumber: uniqueNumber,
       isFav: isFav,
       favUrl: favUrl,
@@ -227,7 +230,8 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
     final postUrl = _images[idx]['postUrl'] as String;
     final fetchGeneration = _fetchGeneration;
     try {
-      final data = await _profileGalleryService.fetchSubmissionData(postUrl);
+      final data =
+          await _profileGalleryRepository.fetchSubmissionData(postUrl);
       if (_isDisposed || fetchGeneration != _fetchGeneration) return;
       setState(() {
         _images[idx]['isFav'] = data.isFav;

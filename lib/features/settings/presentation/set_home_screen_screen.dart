@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import 'package:FANotifier/features/settings/data/home_start_screen_preference.dart';
+import 'package:FANotifier/features/home/domain/home_start_screen_preference.dart';
+import 'package:FANotifier/features/home/domain/home_start_screen_preference_repository.dart';
+import 'package:FANotifier/features/settings/presentation/home_start_screen_preference_labels.dart';
 
 class SetHomeScreenScreen extends StatefulWidget {
   const SetHomeScreenScreen({super.key});
@@ -14,15 +17,17 @@ class _SetHomeScreenScreenState extends State<SetHomeScreenScreen> {
 
   HomeStartScreenPreference _selectedPreference =
       HomeStartScreenPreference.browse;
+  late final HomeStartScreenPreferenceRepository _repository;
 
   @override
   void initState() {
     super.initState();
+    _repository = context.read<HomeStartScreenPreferenceRepository>();
     _loadPreference();
   }
 
   Future<void> _loadPreference() async {
-    final preference = await loadHomeStartScreenPreference();
+    final preference = await _repository.load();
     if (!mounted) {
       return;
     }
@@ -38,7 +43,7 @@ class _SetHomeScreenScreenState extends State<SetHomeScreenScreen> {
     setState(() {
       _selectedPreference = preference;
     });
-    await saveHomeStartScreenPreference(preference);
+    await _repository.save(preference);
   }
 
   Widget _buildOption({

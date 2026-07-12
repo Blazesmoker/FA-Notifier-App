@@ -1,4 +1,8 @@
-import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
+import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
+
+String stripNotificationTitledWord(String content) {
+  return content.replaceAll(RegExp(r'\btitled\b', caseSensitive: false), '');
+}
 
 String _formatNotificationPart({
   required int current,

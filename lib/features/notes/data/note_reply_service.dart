@@ -6,12 +6,13 @@ import 'package:html/parser.dart' as html_parser;
 
 import 'package:FANotifier/core/utils/utils.dart';
 import 'package:FANotifier/features/notes/domain/note_reply_models.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
+import 'package:FANotifier/features/notes/domain/note_reply_repository.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:FANotifier/core/network/fa_request_coordinator.dart';
 import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 
-class NoteReplyService {
+class NoteReplyService implements NoteReplyRepository {
   NoteReplyService({
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ??
@@ -28,10 +29,12 @@ class NoteReplyService {
   final Dio _dio = Dio();
   final CookieJar _cookieJar = CookieJar();
 
+  @override
   void close() {
     _dio.close();
   }
 
+  @override
   Future<NoteReplyContext> fetchReplyContext(String messageLink) async {
     await _loadCookies();
     await FaRequestCoordinator.instance.waitForTurn(
@@ -118,6 +121,7 @@ class NoteReplyService {
     );
   }
 
+  @override
   Future<NoteReplySendResult> sendModernReply({
     required String messageLink,
     required String recipient,

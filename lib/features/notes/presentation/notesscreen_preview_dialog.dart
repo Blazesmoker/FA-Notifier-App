@@ -3,12 +3,12 @@ import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
 
-import 'package:FANotifier/features/notes/data/note_message_service.dart';
-import 'package:FANotifier/shared/utils/fa_link_handler.dart';
+import 'package:FANotifier/features/notes/domain/note_message_repository.dart';
+import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
-import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
 import 'package:provider/provider.dart';
 
 /// Dialog content for previewing a note/message.
@@ -29,8 +29,7 @@ class PreviewDialogContent extends StatefulWidget {
 }
 
 class _PreviewDialogContentState extends State<PreviewDialogContent> {
-  late final NoteMessageService _noteMessageService =
-      NoteMessageService();
+  late final NoteMessageRepository _noteMessageRepository;
 
   bool isLoading = true;
   String errorMessage = '';
@@ -51,18 +50,19 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
   @override
   void initState() {
     super.initState();
+    _noteMessageRepository = context.read<NoteMessageRepositoryFactory>()();
     _fetchMessageDetails();
   }
 
   @override
   void dispose() {
-    _noteMessageService.close();
+    _noteMessageRepository.close();
     super.dispose();
   }
 
   Future<void> _fetchMessageDetails() async {
     try {
-      final result = await _noteMessageService.fetchMessageDetails(
+      final result = await _noteMessageRepository.fetchMessageDetails(
         messageLink: widget.message.link,
         folder: widget.folder,
         closeConnection: true,

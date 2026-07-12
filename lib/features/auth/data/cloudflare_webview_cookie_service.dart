@@ -1,8 +1,9 @@
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_media_auth.dart';
+import 'package:FANotifier/features/auth/domain/cloudflare_check_gateway.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/fa/fa_media_auth.dart';
 
 class CloudflareWebViewCookieService {
   const CloudflareWebViewCookieService({
@@ -55,7 +56,7 @@ class CloudflareWebViewCookieService {
   }
 
   Future<void> saveCurrentCookies({
-    InAppWebViewController? controller,
+    CloudflareJavascriptEvaluator? evaluateJavascript,
   }) async {
     final existingCf = await _secureStorage.read(key: 'fa_cookie_cf_clearance');
     final cookies = await CookieManager.instance().getCookies(
@@ -84,15 +85,14 @@ class CloudflareWebViewCookieService {
       await FaCookieHelper.writeCfClearance(latestCf);
     }
 
-    if (controller == null) {
+    if (evaluateJavascript == null) {
       FaMediaAuth.invalidate();
       return;
     }
 
     try {
-      final rawDocumentCookie = await controller.evaluateJavascript(
-        source: 'document.cookie',
-      );
+      final rawDocumentCookie =
+          await evaluateJavascript('document.cookie');
       final documentCookie = rawDocumentCookie?.toString() ?? '';
       final cookiePairs = documentCookie.split(';');
       for (final pair in cookiePairs) {

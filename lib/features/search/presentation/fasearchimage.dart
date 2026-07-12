@@ -2,7 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart';
+import 'package:provider/provider.dart';
+import 'package:FANotifier/features/search/domain/search_repository.dart';
 import 'package:FANotifier/features/search/presentation/search_image_controller.dart';
+import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/heart_animation.dart';
@@ -48,6 +51,8 @@ class FASearchImageState extends State<FASearchImage> {
         if (mounted) setState(() {});
       },
       showCloudflareCheck: _showCloudflareDialog,
+      repository: context.read<SearchRepository>(),
+      favoriteRepository: context.read<SubmissionFavoriteRepository>(),
     );
     _controller.start();
   }

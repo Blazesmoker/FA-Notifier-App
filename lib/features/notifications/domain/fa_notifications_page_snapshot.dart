@@ -1,6 +1,6 @@
 import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
-import 'package:FANotifier/features/notifications/domain/notification_counts.dart';
-import 'package:FANotifier/features/notifications/domain/notifications.dart';
+import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
+import 'package:FANotifier/shared/fa/domain/notifications.dart';
 
 class FaNotificationsPageSnapshot {
   FaNotificationsPageSnapshot({

@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/shared/fa/fa_media_auth.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:FANotifier/core/fa/fa_media_auth.dart';
 
 class OpenPostImageService {
   const OpenPostImageService();

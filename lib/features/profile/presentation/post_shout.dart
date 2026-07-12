@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:FANotifier/features/profile/data/shout_service.dart';
+import 'package:provider/provider.dart';
+import 'package:FANotifier/features/profile/domain/profile_shout_repository.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 
@@ -15,7 +16,7 @@ class PostShoutScreen extends StatefulWidget {
 
 class _PostShoutScreenState extends State<PostShoutScreen> {
   final TextEditingController _shoutController = TextEditingController();
-  late final ShoutService _shoutService;
+  late final ProfileShoutRepository _shoutRepository;
 
   final int _maxLength = 222;
   bool _isLoading = false;
@@ -24,8 +25,8 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
   @override
   void initState() {
     super.initState();
-    _shoutService = ShoutService();
-    _shoutService.initialize();
+    _shoutRepository = context.read<ProfileShoutRepositoryFactory>()();
+    _shoutRepository.initialize();
     _shoutController.addListener(() {
       // Only update when TEXT changes, not selection
       final newLength = _shoutController.text.length;
@@ -43,7 +44,7 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
 
   @override
   void dispose() {
-    _shoutService.close();
+    _shoutRepository.close();
     _shoutController.dispose();
     _lengthNotifier.dispose();
     super.dispose();
@@ -69,7 +70,7 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
       _isLoading = true;
     });
 
-    final result = await _shoutService.postShout(
+    final result = await _shoutRepository.postShout(
       username: widget.username,
       shout: _shoutController.text.trim(),
     );

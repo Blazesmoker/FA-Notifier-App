@@ -1,45 +1,24 @@
-import 'dart:io';
-import 'package:FANotifier/features/notifications/data/NotificationNavigationProvider.dart';
-import 'package:FANotifier/features/settings/data/timezone_provider.dart';
-import 'package:FANotifier/core/cache/CacheMonitorService.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/features/notifications/data/fa_notification_service.dart';
-import 'package:FANotifier/features/notifications/data/pending_navigation.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:workmanager/workmanager.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:FANotifier/app/analytics_privacy.dart';
-import 'package:FANotifier/core/cache/custom_cache_manager.dart';
-import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
-import 'package:FANotifier/features/drawer/data/app_update_service.dart';
-import 'package:FANotifier/features/drawer/presentation/update_screen.dart';
-import 'package:FANotifier/features/notifications/data/notification_service.dart';
-import 'package:FANotifier/features/home/presentation/home_screen.dart';
-import 'package:FANotifier/app/app_theme.dart';
-import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
-import 'package:FANotifier/features/settings/data/thumbnail_display_settings_provider.dart';
-import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
-import 'package:provider/provider.dart';
-import 'package:FANotifier/shared/utils/fa_link_handler.dart';
-import 'package:app_links/app_links.dart';
 import 'dart:async';
-import 'package:FANotifier/core/logging/app_logging.dart';
-import 'package:FANotifier/core/network/fresh_http_overrides.dart';
+
+import 'package:app_links/app_links.dart';
+import 'package:flutter/material.dart';
+
+import 'package:FANotifier/shared/theme/app_theme.dart';
+import 'package:FANotifier/app/bootstrap/app_bootstrap.dart';
+import 'package:FANotifier/app/composition/app_providers.dart';
+import 'package:FANotifier/app/navigation/app_navigation.dart';
+import 'package:FANotifier/app/navigation/app_notification_navigation.dart';
 import 'package:FANotifier/core/preferences/app_foreground_state_preference.dart';
-import 'package:FANotifier/features/notifications/data/adaptive_background_fetch_scheduler.dart'
-    as background_scheduler;
-import 'package:FANotifier/features/notifications/data/background_workmanager_initializer.dart';
+import 'package:FANotifier/features/drawer/data/app_update_service.dart';
+import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
+import 'package:FANotifier/features/drawer/presentation/update_screen.dart';
+import 'package:FANotifier/features/home/presentation/home_screen.dart';
 import 'package:FANotifier/features/notifications/data/notification_badge_state.dart'
     as notification_badge;
-import 'package:FANotifier/features/notifications/data/background_notification_worker.dart';
+import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
 
-final RouteObserver<ModalRoute<dynamic>> routeObserver =
-    RouteObserver<ModalRoute<dynamic>>();
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+import 'core/logging/app_logging.dart';
+
 final GlobalKey<DrawerUserControllerState> drawerKey =
     GlobalKey<DrawerUserControllerState>();
 
@@ -47,140 +26,24 @@ const bool _forceShowUpdateScreen = false;
 
 const AppForegroundStatePreference _appForegroundStatePreference =
     AppForegroundStatePreference();
-final BackgroundWorkmanagerInitializer _backgroundWorkmanagerInitializer =
-    BackgroundWorkmanagerInitializer(callbackDispatcher: callbackDispatcher);
-final background_scheduler.AdaptiveBackgroundFetchScheduler
-    _adaptiveBackgroundFetchScheduler =
-    background_scheduler.AdaptiveBackgroundFetchScheduler(
-  workmanagerInitializer: _backgroundWorkmanagerInitializer,
-);
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
-  WidgetsFlutterBinding.ensureInitialized();
-  configureAppLogging();
-  final worker = BackgroundNotificationWorker(
-    adaptiveBackgroundFetchScheduler: _adaptiveBackgroundFetchScheduler,
-  );
-  Workmanager().executeTask(worker.execute);
-}
-
-Future<void> requestAndroidNotificationPermission() async {
-  if (Platform.isAndroid) {
-    final status = await Permission.notification.status;
-    if (status.isDenied || status.isPermanentlyDenied) {
-      final newStatus = await Permission.notification.request();
-      debugPrint(
-          'Android notification permission: ${newStatus.isGranted ? "granted" : "denied"}');
-    }
-  }
-}
-
-Future<void> requestIOSNotificationPermission() async {
-  if (Platform.isIOS) {
-    final status = await Permission.notification.status;
-    if (status.isDenied || status.isPermanentlyDenied) {
-      final newStatus = await Permission.notification.request();
-      debugPrint(
-          'iOS notification permission: ${newStatus.isGranted ? "granted" : "denied"}');
-    }
-  }
-}
-
-Future<void> _afterFirstFrameBoot(TimezoneProvider timezoneProvider) async {
-  try {
-    await PackageInfo.fromPlatform();
-    tz.initializeTimeZones();
-    await timezoneProvider.fetchTimezone();
-    final notificationService = NotificationService();
-    await notificationService.init(
-      onLaunchPayloadSaved: () =>
-          processPendingNavigation(from: 'notification_launch_details'),
-    );
-    await notificationService.updateNotificationChannels();
-    const channel = MethodChannel('app.notifications');
-    try {
-      await channel.invokeMethod('notifications.ready');
-    } catch (_) {}
-    await requestAndroidNotificationPermission();
-    await requestIOSNotificationPermission();
-    final cacheManager = CustomCacheManager();
-    final cacheMonitorService = CacheMonitorService(cacheManager);
-    await cacheMonitorService.checkStorageUsage();
-    await _backgroundWorkmanagerInitializer.ensureWorkmanagerInitialized();
-    if (Platform.isAndroid) {
-      await _adaptiveBackgroundFetchScheduler.applyBackgroundFetchInterval(
-        background_scheduler.backgroundFetchFastIntervalMinutes,
-      );
-      debugPrint("Android background task registered");
-    } else if (Platform.isIOS) {
-      debugPrint("iOS background task handler registered");
-    }
-  } catch (e, st) {
-    debugPrint('[BOOT] afterFirstFrame error: $e');
-    debugPrint(st as String?);
-  }
-}
-
-class AppLifecycleNetworkReset with WidgetsBindingObserver {
-  static final AppLifecycleNetworkReset _instance =
-      AppLifecycleNetworkReset._();
-  AppLifecycleNetworkReset._();
-
-  static void attach() {
-    WidgetsBinding.instance.addObserver(_instance);
-  }
-
-  static void detach() {
-    WidgetsBinding.instance.removeObserver(_instance);
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      FAHttp.reset();
-    }
-  }
+  configureBackgroundWorkmanager(callbackDispatcher);
+  runBackgroundNotificationWorker();
 }
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  configureAppLogging();
-  await Firebase.initializeApp();
-  await setupAnalyticsPrivacy();
-  await FAHttp.init();
-  AppLifecycleNetworkReset.attach();
-  HttpOverrides.global = FreshHttpOverrides();
-  try {
-    await _backgroundWorkmanagerInitializer.ensureWorkmanagerInitialized();
-  } catch (e, st) {
-    debugPrint('[BOOT] early Workmanager init failed: $e');
-    debugPrint(st.toString());
-  }
+  await initializeAppInfrastructure(
+    callbackDispatcher: callbackDispatcher,
+  );
   debugPrint("===============================================");
   debugPrint("APP STARTING: ${DateTime.now()}");
   debugPrint("===============================================");
-  final timezoneProvider = TimezoneProvider();
+  final timezoneProvider = AppProviders.createTimezoneProvider();
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider<TimezoneProvider>.value(value: timezoneProvider),
-        ChangeNotifierProvider<NotificationNavigationProvider>(
-          create: (_) => NotificationNavigationProvider(),
-        ),
-        ChangeNotifierProvider<NotificationSettingsProvider>(
-          create: (_) => NotificationSettingsProvider(),
-        ),
-        ChangeNotifierProvider<ThumbnailDisplaySettingsProvider>(
-          create: (_) => ThumbnailDisplaySettingsProvider(),
-        ),
-        ChangeNotifierProvider<TranslatorSettingsProvider>(
-          create: (_) => TranslatorSettingsProvider(),
-        ),
-        ChangeNotifierProvider<FANotificationService>(
-          create: (_) => FANotificationService(),
-        ),
-      ],
+    AppProviders(
+      timezoneProvider: timezoneProvider,
       child: const MyApp(),
     ),
   );
@@ -188,7 +51,7 @@ void main() async {
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     debugPrint(
         '[BOOT] First frame at ${DateTime.now()} (+${DateTime.now().difference(t0)})');
-    await _afterFirstFrameBoot(timezoneProvider);
+    await afterFirstFrameBoot(timezoneProvider);
   });
   Future.delayed(const Duration(seconds: 3), () {
     debugPrint(
@@ -278,7 +141,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         _setAppActive(true);
         _startActiveHeartbeat();
         WidgetsBinding.instance.addPostFrameCallback((_) async {
-          await processPendingNavigation(from: 'app_lifecycle_resumed');
+          await appNotificationNavigation.processPending(
+            from: 'app_lifecycle_resumed',
+          );
         });
         appLog('→ App RESUMED - Background fetch DISABLED');
         break;
@@ -337,7 +202,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             "[APP STATE] Set to: ${stateToPersist ? 'ACTIVE' : 'INACTIVE'}");
         if (stateToPersist && shouldResetBadge && _desiredAppActive) {
           await notification_badge.resetBadgeCounter();
-          await _adaptiveBackgroundFetchScheduler
+          await adaptiveBackgroundFetchScheduler
               .resetAdaptiveBackgroundFetch();
         }
       } catch (e) {
@@ -375,6 +240,3 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     );
   }
 }
-
-final GlobalKey<ScaffoldMessengerState> rootMessengerKey =
-    GlobalKey<ScaffoldMessengerState>();

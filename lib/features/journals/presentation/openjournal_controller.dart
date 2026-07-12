@@ -3,48 +3,21 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
-import 'package:FANotifier/features/journals/data/journal_action_service.dart';
-import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
-import 'package:FANotifier/features/journals/data/journal_deletion_coordinator.dart';
-import 'package:FANotifier/features/journals/data/journal_link_parser.dart';
-import 'package:FANotifier/features/journals/data/openjournal_api_service.dart';
-import 'package:FANotifier/features/journals/data/openjournal_load_coordinator.dart';
-import 'package:FANotifier/features/journals/data/openjournal_repository_impl.dart';
 import 'package:FANotifier/features/journals/domain/journal_deletion_result.dart';
 import 'package:FANotifier/features/journals/domain/journal_optimistic_comment.dart';
 import 'package:FANotifier/features/journals/domain/journal_publication_time_parser.dart';
 import 'package:FANotifier/features/journals/domain/openjournal_fetch_result.dart';
 import 'package:FANotifier/features/journals/domain/openjournal_load_result.dart';
+import 'package:FANotifier/features/journals/domain/openjournal_repository.dart';
 
 class OpenJournalController extends ChangeNotifier {
   OpenJournalController({
     required this.journalId,
-    OpenJournalApiService? api,
-    OpenJournalLoadCoordinator? loadCoordinator,
-    JournalActionService? actionService,
-    JournalDeletionCoordinator? deletionCoordinator,
-    JournalCommentService? commentService,
-  }) {
-    final resolvedApi = api ?? OpenJournalApiService();
-    final resolvedActionService = actionService ?? const JournalActionService();
-    _loadCoordinator = loadCoordinator ??
-        OpenJournalLoadCoordinator(
-          repository: OpenJournalRepositoryImpl(api: resolvedApi),
-        );
-    _actionService = resolvedActionService;
-    _deletionCoordinator = deletionCoordinator ??
-        JournalDeletionCoordinator(
-          api: resolvedApi,
-          actionService: resolvedActionService,
-        );
-    _commentService = commentService ?? JournalCommentService();
-  }
+    required OpenJournalRepository repository,
+  }) : _repository = repository;
 
   final String journalId;
-  late final OpenJournalLoadCoordinator _loadCoordinator;
-  late final JournalActionService _actionService;
-  late final JournalDeletionCoordinator _deletionCoordinator;
-  late final JournalCommentService _commentService;
+  final OpenJournalRepository _repository;
 
   String? _profileImageUrl;
   String? _submissionTitle;
@@ -112,7 +85,7 @@ class OpenJournalController extends ChangeNotifier {
 
   Future<OpenJournalLoadResult> load() async {
     try {
-      final loadResult = await _loadCoordinator.load(journalId);
+      final loadResult = await _repository.loadJournal(journalId);
       if (_disposed) {
         return loadResult;
       }
@@ -144,7 +117,7 @@ class OpenJournalController extends ChangeNotifier {
   }
 
   Future<JournalDeletionResult> deleteJournal() {
-    return _deletionCoordinator.delete(
+    return _repository.deleteJournal(
       journalId: journalId,
       currentDeleteLink: _deleteLink,
       onDeleteLinkResolved: (resolvedDeleteLink) {
@@ -155,18 +128,21 @@ class OpenJournalController extends ChangeNotifier {
   }
 
   Future<int?> updateCommentVisibility(String link) {
-    return _actionService.updateCommentVisibility(link);
+    return _repository.updateCommentVisibility(link);
   }
 
   Future<bool> submitComment(String message) {
-    return _commentService.submitComment(
+    return _repository.submitComment(
       message: message,
       journalId: journalId,
     );
   }
 
   void addOptimisticComment(String text, DateTime now) {
-    _comments.add(buildOptimisticJournalComment(text: text, now: now));
+    _comments = <Map<String, dynamic>>[
+      ..._comments,
+      buildOptimisticJournalComment(text: text, now: now),
+    ];
     _commentsCount++;
     _notifyChanged();
   }
@@ -174,7 +150,16 @@ class OpenJournalController extends ChangeNotifier {
   String getFullLink(String truncatedUrl, {String? htmlSource}) {
     final source = htmlSource ?? _submissionDescription;
     if (source == null) return truncatedUrl;
-    return findFullShortenedJournalLink(source, truncatedUrl) ?? truncatedUrl;
+    return _repository.resolveShortenedLink(
+      sourceHtml: source,
+      truncatedUrl: truncatedUrl,
+    );
+  }
+
+  String get journalUrl => _repository.buildJournalUrl(journalId);
+
+  String fixTruncatedLinks(String htmlContent) {
+    return _repository.replaceTruncatedLinks(htmlContent);
   }
 
   String? get formattedPublicationTime {
@@ -223,7 +208,7 @@ class OpenJournalController extends ChangeNotifier {
 
   Future<void> _fetchFallbackComments(String body) async {
     try {
-      final comments = await _loadCoordinator.fetchFallbackComments(body);
+      final comments = await _repository.fetchFallbackComments(body);
       if (_disposed) return;
       _comments = comments;
       _notifyChanged();

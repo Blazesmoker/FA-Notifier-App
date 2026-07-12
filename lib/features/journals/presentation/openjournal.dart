@@ -3,39 +3,40 @@ import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/journals/data/journal_url_builder.dart';
+import 'package:FANotifier/features/journals/domain/openjournal_repository.dart';
 import 'package:FANotifier/features/journals/presentation/create_journal.dart';
 import 'package:FANotifier/features/journals/presentation/editjournalcommentscreen.dart';
 import 'package:FANotifier/features/journals/presentation/journal_reply_screen.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal_controller.dart';
+import 'package:FANotifier/features/comments/presentation/threaded_comments.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal_comments.dart';
 import 'package:FANotifier/features/journals/domain/journal_deletion_result.dart';
 import 'package:FANotifier/features/journals/domain/journal_load_failure.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
-import 'package:FANotifier/shared/utils/fa_link_handler.dart';
+import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/utils/comment_composer_lines.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
-import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
 import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/shared/translation/translation_service.dart';
 import 'package:FANotifier/shared/translation/translation_source_text_builder.dart';
 import 'package:FANotifier/shared/platform/fa_share_service.dart';
-import 'package:FANotifier/main.dart';
+import 'package:FANotifier/app/navigation/app_navigation.dart';
 import 'package:provider/provider.dart';
-
-import '../data/journal_link_parser.dart';
 
 class OpenJournal extends StatefulWidget {
   final String uniqueNumber;
   final VoidCallback? onJournalMutated;
+  final OpenJournalRepository? repository;
 
   const OpenJournal({
     required this.uniqueNumber,
     this.onJournalMutated,
+    this.repository,
     Key? key,
   }) : super(key: key);
 
@@ -110,7 +111,10 @@ class _OpenJournalState extends State<OpenJournal>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateKeyboardInset();
     });
-    _controller = OpenJournalController(journalId: widget.uniqueNumber);
+    _controller = OpenJournalController(
+      journalId: widget.uniqueNumber,
+      repository: widget.repository ?? context.read<OpenJournalRepository>(),
+    );
     _controller.addListener(_handleControllerChanged);
     IosScrollRecovery.addListener(_handleIosScrollRecovery);
     // Only fetch the journal itself on open.
@@ -553,7 +557,7 @@ class _OpenJournalState extends State<OpenJournal>
   }
 
   void _sharePost() {
-    final postUrl = buildFaJournalUrl(widget.uniqueNumber);
+    final postUrl = _controller.journalUrl;
     final shareContent = '$postUrl';
     const FaShareService().shareText(
       text: shareContent,
@@ -1345,47 +1349,26 @@ class _OpenJournalState extends State<OpenJournal>
                             SliverPadding(
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 8.0),
-                              sliver: SliverList(
-                                delegate: SliverChildBuilderDelegate(
-                                  (context, index) {
-                                    final comment = comments[index];
-                                    final selectionId =
-                                        _commentSelectionId(comment, index);
-                                    final previousComment =
-                                        index > 0 ? comments[index - 1] : null;
-                                    final nextComment =
-                                        index + 1 < comments.length
-                                            ? comments[index + 1]
-                                            : null;
-                                    final previousNestingLevel =
-                                        previousComment == null
-                                            ? 0
-                                            : ((100.0 -
-                                                        (previousComment[
-                                                                    'width'] ??
-                                                                100)
-                                                            .toDouble()) /
-                                                    3.0)
-                                                .round()
-                                                .clamp(0, 4)
-                                                .toInt();
-                                    final nextNestingLevel = nextComment == null
-                                        ? 0
-                                        : ((100.0 -
-                                                    (nextComment['width'] ??
-                                                            100)
-                                                        .toDouble()) /
-                                                3.0)
-                                            .round()
-                                            .clamp(0, 4)
-                                            .toInt();
-                                    return CommentWidget(
+                              sliver: SliverThreadedComments(
+                                comments: comments,
+                                itemBuilder: (context, item) {
+                                  final index = item.index;
+                                  final comment = item.comment;
+                                  final selectionId =
+                                      _commentSelectionId(comment, index);
+                                  return CommentWidget(
                                       key: ValueKey(
                                           comment['commentId'] ?? index),
                                       comment: comment,
-                                      previousNestingLevel:
-                                          previousNestingLevel,
-                                      nextNestingLevel: nextNestingLevel,
+                                      treeLevels: item.treeLevels,
+                                      collapsed: item.collapsed,
+                                      onToggleCollapse:
+                                          item.onToggleCollapse,
+                                      hasAnyCommentSelection: () =>
+                                          _commentSelectedTexts.isNotEmpty,
+                                      animationDuration:
+                                          item.animationDuration,
+                                      animationCurve: item.animationCurve,
                                       onHide: (comment['hideLink'] != null)
                                           ? () => hideComment(
                                               comment['hideLink'],
@@ -1475,10 +1458,8 @@ class _OpenJournalState extends State<OpenJournal>
                                         comment,
                                         translatorSettings,
                                       ),
-                                    );
-                                  },
-                                  childCount: comments.length,
-                                ),
+                                  );
+                                },
                               ),
                             ),
                             SliverToBoxAdapter(
@@ -1737,6 +1718,6 @@ class _OpenJournalState extends State<OpenJournal>
   }
 
   String fixTruncatedLinks(String htmlContent) {
-    return replaceTruncatedJournalLinks(htmlContent);
+    return _controller.fixTruncatedLinks(htmlContent);
   }
 }

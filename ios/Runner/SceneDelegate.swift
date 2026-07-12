@@ -82,6 +82,12 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate, FlutterSceneLifeCyclePr
         }
     }
 
+    func prepareForNotificationActivation() {
+        guard let windowScene = window?.windowScene ?? pendingWindowScene else { return }
+        createWindowAndForwardPendingConnectionIfNeeded(for: windowScene)
+        window?.makeKeyAndVisible()
+    }
+
     func scene(
         _ scene: UIScene,
         openURLContexts URLContexts: Set<UIOpenURLContext>

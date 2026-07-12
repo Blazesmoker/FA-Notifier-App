@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/browse/data/browse_filter_options_service.dart';
+import 'package:provider/provider.dart';
+import 'package:FANotifier/features/browse/domain/browse_repository.dart';
 import 'package:FANotifier/features/browse/domain/browse_filter_display_names.dart';
 import 'package:FANotifier/shared/utils/content_rating_filters.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
@@ -64,7 +65,8 @@ class _FiltersScreenState extends State<FiltersScreen> {
     setState(() {
       _isLoadingFilters = true;
     });
-    final loadedFilterOptions = await fetchBrowseFilterOptions();
+    final loadedFilterOptions =
+        await context.read<BrowseRepository>().fetchFilterOptions();
     setState(() {
       _filterOptions = loadedFilterOptions;
       _updateCurrentFilters();

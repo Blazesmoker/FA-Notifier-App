@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/comments/data/fa_edit_comment_service.dart';
+import 'package:provider/provider.dart';
+
+import 'package:FANotifier/features/comments/domain/comment_edit_repository.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
@@ -7,11 +9,13 @@ class EditCommentScreen extends StatefulWidget {
   final Map<String, dynamic> comment;
   final String editLink;
   final VoidCallback onUpdateComment;
+  final CommentEditRepository? commentEditRepository;
 
   EditCommentScreen({
     required this.comment,
     required this.editLink,
     required this.onUpdateComment,
+    this.commentEditRepository,
   });
 
   @override
@@ -21,26 +25,31 @@ class EditCommentScreen extends StatefulWidget {
 class _EditCommentScreenState extends State<EditCommentScreen> {
   final TextEditingController _controller = TextEditingController();
   bool _isLoading = false;
-  late AuthenticatedFaEditCommentService _editCommentService;
+  late final CommentEditRepository _editCommentRepository;
+  late final bool _ownsEditCommentRepository;
 
   @override
   void initState() {
     super.initState();
     _controller.text = widget.comment['text'];
-    _editCommentService = AuthenticatedFaEditCommentService();
+    _ownsEditCommentRepository = widget.commentEditRepository == null;
+    _editCommentRepository = widget.commentEditRepository ??
+        context.read<CommentEditRepositoryFactory>()();
     _loadEditForm();
   }
 
   @override
   void dispose() {
-    _editCommentService.close();
+    if (_ownsEditCommentRepository) {
+      _editCommentRepository.close();
+    }
     _controller.dispose();
     super.dispose();
   }
   Future<void> _loadEditForm() async {
     setState(() => _isLoading = true);
 
-    final result = await _editCommentService.loadEditCommentText(
+    final result = await _editCommentRepository.loadEditCommentText(
       editLink: widget.editLink,
     );
 
@@ -59,7 +68,7 @@ class _EditCommentScreenState extends State<EditCommentScreen> {
 
     final updatedText = _controller.text;
 
-    final result = await _editCommentService.submitEditComment(
+    final result = await _editCommentRepository.submitEditComment(
       editLink: widget.editLink,
       updatedText: updatedText,
       requireFValue: true,

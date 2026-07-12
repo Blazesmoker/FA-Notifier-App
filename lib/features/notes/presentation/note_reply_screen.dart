@@ -3,17 +3,16 @@ import 'dart:async';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:FANotifier/features/notes/data/note_reply_service.dart';
-import 'package:FANotifier/features/notes/data/note_reply_webview_controller_factory.dart';
-import 'package:FANotifier/features/notes/data/note_reply_webview_cookie_service.dart';
-import 'package:FANotifier/features/notes/data/note_reply_webview_navigation_service.dart';
-import 'package:FANotifier/features/notes/data/note_reply_webview_scripts.dart';
+import 'package:FANotifier/features/notes/domain/note_reply_repository.dart';
+import 'package:FANotifier/features/notes/domain/note_reply_webview_gateway.dart';
+import 'package:FANotifier/features/notes/presentation/note_reply_webview_controller_factory.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
-import 'package:FANotifier/shared/utils/fa_link_handler.dart';
+import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:FANotifier/shared/widgets/cooldown_send_icon.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:provider/provider.dart';
 
 class NoteReplyScreen extends StatefulWidget {
   final String subject;
@@ -46,14 +45,10 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   bool _useWebView = false;
   bool _isClassicTheme = false;
 
-  late final NoteReplyService _noteReplyService =
-      NoteReplyService();
-  late final NoteReplyWebViewCookieService _webViewCookieService =
-      NoteReplyWebViewCookieService();
+  late final NoteReplyRepository _noteReplyRepository;
+  late final NoteReplyWebViewGateway _webViewGateway;
   final NoteReplyWebViewControllerFactory _webViewControllerFactory =
       const NoteReplyWebViewControllerFactory();
-  final NoteReplyWebViewNavigationService _webViewNavigationService =
-      const NoteReplyWebViewNavigationService();
 
   String recipient = 'Loading...';
   bool _isMessageDetailsLoading = true;
@@ -69,6 +64,8 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   @override
   void initState() {
     super.initState();
+    _noteReplyRepository = context.read<NoteReplyRepositoryFactory>()();
+    _webViewGateway = context.read<NoteReplyWebViewGateway>();
     _fetchMessageDetails();
   }
 
@@ -80,14 +77,14 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   @override
   void dispose() {
     _cooldownTimer?.cancel();
-    _noteReplyService.close();
+    _noteReplyRepository.close();
     _replyController.dispose();
     super.dispose();
   }
 
   Future<void> _fetchMessageDetails() async {
     try {
-      final details = await _noteReplyService.fetchReplyContext(
+      final details = await _noteReplyRepository.fetchReplyContext(
         widget.messageLink,
       );
 
@@ -109,7 +106,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   }
 
   Future<void> _initializeWebView() async {
-    final hasCookies = await _webViewCookieService.setAuthCookies();
+    final hasCookies = await _webViewGateway.setAuthCookies();
 
     if (!hasCookies) {
       if (mounted) {
@@ -121,8 +118,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       return;
     }
 
-    final webViewUrl =
-        _webViewNavigationService.buildMessageUrl(widget.messageLink);
+    final webViewUrl = _webViewGateway.buildMessageUrl(widget.messageLink);
 
     final WebViewController controller = _webViewControllerFactory.create();
 
@@ -132,7 +128,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
           onPageStarted: (String url) {
             // Check if we've navigated to the messages list (success)
             debugPrint('DEBUG: WebView page started: $url');
-            if (_webViewNavigationService.isSentMessagesListUrl(url)) {
+            if (_webViewGateway.isSentMessagesListUrl(url)) {
               debugPrint('DEBUG: Success detected in onPageStarted');
               if (mounted && !_replySentSuccessfully) {
                 debugPrint('DEBUG: Setting _replySentSuccessfully = true in onPageStarted');
@@ -154,7 +150,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
             }
 
             // Double-check for success page
-            if (_webViewNavigationService.isSentMessagesListUrl(url)) {
+            if (_webViewGateway.isSentMessagesListUrl(url)) {
               debugPrint('DEBUG: Success detected in onPageFinished');
               if (mounted && !_replySentSuccessfully) {
                 debugPrint('DEBUG: Setting _replySentSuccessfully = true in onPageFinished');
@@ -198,7 +194,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     if (replyText.isEmpty) return;
 
     await controller.runJavaScript(
-      buildNoteReplyFormScript(
+      _webViewGateway.buildFormScript(
         replyText: replyText,
         originalContent: widget.originalContent,
         recipient: recipient,
@@ -230,7 +226,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     });
 
     try {
-      final result = await _noteReplyService.sendModernReply(
+      final result = await _noteReplyRepository.sendModernReply(
         messageLink: widget.messageLink,
         recipient: recipient,
         subject: widget.subject,

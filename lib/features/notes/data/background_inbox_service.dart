@@ -8,8 +8,8 @@ import 'package:FANotifier/features/notes/data/background_inbox_parser.dart';
 import 'package:FANotifier/features/notes/domain/background_inbox_models.dart';
 import 'package:FANotifier/features/notes/domain/inbox_second_page_policy.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
 
 class BackgroundInboxService {
   BackgroundInboxService({

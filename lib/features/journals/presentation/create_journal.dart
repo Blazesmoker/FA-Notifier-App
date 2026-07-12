@@ -2,21 +2,22 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:provider/provider.dart';
 
-import 'package:FANotifier/shared/fa/fa_webview_cookie_service.dart';
+import 'package:FANotifier/features/journals/domain/create_journal_repository.dart';
 import 'package:FANotifier/shared/widgets/tags_and_codes_webview_widget.dart';
-import 'package:FANotifier/features/journals/data/create_journal_service.dart';
-import 'package:FANotifier/features/journals/data/create_journal_webview_scripts.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 
 class CreateJournalScreen extends StatefulWidget {
   final String? uniqueNumber;
   final VoidCallback? onJournalSubmitted;
+  final CreateJournalRepository? repository;
 
   const CreateJournalScreen({
     Key? key,
     this.uniqueNumber,
     this.onJournalSubmitted,
+    this.repository,
   }) : super(key: key);
 
   @override
@@ -25,9 +26,7 @@ class CreateJournalScreen extends StatefulWidget {
 
 class _CreateJournalScreenState extends State<CreateJournalScreen>
     with AutomaticKeepAliveClientMixin {
-  final CreateJournalService _createJournalService =
-      const CreateJournalService();
-  late final FAWebViewCookieService _webViewCookieService;
+  late final CreateJournalRepository _createJournalRepository;
   late final String initialUrl;
 
   InAppWebViewController? _webViewController;
@@ -47,16 +46,17 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
   @override
   void initState() {
     super.initState();
-    _webViewCookieService = const FAWebViewCookieService();
-    initialUrl = _createJournalService.buildInitialUrl(widget.uniqueNumber);
+    _createJournalRepository =
+        widget.repository ?? context.read<CreateJournalRepository>();
+    initialUrl = _createJournalRepository.buildInitialUrl(widget.uniqueNumber);
     _handledCurrentJournal = false;
   }
 
   Future<void> _handlePossibleJournalSuccess(String? url) async {
     if (_handledCurrentJournal) return;
-    if (!_createJournalService.isJournalFinalizeUrl(url)) return;
+    if (!_createJournalRepository.isJournalFinalizeUrl(url)) return;
 
-    final journalId = _createJournalService.extractJournalId(url!);
+    final journalId = _createJournalRepository.extractJournalId(url!);
     if (journalId == null) return;
 
     _handledCurrentJournal = true;
@@ -112,16 +112,16 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
   Future<void> _detectJournalViaDom(String? currentUrl) async {
     if (_handledCurrentJournal) return;
     if (_webViewController == null) return;
-    if (_createJournalService.isEditorPage(currentUrl)) return;
+    if (_createJournalRepository.isEditorPage(currentUrl)) return;
 
     final result = await _webViewController!.evaluateJavascript(
-      source: buildFindCreatedJournalPathScript(),
+      source: _createJournalRepository.buildFindCreatedJournalPathScript(),
     );
 
     if (result == null) return;
 
-    final fullUrl = _createJournalService.buildFullJournalUrl(result);
-    final journalId = _createJournalService.extractJournalId(fullUrl);
+    final fullUrl = _createJournalRepository.buildFullJournalUrl(result);
+    final journalId = _createJournalRepository.extractJournalId(fullUrl);
     if (journalId == null) return;
 
     _handledCurrentJournal = true;
@@ -146,7 +146,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     if (_webViewController == null) return;
 
     await _webViewController!.evaluateJavascript(
-      source: buildJournalFormInjectionScript(),
+      source: _createJournalRepository.buildJournalFormInjectionScript(),
     );
     debugPrint("CSS and JavaScript injection completed.");
   }
@@ -155,7 +155,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     if (_webViewController == null) return;
 
     await _webViewController!.evaluateJavascript(
-      source: buildJournalWrapSelectionScript(tag),
+      source: _createJournalRepository.buildJournalWrapSelectionScript(tag),
     );
   }
 
@@ -204,12 +204,16 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
               contextMenu: _buildContextMenu(),
               onWebViewCreated: (controller) async {
                 _webViewController = controller;
-                await _webViewCookieService.setCookies();
+                await _createJournalRepository.prepareWebViewSession();
               },
               onLoadStart: (controller, uri) async {
                 _webViewController = controller;
                 debugPrint("Page started loading: $uri");
-                if (uri != null && uri.toString().startsWith(initialUrl)) {
+                if (uri != null &&
+                    _createJournalRepository.shouldInjectEditorAssets(
+                      currentUrl: uri.toString(),
+                      initialUrl: initialUrl,
+                    )) {
                   debugPrint("Injecting journal form CSS and JavaScript");
                   await _injectJournalFormCss();
                 }
@@ -217,7 +221,11 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
               onLoadStop: (controller, uri) async {
                 debugPrint("Page finished loading: $uri");
 
-                if (uri != null && uri.toString().startsWith(initialUrl)) {
+                if (uri != null &&
+                    _createJournalRepository.shouldInjectEditorAssets(
+                      currentUrl: uri.toString(),
+                      initialUrl: initialUrl,
+                    )) {
                   await _injectJournalFormCss();
                 }
 

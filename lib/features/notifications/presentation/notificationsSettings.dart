@@ -2,14 +2,19 @@
 
 import 'dart:io';
 
-import 'package:FANotifier/features/notifications/data/notification_settings_service.dart';
 import 'package:FANotifier/features/notifications/domain/notification_permission_state.dart';
+import 'package:FANotifier/features/notifications/domain/notification_platform_settings_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/notifications/data/notification_settings_provider.dart';
+import 'package:FANotifier/features/notifications/presentation/notification_settings_provider.dart';
 
 class NotificationsSettingsScreen extends StatefulWidget {
-  const NotificationsSettingsScreen({Key? key}) : super(key: key);
+  const NotificationsSettingsScreen({
+    Key? key,
+    this.platformSettingsRepository,
+  }) : super(key: key);
+
+  final NotificationPlatformSettingsRepository? platformSettingsRepository;
 
   @override
   State<NotificationsSettingsScreen> createState() =>
@@ -18,13 +23,15 @@ class NotificationsSettingsScreen extends StatefulWidget {
 
 class _NotificationsSettingsScreenState
     extends State<NotificationsSettingsScreen> {
-  final NotificationSettingsService _notificationSettingsService =
-      NotificationSettingsService();
+  late final NotificationPlatformSettingsRepository
+      _notificationSettingsService;
   bool useAdaptiveNotificationIcon = false;
 
   @override
   void initState() {
     super.initState();
+    _notificationSettingsService = widget.platformSettingsRepository ??
+        context.read<NotificationPlatformSettingsRepository>();
     _loadNotificationIconPreference();
   }
 

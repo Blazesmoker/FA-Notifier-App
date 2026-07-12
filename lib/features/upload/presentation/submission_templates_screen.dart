@@ -4,13 +4,16 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-import 'package:FANotifier/features/upload/data/submission_template_store.dart';
 import 'package:FANotifier/features/upload/domain/submission_template.dart';
+import 'package:FANotifier/features/upload/domain/submission_template_repository.dart';
 
 class SubmissionTemplatesScreen extends StatefulWidget {
-  final SubmissionTemplateStore store;
+  final SubmissionTemplateRepository repository;
 
-  const SubmissionTemplatesScreen({Key? key, required this.store}) : super(key: key);
+  const SubmissionTemplatesScreen({
+    Key? key,
+    required this.repository,
+  }) : super(key: key);
 
   @override
   State<SubmissionTemplatesScreen> createState() => _SubmissionTemplatesScreenState();
@@ -30,7 +33,7 @@ class _SubmissionTemplatesScreenState extends State<SubmissionTemplatesScreen> w
   }
 
   Future<void> _load() async {
-    final list = await widget.store.loadTemplates();
+    final list = await widget.repository.loadTemplates();
     if (!mounted) return;
     setState(() {
       _templates = list;
@@ -84,7 +87,7 @@ class _SubmissionTemplatesScreenState extends State<SubmissionTemplatesScreen> w
     final trimmed = (newName ?? '').trim();
     if (trimmed.isEmpty) return;
 
-    await widget.store.renameTemplate(template.id, trimmed);
+    await widget.repository.renameTemplate(template.id, trimmed);
     await _load();
   }
 
@@ -115,7 +118,7 @@ class _SubmissionTemplatesScreenState extends State<SubmissionTemplatesScreen> w
 
     if (ok != true) return;
 
-    await widget.store.deleteTemplate(template.id);
+    await widget.repository.deleteTemplate(template.id);
     await _load();
   }
 
@@ -250,7 +253,7 @@ class _SubmissionTemplatesScreenState extends State<SubmissionTemplatesScreen> w
       final item = _templates.removeAt(oldIndex);
       _templates.insert(newIndex, item);
     });
-    await widget.store.saveOrder(_templates.map((e) => e.id).toList());
+    await widget.repository.saveOrder(_templates.map((e) => e.id).toList());
   }
 
   Widget _templateItem(SubmissionTemplate template, int index) {

@@ -3,10 +3,8 @@ import 'dart:async';
 import 'package:FANotifier/core/logging/app_logging.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/auth/domain/cloudflare_check_result.dart';
-import 'package:FANotifier/features/search/data/search_image_parser.dart';
-import 'package:FANotifier/features/search/data/search_image_service.dart';
-import 'package:FANotifier/features/submissions/data/favorite_service.dart';
-import 'package:FANotifier/features/submissions/data/submission_favorite_details_service.dart';
+import 'package:FANotifier/features/search/domain/search_repository.dart';
+import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:FANotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:FANotifier/shared/fa/fa_thumbnail_processing.dart';
 import 'package:flutter/material.dart';
@@ -22,20 +20,17 @@ class SearchImageController {
     required bool Function() isMounted,
     required VoidCallback notifyView,
     required SearchCloudflareCheck showCloudflareCheck,
-    SearchImageService? searchImageService,
-    FavoriteService? favoriteService,
+    required SearchRepository repository,
+    required SubmissionFavoriteRepository favoriteRepository,
     SfwModePreference? sfwModePreference,
-    SubmissionFavoriteDetailsService? favoriteDetailsService,
   })  : _selectedFilters = selectedFilters,
         _searchQuery = searchQuery,
         _isMounted = isMounted,
         _notifyView = notifyView,
         _showCloudflareCheck = showCloudflareCheck,
-        _searchImageService = searchImageService ?? SearchImageService(),
-        _favoriteService = favoriteService ?? FavoriteService(),
-        _sfwModePreference = sfwModePreference ?? SfwModePreference(),
-        _favoriteDetailsService = favoriteDetailsService ??
-            const SubmissionFavoriteDetailsService();
+        _repository = repository,
+        _favoriteRepository = favoriteRepository,
+        _sfwModePreference = sfwModePreference ?? SfwModePreference();
 
   static const double _nextPageLeadScreens = 2.5;
 
@@ -44,10 +39,9 @@ class SearchImageController {
   final bool Function() _isMounted;
   final VoidCallback _notifyView;
   final SearchCloudflareCheck _showCloudflareCheck;
-  final SearchImageService _searchImageService;
-  final FavoriteService _favoriteService;
+  final SearchRepository _repository;
+  final SubmissionFavoriteRepository _favoriteRepository;
   final SfwModePreference _sfwModePreference;
-  final SubmissionFavoriteDetailsService _favoriteDetailsService;
 
   int currentPage = 1;
   bool isLoading = false;
@@ -128,7 +122,7 @@ class SearchImageController {
 
   Future<String> _getAllCookies() async {
     await _sfwLoadFuture;
-    return _searchImageService.buildCookieHeader(
+    return _repository.buildCookieHeader(
       selectedFilters: _selectedFilters,
       sfwEnabled: _sfwEnabled,
     );
@@ -209,7 +203,7 @@ class SearchImageController {
         _isNextPageFetchQueued = false;
       }
 
-      final newImages = await _searchImageService.fetchImages(
+      final newImages = await _repository.fetchImages(
         pageNumber: pageNumber,
         selectedFilters: _selectedFilters,
         searchQuery: _searchQuery,
@@ -248,7 +242,8 @@ class SearchImageController {
 
       final recoveredHtml = result?.pageHtml;
       if (recoveredHtml != null && recoveredHtml.isNotEmpty) {
-        final recoveredImages = await parseSearchImageHtml(recoveredHtml);
+        final recoveredImages =
+            await _repository.parseRecoveredHtml(recoveredHtml);
         await _appendImages(
           recoveredImages,
           previousMaxScrollExtent: previousMaxScrollExtent,
@@ -440,7 +435,7 @@ class SearchImageController {
   }
 
   Future<Map<String, String>?> _fetchPostDetails(String postUrl) async {
-    final links = await _favoriteDetailsService.fetchLinksForPostUrl(
+    final links = await _favoriteRepository.fetchLinksForPostUrl(
       postUrl: postUrl,
       cookieHeaderProvider: _getAllCookies,
     );
@@ -495,7 +490,8 @@ class SearchImageController {
     }
     _notifyIfMounted();
 
-    final success = await _favoriteService.executePostWithRetry(urlToUse);
+    final success =
+        await _favoriteRepository.executePostWithRetry(urlToUse);
     if (!success) {
       if (wantFavorite) {
         favoritedImages.remove(uniqueNumber);

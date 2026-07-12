@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/features/profile/domain/user_profile.dart';
+import 'package:FANotifier/shared/fa/domain/user_profile.dart';
 
 class HomeProfileCache {
   const HomeProfileCache();

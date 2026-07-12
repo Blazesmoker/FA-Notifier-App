@@ -4,41 +4,38 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter/scheduler.dart';
-import 'package:FANotifier/features/notes/presentation/reply_screen.dart';
+import 'package:FANotifier/features/comments/presentation/reply_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:like_button/like_button.dart';
-import 'package:FANotifier/app/app_theme.dart';
-import 'package:FANotifier/main.dart';
+import 'package:FANotifier/shared/theme/app_theme.dart';
+import 'package:FANotifier/app/navigation/app_navigation.dart';
 import 'package:FANotifier/shared/fa/fa_username.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/utils/comment_composer_lines.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/comments/data/submission_comment_service.dart';
-import 'package:FANotifier/features/submissions/data/openpost_link_parser.dart';
-import 'package:FANotifier/features/submissions/data/openpost_url_builder.dart';
-import 'package:FANotifier/features/submissions/data/openpost_media_export_service.dart';
 import 'package:FANotifier/features/submissions/presentation/SubmissionDescriptionWebview.dart';
 import 'package:FANotifier/features/profile/presentation/image_inspect_screen.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_details_load_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_media_export_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_action_result.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_repository.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost_controller.dart';
 import 'package:FANotifier/features/submissions/presentation/edit_submission_screen.dart';
 import 'package:FANotifier/features/comments/presentation/editcommentscreen.dart';
+import 'package:FANotifier/features/comments/presentation/threaded_comments.dart';
 import 'package:FANotifier/features/search/presentation/keyword_search_screen.dart';
 import 'package:FANotifier/features/notes/presentation/new_message.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost_comments.dart';
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
-import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
 import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
 import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.dart';
 import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
@@ -53,11 +50,13 @@ class OpenPost extends StatefulWidget {
   final String imageUrl;
   final String uniqueNumber;
   final bool skipInitialWatchCheck;
+  final OpenPostRepository? repository;
 
   const OpenPost({
     required this.imageUrl,
     required this.uniqueNumber,
     this.skipInitialWatchCheck = false,
+    this.repository,
     Key? key,
   }) : super(key: key);
 
@@ -92,9 +91,6 @@ class _OpenPostState extends State<OpenPost>
     implements DetachableWebViewRouteOwner {
   bool _showFullPublicationDate = false;
   late final OpenPostController _controller;
-  late final PostCommentService _postCommentService;
-  final OpenPostMediaExportService _openPostMediaExportService =
-      const OpenPostMediaExportService();
   final TranslationService _translationService = TranslationService.instance;
   final TranslationSourceTextBuilder _translationSourceTextBuilder =
       TranslationSourceTextBuilder(TranslationService.instance);
@@ -190,8 +186,10 @@ class _OpenPostState extends State<OpenPost>
   @override
   void initState() {
     super.initState();
-    _controller = OpenPostController(submissionId: widget.uniqueNumber);
-    _postCommentService = PostCommentService();
+    _controller = OpenPostController(
+      submissionId: widget.uniqueNumber,
+      repository: widget.repository ?? context.read<OpenPostRepository>(),
+    );
     DetachableWebViewRouteRegistry.register(this);
     WidgetsBinding.instance.addObserver(this);
     if (_webViewScrollOptimizationEnabled) {
@@ -536,20 +534,6 @@ class _OpenPostState extends State<OpenPost>
     setState(() {});
   }
 
-  Future<Response> _getWithSfwCookie(
-    String url, {
-    Map<String, String>? additionalHeaders,
-    bool skipSfw = false,
-  }) {
-    return _controller.getWithSfwCookie(
-      url,
-      additionalHeaders: additionalHeaders,
-      skipSfw: skipSfw,
-      confirmNsfw: _showNSFWConfirmationDialog,
-      onNsfwAllowed: () => setState(() {}),
-    );
-  }
-
   Future<bool> _showNSFWConfirmationDialog() async {
     return await showDialog<bool>(
           context: context,
@@ -584,7 +568,8 @@ class _OpenPostState extends State<OpenPost>
 
   Future<void> _fetchUserPageLinks() async {
     final updated = await _controller.loadUserActions(
-      fetch: _getWithSfwCookie,
+      confirmNsfw: _showNSFWConfirmationDialog,
+      onNsfwAllowed: () => setState(() {}),
     );
     if (updated) setState(() {});
   }
@@ -1039,7 +1024,8 @@ class _OpenPostState extends State<OpenPost>
 
     try {
       final result = await _controller.loadDetails(
-        fetch: _getWithSfwCookie,
+        confirmNsfw: _showNSFWConfirmationDialog,
+        onNsfwAllowed: () => setState(() {}),
       );
       setState(() {});
 
@@ -1383,7 +1369,7 @@ class _OpenPostState extends State<OpenPost>
   }
 
   void _sharePost() {
-    final postUrl = buildSubmissionViewUrl(widget.uniqueNumber);
+    final postUrl = _controller.submissionViewUrl;
     final shareContent = '$postUrl';
     const FaShareService().shareText(
       text: shareContent,
@@ -1454,10 +1440,7 @@ class _OpenPostState extends State<OpenPost>
     _isSendingInlineComment.value = true;
 
     try {
-      final success = await _postCommentService.submitComment(
-        message: commentText,
-        submissionId: widget.uniqueNumber,
-      );
+      final success = await _controller.submitComment(commentText);
 
       if (!mounted) return;
 
@@ -1581,8 +1564,7 @@ class _OpenPostState extends State<OpenPost>
   /// Downloads the image from [imageUrl] and saves it to the gallery.
   Future<void> _downloadImage(BuildContext context, String imageUrl) async {
     try {
-      final result =
-          await _openPostMediaExportService.exportToGallery(imageUrl);
+      final result = await _controller.exportToGallery(imageUrl);
       if (result.status == OpenPostMediaExportStatus.permissionDenied) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1619,7 +1601,7 @@ class _OpenPostState extends State<OpenPost>
   /// Downloads the image, writes it to a temporary file, then triggers sharing.
   Future<void> _shareImage(BuildContext context, String imageUrl) async {
     try {
-      final result = await _openPostMediaExportService.shareFromUrl(imageUrl);
+      final result = await _controller.shareFromUrl(imageUrl);
       if (result.status == OpenPostMediaExportStatus.permissionDenied) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1640,12 +1622,12 @@ class _OpenPostState extends State<OpenPost>
   }
 
   String fixTruncatedLinks(String htmlContent) {
-    return replaceTruncatedSubmissionLinks(htmlContent);
+    return _controller.normalizeSubmissionHtml(htmlContent);
   }
 
   /// Returns the full URL from a truncated comment link.
   String? _getFullLinkFromCommentHtml(String commentHtml, String truncatedUrl) {
-    return findFullShortenedCommentLink(commentHtml, truncatedUrl);
+    return _controller.findFullCommentLink(commentHtml, truncatedUrl);
   }
 
   String _getFullLinkFromCommentSource(String truncatedUrl,
@@ -1767,9 +1749,9 @@ class _OpenPostState extends State<OpenPost>
   void _openSubmissionEdit(String type) {
     String editUrl;
     if (type == 'info') {
-      editUrl = buildOpenPostChangeInfoUrl(widget.uniqueNumber);
+      editUrl = _controller.buildChangeInfoUrl();
     } else {
-      editUrl = buildOpenPostChangeSubmissionUrl(widget.uniqueNumber);
+      editUrl = _controller.buildChangeSubmissionUrl();
     }
 
     Navigator.push(
@@ -1844,7 +1826,8 @@ class _OpenPostState extends State<OpenPost>
   Future<void> _sendFavoriteRequest(bool shouldFavorite) async {
     final updated = await _controller.sendFavoriteRequest(
       shouldFavorite: shouldFavorite,
-      fetch: _getWithSfwCookie,
+      confirmNsfw: _showNSFWConfirmationDialog,
+      onNsfwAllowed: () => setState(() {}),
     );
     if (updated) setState(() {});
   }
@@ -2262,7 +2245,7 @@ class _OpenPostState extends State<OpenPost>
 
                             switch (selected) {
                               case 'report':
-                                launchUrlString(openPostTroubleTicketsUrl);
+                                launchUrlString(_controller.troubleTicketsUrl);
                                 break;
                               case 'block_unblock':
                                 await _handleBlockUnblock();
@@ -2277,8 +2260,7 @@ class _OpenPostState extends State<OpenPost>
                                 _handleDeletePost();
                                 break;
                               case 'copy_link':
-                                final postUrl =
-                                    buildSubmissionViewUrl(widget.uniqueNumber);
+                                final postUrl = _controller.submissionViewUrl;
                                 await Clipboard.setData(
                                     ClipboardData(text: postUrl));
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -3528,32 +3510,21 @@ class _OpenPostState extends State<OpenPost>
       SliverPadding(
         padding:
             const EdgeInsets.only(top: 8.0, bottom: 0.0, right: 8.0, left: 8.0),
-        sliver: SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              final comment = comments[index];
-              final selectionId = _commentSelectionId(comment, index);
-              final previousComment = index > 0 ? comments[index - 1] : null;
-              final nextComment =
-                  index + 1 < comments.length ? comments[index + 1] : null;
-              final previousNestingLevel = previousComment == null
-                  ? 0
-                  : ((100.0 - (previousComment['width'] ?? 100).toDouble()) /
-                          3.0)
-                      .round()
-                      .clamp(0, 4)
-                      .toInt();
-              final nextNestingLevel = nextComment == null
-                  ? 0
-                  : ((100.0 - (nextComment['width'] ?? 100).toDouble()) / 3.0)
-                      .round()
-                      .clamp(0, 4)
-                      .toInt();
-              return CommentWidget(
+        sliver: SliverThreadedComments(
+          comments: comments,
+          itemBuilder: (context, item) {
+            final index = item.index;
+            final comment = item.comment;
+            final selectionId = _commentSelectionId(comment, index);
+            return CommentWidget(
                 key: ValueKey(comment['commentId'] ?? index),
                 comment: comment,
-                previousNestingLevel: previousNestingLevel,
-                nextNestingLevel: nextNestingLevel,
+                treeLevels: item.treeLevels,
+                collapsed: item.collapsed,
+                onToggleCollapse: item.onToggleCollapse,
+                hasAnyCommentSelection: () => _commentSelectedTexts.isNotEmpty,
+                animationDuration: item.animationDuration,
+                animationCurve: item.animationCurve,
                 onHide: () {
                   final hideLink = comment['hideLink'] as String?;
                   final cId = comment['commentId'] as String?;
@@ -3622,10 +3593,8 @@ class _OpenPostState extends State<OpenPost>
                   comment,
                   translatorSettings,
                 ),
-              );
-            },
-            childCount: comments.length,
-          ),
+            );
+          },
         ),
       ),
     ];

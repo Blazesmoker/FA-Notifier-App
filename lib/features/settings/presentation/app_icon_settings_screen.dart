@@ -1,8 +1,9 @@
 import 'dart:io';
 
-import 'package:FANotifier/features/settings/data/app_icon_service.dart';
+import 'package:FANotifier/features/settings/domain/app_icon_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 class AppIconSettingsScreen extends StatefulWidget {
   const AppIconSettingsScreen({Key? key}) : super(key: key);
@@ -12,18 +13,20 @@ class AppIconSettingsScreen extends StatefulWidget {
 }
 
 class _AppIconSettingsScreenState extends State<AppIconSettingsScreen> {
-  final AppIconService _appIconService = AppIconService();
+  late final AppIconRepository _appIconRepository;
 
   bool useAdaptiveIcon = false;
 
   @override
   void initState() {
     super.initState();
+    _appIconRepository = context.read<AppIconRepository>();
     _loadIconPreference();
   }
 
   Future<void> _loadIconPreference() async {
-    final loadedUseAdaptiveIcon = await _appIconService.loadUseAdaptiveIcon();
+    final loadedUseAdaptiveIcon =
+        await _appIconRepository.loadUseAdaptiveIcon();
     if (!mounted) return;
     setState(() {
       useAdaptiveIcon = loadedUseAdaptiveIcon;
@@ -34,7 +37,7 @@ class _AppIconSettingsScreenState extends State<AppIconSettingsScreen> {
     setState(() => useAdaptiveIcon = value);
 
     try {
-      await _appIconService.setUseAdaptiveIcon(useAdaptiveIcon);
+      await _appIconRepository.setUseAdaptiveIcon(useAdaptiveIcon);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

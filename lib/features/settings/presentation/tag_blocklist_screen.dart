@@ -1,6 +1,7 @@
-import 'package:FANotifier/features/settings/data/tag_blocklist_service.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:FANotifier/features/settings/domain/tag_blocklist_repository.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
@@ -15,6 +16,7 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
   final TextEditingController _addController = TextEditingController();
   final SfwModePreference _sfwModePreference = SfwModePreference();
   final Set<String> _tagToggleInFlight = <String>{};
+  late final TagBlocklistRepository _tagBlocklistRepository;
 
   bool _sfwEnabled = true;
   bool _loading = true;
@@ -27,6 +29,7 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
   @override
   void initState() {
     super.initState();
+    _tagBlocklistRepository = context.read<TagBlocklistRepository>();
     Future.wait([
       _loadSfwEnabled(),
       _fetchBlocklist(),
@@ -50,7 +53,7 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
   Future<void> _fetchBlocklist() async {
     setState(() => _loading = true);
     try {
-      final parsed = await fetchTagBlocklist(
+      final parsed = await _tagBlocklistRepository.fetch(
         sfwEnabled: _sfwEnabled,
       );
 
@@ -80,7 +83,7 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
       throw Exception('Missing tag blocklist nonce.');
     }
 
-    await sendTagBlocklistRequest(
+    await _tagBlocklistRepository.updateTag(
       sfwEnabled: _sfwEnabled,
       nonce: _nonce!,
       tagName: tagName,

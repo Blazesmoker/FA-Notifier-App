@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:FANotifier/features/notifications/data/notification_service.dart';
 import 'package:FANotifier/features/notifications/domain/notification_permission_state.dart';
+import 'package:FANotifier/features/notifications/domain/notification_platform_settings_repository.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class NotificationSettingsService {
+class NotificationSettingsService
+    implements NotificationPlatformSettingsRepository {
   static const MethodChannel _settingsChannel =
       MethodChannel('com.blazesmoker.fanotifier/settings');
   static const _useAdaptiveNotificationIconKey = 'useAdaptiveNotificationIcon';

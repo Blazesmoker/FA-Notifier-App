@@ -1,30 +1,28 @@
 // lib/services/notification_service.dart
 import 'dart:io';
 import 'dart:ui';
-import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart' hide Priority;
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
-import 'package:FANotifier/main.dart';
-import 'package:FANotifier/features/notifications/data/NotificationNavigationProvider.dart';
 import 'package:FANotifier/features/notifications/data/activities_notification_state.dart';
-import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
-import 'package:FANotifier/features/notifications/data/notification_refresh_service.dart';
+import 'package:FANotifier/features/notifications/data/pending_navigation_store.dart';
 import 'package:FANotifier/features/notifications/domain/notification_payloads.dart';
 import 'package:FANotifier/core/logging/app_logging.dart';
+import 'package:FANotifier/core/notifications/domain/local_notification_gateway.dart';
+
+typedef NotificationTapHandler = Future<void> Function(
+  String payload,
+  String source,
+);
 
 /// Manages notification channels, shows notifications, and handles taps.
-class NotificationService {
+class NotificationService implements LocalNotificationGateway {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  final GlobalKey<DrawerUserControllerState> drawerKey =
-      GlobalKey<DrawerUserControllerState>();
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
@@ -36,6 +34,7 @@ class NotificationService {
   static const int activityNotificationId = _kActivityNotificationIdBase;
   static const int appUpdateNotificationId = 1400000000;
   static const String appUpdatePayload = appUpdateNotificationPayload;
+  NotificationTapHandler? _notificationTapHandler;
 
   Future<int> allocateActivityNotificationId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -67,7 +66,11 @@ class NotificationService {
 
   Future<void> init({
     Future<void> Function()? onLaunchPayloadSaved,
+    NotificationTapHandler? onNotificationTap,
   }) async {
+    if (onNotificationTap != null) {
+      _notificationTapHandler = onNotificationTap;
+    }
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/fathemednotif');
 
@@ -130,8 +133,7 @@ class NotificationService {
           await ActivitiesNotificationStateStore()
               .requestAcknowledgeOnNextForegroundFetch();
         }
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('pending_navigation', payload);
+        await const PendingNavigationStore().savePayload(payload);
         await onLaunchPayloadSaved?.call();
       }
     }
@@ -232,9 +234,9 @@ class NotificationService {
     required String source,
   }) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      const pendingNavigationStore = PendingNavigationStore();
       if (payload == appUpdatePayload) {
-        await prefs.remove('pending_navigation');
+        await pendingNavigationStore.clearPayload();
         return;
       }
 
@@ -247,59 +249,17 @@ class NotificationService {
         'NOTES REFRESH TRIGGERED_handletappayload (source=$source, payload=$payload)',
       );
 
-      final BuildContext? context = navigatorKey.currentContext;
-      if (context == null) {
-        await prefs.setString('pending_navigation', payload);
-        appLog('[NOTIF] No UI context; saved pending navigation.');
-        kDebugPrint(
-            '[NOTIF] No UI context; saved pending_navigation="$payload"');
+      final handler = _notificationTapHandler;
+      if (handler == null) {
+        await pendingNavigationStore.savePayload(payload);
         return;
       }
-
-      navigatorKey.currentState?.popUntil((r) => r.isFirst);
-
-      await prefs.remove('pending_navigation');
-
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await Future<void>.delayed(const Duration(milliseconds: 16));
-
-        final ctx = navigatorKey.currentContext;
-        if (ctx == null) {
-          await prefs.setString('pending_navigation', payload);
-          appLog(
-              '[NOTIF] Lost context after frame; re-stashed pending navigation.');
-          return;
-        }
-
-        final navProvider =
-            Provider.of<NotificationNavigationProvider>(ctx, listen: false);
-
-        final bool isNotes = isNoteNotificationPayload(payload);
-
-        navProvider.setTargetIndex(isNotes ? 4 : 3);
-
-        try {
-          if (isNotes) {
-            NotesRefreshService().triggerRefresh();
-            appLog('[NOTIF] Notes refresh triggered.');
-          } else {
-            NotificationRefreshService().triggerRefresh();
-            appLog('[NOTIF] Activities refresh triggered.');
-          }
-        } catch (e) {
-          appLog('[_handleTapPayload] refresh error: $e');
-        }
-
-        await prefs.setString('last_handled_payload', payload);
-      });
-
-      SchedulerBinding.instance.ensureVisualUpdate();
+      await handler(payload, source);
     } catch (e, st) {
       appLog('[_handleTapPayload] error: $e');
       kDebugPrint('[_handleTapPayload] error: $e\n$st');
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('pending_navigation', payload);
+      await const PendingNavigationStore().savePayload(payload);
     }
   }
 
@@ -430,8 +390,7 @@ void notificationTapBackground(NotificationResponse response) async {
     await ActivitiesNotificationStateStore()
         .requestAcknowledgeOnNextForegroundFetch();
   }
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('pending_navigation', payload);
+  await const PendingNavigationStore().savePayload(payload);
   appLog('[NOTIF_TAP_BG] saved pending notification payload.');
   kDebugPrint('[NOTIF_TAP_BG] saved payload "$payload"');
 }

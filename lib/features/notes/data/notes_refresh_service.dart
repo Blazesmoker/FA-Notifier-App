@@ -1,14 +1,18 @@
 import 'dart:async';
 
-class NotesRefreshService {
+import 'package:FANotifier/features/notes/domain/notes_refresh_port.dart';
+
+class NotesRefreshService implements NotesRefreshPort {
   static final NotesRefreshService _i = NotesRefreshService._();
   factory NotesRefreshService() => _i;
   NotesRefreshService._();
 
   final _ctrl = StreamController<void>.broadcast();
   bool _hasPendingRefresh = false;
+  @override
   Stream<void> get stream => _ctrl.stream;
 
+  @override
   void triggerRefresh() {
     if (_ctrl.isClosed) return;
     if (!_ctrl.hasListener) {
@@ -18,6 +22,7 @@ class NotesRefreshService {
     _ctrl.add(null);
   }
 
+  @override
   bool takePendingRefresh() {
     final pending = _hasPendingRefresh;
     _hasPendingRefresh = false;

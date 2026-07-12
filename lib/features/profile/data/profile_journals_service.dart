@@ -4,9 +4,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/profile/data/profile_journals_parser.dart';
 import 'package:FANotifier/features/profile/domain/profile_journals_models.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/features/profile/domain/profile_journals_repository.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
 
-class ProfileJournalsService {
+class ProfileJournalsService implements ProfileJournalsRepository {
   ProfileJournalsService({
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ??
@@ -20,6 +21,7 @@ class ProfileJournalsService {
   final FlutterSecureStorage _secureStorage;
   final SfwModePreference _sfwModePreference = SfwModePreference();
 
+  @override
   Future<ProfileJournalsPageData> fetchJournalsPage({
     required String username,
     required int pageNumber,

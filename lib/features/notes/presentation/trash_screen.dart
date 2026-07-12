@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:FANotifier/features/notes/presentation/message_detail_screen.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/features/notes/data/notesscreen_api_service.dart';
+import 'package:FANotifier/features/notes/domain/notes_trash_repository.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:provider/provider.dart';
 
 /// Regulate selection highlight opacity here. Values 0.0–1.0.
 /// Lower = more semi-transparent.
@@ -18,7 +19,7 @@ class TrashScreen extends StatefulWidget {
 class TrashScreenState extends State<TrashScreen> {
   static const Color _accent = Color(0xFFE09321);
 
-  late final NotesApiService _notesApi;
+  late final NotesTrashRepository _notesTrashRepository;
   final ScrollController _scrollController = ScrollController();
 
   bool isLoading = true;
@@ -40,7 +41,7 @@ class TrashScreenState extends State<TrashScreen> {
   @override
   void initState() {
     super.initState();
-    _notesApi = NotesApiService();
+    _notesTrashRepository = context.read<NotesTrashRepositoryFactory>()();
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
               _scrollController.position.maxScrollExtent - 100 &&
@@ -69,7 +70,8 @@ class TrashScreenState extends State<TrashScreen> {
     }
 
     try {
-      final newMessages = await _notesApi.fetchTrashPage(page: page);
+      final newMessages =
+          await _notesTrashRepository.fetchTrashPage(page: page);
 
       if (page == 1) {
         setState(() {
@@ -166,7 +168,7 @@ class TrashScreenState extends State<TrashScreen> {
       setState(() => _selectAllProgressPage = page);
       List<Message> messages;
       try {
-        messages = await _notesApi.fetchTrashPage(page: page);
+        messages = await _notesTrashRepository.fetchTrashPage(page: page);
       } catch (e) {
         if (mounted) {
           setState(() => _isSelectAllInProgress = false);
@@ -224,7 +226,7 @@ class TrashScreenState extends State<TrashScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await _notesApi.restoreNotesFromTrash(ids: ids);
+      await _notesTrashRepository.restoreNotesFromTrash(ids: ids);
       if (!mounted) return;
       setState(() {
         _selectionMode = false;
@@ -271,7 +273,7 @@ class TrashScreenState extends State<TrashScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await _notesApi.deleteNotesPermanently(ids: ids);
+      await _notesTrashRepository.deleteNotesPermanently(ids: ids);
       if (!mounted) return;
       setState(() {
         _selectionMode = false;

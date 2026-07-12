@@ -6,28 +6,17 @@ import 'package:html/parser.dart' as html_parser;
 
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/profile/data/profile_posts_parser.dart';
-import 'package:FANotifier/features/profile/domain/fa_folder.dart';
+import 'package:FANotifier/features/profile/domain/profile_gallery_page_data.dart';
+import 'package:FANotifier/features/profile/domain/profile_gallery_repository.dart';
 import 'package:FANotifier/features/profile/domain/profile_submission_data.dart';
-import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
-
-class ProfileGalleryPageData {
-  const ProfileGalleryPageData({
-    required this.posts,
-    required this.nextPageUrl,
-    required this.folders,
-  });
-
-  final List<Map<String, dynamic>> posts;
-  final String? nextPageUrl;
-  final List<FaFolder> folders;
-}
+import 'package:FANotifier/shared/fa/parsing/submission_favorite_links_parser.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
 
 String buildDefaultProfileGalleryUrl(String username) {
   return 'https://www.furaffinity.net/gallery/$username/';
 }
 
-class ProfileGalleryService {
+class ProfileGalleryService implements ProfileGalleryRepository {
   ProfileGalleryService({
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ??
@@ -41,6 +30,7 @@ class ProfileGalleryService {
   final FlutterSecureStorage _secureStorage;
   final SfwModePreference _sfwModePreference = SfwModePreference();
 
+  @override
   String buildInitialGalleryUrl(String username, String selectedFolderUrl) {
     if (selectedFolderUrl.isNotEmpty) {
       return selectedFolderUrl;
@@ -48,14 +38,17 @@ class ProfileGalleryService {
     return buildDefaultGalleryUrl(username);
   }
 
+  @override
   String buildDefaultGalleryUrl(String username) {
     return buildDefaultProfileGalleryUrl(username);
   }
 
+  @override
   String normalizeFolderUrl(String selectedFolderUrl) {
     return selectedFolderUrl.replaceAll(RegExp(r'/$'), '');
   }
 
+  @override
   Future<ProfileGalleryPageData> fetchGalleryPage({
     required String url,
     String? selectedFolderUrl,
@@ -98,6 +91,7 @@ class ProfileGalleryService {
     );
   }
 
+  @override
   Future<ProfileSubmissionData> fetchSubmissionData(String postUrl) async {
     final absolute =
         Uri.parse('https://www.furaffinity.net').resolve(postUrl).toString();

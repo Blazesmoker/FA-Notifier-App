@@ -1,19 +1,22 @@
+import 'package:FANotifier/core/notifications/domain/local_notification_gateway.dart';
 import 'package:FANotifier/features/notes/data/message_storage.dart';
 import 'package:FANotifier/features/notes/data/note_unread_service.dart';
 import 'package:FANotifier/features/notes/data/notesscreen_api_service.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
 import 'package:FANotifier/features/notes/domain/notes_unread_notification_result.dart';
-import 'package:FANotifier/features/notifications/data/notification_service.dart';
 
 class NotesUnreadNotificationService {
   const NotesUnreadNotificationService({
     required NotesApiService notesApi,
     required NoteUnreadService noteUnreadService,
+    required LocalNotificationGateway notificationGateway,
   })  : _notesApi = notesApi,
-        _noteUnreadService = noteUnreadService;
+        _noteUnreadService = noteUnreadService,
+        _notificationGateway = notificationGateway;
 
   final NotesApiService _notesApi;
   final NoteUnreadService _noteUnreadService;
+  final LocalNotificationGateway _notificationGateway;
 
   Future<NotesUnreadNotificationResult> handle({
     required List<Message> fetchedInbox,
@@ -78,7 +81,7 @@ class NotesUnreadNotificationService {
       for (final msg in newUnread) {
         try {
           final content = await _notesApi.fetchMessageContent(msg.link);
-          await NotificationService().showNotification(
+          await _notificationGateway.showNotification(
             msg.id.hashCode,
             'New Note from ${msg.sender}',
             content,

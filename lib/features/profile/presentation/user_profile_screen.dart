@@ -10,7 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:url_launcher/url_launcher_string.dart';
-import 'package:FANotifier/main.dart';
+import 'package:FANotifier/app/navigation/app_navigation.dart';
 import 'package:FANotifier/features/profile/domain/fa_folder.dart';
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
 import 'package:FANotifier/features/profile/domain/shout.dart';
@@ -29,9 +29,8 @@ import 'package:FANotifier/features/profile/presentation/profilejournals.dart';
 import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
 import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.dart';
-import 'package:FANotifier/features/profile/data/user_profile_repository_impl.dart';
-import 'package:FANotifier/features/profile/data/profile_avatar_transparency_detector.dart';
-import 'package:FANotifier/features/profile/data/user_profile_action_parser.dart';
+import 'package:FANotifier/features/profile/domain/user_profile_action_key.dart';
+import 'package:FANotifier/features/profile/presentation/profile_avatar_transparency_detector.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_controller.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_sliver_helpers.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_favorites_section.dart';
@@ -39,7 +38,7 @@ import 'package:FANotifier/features/profile/presentation/user_profile_gallery_se
 import 'package:FANotifier/features/profile/presentation/user_profile_home_section.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_journals_section.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_scraps_section.dart';
-import 'package:FANotifier/features/settings/data/translator_settings_provider.dart';
+import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
 import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/shared/translation/translation_service.dart';
@@ -304,7 +303,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     super.initState();
     DetachableWebViewRouteRegistry.register(this);
 
-    final profileRepository = UserProfileRepositoryImpl();
+    final profileRepository = context.read<UserProfileRepository>();
     _profileRepository = profileRepository;
     _profileController = UserProfileController(
       repository: profileRepository,

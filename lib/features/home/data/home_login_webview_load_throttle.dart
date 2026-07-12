@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:FANotifier/features/home/domain/home_login_webview_support.dart';
+
 class HomeLoginWebViewLoadThrottle {
   const HomeLoginWebViewLoadThrottle();
 
@@ -19,7 +21,7 @@ class HomeLoginWebViewLoadThrottle {
   }
 }
 
-class HomeLoginWebViewLoadSlot {
+class HomeLoginWebViewLoadSlot implements HomeLoginLoadSlot {
   const HomeLoginWebViewLoadSlot._(this._preferences);
 
   final SharedPreferences _preferences;

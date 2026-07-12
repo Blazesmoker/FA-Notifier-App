@@ -5,11 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:FANotifier/features/profile/data/user_description_service.dart';
-import 'package:FANotifier/features/profile/data/user_description_webview_html_builder.dart';
+import 'package:provider/provider.dart';
+import 'package:FANotifier/features/profile/domain/user_description_repository.dart';
 import 'package:FANotifier/features/profile/domain/user_description_webview_content.dart';
 import 'package:FANotifier/shared/fa/fa_webview_document_scripts.dart';
-import 'package:FANotifier/shared/utils/fa_link_handler.dart';
+import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
 enum UserDescriptionWebViewPauseReason { route, visibility, scrolling }
@@ -44,8 +44,7 @@ class UserDescriptionWebView extends StatefulWidget {
 
 class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     with AutomaticKeepAliveClientMixin<UserDescriptionWebView> {
-  late final UserDescriptionService _userDescriptionService =
-      UserDescriptionService();
+  late final UserDescriptionRepository _userDescriptionRepository;
   late Future<UserDescriptionWebViewContent> _userDescriptionFuture;
   InAppWebViewController? _controller;
   final Set<UserDescriptionWebViewPauseReason> _pauseReasons =
@@ -63,6 +62,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   @override
   void initState() {
     super.initState();
+    _userDescriptionRepository = context.read<UserDescriptionRepository>();
     if (widget.initialHtml != null) {
       _userDescriptionFuture = _processInitialHtml(widget.initialHtml!);
     } else {
@@ -178,24 +178,25 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   }
 
   Future<UserDescriptionWebViewContent> _processInitialHtml(String html) async {
-    final extractedHtml = await _userDescriptionService.extractInitialHtml(html);
+    final extractedHtml =
+        await _userDescriptionRepository.extractInitialHtml(html);
     final htmlWithInlinedIcons =
-        await _userDescriptionService.inlineIcons(extractedHtml);
+        await _userDescriptionRepository.inlineIcons(extractedHtml);
     _userDescriptionHtml = htmlWithInlinedIcons;
-    return _userDescriptionService.buildWebViewContent(
+    return _userDescriptionRepository.buildWebViewContent(
       htmlWithInlinedIcons,
     );
   }
 
   /// Fetches and cleans the HTML content for the user description.
   Future<UserDescriptionWebViewContent> _fetchCleanHTML() async {
-    final extractedHtml = await _userDescriptionService.fetchCleanHtml(
+    final extractedHtml = await _userDescriptionRepository.fetchCleanHtml(
       widget.sanitizedUsername,
     );
     final htmlWithInlinedIcons =
-        await _userDescriptionService.inlineIcons(extractedHtml);
+        await _userDescriptionRepository.inlineIcons(extractedHtml);
     _userDescriptionHtml = htmlWithInlinedIcons;
-    return _userDescriptionService.buildWebViewContent(
+    return _userDescriptionRepository.buildWebViewContent(
       htmlWithInlinedIcons,
     );
   }
@@ -208,13 +209,13 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
       {String? htmlSource}) {
     final String? source = htmlSource ?? _userDescriptionHtml;
     if (source == null) return truncatedUrl;
-    return _userDescriptionService.findFullLink(source, truncatedUrl);
+    return _userDescriptionRepository.findFullLink(source, truncatedUrl);
   }
 
   /// Returns plain text by stripping HTML tags from the cleaned HTML.
   Future<String?> getPlainText() async {
     if (_userDescriptionHtml == null) return null;
-    return _userDescriptionService.plainText(_userDescriptionHtml!);
+    return _userDescriptionRepository.plainText(_userDescriptionHtml!);
   }
 
   /// Processes a FurAffinity URL.
@@ -297,7 +298,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
                           }
                         : null,
                     initialData: InAppWebViewInitialData(
-                      data: buildUserDescriptionWebViewHtml(
+                      data: _userDescriptionRepository.buildWebViewHtml(
                         userDescriptionHtml: cleanHtml,
                         faThemeCss: faThemeCss,
                         enableTextSelection: widget.enableTextSelection,

@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/submissions/data/submission_favorite_links_parser.dart';
+import 'package:FANotifier/shared/fa/parsing/submission_favorite_links_parser.dart';
 import 'package:FANotifier/features/submissions/domain/submission_fetch_models.dart';
 
 SubmissionData parseSubmissionDetailData(List<int> bodyBytes) {

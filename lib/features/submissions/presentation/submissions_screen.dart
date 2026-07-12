@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/notifications/data/fa_activities_polling_service.dart';
+import 'package:FANotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost.dart';
+import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:FANotifier/features/submissions/domain/submission_list_item.dart';
+import 'package:FANotifier/features/submissions/domain/submissions_repository.dart';
 import 'package:FANotifier/features/submissions/presentation/submissions_controller.dart';
 import 'package:FANotifier/features/submissions/presentation/widgets/submission_favorite_image_tile.dart';
 import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
@@ -20,6 +23,7 @@ class SubmissionsScreen extends StatefulWidget {
 class SubmissionsScreenState extends State<SubmissionsScreen>
     with AutomaticKeepAliveClientMixin<SubmissionsScreen> {
   late final SubmissionsController _controller;
+  late final FaActivitiesPollingPort _activitiesPollingPort;
   final ScrollController _scrollController = ScrollController();
 
   List<Map<String, dynamic>> get _flatSubmissionsList =>
@@ -39,7 +43,11 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   @override
   void initState() {
     super.initState();
-    _controller = SubmissionsController();
+    _activitiesPollingPort = context.read<FaActivitiesPollingPort>();
+    _controller = SubmissionsController(
+      repository: context.read<SubmissionsRepository>(),
+      favoriteRepository: context.read<SubmissionFavoriteRepository>(),
+    );
     _controller.addListener(_handleControllerChanged);
     _scrollController.addListener(_scrollListenerForPagination);
     _controller.loadSfwEnabled().then((_) => _refreshSubmissions());
@@ -51,7 +59,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     _scrollController.dispose();
     _controller.removeListener(_handleControllerChanged);
     _controller.dispose();
-    FaActivitiesPollingService().setSubmissionsScreenVisible(false);
+    _activitiesPollingPort.setSubmissionsScreenVisible(false);
     super.dispose();
   }
 
@@ -276,7 +284,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     return VisibilityDetector(
       key: const Key('submissions_screen_visibility'),
       onVisibilityChanged: (info) {
-        FaActivitiesPollingService()
+        _activitiesPollingPort
             .setSubmissionsScreenVisible(info.visibleFraction > 0.01);
       },
       child: PopScope(

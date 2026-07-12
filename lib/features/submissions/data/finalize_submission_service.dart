@@ -3,17 +3,18 @@ import 'dart:io';
 import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:FANotifier/features/submissions/data/finalize_submission_parser.dart';
 import 'package:FANotifier/features/submissions/domain/finalize_submission_options.dart';
+import 'package:FANotifier/features/submissions/domain/finalize_submission_repository.dart';
 import 'package:FANotifier/features/submissions/domain/finalize_submission_request.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
-import 'package:FANotifier/shared/fa/fa_request_coordinator.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:FANotifier/core/network/fa_request_coordinator.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-class FinalizeSubmissionService {
+class FinalizeSubmissionService implements FinalizeSubmissionRepository {
   FinalizeSubmissionService({
     FlutterSecureStorage? secureStorage,
   })  : _secureStorage = secureStorage ??
@@ -47,6 +48,7 @@ class FinalizeSubmissionService {
     _dio.interceptors.add(CookieManager(_cookieJar));
   }
 
+  @override
   Future<FinalizeSubmissionOptions> fetchOptions() async {
     await _loadCookies();
 
@@ -80,6 +82,7 @@ class FinalizeSubmissionService {
     );
   }
 
+  @override
   Future<void> finalizeSubmission(FinalizeSubmissionRequest request) async {
     final data = request.toFormData();
 

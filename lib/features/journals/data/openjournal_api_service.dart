@@ -11,8 +11,8 @@ import 'package:FANotifier/features/journals/data/openjournal_comment_parser.dar
 import 'package:FANotifier/features/journals/data/openjournal_delete_link_parser.dart';
 import 'package:FANotifier/features/journals/data/journal_url_builder.dart';
 import 'package:FANotifier/features/journals/domain/openjournal_fetch_result.dart';
-import 'package:FANotifier/shared/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
 
 class OpenJournalApiService {
   OpenJournalApiService({

@@ -198,6 +198,43 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         pendingNotificationPayload = nil
     }
 
+    private func activateSceneForNotificationTap() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.activateSceneForNotificationTap()
+            }
+            return
+        }
+
+        if #available(iOS 13.0, *) {
+            let windowScenes = UIApplication.shared.connectedScenes.compactMap {
+                $0 as? UIWindowScene
+            }
+            let targetScene = windowScenes.first(where: {
+                $0.activationState == .foregroundActive ||
+                    $0.activationState == .foregroundInactive
+            }) ?? windowScenes.first
+
+            (targetScene?.delegate as? SceneDelegate)?.prepareForNotificationActivation()
+
+            if targetScene?.activationState == .foregroundActive ||
+                targetScene?.activationState == .foregroundInactive {
+                return
+            }
+
+            fLog("Requesting scene activation for notification tap")
+            UIApplication.shared.requestSceneSessionActivation(
+                targetScene?.session,
+                userActivity: nil,
+                options: nil
+            ) { [weak self] error in
+                self?.fLog("Notification scene activation failed: \(error.localizedDescription)")
+            }
+        } else {
+            window?.makeKeyAndVisible()
+        }
+    }
+
     func setupTranslationChannelIfNeeded() {
         guard translationChannel == nil,
               let controller = findFlutterViewController()
@@ -527,8 +564,24 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else {
+                    completionHandler()
+                    return
+                }
+                self.userNotificationCenter(
+                    center,
+                    didReceive: response,
+                    withCompletionHandler: completionHandler
+                )
+            }
+            return
+        }
+
         let content = response.notification.request.content
         fLog("Notification tapped: \(content.title) (action=\(response.actionIdentifier))")
+        activateSceneForNotificationTap()
         let payload = makePayload(from: response)
         if notificationsReady, let channel = notifChannel {
             fLog("Forwarding tap to Dart via MethodChannel")

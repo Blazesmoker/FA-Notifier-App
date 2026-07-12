@@ -2,7 +2,7 @@
 
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/profile/domain/user_link.dart';
+import 'package:FANotifier/shared/fa/domain/user_link.dart';
 import 'package:FANotifier/features/settings/presentation/view_list_screen.dart';
 
 class UserGridSection extends StatelessWidget {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/settings/data/watchlist_user_service.dart';
-import 'package:FANotifier/features/profile/domain/user_link.dart';
+import 'package:provider/provider.dart';
+import 'package:FANotifier/shared/fa/domain/user_link.dart';
+import 'package:FANotifier/features/settings/domain/watchlist_repository.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 
@@ -34,6 +35,7 @@ class _ViewListScreenState extends State<ViewListScreen> {
   String retryMessage = '';
   int loadedUsersCount = 0;
   final Set<String> _seenUsernames = <String>{};
+  late final WatchlistRepository _watchlistRepository;
 
   int get _expectedUserCount =>
       widget.expectedUserCount < 0 ? 0 : widget.expectedUserCount;
@@ -67,6 +69,7 @@ class _ViewListScreenState extends State<ViewListScreen> {
   @override
   void initState() {
     super.initState();
+    _watchlistRepository = context.read<WatchlistRepository>();
     _fetchAllUsers();
   }
 
@@ -98,7 +101,7 @@ class _ViewListScreenState extends State<ViewListScreen> {
     required int page,
     required String cookieHeader,
   }) async {
-    final parsedUsers = await fetchWatchlistUsersPage(
+    final parsedUsers = await _watchlistRepository.fetchUsersPage(
       title: widget.title,
       sanitizedUsername: widget.sanitizedUsername,
       page: page,
@@ -130,7 +133,7 @@ class _ViewListScreenState extends State<ViewListScreen> {
   }
 
   Future<void> _fetchAllUsers() async {
-    final cookieHeader = await buildWatchlistCookieHeader();
+    final cookieHeader = await _watchlistRepository.buildCookieHeader();
 
     if (cookieHeader.isEmpty) {
       setState(() {

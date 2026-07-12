@@ -2,10 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:FANotifier/features/notes/data/new_message_service.dart';
+import 'package:FANotifier/features/notes/domain/new_message_repository.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:FANotifier/shared/widgets/cooldown_send_icon.dart';
+import 'package:provider/provider.dart';
 
 class NewMessageScreen extends StatefulWidget {
   const NewMessageScreen({Key? key, this.recipient}) : super(key: key);
@@ -21,12 +22,18 @@ class _NewMessageScreenState extends State<NewMessageScreen> {
       TextEditingController(text: widget.recipient ?? '');
   final TextEditingController _subjectController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
-  final NewMessageService _newMessageService = NewMessageService();
+  late final NewMessageRepository _newMessageRepository;
 
   Timer? _cooldownTimer;
   bool _isSending = false;
   int _cooldownRemaining = 0;
   int _cooldownTotal = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _newMessageRepository = context.read<NewMessageRepositoryFactory>()();
+  }
 
   @override
   void dispose() {
@@ -44,7 +51,7 @@ class _NewMessageScreenState extends State<NewMessageScreen> {
       _isSending = true;
     });
 
-    final result = await _newMessageService.sendMessage(
+    final result = await _newMessageRepository.sendMessage(
       recipient: _recipientController.text.trim(),
       subject: _subjectController.text.trim(),
       message: _messageController.text.trim(),

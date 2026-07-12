@@ -1,19 +1,23 @@
 // lib/finalize_submission.dart
 
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/submissions/data/finalize_submission_service.dart';
+import 'package:provider/provider.dart';
+import 'package:FANotifier/features/submissions/domain/finalize_submission_repository.dart';
 import 'package:FANotifier/features/submissions/domain/finalize_submission_request.dart';
 import 'package:FANotifier/features/submissions/domain/submission_form_option.dart';
+import 'package:FANotifier/features/submissions/domain/finalize_submission_defaults.dart';
 
 class FinalizeSubmissionScreen extends StatefulWidget {
   final String submissionKey;
   final String submissionType;
+  final FinalizeSubmissionRepository? repository;
 
 
   const FinalizeSubmissionScreen({
     Key? key,
     required this.submissionKey,
     required this.submissionType,
+    this.repository,
 
   }) : super(key: key);
 
@@ -26,11 +30,11 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
   final _formKey = GlobalKey<FormState>();
 
   // Form Fields
-  String _category = '1'; // Default to 'All'
-  String _theme = '1'; // Default to 'All'
-  String _species = '1'; // Default to 'Unspecified / Any'
-  String _gender = '0'; // Default to 'Any'
-  String _rating = '0'; // General
+  String _category = FinalizeSubmissionDefaults.category;
+  String _theme = FinalizeSubmissionDefaults.theme;
+  String _species = FinalizeSubmissionDefaults.species;
+  String _gender = FinalizeSubmissionDefaults.gender;
+  String _rating = FinalizeSubmissionDefaults.rating;
   String _title = '';
   String _description = '';
   String _keywords = '';
@@ -42,7 +46,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
   bool _isFinalizing = false;
   String _errorMessage = '';
 
-  late final FinalizeSubmissionService _finalizeSubmissionService;
+  late final FinalizeSubmissionRepository _finalizeSubmissionRepository;
 
   // Option Groups
   List<OptionGroup> _categoryOptions = [];
@@ -55,7 +59,8 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
   @override
   void initState() {
     super.initState();
-    _finalizeSubmissionService = FinalizeSubmissionService();
+    _finalizeSubmissionRepository = widget.repository ??
+        context.read<FinalizeSubmissionRepositoryFactory>()();
     _fetchOptions();
   }
 
@@ -66,7 +71,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
     });
 
     try {
-      final parsed = await _finalizeSubmissionService.fetchOptions();
+      final parsed = await _finalizeSubmissionRepository.fetchOptions();
       final submissionKey = parsed.submissionKey;
       setState(() {
         _submissionKeyUpload = submissionKey;
@@ -109,7 +114,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
     });
 
     try {
-      await _finalizeSubmissionService.finalizeSubmission(
+      await _finalizeSubmissionRepository.finalizeSubmission(
         FinalizeSubmissionRequest(
           key: _submissionKeyUpload!,
           category: _category,

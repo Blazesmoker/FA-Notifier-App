@@ -34,6 +34,18 @@ const Map<String, String> kSmilieEmojiAssets = {
   '[smilie-sleepy]': 'assets/emojis/sleepy.png',
 };
 
+String preprocessFAEmojis(String rawHtml) {
+  final exp =
+      RegExp(r'<i\s+class="([^"]+)"[^>]*>(.*?)<\/i>', caseSensitive: false);
+  return rawHtml.replaceAllMapped(exp, (match) {
+    final classAttr = match.group(1) ?? '';
+    if (classAttr.startsWith('smilie ')) {
+      return '[${classAttr.replaceAll(' ', '-')}]';
+    }
+    return match.group(0)!;
+  });
+}
+
 String normalizeSmilieTokensToHtml(String html) {
   return html.replaceAllMapped(
     RegExp(r'\[smilie-([a-z0-9]+)\]', caseSensitive: false),

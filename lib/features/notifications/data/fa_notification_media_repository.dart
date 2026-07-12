@@ -4,7 +4,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:FANotifier/features/notifications/data/fa_notification_cookie_header_provider.dart';
 import 'package:FANotifier/features/notifications/data/fa_notification_media_parser.dart';
 import 'package:FANotifier/features/notifications/data/simple_semaphore.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
 
 class FaNotificationMediaRepository {
   FaNotificationMediaRepository({

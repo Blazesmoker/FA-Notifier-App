@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:FANotifier/features/search/domain/find_source_models.dart';
-import 'package:FANotifier/shared/fa/fa_http.dart';
+import 'package:FANotifier/core/network/fa_http.dart';
 
 class FindSourceService {
   static const String _iqdbEndpoint = 'https://e621.net/iqdb_queries.json';

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html;
+import 'package:provider/provider.dart';
 
-import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
+import 'package:FANotifier/features/journals/domain/openjournal_repository.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 
@@ -19,6 +20,7 @@ class JournalReplyScreen extends StatefulWidget {
   final String? commentHtml;
 
   final Function(String) onSendReply;
+  final OpenJournalRepository? repository;
 
   const JournalReplyScreen({
     required this.submissionId,
@@ -26,6 +28,7 @@ class JournalReplyScreen extends StatefulWidget {
     required this.username,
     required this.profileImage,
     required this.onSendReply,
+    this.repository,
     this.commentText,
     this.commentHtml,
     Key? key,
@@ -37,7 +40,6 @@ class JournalReplyScreen extends StatefulWidget {
 
 class _JournalReplyScreenState extends State<JournalReplyScreen> {
   final TextEditingController _replyController = TextEditingController();
-  final JournalCommentService _commentService = JournalCommentService();
 
   bool _isSending = false;
   String _selectedCommentText = '';
@@ -79,7 +81,9 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
     setState(() => _isSending = true);
 
     try {
-      final success = await _commentService.submitReplyToComment(
+      final repository =
+          widget.repository ?? context.read<OpenJournalRepository>();
+      final success = await repository.submitReplyToComment(
         message: replyText,
         journalId: widget.submissionId,
         commentId: widget.commentId,
