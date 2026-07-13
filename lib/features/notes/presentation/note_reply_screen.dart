@@ -6,9 +6,11 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:FANotifier/features/notes/domain/note_reply_repository.dart';
 import 'package:FANotifier/features/notes/domain/note_reply_webview_gateway.dart';
 import 'package:FANotifier/features/notes/presentation/note_reply_webview_controller_factory.dart';
+import 'package:FANotifier/features/notes/domain/note_image_preview_mode.dart';
+import 'package:FANotifier/features/notes/domain/note_submission_preview_repository.dart';
+import 'package:FANotifier/features/notes/presentation/note_body_with_previews.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:FANotifier/shared/widgets/cooldown_send_icon.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
@@ -21,6 +23,7 @@ class NoteReplyScreen extends StatefulWidget {
   final String username;
   final String messageId;
   final String messageLink;
+  final NoteImagePreviewMode imagePreviewMode;
 
   const NoteReplyScreen({
     Key? key,
@@ -30,6 +33,7 @@ class NoteReplyScreen extends StatefulWidget {
     required this.username,
     required this.messageId,
     required this.messageLink,
+    required this.imagePreviewMode,
   }) : super(key: key);
 
   @override
@@ -50,7 +54,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   final NoteReplyWebViewControllerFactory _webViewControllerFactory =
       const NoteReplyWebViewControllerFactory();
 
-  String recipient = 'Loading...';
+  late String recipient;
   bool _isMessageDetailsLoading = true;
   String errorMessage = '';
 
@@ -60,10 +64,22 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   bool _replySentSuccessfully = false;
   bool _hasPopped = false;
   String _selectedOriginalText = '';
+  late final bool _hasImagePreviewLinks;
 
   @override
   void initState() {
     super.initState();
+    recipient = widget.username;
+    _hasImagePreviewLinks =
+        widget.imagePreviewMode != NoteImagePreviewMode.off &&
+            noteBodyContainsSubmissionLinks(
+              widget.originalContentHtml != null &&
+                      widget.originalContentHtml!.isNotEmpty
+                  ? widget.originalContentHtml!
+                  : widget.originalContent,
+              isHtml: widget.originalContentHtml != null &&
+                  widget.originalContentHtml!.isNotEmpty,
+            );
     _noteReplyRepository = context.read<NoteReplyRepositoryFactory>()();
     _webViewGateway = context.read<NoteReplyWebViewGateway>();
     _fetchMessageDetails();
@@ -368,22 +384,6 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       });
     }
 
-    if (_isMessageDetailsLoading) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text("Reply to Note"),
-          backgroundColor: Colors.black,
-        ),
-        backgroundColor: Colors.black,
-        body: const Center(
-          child: PulsatingLoadingIndicator(
-            size: 88.0,
-            assetPath: 'assets/icons/fathemed.png',
-          ),
-        ),
-      );
-    }
-
     if (_useWebView && _webViewController != null) {
       return Scaffold(
         appBar: AppBar(
@@ -449,6 +449,10 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       );
     }
 
+    final imagePreviewRepository = _hasImagePreviewLinks
+        ? context.read<NoteSubmissionPreviewRepository>()
+        : null;
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool didPop, dynamic result) {
@@ -464,8 +468,11 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
           actions: [
             IconButton(
               icon: _buildSendIcon(),
-              onPressed:
-                  (_isSending || _cooldownRemaining > 0) ? null : _sendReply,
+              onPressed: (_isSending ||
+                      _isMessageDetailsLoading ||
+                      _cooldownRemaining > 0)
+                  ? null
+                  : _sendReply,
             ),
           ],
         ),
@@ -473,15 +480,12 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
         resizeToAvoidBottomInset: true,
         body: SafeArea(
           top: false,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return SingleChildScrollView(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: IntrinsicHeight(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
+          child: CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (errorMessage.isNotEmpty)
@@ -540,7 +544,18 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
                               color: Colors.grey[900],
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: (widget.originalContentHtml != null &&
+                            child: _hasImagePreviewLinks
+                                ? NoteBodyWithPreviews(
+                                    content: widget.originalContentHtml != null &&
+                                            widget.originalContentHtml!.isNotEmpty
+                                        ? widget.originalContentHtml!
+                                        : widget.originalContent,
+                                    isHtml: widget.originalContentHtml != null &&
+                                        widget.originalContentHtml!.isNotEmpty,
+                                    mode: widget.imagePreviewMode,
+                                    repository: imagePreviewRepository!,
+                                  )
+                                : (widget.originalContentHtml != null &&
                                     widget.originalContentHtml!.isNotEmpty)
                                 ? Theme(
                                     data: Theme.of(context).copyWith(
@@ -613,31 +628,32 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
                                   ),
                           ),
                           const SizedBox(height: 16),
-                          Expanded(
-                            child: TextField(
-                              controller: _replyController,
-                              style: const TextStyle(color: Colors.white),
-                              minLines: 6,
-                              maxLines: null,
-                              keyboardType: TextInputType.multiline,
-                              decoration: const InputDecoration(
-                                border: OutlineInputBorder(),
-                                labelText: 'Your Reply',
-                                labelStyle: TextStyle(color: Colors.white),
-                                alignLabelWithHint: true,
-                              ),
-                              contextMenuBuilder: BBCodeContextMenu.builder(_replyController),
-                            ),
-
-                          ),
-                          const SizedBox(height: 16),
                         ],
-                      ),
-                    ),
                   ),
                 ),
-              );
-            },
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                sliver: SliverToBoxAdapter(
+                  child: TextField(
+                    controller: _replyController,
+                    style: const TextStyle(color: Colors.white),
+                    minLines: 6,
+                    maxLines: null,
+                    textAlignVertical: TextAlignVertical.top,
+                    keyboardType: TextInputType.multiline,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Your Reply',
+                      hintStyle: TextStyle(color: Colors.white),
+                      contentPadding: EdgeInsets.all(16),
+                    ),
+                    contextMenuBuilder:
+                        BBCodeContextMenu.builder(_replyController),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

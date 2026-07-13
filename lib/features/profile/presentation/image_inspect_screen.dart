@@ -6,15 +6,24 @@ import 'package:flutter/services.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:provider/provider.dart';
 
+import 'package:FANotifier/features/profile/domain/avatar_image_data.dart';
 import 'package:FANotifier/features/profile/domain/profile_media_export_repository.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 
 class ImageInspectScreen extends StatefulWidget {
   final String imageUrl;
+  final AvatarImageData? imageData;
 
-  const ImageInspectScreen({Key? key, required this.imageUrl}) : super(key: key);
+  const ImageInspectScreen({
+    Key? key,
+    required this.imageUrl,
+    this.imageData,
+  }) : super(key: key);
 
-  static Route<void> route({required String imageUrl}) {
+  static Route<void> route({
+    required String imageUrl,
+    AvatarImageData? imageData,
+  }) {
     return PageRouteBuilder<void>(
       opaque: false,
       barrierColor: Colors.transparent,
@@ -22,7 +31,10 @@ class ImageInspectScreen extends StatefulWidget {
       pageBuilder: (context, animation, secondaryAnimation) {
         return FadeTransition(
           opacity: animation,
-          child: ImageInspectScreen(imageUrl: imageUrl),
+          child: ImageInspectScreen(
+            imageUrl: imageUrl,
+            imageData: imageData,
+          ),
         );
       },
     );
@@ -118,7 +130,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
         return;
       }
 
-      final imageData =
+      final imageData = widget.imageData ??
           await _mediaExportRepository.fetchImageData(widget.imageUrl);
       final isSaved =
           await _mediaExportRepository.saveImageToGallery(imageData);
@@ -151,7 +163,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
         return;
       }
 
-      final imageData =
+      final imageData = widget.imageData ??
           await _mediaExportRepository.fetchImageData(widget.imageUrl);
       await _mediaExportRepository.shareImage(imageData);
     } catch (e) {
@@ -543,24 +555,34 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
                 child: SizedBox.expand(
                   child: Container(
                     alignment: Alignment.center,
-                    child: FaNetworkImage(
-                      widget.imageUrl,
-                      fit: BoxFit.contain,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) {
-                          return child;
-                        }
-                        return const Center(
-                          child: PulsatingLoadingIndicator(
-                            size: 108.0,
-                            assetPath: 'assets/icons/fathemed.png',
+                    child: widget.imageData != null
+                        ? Image.memory(
+                            widget.imageData!.bytes,
+                            fit: BoxFit.contain,
+                            filterQuality: FilterQuality.high,
+                            gaplessPlayback: true,
+                          )
+                        : FaNetworkImage(
+                            widget.imageUrl,
+                            fit: BoxFit.contain,
+                            loadingBuilder:
+                                (context, child, loadingProgress) {
+                              if (loadingProgress == null) {
+                                return child;
+                              }
+                              return const Center(
+                                child: PulsatingLoadingIndicator(
+                                  size: 108.0,
+                                  assetPath: 'assets/icons/fathemed.png',
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              return Image.asset(
+                                'assets/images/defaultpic.gif',
+                              );
+                            },
                           ),
-                        );
-                      },
-                      errorBuilder: (context, error, stackTrace) {
-                        return Image.asset('assets/images/defaultpic.gif');
-                      },
-                    ),
                   ),
                 ),
               ),

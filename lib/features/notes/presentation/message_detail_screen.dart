@@ -7,6 +7,10 @@ import 'package:FANotifier/features/notes/domain/notes_refresh_port.dart';
 import 'package:FANotifier/app/navigation/app_navigation.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/notes/presentation/note_reply_screen.dart';
+import 'package:FANotifier/features/notes/domain/note_image_preview_mode.dart';
+import 'package:FANotifier/features/notes/domain/note_submission_preview_repository.dart';
+import 'package:FANotifier/features/notes/presentation/note_body_with_previews.dart';
+import 'package:FANotifier/features/notes/presentation/note_image_preview_settings_provider.dart';
 import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
@@ -187,6 +191,22 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final imagePreviewSettings =
+        context.watch<NoteImagePreviewSettingsProvider>();
+    final imagePreviewMode = imagePreviewSettings.loaded
+        ? imagePreviewSettings.mode
+        : NoteImagePreviewMode.off;
+    final hasImagePreviewLinks =
+        imagePreviewMode != NoteImagePreviewMode.off &&
+            noteBodyContainsSubmissionLinks(
+              messageContentHtml.isNotEmpty
+                  ? messageContentHtml
+                  : messageContent,
+              isHtml: messageContentHtml.isNotEmpty,
+            );
+    final imagePreviewRepository = hasImagePreviewLinks
+        ? context.read<NoteSubmissionPreviewRepository>()
+        : null;
     if (_shouldShowReplySuccess) {
       _shouldShowReplySuccess = false; // Reset immediately
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -405,15 +425,32 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                   ),
                   const Divider(height: 20, thickness: 1, color: Colors.white54),
                   Expanded(
-                    child: SingleChildScrollView(
-                      child: Theme(
-                        data: Theme.of(context).copyWith(
-                          textSelectionTheme: TextSelectionThemeData(
-                            selectionColor: Color(0xFFE09321).withValues(alpha: 0.4),
-                            selectionHandleColor: Color(0xFFE09321),
-                          ),
-                        ),
-                        child: messageContentHtml.isNotEmpty
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: SingleChildScrollView(
+                            padding: EdgeInsets.only(
+                              bottom: widget.folder != 'sent' ? 96 : 0,
+                            ),
+                            child: Theme(
+                              data: Theme.of(context).copyWith(
+                                textSelectionTheme: TextSelectionThemeData(
+                                  selectionColor: const Color(0xFFE09321)
+                                      .withValues(alpha: 0.4),
+                                  selectionHandleColor:
+                                      const Color(0xFFE09321),
+                                ),
+                              ),
+                              child: hasImagePreviewLinks
+                                  ? NoteBodyWithPreviews(
+                                content: messageContentHtml.isNotEmpty
+                                    ? messageContentHtml
+                                    : messageContent,
+                                isHtml: messageContentHtml.isNotEmpty,
+                                mode: imagePreviewMode,
+                                repository: imagePreviewRepository!,
+                              )
+                            : messageContentHtml.isNotEmpty
                             ? SelectionArea(
                                 key: _selectableKey,
                                 onSelectionChanged: (content) {
@@ -463,8 +500,8 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                                   },
                                   extensions: [faHtmlImageExtension()],
                                 ),
-                              )
-                            : SelectableLinkify(
+                                        )
+                                      : SelectableLinkify(
                                 key: _selectableKey,
                                 onSelectionChanged:
                                     _updatePlainMessageSelection,
@@ -490,62 +527,91 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                                 ),
                                 selectionControls: MaterialTextSelectionControls(),
                               ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      if (widget.folder != 'sent')
-                        OutlinedButton(
-                          onPressed: _markAsUnread,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFFE09321),
-                            side: const BorderSide(
-                              color: Color(0xFFE09321),
                             ),
                           ),
-                          child: const Text('Mark Unread'),
                         ),
-                      if (widget.folder != 'sent') const SizedBox(width: 8),
-
-
-                      if (widget.folder != 'sent')
-                        ElevatedButton(
-                          onPressed: () {
-                            final replyToUsername = widget.folder == 'sent'
-                                ? recipientUsername
-                                : senderUsername;
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => NoteReplyScreen(
-                                  subject: subject,
-                                  originalContent: messageContent,
-                                  originalContentHtml: messageContentHtml.isNotEmpty ? messageContentHtml : null,
-                                  username: replyToUsername.isNotEmpty ? replyToUsername : senderUsername,
-                                  messageId: messageId ?? '',
-                                  messageLink: widget.messageLink,
+                        if (widget.folder != 'sent')
+                          Align(
+                            alignment: Alignment.bottomCenter,
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.only(top: 32),
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.transparent,
+                                    Color(0xCC000000),
+                                    Colors.black,
+                                  ],
                                 ),
                               ),
-                            ).then((result) {
-                              if (result == true) {
-                                rootMessengerKey.currentState?.showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Reply sent successfully!'),
-                                    backgroundColor: Colors.green,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  OutlinedButton(
+                                    onPressed: _markAsUnread,
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor:
+                                          const Color(0xFFE09321),
+                                      side: const BorderSide(
+                                        color: Color(0xFFE09321),
+                                      ),
+                                    ),
+                                    child: const Text('Mark Unread'),
                                   ),
-                                );
-                              }
-                            });
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFE09321),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton(
+                                    onPressed: () {
+                                      final replyToUsername =
+                                          widget.folder == 'sent'
+                                              ? recipientUsername
+                                              : senderUsername;
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => NoteReplyScreen(
+                                            subject: subject,
+                                            originalContent: messageContent,
+                                            originalContentHtml:
+                                                messageContentHtml.isNotEmpty
+                                                    ? messageContentHtml
+                                                    : null,
+                                            username: replyToUsername.isNotEmpty
+                                                ? replyToUsername
+                                                : senderUsername,
+                                            messageId: messageId ?? '',
+                                            messageLink: widget.messageLink,
+                                            imagePreviewMode: imagePreviewMode,
+                                          ),
+                                        ),
+                                      ).then((result) {
+                                        if (result == true) {
+                                          rootMessengerKey.currentState
+                                              ?.showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Reply sent successfully!',
+                                              ),
+                                              backgroundColor: Colors.green,
+                                            ),
+                                          );
+                                        }
+                                      });
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor:
+                                          const Color(0xFFE09321),
+                                    ),
+                                    child: const Text('Reply'),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                          child: const Text('Reply'),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),

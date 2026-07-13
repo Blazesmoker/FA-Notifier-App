@@ -38,10 +38,12 @@ import 'package:FANotifier/features/notes/domain/new_message_repository.dart';
 import 'package:FANotifier/features/notes/domain/note_message_repository.dart';
 import 'package:FANotifier/features/notes/domain/note_reply_repository.dart';
 import 'package:FANotifier/features/notes/domain/note_reply_webview_gateway.dart';
+import 'package:FANotifier/features/notes/domain/note_submission_preview_repository.dart';
 import 'package:FANotifier/features/notes/domain/notes_repository.dart';
 import 'package:FANotifier/features/notes/domain/notes_refresh_port.dart';
 import 'package:FANotifier/features/notes/domain/notes_trash_repository.dart';
 import 'package:FANotifier/features/notes/notes_feature.dart';
+import 'package:FANotifier/features/notes/presentation/note_image_preview_settings_provider.dart';
 import 'package:FANotifier/features/profile/profile_feature.dart';
 import 'package:FANotifier/features/profile/domain/profile_favorites_repository.dart';
 import 'package:FANotifier/features/profile/domain/profile_gallery_favorite_repository.dart';
@@ -265,6 +267,11 @@ class AppProviders extends StatelessWidget {
                 context.read<SubmissionCommentRepository>(),
           ),
         ),
+        Provider<NoteSubmissionPreviewRepository>(
+          create: (context) => NotesFeature.createSubmissionPreviewRepository(
+            openPostRepository: context.read<OpenPostRepository>(),
+          ),
+        ),
         ChangeNotifierProvider<TimezoneProvider>.value(
           value: timezoneProvider,
         ),
@@ -279,6 +286,9 @@ class AppProviders extends StatelessWidget {
         ),
         ChangeNotifierProvider<TranslatorSettingsProvider>(
           create: (_) => TranslatorSettingsProvider(),
+        ),
+        ChangeNotifierProvider<NoteImagePreviewSettingsProvider>(
+          create: (_) => NoteImagePreviewSettingsProvider(),
         ),
         ChangeNotifierProvider<FANotificationService>(
           create: (_) => NotificationsFeature.createNotificationService(),

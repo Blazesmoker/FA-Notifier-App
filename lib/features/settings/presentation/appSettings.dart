@@ -6,6 +6,7 @@ import 'package:FANotifier/features/browse/presentation/thumbnail_display_settin
 import 'package:FANotifier/features/settings/presentation/app_icon_settings_screen.dart';
 import 'package:FANotifier/features/settings/presentation/set_home_screen_screen.dart';
 import 'package:FANotifier/features/settings/presentation/translator_settings_screen.dart';
+import 'package:FANotifier/features/notes/presentation/notes_settings_screen.dart';
 
 class AppSettingsScreen extends StatefulWidget {
   const AppSettingsScreen({Key? key}) : super(key: key);
@@ -85,6 +86,26 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => const NotificationsSettingsScreen(),
+                ),
+              );
+            },
+          ),
+          const Divider(
+            height: 1.0,
+            color: Color(0xFF111111),
+            thickness: 3.0,
+          ),
+          ListTile(
+            leading: const Icon(
+              Icons.mail_outline_rounded,
+              color: Color(0xFFE09321),
+            ),
+            title: const Text('Notes Settings'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const NotesSettingsScreen(),
                 ),
               );
             },
