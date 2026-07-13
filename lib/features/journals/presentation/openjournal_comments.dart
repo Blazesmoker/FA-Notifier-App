@@ -229,12 +229,22 @@ class _CommentWidgetState extends State<CommentWidget> {
     final int nestingLevel =
         ((100.0 - widthPercent) / 3.0).round().clamp(0, 4).toInt();
     final double leftPadding = nestingLevel * 16.0;
+    final bool isAdmin = widget.comment['isAdmin'] == true;
     final decoration = BoxDecoration(
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF101010), Color(0xFF202020)],
-      ),
+      gradient: isAdmin
+          ? const LinearGradient(
+          begin: Alignment.bottomLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF141619),
+            Color(0xFF2B3447),
+          ],
+            )
+          : const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF101010), Color(0xFF202020)],
+            ),
       borderRadius: BorderRadius.circular(8.0),
     );
 

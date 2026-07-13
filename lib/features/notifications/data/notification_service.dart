@@ -1,7 +1,6 @@
 // lib/services/notification_service.dart
 import 'dart:io';
 import 'dart:ui';
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,7 +25,6 @@ class NotificationService implements LocalNotificationGateway {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  static const MethodChannel _iosChannel = MethodChannel('app.notifications');
   static const String _kNextActivityNotificationId =
       'next_activity_notification_id';
   static const int _kActivityNotificationIdBase = 1500000000;
@@ -35,6 +33,8 @@ class NotificationService implements LocalNotificationGateway {
   static const int appUpdateNotificationId = 1400000000;
   static const String appUpdatePayload = appUpdateNotificationPayload;
   NotificationTapHandler? _notificationTapHandler;
+  bool _tapHandlingInitialized = false;
+  bool _platformConfigured = false;
 
   Future<int> allocateActivityNotificationId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -65,12 +65,13 @@ class NotificationService implements LocalNotificationGateway {
   }
 
   Future<void> init({
-    Future<void> Function()? onLaunchPayloadSaved,
     NotificationTapHandler? onNotificationTap,
   }) async {
     if (onNotificationTap != null) {
       _notificationTapHandler = onNotificationTap;
     }
+    if (_tapHandlingInitialized) return;
+
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/fathemednotif');
 
@@ -93,36 +94,6 @@ class NotificationService implements LocalNotificationGateway {
       onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
 
-    if (!Platform.isAndroid) {
-      await _requestIOSPermissions();
-    }
-
-    await _createNotificationChannels();
-
-    _iosChannel.setMethodCallHandler((call) async {
-      if (call.method == 'notificationTapped') {
-        final Map<String, dynamic> map =
-            Map<String, dynamic>.from(call.arguments as Map);
-        final String? payload = _extractPayloadFromNative(map);
-        if (payload != null) {
-          await _handleTapPayload(payload, source: 'iosChannel');
-        } else {
-          // Heuristic fallback: route by "type" in userInfo
-          final userInfo =
-              (map['userInfo'] as Map?)?.cast<String, dynamic>() ?? const {};
-          if (userInfo['type'] == 'notes') {
-            await _handleTapPayload('note_native', source: 'iosChannel');
-          } else if (userInfo['type'] == 'activities') {
-            await _handleTapPayload('activity_native', source: 'iosChannel');
-          }
-        }
-      }
-    });
-
-    try {
-      await _iosChannel.invokeMethod('notifications.ready');
-    } catch (_) {}
-
     final details =
         await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
     if ((details?.didNotificationLaunchApp ?? false) &&
@@ -134,9 +105,19 @@ class NotificationService implements LocalNotificationGateway {
               .requestAcknowledgeOnNextForegroundFetch();
         }
         await const PendingNavigationStore().savePayload(payload);
-        await onLaunchPayloadSaved?.call();
       }
     }
+    _tapHandlingInitialized = true;
+  }
+
+  Future<void> configurePlatform() async {
+    if (_platformConfigured) return;
+    await init();
+    if (!Platform.isAndroid) {
+      await _requestIOSPermissions();
+    }
+    await _createNotificationChannels();
+    _platformConfigured = true;
   }
 
   Future<void> _requestIOSPermissions() async {
@@ -261,19 +242,6 @@ class NotificationService implements LocalNotificationGateway {
 
       await const PendingNavigationStore().savePayload(payload);
     }
-  }
-
-  String? _extractPayloadFromNative(Map<String, dynamic> native) {
-    if (native['payload'] is String &&
-        (native['payload'] as String).isNotEmpty) {
-      return native['payload'] as String;
-    }
-    final Map<String, dynamic> userInfo =
-        (native['userInfo'] as Map?)?.cast<String, dynamic>() ?? const {};
-    if (userInfo['payload'] is String) return userInfo['payload'] as String;
-    if (userInfo['route'] == '/notes') return 'note_native';
-    if (userInfo['route'] == '/activities') return 'activity_native';
-    return null;
   }
 
   String _capitalize(String s) =>

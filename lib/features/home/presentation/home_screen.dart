@@ -11,8 +11,6 @@ import 'package:FANotifier/features/upload/presentation/upload_submission.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:FANotifier/features/notifications/presentation/fa_notification_service.dart';
-import 'package:FANotifier/features/notes/domain/notes_refresh_port.dart';
-import 'package:FANotifier/features/notifications/domain/notification_refresh_port.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:flutter/foundation.dart';
@@ -28,13 +26,11 @@ import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.d
 import 'package:FANotifier/shared/theme/app_theme.dart';
 import 'package:FANotifier/shared/fa/domain/user_profile.dart';
 import 'package:FANotifier/shared/fa/domain/notifications.dart';
-import 'package:FANotifier/features/notifications/domain/pending_navigation_repository.dart';
 import 'package:FANotifier/features/home/domain/home_login_webview_support.dart';
 import 'package:FANotifier/features/home/domain/home_profile_repository.dart';
 import 'package:FANotifier/features/home/domain/home_session_repository.dart';
 import 'package:FANotifier/features/home/domain/home_start_screen_preference.dart';
 import 'package:FANotifier/features/home/domain/home_start_screen_preference_repository.dart';
-import 'package:FANotifier/features/home/domain/pending_home_destination.dart';
 import 'package:FANotifier/features/auth/domain/startup_cloudflare_checker.dart';
 import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
@@ -72,10 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final HomeStartScreenPreferenceRepository
       _homeStartScreenPreferenceRepository;
   late final StartupCloudflareChecker _startupCloudflareChecker;
-  late final PendingNavigationRepository _pendingNavigationRepository;
   late final FaActivitiesPollingPort _activitiesPolling;
-  late final NotesRefreshPort _notesRefresh;
-  late final NotificationRefreshPort _notificationRefresh;
   HomeStartScreenPreference _homeStartScreenPreference =
       HomeStartScreenPreference.browse;
   Future<void>? _homeStartPreferenceFuture;
@@ -133,18 +126,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _homeStartScreenPreferenceRepository =
         context.read<HomeStartScreenPreferenceRepository>();
     _startupCloudflareChecker = context.read<StartupCloudflareChecker>();
-    _pendingNavigationRepository =
-        context.read<PendingNavigationRepository>();
     _activitiesPolling = context.read<FaActivitiesPollingPort>();
-    _notesRefresh = context.read<NotesRefreshPort>();
-    _notificationRefresh = context.read<NotificationRefreshPort>();
     _navProvider =
         Provider.of<NotificationNavigationProvider>(context, listen: false);
     _navProvider.addListener(_handleNavProviderChange);
 
     _homeStartPreferenceFuture = _loadHomeStartScreenPreference();
     _initializeAndLoadLoginState();
-    _handlePendingNavigation();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.initialSearchQuery != null &&
@@ -202,39 +190,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     _maybeOpenStartupProfile();
-  }
-
-  Future<void> _handlePendingNavigation() async {
-    if (!mounted) return;
-    final String? pendingPayload =
-        await _pendingNavigationRepository.loadPayload(reload: true);
-    if (pendingPayload == null) return;
-    if (pendingPayload.isEmpty) {
-      await _pendingNavigationRepository.clearPayload();
-      return;
-    }
-
-    final destination = pendingHomeDestinationFromPayload(pendingPayload);
-
-    if (destination == PendingHomeDestination.notes) {
-      _navProvider.setTargetIndex(4);
-      setState(
-          () => _forceNotesRefresh = true);
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _notesRefresh.triggerRefresh();
-        debugPrint("NOTES REFRESH TRIGGERED_home_postframe");
-      });
-    } else if (destination == PendingHomeDestination.notifications) {
-      _navProvider.setTargetIndex(3);
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _notificationRefresh.triggerRefresh();
-        debugPrint("ACTIVITIES REFRESH TRIGGERED_home_postframe");
-      });
-    }
-
-    await _pendingNavigationRepository.clearPayload();
   }
 
   Future<void> _initializeAndLoadLoginState() async {

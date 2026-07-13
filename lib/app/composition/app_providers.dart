@@ -22,7 +22,6 @@ import 'package:FANotifier/features/notifications/notifications_feature.dart';
 import 'package:FANotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:FANotifier/features/notifications/domain/notification_refresh_port.dart';
 import 'package:FANotifier/features/notifications/domain/notification_platform_settings_repository.dart';
-import 'package:FANotifier/features/notifications/domain/pending_navigation_repository.dart';
 import 'package:FANotifier/features/notifications/presentation/fa_notification_service.dart';
 import 'package:FANotifier/features/notifications/presentation/notification_navigation_provider.dart';
 import 'package:FANotifier/features/notifications/presentation/notification_settings_provider.dart';
@@ -142,10 +141,6 @@ class AppProviders extends StatelessWidget {
         ),
         Provider<NotificationRefreshPort>.value(
           value: NotificationsFeature.refreshPort,
-        ),
-        Provider<PendingNavigationRepository>(
-          create: (_) =>
-              NotificationsFeature.createPendingNavigationRepository(),
         ),
         Provider<NotificationPlatformSettingsRepository>(
           create: (_) =>

@@ -12,6 +12,7 @@ List<Map<String, dynamic>> parseOpenPostComments(dom.Document document) {
   for (final commentContainer in commentContainers) {
     final isClassic = commentContainer.localName == 'table';
     final innerContainer = commentContainer.querySelector('comment-container');
+    final isAdmin = commentContainer.classes.contains('admin-comment');
     var isDeleted =
         innerContainer?.classes.contains('deleted-comment-container') ?? false;
 
@@ -217,6 +218,7 @@ List<Map<String, dynamic>> parseOpenPostComments(dom.Document document) {
       'commentHtml': commentHtml,
       'width': widthPercent,
       'isOP': commentContainer.querySelector('.comment_op_marker') != null,
+      'isAdmin': isAdmin,
       'popupDateFull': popupDateFull,
       'popupDateRelative': popupDateRelative,
       'showFullDate': false,

@@ -49,6 +49,7 @@ List<Map<String, dynamic>> parseOpenJournalComments(dom.Document document) {
         commentBlock.querySelector('comment-title')?.text.trim() ?? '';
     comment['isOP'] =
         commentBlock.querySelector('.comment_op_marker') != null;
+    comment['isAdmin'] = commentBlock.classes.contains('admin-comment');
 
     comment['iconBeforeUrls'] = commentBlock
         .querySelectorAll('usericon-block-before img')

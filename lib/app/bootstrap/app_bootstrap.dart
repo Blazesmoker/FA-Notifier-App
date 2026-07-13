@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -54,6 +53,14 @@ Future<void> initializeAppInfrastructure({
   configureBackgroundWorkmanager(callbackDispatcher);
   WidgetsFlutterBinding.ensureInitialized();
   configureAppLogging();
+  try {
+    await NotificationService().init(
+      onNotificationTap: appNotificationNavigation.handleTap,
+    );
+  } catch (error, stackTrace) {
+    debugPrint('[BOOT] early notification tap init failed: $error');
+    debugPrint(stackTrace.toString());
+  }
   await Firebase.initializeApp();
   await setupAnalyticsPrivacy();
   await FAHttp.init();
@@ -69,21 +76,15 @@ Future<void> initializeAppInfrastructure({
 
 Future<void> afterFirstFrameBoot(TimezoneProvider timezoneProvider) async {
   try {
+    await appNotificationNavigation.processPending(
+      from: 'after_first_frame_boot',
+    );
     await PackageInfo.fromPlatform();
     tz.initializeTimeZones();
     await timezoneProvider.fetchTimezone();
     final notificationService = NotificationService();
-    await notificationService.init(
-      onNotificationTap: appNotificationNavigation.handleTap,
-      onLaunchPayloadSaved: () => appNotificationNavigation.processPending(
-        from: 'notification_launch_details',
-      ),
-    );
+    await notificationService.configurePlatform();
     await notificationService.updateNotificationChannels();
-    const channel = MethodChannel('app.notifications');
-    try {
-      await channel.invokeMethod('notifications.ready');
-    } catch (_) {}
     await _requestAndroidNotificationPermission();
     await _requestIOSNotificationPermission();
     final cacheManager = CustomCacheManager();

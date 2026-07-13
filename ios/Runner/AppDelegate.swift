@@ -110,9 +110,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 }
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
-
-    var flutterEngine: FlutterEngine?
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
 
     private let backgroundTaskIdentifier = adaptiveBackgroundTaskIdentifier
 
@@ -127,9 +125,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         UserDefaults.standard.synchronize()
     }
 
-    private var notifChannel: FlutterMethodChannel?
-    private var pendingNotificationPayload: [String: Any]?
-    private var notificationsReady = false
     private var translationChannel: FlutterMethodChannel?
     private var translationHostWindow: UIWindow?
     private weak var translationPreviousKeyWindow: UIWindow?
@@ -140,109 +135,14 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         }
     }
 
-    private func findFlutterViewController() -> FlutterViewController? {
-        if let vc = window?.rootViewController as? FlutterViewController {
-            return vc
-        }
-        if #available(iOS 13.0, *) {
-            for scene in UIApplication.shared.connectedScenes {
-                guard let windowScene = scene as? UIWindowScene else { continue }
-                for w in windowScene.windows {
-                    if let fc = w.rootViewController as? FlutterViewController {
-                        return fc
-                    }
-                    if let nav = w.rootViewController as? UINavigationController,
-                       let fc = nav.viewControllers.first(where: { $0 is FlutterViewController }) as? FlutterViewController {
-                        return fc
-                    }
-                }
-            }
-        }
-        return nil
-    }
-
-    func setupNotificationChannelIfNeeded() {
-        guard notifChannel == nil,
-              let controller = findFlutterViewController()
-        else { return }
-
-        let channel = FlutterMethodChannel(
-            name: "app.notifications",
-            binaryMessenger: controller.binaryMessenger
-        )
-        self.notifChannel = channel
-
-        channel.setMethodCallHandler { [weak self] call, result in
-            guard let self = self else { return }
-            if call.method == "notifications.ready" {
-                self.fLog("Dart confirmed notifications.ready")
-                self.notificationsReady = true
-                self.flushPendingNotificationIfReady()
-                result(true)
-            } else {
-                result(FlutterMethodNotImplemented)
-            }
-        }
-
-        self.fLog("MethodChannel 'app.notifications' initialized")
-        flushPendingNotificationIfReady()
-    }
-
-    private func flushPendingNotificationIfReady() {
-        guard notificationsReady,
-              let channel = notifChannel,
-              let pending = pendingNotificationPayload
-        else { return }
-        fLog("Sending pending tapped notification to Dart")
-        channel.invokeMethod("notificationTapped", arguments: pending)
-        pendingNotificationPayload = nil
-    }
-
-    private func activateSceneForNotificationTap() {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { [weak self] in
-                self?.activateSceneForNotificationTap()
-            }
-            return
-        }
-
-        if #available(iOS 13.0, *) {
-            let windowScenes = UIApplication.shared.connectedScenes.compactMap {
-                $0 as? UIWindowScene
-            }
-            let targetScene = windowScenes.first(where: {
-                $0.activationState == .foregroundActive ||
-                    $0.activationState == .foregroundInactive
-            }) ?? windowScenes.first
-
-            (targetScene?.delegate as? SceneDelegate)?.prepareForNotificationActivation()
-
-            if targetScene?.activationState == .foregroundActive ||
-                targetScene?.activationState == .foregroundInactive {
-                return
-            }
-
-            fLog("Requesting scene activation for notification tap")
-            UIApplication.shared.requestSceneSessionActivation(
-                targetScene?.session,
-                userActivity: nil,
-                options: nil
-            ) { [weak self] error in
-                self?.fLog("Notification scene activation failed: \(error.localizedDescription)")
-            }
-        } else {
-            window?.makeKeyAndVisible()
-        }
-    }
-
-    func setupTranslationChannelIfNeeded() {
-        guard translationChannel == nil,
-              let controller = findFlutterViewController()
-        else { return }
+    private func setupTranslationChannelIfNeeded(
+        binaryMessenger: FlutterBinaryMessenger
+    ) {
+        guard translationChannel == nil else { return }
 
         let channel = FlutterMethodChannel(
             name: "app.translation",
-            binaryMessenger: controller.binaryMessenger
+            binaryMessenger: binaryMessenger
         )
         translationChannel = channel
         self.fLog("MethodChannel 'app.translation' initialized")
@@ -401,10 +301,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         if application.applicationState == .background {
             fLog("Background launch detected - skipping FlutterEngine.run for UI entrypoint")
         }
-        setupNotificationChannelIfNeeded()
-        setupTranslationChannelIfNeeded()
-        UNUserNotificationCenter.current().delegate = self
-        configurePluginRegistrantCallbacks()
+        UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
         WorkmanagerPlugin.setPluginRegistrantCallback(registerPluginsForBackgroundIsolate)
 
         if #available(iOS 13.0, *) {
@@ -441,20 +338,15 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
 
-    override func applicationDidEnterBackground(_ application: UIApplication) {
-        handleDidEnterBackground(source: "appDelegate")
-    }
-
-    override func applicationDidBecomeActive(_ application: UIApplication) {
-        handleDidBecomeActive(source: "appDelegate")
-    }
-
-    override func applicationWillResignActive(_ application: UIApplication) {
-        fLog("App will resign active")
-    }
-
-    override func applicationWillEnterForeground(_ application: UIApplication) {
-        fLog("App will enter foreground")
+    func didInitializeImplicitFlutterEngine(
+        _ engineBridge: FlutterImplicitEngineBridge
+    ) {
+        configurePluginRegistrantCallbacks()
+        GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+        registerAdaptiveBackgroundFetchPlugin(registry: engineBridge.pluginRegistry)
+        setupTranslationChannelIfNeeded(
+            binaryMessenger: engineBridge.applicationRegistrar.messenger()
+        )
     }
 
     func handleDidEnterBackground(source: String) {
@@ -472,8 +364,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         UserDefaults.standard.synchronize()
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: backgroundTaskIdentifier)
         fLog("Background fetch interval reset to 15m; pending request cleared while app is active")
-        setupNotificationChannelIfNeeded()
-        setupTranslationChannelIfNeeded()
         getPendingBackgroundTasks()
         logApproxNextFetch("didBecomeActive:\(source)")
     }
@@ -581,56 +471,11 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 
         let content = response.notification.request.content
         fLog("Notification tapped: \(content.title) (action=\(response.actionIdentifier))")
-        activateSceneForNotificationTap()
-        let payload = makePayload(from: response)
-        if notificationsReady, let channel = notifChannel {
-            fLog("Forwarding tap to Dart via MethodChannel")
-            channel.invokeMethod("notificationTapped", arguments: payload)
-        } else {
-            fLog("MethodChannel not ready yet – caching tapped notification")
-            pendingNotificationPayload = payload
-        }
-        completionHandler()
-    }
-
-    private func makePayload(from response: UNNotificationResponse) -> [String: Any] {
-        let content = response.notification.request.content
-        let info = stringifyUserInfo(content.userInfo)
-        var payload: [String: Any] = [
-            "id": response.notification.request.identifier,
-            "title": content.title,
-            "body": content.body,
-            "actionIdentifier": response.actionIdentifier,
-            "categoryIdentifier": content.categoryIdentifier,
-            "threadIdentifier": content.threadIdentifier,
-            "timestamp": Int(Date().timeIntervalSince1970),
-            "userInfo": info
-        ]
-        if let dartPayload = content.userInfo["payload"] as? String {
-            payload["payload"] = dartPayload
-        }
-        return payload
-    }
-
-    private func stringifyUserInfo(_ userInfo: [AnyHashable: Any]) -> [String: Any] {
-        var out: [String: Any] = [:]
-        for (k, v) in userInfo {
-            let key = String(describing: k)
-            switch v {
-            case let s as String:        out[key] = s
-            case let n as NSNumber:      out[key] = n
-            case let b as Bool:          out[key] = b
-            case let d as Double:        out[key] = d
-            case let i as Int:           out[key] = i
-            case let arr as [Any]:
-                out[key] = arr.map { String(describing: $0) }
-            case let dict as [AnyHashable: Any]:
-                out[key] = stringifyUserInfo(dict)
-            default:
-                out[key] = String(describing: v)
-            }
-        }
-        return out
+        super.userNotificationCenter(
+            center,
+            didReceive: response,
+            withCompletionHandler: completionHandler
+        )
     }
 
     #if DEBUG
