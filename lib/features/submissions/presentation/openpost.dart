@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter/scheduler.dart';
 import 'package:FANotifier/features/comments/presentation/reply_screen.dart';
+import 'package:FANotifier/features/comments/presentation/inline_comment_composer.dart';
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
@@ -14,7 +15,6 @@ import 'package:like_button/like_button.dart';
 import 'package:FANotifier/shared/theme/app_theme.dart';
 import 'package:FANotifier/app/navigation/app_navigation.dart';
 import 'package:FANotifier/shared/fa/fa_username.dart';
-import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:FANotifier/shared/utils/comment_composer_lines.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/features/submissions/presentation/SubmissionDescriptionWebview.dart';
@@ -45,6 +45,8 @@ import 'package:FANotifier/shared/translation/translation_source_text_builder.da
 import 'package:FANotifier/shared/platform/fa_share_service.dart';
 import 'package:FANotifier/shared/navigation/transparent_slide_page_route.dart';
 import 'package:provider/provider.dart';
+
+import '../../../shared/utils/bbcode_context_menu.dart';
 
 class OpenPost extends StatefulWidget {
   final String imageUrl;
@@ -524,7 +526,7 @@ class _OpenPostState extends State<OpenPost>
 
       final keyboardJustClosed = previousInset > 0 && inset <= 0.5;
       if (keyboardJustClosed && _commentFocusNode.hasFocus) {
-        _commentFocusNode.unfocus();
+        _dismissCommentComposerFocus();
       }
     }
   }
@@ -1480,42 +1482,6 @@ class _OpenPostState extends State<OpenPost>
         _isSendingInlineComment.value = false;
       }
     }
-  }
-
-  Widget _buildComposerSendButton({
-    required bool canSend,
-    required bool isSending,
-    bool compact = false,
-  }) {
-    final buttonSize = compact ? 30.0 : 40.0;
-
-    if (isSending) {
-      return SizedBox(
-        width: buttonSize,
-        height: buttonSize,
-        child: const Center(
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-      );
-    }
-
-    return IconButton(
-      padding: EdgeInsets.zero,
-      constraints: BoxConstraints.tightFor(
-        width: buttonSize,
-        height: buttonSize,
-      ),
-      visualDensity: VisualDensity.compact,
-      icon: Icon(
-        Icons.send,
-        color: canSend ? const Color(0xFFE09321) : Colors.white54,
-      ),
-      onPressed: canSend ? _sendInlineComment : null,
-    );
   }
 
   Future<void> _unhideComment(String unhideLink, String commentId) async {
@@ -3082,21 +3048,16 @@ class _OpenPostState extends State<OpenPost>
                                 ),
                                 ..._buildCommentSlivers(translatorSettings),
                                 SliverToBoxAdapter(
-                                  child: ListenableBuilder(
-                                    listenable: Listenable.merge([
-                                      _isCommentComposerExpanded,
-                                      _commentDraftCollapsedLines,
-                                    ]),
-                                    builder: (context, _) {
-                                      final isExpanded =
-                                          _isCommentComposerExpanded.value;
-                                      final collapsedPreviewLines =
-                                          _commentDraftCollapsedLines.value;
-                                      final composerSpacerHeight = isExpanded
-                                          ? 198.0
-                                          : (72.0 +
-                                              ((collapsedPreviewLines - 1) *
-                                                  24.0));
+                                  child: ValueListenableBuilder<int>(
+                                    valueListenable:
+                                        _commentDraftCollapsedLines,
+                                    builder:
+                                        (context, collapsedPreviewLines, _) {
+                                      final composerSpacerHeight =
+                                          inlineCommentComposerClearance(
+                                        collapsedLines: collapsedPreviewLines,
+                                        viewPaddingBottom: viewPaddingBottom,
+                                      );
                                       return SizedBox(
                                           height: composerSpacerHeight);
                                     },
@@ -3123,6 +3084,36 @@ class _OpenPostState extends State<OpenPost>
                           },
                         ),
                       ),
+                      if (!showLoadingIndicator)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: InlineCommentComposer(
+                            controller: _commentController,
+                            focusNode: _commentFocusNode,
+                            keyboardInset: _keyboardInset,
+                            isExpanded: _isCommentComposerExpanded,
+                            collapsedLines: _commentDraftCollapsedLines,
+                            hasText: _commentDraftHasText,
+                            showScrollToTop: _showScrollToTopNotifier,
+                            isSending: _isSendingInlineComment,
+                            viewPaddingBottom: viewPaddingBottom,
+                            scrollToTopHeroTag: 'scroll_top',
+                            onPointerDown:
+                                _handleCommentComposerPointerDown,
+                            onScrollToTop: () {
+                              _scrollController.animateTo(
+                                0,
+                                duration:
+                                    const Duration(milliseconds: 300),
+                                curve: Curves.easeOut,
+                              );
+                            },
+                            onSend: _sendInlineComment,
+                            onKeyboardClosing: _dismissCommentComposerFocus,
+                          ),
+                        ),
                       if (showLoadingIndicator)
                         Container(
                           color: const Color(0xFF000000),
@@ -3137,247 +3128,6 @@ class _OpenPostState extends State<OpenPost>
                     ],
                   ),
                 ),
-                bottomNavigationBar: showLoadingIndicator
-                    ? null
-                    : RepaintBoundary(
-                        child: Container(
-                          color: Colors.black,
-                          child: SafeArea(
-                            bottom: true,
-                            child: ListenableBuilder(
-                              listenable: Listenable.merge([
-                                _keyboardInset,
-                                _isCommentComposerExpanded,
-                              ]),
-                              builder: (context, _) {
-                                final keyboardInset = _keyboardInset.value;
-                                return Padding(
-                                  padding: EdgeInsets.only(
-                                    left: 8,
-                                    right: 8,
-                                    bottom: keyboardInset > 0
-                                        ? (keyboardInset -
-                                                viewPaddingBottom +
-                                                8)
-                                            .clamp(0.0, double.infinity)
-                                        : 0.0,
-                                    top: 8,
-                                  ),
-                                  child: ListenableBuilder(
-                                    listenable: Listenable.merge([
-                                      _isCommentComposerExpanded,
-                                      _commentDraftCollapsedLines,
-                                      _commentDraftHasText,
-                                      _showScrollToTopNotifier,
-                                      _isSendingInlineComment,
-                                    ]),
-                                    builder: (context, _) {
-                                      final isExpanded =
-                                          _isCommentComposerExpanded.value;
-                                      final collapsedLines =
-                                          _commentDraftCollapsedLines.value;
-                                      final hasText =
-                                          _commentDraftHasText.value;
-                                      final isSending =
-                                          _isSendingInlineComment.value;
-                                      final canSend = !isSending && hasText;
-                                      final minLines =
-                                          isExpanded ? 6 : collapsedLines;
-                                      final maxLines =
-                                          isExpanded ? 6 : collapsedLines;
-                                      final isCollapsedSingleLine =
-                                          !isExpanded && collapsedLines == 1;
-
-                                      const compactSingleLineVerticalPadding =
-                                          8.0;
-                                      final topPadding = isExpanded
-                                          ? 12.0
-                                          : (isCollapsedSingleLine
-                                              ? compactSingleLineVerticalPadding
-                                              : 8.0);
-                                      final bottomPadding = isExpanded
-                                          ? 8.0
-                                          : (isCollapsedSingleLine
-                                              ? compactSingleLineVerticalPadding
-                                              : 8.0);
-
-                                      return Row(
-                                        crossAxisAlignment:
-                                            isCollapsedSingleLine
-                                                ? CrossAxisAlignment.center
-                                                : CrossAxisAlignment.end,
-                                        children: [
-                                          ClipRect(
-                                            child: AnimatedSize(
-                                              duration: const Duration(
-                                                  milliseconds: 210),
-                                              curve: Curves.easeInOut,
-                                              alignment: Alignment.centerLeft,
-                                              child:
-                                                  ValueListenableBuilder<bool>(
-                                                valueListenable:
-                                                    _showScrollToTopNotifier,
-                                                builder: (context, show, _) {
-                                                  return Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      if (show && !isExpanded)
-                                                        SizedBox(
-                                                          width: 36,
-                                                          height: 36,
-                                                          child:
-                                                              FloatingActionButton
-                                                                  .small(
-                                                            heroTag:
-                                                                'scroll_top',
-                                                            backgroundColor:
-                                                                const Color(
-                                                                    0xFFE09321),
-                                                            elevation: 0,
-                                                            onPressed: () {
-                                                              _scrollController
-                                                                  .animateTo(
-                                                                0,
-                                                                duration:
-                                                                    const Duration(
-                                                                        milliseconds:
-                                                                            300),
-                                                                curve: Curves
-                                                                    .easeOut,
-                                                              );
-                                                            },
-                                                            child: const Icon(
-                                                              Icons
-                                                                  .arrow_upward,
-                                                              size: 18,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      if (show && !isExpanded)
-                                                        const SizedBox(
-                                                            width: 8),
-                                                    ],
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: Stack(
-                                              children: [
-                                                Listener(
-                                                  behavior: HitTestBehavior
-                                                      .translucent,
-                                                  onPointerDown:
-                                                      _handleCommentComposerPointerDown,
-                                                  child: TextField(
-                                                    controller:
-                                                        _commentController,
-                                                    focusNode:
-                                                        _commentFocusNode,
-                                                    style: const TextStyle(
-                                                        color: Colors.white),
-                                                    keyboardType:
-                                                        TextInputType.multiline,
-                                                    textInputAction:
-                                                        TextInputAction.newline,
-                                                    minLines: minLines,
-                                                    maxLines: maxLines,
-                                                    scrollPadding:
-                                                        const EdgeInsets.only(
-                                                            bottom: 8),
-                                                    decoration: InputDecoration(
-                                                      hintText:
-                                                          'Add a comment...',
-                                                      hintStyle:
-                                                          const TextStyle(
-                                                              color: Colors
-                                                                  .white54),
-                                                      contentPadding:
-                                                          EdgeInsets.fromLTRB(
-                                                        12,
-                                                        topPadding,
-                                                        56,
-                                                        bottomPadding,
-                                                      ),
-                                                      filled: true,
-                                                      isDense:
-                                                          isCollapsedSingleLine,
-                                                      fillColor: const Color(
-                                                          0xFF151515),
-                                                      border:
-                                                          OutlineInputBorder(
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(10),
-                                                        borderSide:
-                                                            BorderSide.none,
-                                                      ),
-                                                    ),
-                                                    contextMenuBuilder:
-                                                        BBCodeContextMenu.builder(
-                                                            _commentController),
-                                                  ),
-                                                ),
-                                                if (isCollapsedSingleLine)
-                                                  Positioned.fill(
-                                                    child: Align(
-                                                      alignment:
-                                                          Alignment.centerRight,
-                                                      child: Padding(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .only(right: 4),
-                                                        child:
-                                                            _buildComposerSendButton(
-                                                          canSend: canSend,
-                                                          isSending: isSending,
-                                                          compact: true,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  )
-                                                else
-                                                  Positioned(
-                                                    top: 4,
-                                                    right: 4,
-                                                    child:
-                                                        _buildComposerSendButton(
-                                                      canSend: canSend,
-                                                      isSending: isSending,
-                                                    ),
-                                                  ),
-                                                if (isExpanded &&
-                                                    hasText &&
-                                                    !isSending)
-                                                  Positioned(
-                                                    right: 4,
-                                                    bottom: 4,
-                                                    child: IconButton(
-                                                      icon: const Icon(
-                                                        Icons.clear,
-                                                        color: Colors.white54,
-                                                      ),
-                                                      onPressed: () {
-                                                        _commentController
-                                                            .clear();
-                                                      },
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
               ),
             ),
           ),

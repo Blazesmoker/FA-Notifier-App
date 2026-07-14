@@ -10,8 +10,12 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsAnimationCompat
+import androidx.core.view.WindowInsetsCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
@@ -19,9 +23,19 @@ class MainActivity : FlutterActivity() {
     private val iconChannel = "com.blazesmoker.fanotifier/icon"
     private val settingsChannel = "com.blazesmoker.fanotifier/settings"
     private val translationChannel = "app.translation"
+    private val imeAnimationChannel = "app.ime_animation"
+    private var imeEventSink: EventChannel.EventSink? = null
+    private var latestImeBottom = 0.0
+    private var imeAnimationActive = false
+    private var imeAnimationClosing = false
+    private var imeWasVisibleBeforeAnimation = false
+    private var imeAnimationStartBottom = 0.0
+    private var imeAnimationEndBottom = 0.0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        attachImeAnimationCallback()
 
         Log.d("MainActivity", "🟢 Activity created")
         Log.d("MainActivity", "🟢 onCreate => default static icon is in use.")
@@ -74,6 +88,19 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, imeAnimationChannel)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    imeEventSink = events
+                    publishImeAnimationFrame(
+                        ViewCompat.getRootWindowInsets(window.decorView)
+                    )
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    imeEventSink = null
+                }
+            })
     }
 
     override fun provideFlutterEngine(context: Context): FlutterEngine? {
@@ -89,8 +116,106 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        imeEventSink = null
         customEngine?.destroy()
         super.onDestroy()
+    }
+
+    private fun attachImeAnimationCallback() {
+        val rootView = window.decorView
+        ViewCompat.setWindowInsetsAnimationCallback(
+            rootView,
+            object : WindowInsetsAnimationCompat.Callback(
+                DISPATCH_MODE_CONTINUE_ON_SUBTREE
+            ) {
+                override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                    if (animation.typeMask and WindowInsetsCompat.Type.ime() == 0) {
+                        return
+                    }
+
+                    val insets = ViewCompat.getRootWindowInsets(rootView)
+                    imeAnimationActive = true
+                    imeAnimationClosing = false
+                    imeWasVisibleBeforeAnimation =
+                        insets?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                    publishImeAnimationFrame(insets)
+                    imeAnimationStartBottom = latestImeBottom
+                    imeAnimationEndBottom = latestImeBottom
+                }
+
+                override fun onStart(
+                    animation: WindowInsetsAnimationCompat,
+                    bounds: WindowInsetsAnimationCompat.BoundsCompat
+                ): WindowInsetsAnimationCompat.BoundsCompat {
+                    if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) {
+                        val targetInsets =
+                            ViewCompat.getRootWindowInsets(rootView)
+                        val targetVisible = targetInsets?.isVisible(
+                            WindowInsetsCompat.Type.ime()
+                        ) ?: !imeWasVisibleBeforeAnimation
+                        imeAnimationClosing =
+                            imeWasVisibleBeforeAnimation && !targetVisible
+                        val density = resources.displayMetrics.density.toDouble()
+                        imeAnimationEndBottom = if (targetVisible) {
+                            targetInsets?.let { imeBottom(it) }
+                                ?: (bounds.upperBound.bottom / density)
+                        } else {
+                            bounds.lowerBound.bottom / density
+                        }
+                        publishImeAnimationFrame(null)
+                    }
+                    return bounds
+                }
+
+                override fun onProgress(
+                    insets: WindowInsetsCompat,
+                    runningAnimations: MutableList<WindowInsetsAnimationCompat>
+                ): WindowInsetsCompat {
+                    val imeAnimation = runningAnimations.firstOrNull {
+                        it.typeMask and WindowInsetsCompat.Type.ime() != 0
+                    }
+                    if (imeAnimation != null) {
+                        latestImeBottom = imeAnimationStartBottom +
+                            ((imeAnimationEndBottom - imeAnimationStartBottom) *
+                                imeAnimation.interpolatedFraction.toDouble())
+                        publishImeAnimationFrame(null)
+                    }
+                    return insets
+                }
+
+                override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                    if (animation.typeMask and WindowInsetsCompat.Type.ime() == 0) {
+                        return
+                    }
+
+                    imeAnimationActive = false
+                    imeAnimationClosing = false
+                    imeWasVisibleBeforeAnimation = false
+                    publishImeAnimationFrame(
+                        ViewCompat.getRootWindowInsets(rootView)
+                    )
+                }
+            }
+        )
+        ViewCompat.requestApplyInsets(rootView)
+    }
+
+    private fun publishImeAnimationFrame(insets: WindowInsetsCompat?) {
+        if (insets != null) {
+            latestImeBottom = imeBottom(insets)
+        }
+        imeEventSink?.success(
+            mapOf(
+                "bottom" to latestImeBottom,
+                "isAnimating" to imeAnimationActive,
+                "isClosing" to imeAnimationClosing
+            )
+        )
+    }
+
+    private fun imeBottom(insets: WindowInsetsCompat): Double {
+        return insets.getInsets(WindowInsetsCompat.Type.ime()).bottom /
+            resources.displayMetrics.density.toDouble()
     }
 
 
