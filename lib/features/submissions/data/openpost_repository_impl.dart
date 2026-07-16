@@ -4,6 +4,7 @@ import 'package:FANotifier/features/submissions/data/openpost_action_service.dar
 import 'package:FANotifier/features/submissions/data/openpost_cookie_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_details_loader.dart';
 import 'package:FANotifier/features/submissions/data/openpost_favorite_links_loader.dart';
+import 'package:FANotifier/features/submissions/data/openpost_file_download_service.dart';
 import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
 import 'package:FANotifier/features/submissions/data/openpost_link_parser.dart'
     as openpost_links;
@@ -16,9 +17,11 @@ import 'package:FANotifier/features/submissions/domain/openpost_action_result.da
 import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_details_load_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_favorite_links_load_result.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_file_download_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_media_export_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_page_response.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_repository.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_submission_attachment.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_user_actions_load_result.dart';
 
 class OpenPostRepositoryImpl implements OpenPostRepository {
@@ -31,6 +34,7 @@ class OpenPostRepositoryImpl implements OpenPostRepository {
         const OpenPostUserActionsLoader(),
     OpenPostMediaExportService mediaExportService =
         const OpenPostMediaExportService(),
+    OpenPostFileDownloadService? fileDownloadService,
     required SubmissionCommentRepository submissionCommentRepository,
   })  : _actionService = actionService,
         _cookieService = cookieService,
@@ -38,6 +42,8 @@ class OpenPostRepositoryImpl implements OpenPostRepository {
         _detailsLoader = detailsLoader,
         _userActionsLoader = userActionsLoader,
         _mediaExportService = mediaExportService,
+        _fileDownloadService = fileDownloadService ??
+            OpenPostFileDownloadService(cookieService: cookieService),
         _submissionCommentRepository = submissionCommentRepository;
 
   final OpenPostActionService _actionService;
@@ -46,6 +52,7 @@ class OpenPostRepositoryImpl implements OpenPostRepository {
   final OpenPostDetailsLoader _detailsLoader;
   final OpenPostUserActionsLoader _userActionsLoader;
   final OpenPostMediaExportService _mediaExportService;
+  final OpenPostFileDownloadService _fileDownloadService;
   final SubmissionCommentRepository _submissionCommentRepository;
 
   @override
@@ -224,6 +231,19 @@ class OpenPostRepositoryImpl implements OpenPostRepository {
   @override
   Future<OpenPostMediaExportResult> shareFromUrl(String imageUrl) {
     return _mediaExportService.shareFromUrl(imageUrl);
+  }
+
+  @override
+  Future<OpenPostFileDownloadResult> downloadSubmissionFile({
+    required OpenPostSubmissionAttachment attachment,
+    required bool sfwEnabled,
+    required bool nsfwAllowed,
+  }) {
+    return _fileDownloadService.download(
+      attachment: attachment,
+      sfwEnabled: sfwEnabled,
+      nsfwAllowed: nsfwAllowed,
+    );
   }
 
   @override

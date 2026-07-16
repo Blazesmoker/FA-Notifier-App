@@ -49,20 +49,59 @@ class OpenPostCookieService {
     required bool nsfwAllowed,
     Map<String, String>? additionalHeaders,
     bool skipSfw = false,
+    Duration? timeout,
+  }) async {
+    final headers = await _buildHeaders(
+      sfwEnabled: sfwEnabled,
+      nsfwAllowed: nsfwAllowed,
+      skipSfw: skipSfw,
+      additionalHeaders: additionalHeaders,
+    );
+    return FAHttp.get(
+      Uri.parse(url),
+      headers: headers,
+      timeout: timeout,
+    );
+  }
+
+  Future<Response> getMediaWithSfwCookie({
+    required String url,
+    required bool sfwEnabled,
+    required bool nsfwAllowed,
+    Map<String, String>? additionalHeaders,
+    bool skipSfw = false,
+    Duration? timeout,
+  }) async {
+    final headers = await _buildHeaders(
+      sfwEnabled: sfwEnabled,
+      nsfwAllowed: nsfwAllowed,
+      skipSfw: skipSfw,
+      additionalHeaders: additionalHeaders,
+    );
+    return FAHttp.getMedia(
+      Uri.parse(url),
+      headers: headers,
+      timeout: timeout,
+    );
+  }
+
+  Future<Map<String, String>> _buildHeaders({
+    required bool sfwEnabled,
+    required bool nsfwAllowed,
+    required bool skipSfw,
+    required Map<String, String>? additionalHeaders,
   }) async {
     final cookieHeader = await buildCookieHeader(
       sfwEnabled: sfwEnabled,
       nsfwAllowed: nsfwAllowed,
       skipSfw: skipSfw,
     );
-
     final headers = <String, String>{
       'Cookie':
           await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
       'User-Agent': FAHttp.userAgent,
     };
     if (additionalHeaders != null) headers.addAll(additionalHeaders);
-
-    return FAHttp.get(Uri.parse(url), headers: headers);
+    return headers;
   }
 }

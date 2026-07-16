@@ -171,8 +171,8 @@ class _InlineCommentComposerState extends State<InlineCommentComposer> {
             inset > 0.5 && keyboardOffset > widget.viewPaddingBottom
                 ? keyboardOffset
                 : widget.viewPaddingBottom;
-        return ColoredBox(
-          color: Colors.black,
+        return CustomPaint(
+          painter: const _InlineCommentComposerBackgroundPainter(),
           child: Padding(
             padding: EdgeInsets.only(bottom: bottomOffset),
             child: child,
@@ -180,6 +180,41 @@ class _InlineCommentComposerState extends State<InlineCommentComposer> {
         );
       },
     );
+  }
+}
+
+class _InlineCommentComposerBackgroundPainter extends CustomPainter {
+  const _InlineCommentComposerBackgroundPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fadeHeight = size.height < 6.0 ? size.height : 6.0;
+    if (fadeHeight > 0.0) {
+      final fadeRect = Rect.fromLTWH(0.0, 0.0, size.width, fadeHeight);
+      final fadePaint = Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.transparent, Colors.black],
+        ).createShader(fadeRect);
+      canvas.drawRect(fadeRect, fadePaint);
+    }
+    if (size.height > fadeHeight) {
+      canvas.drawRect(
+        Rect.fromLTWH(
+          0.0,
+          fadeHeight,
+          size.width,
+          size.height - fadeHeight,
+        ),
+        Paint()..color = Colors.black,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_InlineCommentComposerBackgroundPainter oldDelegate) {
+    return false;
   }
 }
 
@@ -212,8 +247,7 @@ class _InlineCommentComposerSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.black,
+    return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
       child: ListenableBuilder(
         listenable: Listenable.merge([

@@ -25,6 +25,7 @@ import 'package:FANotifier/features/submissions/domain/openpost_media_export_res
 import 'package:FANotifier/features/submissions/domain/openpost_action_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_repository.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_submission_attachment.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost_controller.dart';
 import 'package:FANotifier/features/submissions/presentation/edit_submission_screen.dart';
 import 'package:FANotifier/features/comments/presentation/editcommentscreen.dart';
@@ -34,6 +35,7 @@ import 'package:FANotifier/features/notes/presentation/new_message.dart';
 import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:FANotifier/features/journals/presentation/openjournal.dart';
 import 'package:FANotifier/features/submissions/presentation/openpost_comments.dart';
+import 'package:FANotifier/features/submissions/presentation/openpost_submission_content.dart';
 import 'package:FANotifier/features/profile/domain/profile_section.dart';
 import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
 import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
@@ -119,14 +121,19 @@ class _OpenPostState extends State<OpenPost>
   int _frameTimingCount = 0;
   int _frameTimingTotalMicros = 0;
   bool _webViewLoaded = false;
+  Color? _submissionSnackBarColor;
+  int _submissionSnackBarGeneration = 0;
   final GlobalKey<SubmissionDescriptionWebViewState> _submissionWebViewKey =
       GlobalKey<SubmissionDescriptionWebViewState>();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<SelectionAreaState> _titleSelectionKey = GlobalKey();
+  final GlobalKey<SelectionAreaState> _submissionContentSelectionKey =
+      GlobalKey();
   final Map<Object, GlobalKey<SelectionAreaState>> _commentSelectionKeys =
       <Object, GlobalKey<SelectionAreaState>>{};
   final Map<Object, String> _commentSelectedTexts = <Object, String>{};
   String _titleSelectedText = '';
+  String _submissionContentSelectedText = '';
   int? _selectionClearPointerId;
   Offset? _selectionClearPointerDownPosition;
   DateTime? _selectionClearPointerDownTime;
@@ -156,6 +163,8 @@ class _OpenPostState extends State<OpenPost>
   String? get submissionTitle => _controller.submissionTitle;
   String? get fullViewImageUrl => _controller.fullViewImageUrl;
   String? get submissionDescription => _controller.submissionDescription;
+  OpenPostSubmissionAttachment? get submissionAttachment =>
+      _controller.submissionAttachment;
   DateTime? get publicationTime => _controller.publicationTime;
   String? get rating => _controller.rating;
   int get favoritesCount => _controller.favoritesCount;
@@ -227,6 +236,32 @@ class _OpenPostState extends State<OpenPost>
     if (route != null) {
       routeObserver.subscribe(this, route);
     }
+  }
+
+  void _showSubmissionMessage(String message, Color backgroundColor) {
+    if (!mounted) return;
+    final generation = ++_submissionSnackBarGeneration;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    if (_submissionSnackBarColor != backgroundColor) {
+      setState(() {
+        _submissionSnackBarColor = backgroundColor;
+      });
+    }
+    final controller = messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: backgroundColor,
+      ),
+    );
+    unawaited(
+      controller.closed.then((_) {
+        if (!mounted || generation != _submissionSnackBarGeneration) return;
+        setState(() {
+          _submissionSnackBarColor = null;
+        });
+      }),
+    );
   }
 
   @override
@@ -384,6 +419,10 @@ class _OpenPostState extends State<OpenPost>
     _titleSelectedText = content?.plainText ?? '';
   }
 
+  void _updateSubmissionContentSelectedText(SelectedContent? content) {
+    _submissionContentSelectedText = content?.plainText ?? '';
+  }
+
   void _updateCommentSelectedText(
     Object selectionId,
     SelectedContent? content,
@@ -461,6 +500,7 @@ class _OpenPostState extends State<OpenPost>
 
   void _clearAllTextSelections() {
     _clearSelectionArea(_titleSelectionKey);
+    _clearSelectionArea(_submissionContentSelectionKey);
     for (final key in _commentSelectionKeys.values) {
       _clearSelectionArea(key);
     }
@@ -605,8 +645,7 @@ class _OpenPostState extends State<OpenPost>
     }
 
     return Padding(
-      padding:
-          EdgeInsets.fromLTRB(12, 10, 12, metaKeywordTags.isNotEmpty ? 4 : 0),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2090,10 +2129,13 @@ class _OpenPostState extends State<OpenPost>
     final double viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
     return ExcludeSemantics(
       child: AnnotatedRegion<SystemUiOverlayStyle>(
-        value: const SystemUiOverlayStyle(
-          systemNavigationBarColor: Colors.black,
+        value: SystemUiOverlayStyle(
+          systemNavigationBarColor:
+              _submissionSnackBarColor ?? Colors.black,
+          systemNavigationBarDividerColor: Colors.transparent,
           systemNavigationBarIconBrightness: Brightness.light,
-          statusBarColor: Color(0xFF111111),
+          systemNavigationBarContrastEnforced: false,
+          statusBarColor: const Color(0xFF111111),
           statusBarIconBrightness: Brightness.light,
         ),
         child: ValueListenableBuilder<bool>(
@@ -2701,6 +2743,50 @@ class _OpenPostState extends State<OpenPost>
                                         color: Color(0xFF111111),
                                         thickness: 3.0,
                                       ),
+                                      if (submissionAttachment != null)
+                                        OpenPostSubmissionContent(
+                                          attachment: submissionAttachment!,
+                                          onDownload: () =>
+                                              _controller.downloadSubmissionFile(
+                                            submissionAttachment!,
+                                          ),
+                                          onShowMessage:
+                                              _showSubmissionMessage,
+                                          routeDetached:
+                                              _isPostWebViewDetached,
+                                          selectionAreaKey:
+                                              _submissionContentSelectionKey,
+                                          onSelectionChanged:
+                                              _updateSubmissionContentSelectedText,
+                                          contextMenuBuilder:
+                                              ReadOnlySelectionContextMenu
+                                                  .builder(
+                                            selectedTextProvider: () =>
+                                                _submissionContentSelectedText,
+                                            includeIosTranslate: true,
+                                          ),
+                                        ),
+                                      if (submissionAttachment != null &&
+                                          submissionDescription != null)
+                                        const Divider(
+                                          height: 2.0,
+                                          color: Color(0xFF111111),
+                                          thickness: 2.0,
+                                        ),
+                                      if (submissionAttachment != null &&
+                                          submissionDescription != null)
+                                        const Divider(
+                                          height: 3.0,
+                                          color: Colors.black,
+                                          thickness: 3.0,
+                                        ),
+                                      if (submissionAttachment != null &&
+                                          submissionDescription != null)
+                                        const Divider(
+                                          height: 4.0,
+                                          color: Color(0xFF111111),
+                                          thickness: 4.0,
+                                        ),
                                       if (submissionDescription != null)
                                         Padding(
                                           padding: const EdgeInsets.only(

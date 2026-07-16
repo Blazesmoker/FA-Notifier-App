@@ -2,11 +2,13 @@ import 'package:FANotifier/features/submissions/domain/openpost_action_result.da
 import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_details_load_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_favorite_links_load_result.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_file_download_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_media_export_result.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_page_response.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_repository.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_tag_block_state.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_submission_attachment.dart';
 import 'package:flutter/foundation.dart';
 
 class OpenPostController {
@@ -58,6 +60,7 @@ class OpenPostController {
   bool isClassicUserPage = false;
   double? imageWidth;
   double? imageHeight;
+  OpenPostSubmissionAttachment? submissionAttachment;
   bool isLoading = true;
   bool detailsLoaded = false;
   bool sfwEnabled = true;
@@ -247,6 +250,7 @@ class OpenPostController {
     tagBlocklistNonce = parsedPost.tagBlocklistNonce;
     imageWidth = parsedPost.imageWidth;
     imageHeight = parsedPost.imageHeight;
+    submissionAttachment = parsedPost.submissionAttachment;
     comments = parsedComments;
     commentsCount = parsedComments.length;
     detailsLoaded = true;
@@ -448,6 +452,16 @@ class OpenPostController {
 
   Future<OpenPostMediaExportResult> shareFromUrl(String imageUrl) {
     return _repository.shareFromUrl(imageUrl);
+  }
+
+  Future<OpenPostFileDownloadResult> downloadSubmissionFile(
+    OpenPostSubmissionAttachment attachment,
+  ) {
+    return _repository.downloadSubmissionFile(
+      attachment: attachment,
+      sfwEnabled: sfwEnabled,
+      nsfwAllowed: nsfwAllowed,
+    );
   }
 
   String normalizeSubmissionHtml(String htmlContent) {

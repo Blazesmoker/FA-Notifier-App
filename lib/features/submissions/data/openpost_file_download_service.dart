@@ -1,0 +1,101 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
+
+import 'package:FANotifier/features/submissions/data/openpost_cookie_service.dart';
+import 'package:FANotifier/features/submissions/data/openpost_submission_url.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_file_download_result.dart';
+import 'package:FANotifier/features/submissions/domain/openpost_submission_attachment.dart';
+
+class OpenPostFileDownloadService {
+  const OpenPostFileDownloadService({
+    required OpenPostCookieService cookieService,
+  }) : _cookieService = cookieService;
+
+  final OpenPostCookieService _cookieService;
+
+  static const MethodChannel _filePickerChannel = MethodChannel(
+    'miguelruivo.flutter.plugins.filepicker',
+  );
+
+  Future<OpenPostFileDownloadResult> download({
+    required OpenPostSubmissionAttachment attachment,
+    required bool sfwEnabled,
+    required bool nsfwAllowed,
+  }) async {
+    try {
+      final downloadUrl = attachment.downloadUrl ?? attachment.contentUrl;
+      if (!isTrustedOpenPostSubmissionUrl(downloadUrl)) {
+        return const OpenPostFileDownloadResult(
+          OpenPostFileDownloadStatus.failed,
+        );
+      }
+      final response = await _cookieService.getMediaWithSfwCookie(
+        url: downloadUrl,
+        sfwEnabled: sfwEnabled,
+        nsfwAllowed: nsfwAllowed,
+        additionalHeaders: const <String, String>{'Accept': '*/*'},
+        timeout: const Duration(minutes: 2),
+      );
+      if (response.statusCode != 200) {
+        return OpenPostFileDownloadResult(
+          OpenPostFileDownloadStatus.httpFailure,
+          statusCode: response.statusCode,
+        );
+      }
+      final contentType =
+          response.headers['content-type']?.trim().toLowerCase() ?? '';
+      if (response.bodyBytes.isEmpty ||
+          contentType.contains('text/html') ||
+          contentType.contains('application/xhtml')) {
+        return const OpenPostFileDownloadResult(
+          OpenPostFileDownloadStatus.failed,
+        );
+      }
+
+      final savedPath = await _saveFile(
+        attachment: attachment,
+        bytes: response.bodyBytes,
+      );
+      if (savedPath == null) {
+        return const OpenPostFileDownloadResult(
+          OpenPostFileDownloadStatus.cancelled,
+        );
+      }
+      return const OpenPostFileDownloadResult(
+        OpenPostFileDownloadStatus.saved,
+      );
+    } catch (_) {
+      return const OpenPostFileDownloadResult(
+        OpenPostFileDownloadStatus.failed,
+      );
+    }
+  }
+
+  Future<String?> _saveFile({
+    required OpenPostSubmissionAttachment attachment,
+    required Uint8List bytes,
+  }) {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return _filePickerChannel.invokeMethod<String>(
+        'save',
+        <String, Object?>{
+          'fileName': attachment.fileName,
+          'fileType': FileType.custom.name,
+          'initialDirectory': null,
+          'allowedExtensions': <String>[attachment.extension],
+          'bytes': bytes,
+        },
+      );
+    }
+    return FilePicker.saveFile(
+      dialogTitle: 'Save submission file',
+      fileName: attachment.fileName,
+      type: FileType.custom,
+      allowedExtensions: <String>[attachment.extension],
+      bytes: bytes,
+    );
+  }
+}

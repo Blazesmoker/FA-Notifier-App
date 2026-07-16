@@ -1,3 +1,5 @@
+import 'package:FANotifier/features/submissions/domain/openpost_submission_attachment.dart';
+
 class OpenPostParseResult {
   OpenPostParseResult({
     required this.currentUsername,
@@ -27,6 +29,7 @@ class OpenPostParseResult {
     required this.tagBlocklistNonce,
     required this.imageWidth,
     required this.imageHeight,
+    required this.submissionAttachment,
   });
 
   final String? currentUsername;
@@ -56,6 +59,7 @@ class OpenPostParseResult {
   final String? tagBlocklistNonce;
   final double? imageWidth;
   final double? imageHeight;
+  final OpenPostSubmissionAttachment? submissionAttachment;
 }
 
 class FaPostTag {

@@ -2555,7 +2555,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    side: const BorderSide(color: Color(0xFFE09321)),
+                    side: const BorderSide(color: Color(0xFFE09321), width: 0.5),
                   ),
                   child: const Text(
                     "Profile Info",
@@ -2577,7 +2577,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    side: const BorderSide(color: Color(0xFFE09321)),
+                    side: const BorderSide(color: Color(0xFFE09321), width: 0.5),
                   ),
                   child: const Text(
                     "Profile Banner",
@@ -2599,7 +2599,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    side: const BorderSide(color: Color(0xFFE09321)),
+                    side: const BorderSide(color: Color(0xFFE09321), width: 0.5),
                   ),
                   child: const Text(
                     "Contacts & Social Media",
@@ -2620,7 +2620,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    side: const BorderSide(color: Color(0xFFE09321)),
+                    side: const BorderSide(color: Color(0xFFE09321), width: 0.5),
                   ),
                   child: const Text(
                     "Avatar Management",

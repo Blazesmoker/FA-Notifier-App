@@ -4,6 +4,7 @@ import 'package:FANotifier/features/submissions/data/openpost_comments_parser.da
 import 'package:FANotifier/features/submissions/data/openpost_html_link_normalizer.dart';
 import 'package:FANotifier/features/submissions/data/openpost_submission_metadata_parser.dart';
 import 'package:FANotifier/features/submissions/data/openpost_submission_stats_parser.dart';
+import 'package:FANotifier/features/submissions/data/openpost_submission_attachment_parser.dart';
 import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
 import 'package:FANotifier/shared/fa/parsing_utils.dart';
 
@@ -141,6 +142,7 @@ class OpenPostApiService {
       tagBlocklistNonce: metadata.tagBlocklistNonce,
       imageWidth: metadata.imageWidth,
       imageHeight: metadata.imageHeight,
+      submissionAttachment: parseOpenPostSubmissionAttachment(document),
     );
   }
 
