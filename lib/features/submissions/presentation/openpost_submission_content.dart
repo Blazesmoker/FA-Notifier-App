@@ -862,6 +862,13 @@ class _OpenPostDocumentViewerState extends State<_OpenPostDocumentViewer> {
                     callback: (arguments) {
                       if (!_isCurrentViewer(viewerGeneration)) return;
                       _cancelDocumentLoadTimeout();
+                      if (_usesReaderPresentation &&
+                          _fullReaderText == null &&
+                          _isLoading) {
+                        setState(() {
+                          _isLoading = false;
+                        });
+                      }
                     },
                   );
                 },
@@ -1211,6 +1218,9 @@ String _documentViewerSetupScript({
   let pageWidthApplied=false;
   let pdfClassificationStarted=false;
   let pdfPreviewMode=null;
+  let readerTextReported=false;
+  let readerFallbackReady=false;
+  const readerStartedAt=Date.now();
   const resizeObserver=window.ResizeObserver
     ? new ResizeObserver(scheduleOpenPostDocumentHeight)
     : null;
@@ -1395,11 +1405,105 @@ String _documentViewerSetupScript({
   function reportFullReaderText(fullTextPages){
     const fullText=fullTextPages.join('\\n\\n').trim();
     if(fullText&&window.flutter_inappwebview){
+      readerTextReported=true;
       window.flutter_inappwebview.callHandler(
         'openPostDocumentFullText',
         fullText
       );
     }
+  }
+  function normalizedDocumentText(target){
+    if(!target){
+      return '';
+    }
+    let value=target.innerText||'';
+    if(!value&&typeof target.cloneNode==='function'){
+      const clone=target.cloneNode(true);
+      for(const node of clone.querySelectorAll('script,style,noscript')){
+        node.remove();
+      }
+      value=clone.textContent||'';
+    }
+    return value
+      .replace(/\\u00a0/g,' ')
+      .replace(/\\r\\n?/g,'\\n')
+      .replace(/[ \\t]+\\n/g,'\\n')
+      .replace(/\\n[ \\t]+/g,'\\n')
+      .trim();
+  }
+  function reportDocumentReaderText(){
+    if(readerTextReported){
+      return true;
+    }
+    const viewer=document.getElementById('viewer');
+    const candidates=[
+      viewer&&viewer.querySelector('pre'),
+      viewer&&viewer.querySelector('article'),
+      viewer&&viewer.querySelector('main'),
+      viewer,
+      document.querySelector('pre'),
+      document.querySelector('article'),
+      document.querySelector('main'),
+      document.body
+    ];
+    for(const frame of document.querySelectorAll('iframe')){
+      try{
+        const frameDocument=frame.contentDocument;
+        if(frameDocument){
+          candidates.push(
+            frameDocument.querySelector('pre'),
+            frameDocument.querySelector('article'),
+            frameDocument.querySelector('main'),
+            frameDocument.body
+          );
+        }
+      }catch(_){}
+    }
+    const visited=new Set();
+    let text='';
+    for(const target of candidates){
+      if(!target||visited.has(target)){
+        continue;
+      }
+      visited.add(target);
+      const candidate=normalizedDocumentText(target);
+      if(candidate&&!/^loading(?:\\.\\.\\.)?\$/i.test(candidate)){
+        text=candidate;
+        break;
+      }
+    }
+    if(!text){
+      scheduleReaderRetry();
+      return false;
+    }
+    const signature='document:'+text.length+':'+
+      text.slice(0,64)+':'+text.slice(-64);
+    const now=Date.now();
+    if(signature!==readerSignature){
+      readerSignature=signature;
+      readerSignatureSince=now;
+      scheduleReaderRetry();
+      return false;
+    }
+    if(now-readerSignatureSince<180){
+      scheduleReaderRetry();
+      return false;
+    }
+    reportFullReaderText([text]);
+    return readerTextReported;
+  }
+  function reportReaderFallbackReady(){
+    if(readerTextReported||readerFallbackReady||
+        Date.now()-readerStartedAt<2000){
+      return;
+    }
+    const target=readerTarget();
+    if(!target||target.getBoundingClientRect().height<=0||
+        !window.flutter_inappwebview){
+      return;
+    }
+    readerFallbackReady=true;
+    window.flutter_inappwebview.callHandler('openPostDocumentReady');
   }
   function buildReaderFromTextContents(pageContents){
     const existing=document.getElementById('openPostReader');
@@ -1558,10 +1662,16 @@ String _documentViewerSetupScript({
     }
     const viewer=document.getElementById('viewer');
     if(!viewer){
+      if(expandsToContent){
+        reportDocumentReaderText();
+      }
       return;
     }
     const pages=Array.from(viewer.querySelectorAll('.page'));
     if(pages.length===0){
+      if(expandsToContent){
+        reportDocumentReaderText();
+      }
       return;
     }
     const pageLayers=pages.map(function(page){
@@ -1572,6 +1682,9 @@ String _documentViewerSetupScript({
     }
     let layers=pageLayers.filter(function(layer){return !!layer;});
     if(layers.length===0){
+      if(expandsToContent){
+        reportDocumentReaderText();
+      }
       return;
     }
     if(!expandsToContent){
@@ -1582,6 +1695,9 @@ String _documentViewerSetupScript({
       return spans.length+':'+(layer.textContent||'').length;
     }).join('|');
     if(!signature||signature===pages.length+':0'){
+      if(expandsToContent){
+        reportDocumentReaderText();
+      }
       return;
     }
     const now=Date.now();
@@ -1629,6 +1745,9 @@ String _documentViewerSetupScript({
       fullTextPages.push(pageTextLines.join('\\n'));
     }
     if(!hasText||!viewer.parentNode){
+      if(expandsToContent){
+        reportDocumentReaderText();
+      }
       return;
     }
     viewer.parentNode.insertBefore(reader,viewer);
@@ -1701,6 +1820,9 @@ String _documentViewerSetupScript({
     buildReaderFromPdf();
     if(!expandsToContent){
       return;
+    }
+    if(usesReaderPresentation&&!readerTextReported){
+      reportReaderFallbackReady();
     }
     trimLastReaderPage();
     const target=readerTarget();
