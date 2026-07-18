@@ -26,7 +26,7 @@ const double _messageActionsFadeBlackStop = 1.00;
 const double _messageActionsFadePosition = 0.35;
 const double _messageActionsFadeSmoothness = 1.0;
 const int _messageActionsFadeSteps = 64;
-const double _messageActionsFadeBottomOffset = 16.0;
+const double _messageActionsFadeBottomOffset = 18.0;
 const double _messageActionsButtonsBottomOffset = 8.0;
 const double _messageActionsScrollClearance = 96.0;
 
@@ -62,10 +62,8 @@ double _messageActionsFadeAlpha(double stop) {
   final smoothness =
       _messageActionsFadeSmoothness.clamp(0.0, 1.0).toDouble();
   final steepness = 14.0 - (smoothness * 12.0);
-  final shiftedProgress = progress <= position
-      ? 0.5 * (progress / position)
-      : 0.5 +
-          (0.5 * ((progress - position) / (1.0 - position)));
+  final shiftedProgress = (progress * (1.0 - position)) /
+      (position + (progress * (1.0 - (2.0 * position))));
 
   double sigmoid(double value) {
     return 1.0 /
@@ -74,7 +72,14 @@ double _messageActionsFadeAlpha(double stop) {
 
   final minimum = sigmoid(0.0);
   final maximum = sigmoid(1.0);
-  return ((sigmoid(shiftedProgress) - minimum) / (maximum - minimum))
+  final normalizedAlpha =
+      ((sigmoid(shiftedProgress) - minimum) / (maximum - minimum))
+      .clamp(0.0, 1.0)
+      .toDouble();
+  final edgeSmoothedAlpha =
+      normalizedAlpha * normalizedAlpha * (3.0 - (2.0 * normalizedAlpha));
+  return (normalizedAlpha +
+          ((edgeSmoothedAlpha - normalizedAlpha) * smoothness))
       .clamp(0.0, 1.0)
       .toDouble();
 }
@@ -617,32 +622,43 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                                 alignment: Alignment.bottomCenter,
                                 clipBehavior: Clip.none,
                                 children: [
-                                  Positioned(
-                                    top: 0,
-                                    left: 0,
-                                    right: 0,
-                                    bottom: messageActionsFadeBottomInset,
+                                  Positioned.fill(
                                     child: IgnorePointer(
-                                      child: DecoratedBox(
-                                        decoration: BoxDecoration(
-                                          gradient: LinearGradient(
-                                            begin: Alignment.topCenter,
-                                            end: Alignment.bottomCenter,
-                                            colors:
-                                                _messageActionsFadeColors,
-                                            stops: _messageActionsFadeStops,
-                                          ),
-                                        ),
+                                      child: LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          final totalHeight =
+                                              constraints.maxHeight;
+                                          final fadeHeight = math.max(
+                                            0.0,
+                                            totalHeight -
+                                                messageActionsFadeBottomInset,
+                                          );
+                                          final fadeEnd = totalHeight <= 0
+                                              ? 1.0
+                                              : (fadeHeight / totalHeight)
+                                                  .clamp(0.0, 1.0)
+                                                  .toDouble();
+                                          return DecoratedBox(
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                begin: Alignment.topCenter,
+                                                end: Alignment.bottomCenter,
+                                                colors: [
+                                                  ..._messageActionsFadeColors,
+                                                  Colors.black,
+                                                ],
+                                                stops: [
+                                                  ..._messageActionsFadeStops
+                                                      .map(
+                                                    (stop) => stop * fadeEnd,
+                                                  ),
+                                                  1.0,
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        },
                                       ),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    height: messageActionsFadeBottomInset,
-                                    child: const IgnorePointer(
-                                      child: ColoredBox(color: Colors.black),
                                     ),
                                   ),
                                   Padding(
