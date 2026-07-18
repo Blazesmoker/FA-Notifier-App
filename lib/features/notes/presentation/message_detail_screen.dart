@@ -20,12 +20,15 @@ import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
 import 'package:provider/provider.dart';
 
-const double _messageActionsFadeCeilingAboveButtons = 6.0;
+const double _messageActionsFadeCeilingAboveButtons = 0.0;
 const double _messageActionsFadeTransitionStart = 0.0;
 const double _messageActionsFadeBlackStop = 1.00;
 const double _messageActionsFadePosition = 0.35;
 const double _messageActionsFadeSmoothness = 1.0;
 const int _messageActionsFadeSteps = 64;
+const double _messageActionsFadeBottomOffset = 16.0;
+const double _messageActionsButtonsBottomOffset = 8.0;
+const double _messageActionsScrollClearance = 96.0;
 
 List<double> get _messageActionsFadeStops => List<double>.generate(
       _messageActionsFadeSteps + 1,
@@ -265,6 +268,15 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
     final imagePreviewRepository = hasImagePreviewLinks
         ? context.read<NoteSubmissionPreviewRepository>()
         : null;
+    final bottomSafeInset = MediaQuery.paddingOf(context).bottom;
+    final messageActionsFadeBottomInset =
+        bottomSafeInset + _messageActionsFadeBottomOffset;
+    final messageActionsButtonsBottomInset =
+        bottomSafeInset + _messageActionsButtonsBottomOffset;
+    final messageActionsContentBottomInset = math.max(
+      messageActionsFadeBottomInset,
+      messageActionsButtonsBottomInset,
+    );
     if (_shouldShowReplySuccess) {
       _shouldShowReplySuccess = false; // Reset immediately
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -303,6 +315,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
         },
         child: SafeArea(
           top: false,
+          bottom: false,
           child: Scaffold(
             appBar: AppBar(
               title: Text(subject),
@@ -370,7 +383,11 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
               ),
             )
                 : Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.only(
+                left: 16.0,
+                top: 16.0,
+                right: 16.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -488,7 +505,10 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                         Positioned.fill(
                           child: SingleChildScrollView(
                             padding: EdgeInsets.only(
-                              bottom: widget.folder != 'sent' ? 96 : 0,
+                              bottom: widget.folder != 'sent'
+                                  ? _messageActionsScrollClearance +
+                                      messageActionsContentBottomInset
+                                  : messageActionsFadeBottomInset,
                             ),
                             child: Theme(
                               data: Theme.of(context).copyWith(
@@ -591,77 +611,125 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                         if (widget.folder != 'sent')
                           Align(
                             alignment: Alignment.bottomCenter,
-                            child: Container(
+                            child: SizedBox(
                               width: double.infinity,
-                              padding: const EdgeInsets.only(
-                                top: _messageActionsFadeCeilingAboveButtons,
-                              ),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: _messageActionsFadeColors,
-                                  stops: _messageActionsFadeStops,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
+                              child: Stack(
+                                alignment: Alignment.bottomCenter,
+                                clipBehavior: Clip.none,
                                 children: [
-                                  OutlinedButton(
-                                    onPressed: _markAsUnread,
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor:
-                                          const Color(0xFFE09321),
-                                      side: const BorderSide(
-                                        color: Color(0xFFE09321),
-                                      ),
-                                    ),
-                                    child: const Text('Mark Unread'),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  ElevatedButton(
-                                    onPressed: () {
-                                      final replyToUsername =
-                                          widget.folder == 'sent'
-                                              ? recipientUsername
-                                              : senderUsername;
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => NoteReplyScreen(
-                                            subject: subject,
-                                            originalContent: messageContent,
-                                            originalContentHtml:
-                                                messageContentHtml.isNotEmpty
-                                                    ? messageContentHtml
-                                                    : null,
-                                            username: replyToUsername.isNotEmpty
-                                                ? replyToUsername
-                                                : senderUsername,
-                                            messageId: messageId ?? '',
-                                            messageLink: widget.messageLink,
-                                            imagePreviewMode: imagePreviewMode,
+                                  Positioned(
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: messageActionsFadeBottomInset,
+                                    child: IgnorePointer(
+                                      child: DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                            colors:
+                                                _messageActionsFadeColors,
+                                            stops: _messageActionsFadeStops,
                                           ),
                                         ),
-                                      ).then((result) {
-                                        if (result == true) {
-                                          rootMessengerKey.currentState
-                                              ?.showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Reply sent successfully!',
-                                              ),
-                                              backgroundColor: Colors.green,
-                                            ),
-                                          );
-                                        }
-                                      });
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor:
-                                          const Color(0xFFE09321),
+                                      ),
                                     ),
-                                    child: const Text('Reply'),
+                                  ),
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    height: messageActionsFadeBottomInset,
+                                    child: const IgnorePointer(
+                                      child: ColoredBox(color: Colors.black),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: EdgeInsets.only(
+                                      top: _messageActionsFadeCeilingAboveButtons,
+                                      bottom: messageActionsFadeBottomInset,
+                                    ),
+                                    child: Transform.translate(
+                                      offset: const Offset(
+                                        0,
+                                        _messageActionsFadeBottomOffset -
+                                            _messageActionsButtonsBottomOffset,
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
+                                        children: [
+                                          OutlinedButton(
+                                            onPressed: _markAsUnread,
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor:
+                                                  const Color(0xFFE09321),
+                                              side: const BorderSide(
+                                                color: Color(0xFFE09321),
+                                              ),
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize.padded,
+                                            ),
+                                            child: const Text('Mark Unread'),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          ElevatedButton(
+                                            onPressed: () {
+                                              final replyToUsername =
+                                                  widget.folder == 'sent'
+                                                      ? recipientUsername
+                                                      : senderUsername;
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      NoteReplyScreen(
+                                                    subject: subject,
+                                                    originalContent:
+                                                        messageContent,
+                                                    originalContentHtml:
+                                                        messageContentHtml
+                                                                .isNotEmpty
+                                                            ? messageContentHtml
+                                                            : null,
+                                                    username: replyToUsername
+                                                            .isNotEmpty
+                                                        ? replyToUsername
+                                                        : senderUsername,
+                                                    messageId: messageId ?? '',
+                                                    messageLink:
+                                                        widget.messageLink,
+                                                    imagePreviewMode:
+                                                        imagePreviewMode,
+                                                  ),
+                                                ),
+                                              ).then((result) {
+                                                if (result == true) {
+                                                  rootMessengerKey.currentState
+                                                      ?.showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'Reply sent successfully!',
+                                                      ),
+                                                      backgroundColor:
+                                                          Colors.green,
+                                                    ),
+                                                  );
+                                                }
+                                              });
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                                  const Color(0xFFE09321),
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize.padded,
+                                            ),
+                                            child: const Text('Reply'),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
