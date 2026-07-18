@@ -132,8 +132,16 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                                         if (widget
                                             .shout.iconBeforeUrls.isNotEmpty)
                                           ...widget.shout.iconBeforeUrls.map(
-                                              (url) => FaNetworkImage(url,
-                                                  width: 16, height: 16)),
+                                            (url) => Padding(
+                                              padding: const EdgeInsets.only(
+                                                  right: 4.0),
+                                              child: FaNetworkImage(
+                                                url,
+                                                width: 16,
+                                                height: 16,
+                                              ),
+                                            ),
+                                          ),
                                         Flexible(
                                           child: AutoSizeText(
                                             widget.shout.username,
@@ -148,8 +156,16 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                                         if (widget
                                             .shout.iconAfterUrls.isNotEmpty)
                                           ...widget.shout.iconAfterUrls.map(
-                                              (url) => FaNetworkImage(url,
-                                                  width: 16, height: 16)),
+                                            (url) => Padding(
+                                              padding: const EdgeInsets.only(
+                                                  left: 4.0),
+                                              child: FaNetworkImage(
+                                                url,
+                                                width: 16,
+                                                height: 16,
+                                              ),
+                                            ),
+                                          ),
                                       ],
                                     ),
                                   ),

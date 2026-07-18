@@ -18,6 +18,10 @@ import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
 import 'package:provider/provider.dart';
 
+const double _messageActionsFadeTopExtent = 26.0;
+const double _messageActionsFadeStart = 0.27;
+const double _messageActionsFadeEnd = 0.35;
+
 class MessageDetailScreen extends StatefulWidget {
   final String messageLink;
   final String folder;
@@ -535,15 +539,20 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                             alignment: Alignment.bottomCenter,
                             child: Container(
                               width: double.infinity,
-                              padding: const EdgeInsets.only(top: 32),
+                              padding: const EdgeInsets.only(
+                                top: _messageActionsFadeTopExtent,
+                              ),
                               decoration: const BoxDecoration(
                                 gradient: LinearGradient(
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
                                   colors: [
                                     Colors.transparent,
-                                    Color(0xCC000000),
                                     Colors.black,
+                                  ],
+                                  stops: [
+                                    _messageActionsFadeStart,
+                                    _messageActionsFadeEnd,
                                   ],
                                 ),
                               ),
