@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
@@ -18,9 +20,61 @@ import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
 import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
 import 'package:provider/provider.dart';
 
-const double _messageActionsFadeTopExtent = 26.0;
-const double _messageActionsFadeStart = 0.27;
-const double _messageActionsFadeEnd = 0.35;
+const double _messageActionsFadeCeilingAboveButtons = 6.0;
+const double _messageActionsFadeTransitionStart = 0.0;
+const double _messageActionsFadeBlackStop = 1.00;
+const double _messageActionsFadePosition = 0.35;
+const double _messageActionsFadeSmoothness = 1.0;
+const int _messageActionsFadeSteps = 64;
+
+List<double> get _messageActionsFadeStops => List<double>.generate(
+      _messageActionsFadeSteps + 1,
+      (index) => index / _messageActionsFadeSteps,
+    );
+
+List<Color> get _messageActionsFadeColors => List<Color>.generate(
+      _messageActionsFadeSteps + 1,
+      (index) => Color.fromARGB(
+        (_messageActionsFadeAlpha(index / _messageActionsFadeSteps) * 255)
+            .round(),
+        0,
+        0,
+        0,
+      ),
+    );
+
+double _messageActionsFadeAlpha(double stop) {
+  final transitionStart =
+      _messageActionsFadeTransitionStart.clamp(0.0, 0.99).toDouble();
+  final blackStop = _messageActionsFadeBlackStop
+      .clamp(transitionStart + 0.01, 1.0)
+      .toDouble();
+  if (stop <= transitionStart) return 0.0;
+  if (stop >= blackStop) return 1.0;
+
+  final progress =
+      (stop - transitionStart) / (blackStop - transitionStart);
+  final position =
+      _messageActionsFadePosition.clamp(0.01, 0.99).toDouble();
+  final smoothness =
+      _messageActionsFadeSmoothness.clamp(0.0, 1.0).toDouble();
+  final steepness = 14.0 - (smoothness * 12.0);
+  final shiftedProgress = progress <= position
+      ? 0.5 * (progress / position)
+      : 0.5 +
+          (0.5 * ((progress - position) / (1.0 - position)));
+
+  double sigmoid(double value) {
+    return 1.0 /
+        (1.0 + math.exp(-steepness * (value - 0.5)));
+  }
+
+  final minimum = sigmoid(0.0);
+  final maximum = sigmoid(1.0);
+  return ((sigmoid(shiftedProgress) - minimum) / (maximum - minimum))
+      .clamp(0.0, 1.0)
+      .toDouble();
+}
 
 class MessageDetailScreen extends StatefulWidget {
   final String messageLink;
@@ -540,20 +594,14 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                             child: Container(
                               width: double.infinity,
                               padding: const EdgeInsets.only(
-                                top: _messageActionsFadeTopExtent,
+                                top: _messageActionsFadeCeilingAboveButtons,
                               ),
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.transparent,
-                                    Colors.black,
-                                  ],
-                                  stops: [
-                                    _messageActionsFadeStart,
-                                    _messageActionsFadeEnd,
-                                  ],
+                                  colors: _messageActionsFadeColors,
+                                  stops: _messageActionsFadeStops,
                                 ),
                               ),
                               child: Row(
