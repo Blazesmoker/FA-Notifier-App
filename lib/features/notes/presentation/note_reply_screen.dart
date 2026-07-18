@@ -545,15 +545,49 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: _hasImagePreviewLinks
-                                ? NoteBodyWithPreviews(
-                                    content: widget.originalContentHtml != null &&
-                                            widget.originalContentHtml!.isNotEmpty
-                                        ? widget.originalContentHtml!
-                                        : widget.originalContent,
-                                    isHtml: widget.originalContentHtml != null &&
-                                        widget.originalContentHtml!.isNotEmpty,
-                                    mode: widget.imagePreviewMode,
-                                    repository: imagePreviewRepository!,
+                                ? Theme(
+                                    data: Theme.of(context).copyWith(
+                                      textSelectionTheme:
+                                          TextSelectionThemeData(
+                                        selectionColor:
+                                            const Color(0xFFE09321)
+                                                .withValues(alpha: 0.4),
+                                        selectionHandleColor:
+                                            const Color(0xFFE09321),
+                                      ),
+                                    ),
+                                    child: SelectionArea(
+                                      onSelectionChanged: (content) {
+                                        _selectedOriginalText =
+                                            content?.plainText.replaceAll(
+                                                  '\uFFFC',
+                                                  '',
+                                                ) ??
+                                                '';
+                                      },
+                                      contextMenuBuilder:
+                                          ReadOnlySelectionContextMenu.builder(
+                                        selectedTextProvider: () =>
+                                            _selectedOriginalText,
+                                        includeIosTranslate: true,
+                                      ),
+                                      child: NoteBodyWithPreviews(
+                                        content:
+                                            widget.originalContentHtml !=
+                                                        null &&
+                                                    widget.originalContentHtml!
+                                                        .isNotEmpty
+                                                ? widget.originalContentHtml!
+                                                : widget.originalContent,
+                                        isHtml:
+                                            widget.originalContentHtml !=
+                                                        null &&
+                                                    widget.originalContentHtml!
+                                                        .isNotEmpty,
+                                        mode: widget.imagePreviewMode,
+                                        repository: imagePreviewRepository!,
+                                      ),
+                                    ),
                                   )
                                 : (widget.originalContentHtml != null &&
                                     widget.originalContentHtml!.isNotEmpty)

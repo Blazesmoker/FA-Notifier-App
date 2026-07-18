@@ -154,9 +154,11 @@ class _NoteBodyWithPreviewsState extends State<NoteBodyWithPreviews> {
   Widget _buildControl(String id) {
     final state = _states[id];
     if (state == null) return const SizedBox.shrink();
-    return ListenableBuilder(
-      listenable: state,
-      builder: (context, _) => _buildControlValue(id, state),
+    return SelectionContainer.disabled(
+      child: ListenableBuilder(
+        listenable: state,
+        builder: (context, _) => _buildControlValue(id, state),
+      ),
     );
   }
 
@@ -250,30 +252,32 @@ class _NoteBodyWithPreviewsState extends State<NoteBodyWithPreviews> {
   Widget _buildExpanded(String id, double width) {
     final state = _states[id];
     if (state == null) return const SizedBox.shrink();
-    return ListenableBuilder(
-      listenable: state,
-      builder: (context, _) {
-        final preview = state.preview;
-        return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
-          switchInCurve: Curves.easeInOut,
-          switchOutCurve: Curves.easeInOut,
-          transitionBuilder: (child, animation) => FadeTransition(
-            opacity: animation,
-            child: child,
-          ),
-          child: state.expanded && preview != null
-              ? SizedBox(
-                  key: ValueKey('expanded-$id'),
-                  width: width,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: _buildLargePreview(preview),
-                  ),
-                )
-              : SizedBox.shrink(key: ValueKey('collapsed-$id')),
-        );
-      },
+    return SelectionContainer.disabled(
+      child: ListenableBuilder(
+        listenable: state,
+        builder: (context, _) {
+          final preview = state.preview;
+          return AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            switchInCurve: Curves.easeInOut,
+            switchOutCurve: Curves.easeInOut,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: child,
+            ),
+            child: state.expanded && preview != null
+                ? SizedBox(
+                    key: ValueKey('expanded-$id'),
+                    width: width,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: _buildLargePreview(preview),
+                    ),
+                  )
+                : SizedBox.shrink(key: ValueKey('collapsed-$id')),
+          );
+        },
+      ),
     );
   }
 

@@ -525,14 +525,29 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                                 ),
                               ),
                               child: hasImagePreviewLinks
-                                  ? NoteBodyWithPreviews(
-                                content: messageContentHtml.isNotEmpty
-                                    ? messageContentHtml
-                                    : messageContent,
-                                isHtml: messageContentHtml.isNotEmpty,
-                                mode: imagePreviewMode,
-                                repository: imagePreviewRepository!,
-                              )
+                                  ? SelectionArea(
+                                      key: _selectableKey,
+                                      onSelectionChanged: (content) {
+                                        _selectedMessageText = content?.plainText
+                                                .replaceAll('\uFFFC', '') ??
+                                            '';
+                                      },
+                                      contextMenuBuilder:
+                                          ReadOnlySelectionContextMenu.builder(
+                                        selectedTextProvider: () =>
+                                            _selectedMessageText,
+                                        includeIosTranslate: true,
+                                      ),
+                                      child: NoteBodyWithPreviews(
+                                        content: messageContentHtml.isNotEmpty
+                                            ? messageContentHtml
+                                            : messageContent,
+                                        isHtml:
+                                            messageContentHtml.isNotEmpty,
+                                        mode: imagePreviewMode,
+                                        repository: imagePreviewRepository!,
+                                      ),
+                                    )
                             : messageContentHtml.isNotEmpty
                             ? SelectionArea(
                                 key: _selectableKey,
