@@ -340,6 +340,14 @@ class _OpenPostState extends State<OpenPost>
     }
   }
 
+  Future<void> _prepareForInternalWebViewNavigation() async {
+    _setRouteWebViewDetached(true);
+    await WidgetsBinding.instance.endOfFrame;
+    if (Platform.isAndroid) {
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
+  }
+
   List<String> iconBeforeUrls = [];
   List<String> iconAfterUrls = [];
 
@@ -2867,6 +2875,8 @@ class _OpenPostState extends State<OpenPost>
                                               forceHybridComposition: false,
                                               routeDetached:
                                                   _isPostWebViewDetached,
+                                              onBeforeInternalNavigation:
+                                                  _prepareForInternalWebViewNavigation,
                                               enableScrollPerformancePause:
                                                   _webViewScrollOptimizationEnabled &&
                                                       _enableScrollWebViewPause,

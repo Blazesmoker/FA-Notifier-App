@@ -34,7 +34,7 @@ class NotesSettingsScreen extends StatelessWidget {
             groupValue: settings.mode,
             activeColor: const Color(0xFFE09321),
             title: const Text('Always'),
-            subtitle: const Text('Automatically load preview thumbnails.'),
+            subtitle: const Text('Automatically load image previews.'),
             onChanged: (value) {
               if (value != null) settings.setMode(value);
             },

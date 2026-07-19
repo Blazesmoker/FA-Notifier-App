@@ -1,5 +1,7 @@
 import 'package:html/parser.dart' as html_parser;
 
+import 'package:FANotifier/features/submissions/data/openpost_html_link_normalizer.dart';
+
 String extractSubmissionDescriptionHtml(
   String html, {
   bool allowBodyFallback = false,
@@ -32,7 +34,7 @@ String extractSubmissionDescriptionHtml(
     }
   }
 
-  return submissionDesc.outerHtml;
+  return normalizeOpenPostTruncatedLinks(submissionDesc.outerHtml);
 }
 
 String extractSubmissionDescriptionHtmlDefault(String html) {

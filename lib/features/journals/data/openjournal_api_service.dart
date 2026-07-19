@@ -13,6 +13,7 @@ import 'package:FANotifier/features/journals/data/journal_url_builder.dart';
 import 'package:FANotifier/features/journals/domain/openjournal_fetch_result.dart';
 import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
 import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:FANotifier/shared/fa/user_submitted_html_linkifier.dart';
 
 class OpenJournalApiService {
   OpenJournalApiService({
@@ -268,7 +269,9 @@ class OpenJournalApiService {
     final descElem = document.querySelector('.journal-content') ??
         document.querySelector('.journal-body') ??
         document.querySelector('.journal-message');
-    submissionDescription = descElem?.innerHtml;
+    submissionDescription = descElem == null
+        ? null
+        : linkifyBareWebUrlsInHtml(descElem.innerHtml);
 
     String? fullViewImageUrl;
     String? fileLink;

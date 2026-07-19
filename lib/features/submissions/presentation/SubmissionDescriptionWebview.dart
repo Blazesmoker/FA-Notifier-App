@@ -10,6 +10,7 @@ import 'package:FANotifier/features/submissions/domain/submission_description_we
 import 'package:FANotifier/shared/fa/fa_webview_document_scripts.dart';
 import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
 import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
+import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
 import 'package:FANotifier/shared/utils/utils.dart';
 
 class SubmissionDescriptionWebView extends StatefulWidget {
@@ -23,6 +24,7 @@ class SubmissionDescriptionWebView extends StatefulWidget {
   final void Function(double height)? onHeightChanged;
   final bool routeDetached;
   final SubmissionDescriptionRepository? repository;
+  final Future<void> Function()? onBeforeInternalNavigation;
 
   const SubmissionDescriptionWebView({
     required this.submissionId,
@@ -35,6 +37,7 @@ class SubmissionDescriptionWebView extends StatefulWidget {
     this.onHeightChanged,
     this.routeDetached = false,
     this.repository,
+    this.onBeforeInternalNavigation,
     Key? key,
   }) : super(key: key);
 
@@ -212,6 +215,18 @@ class SubmissionDescriptionWebViewState
     );
   }
 
+  Future<void> _handleLink(String url) async {
+    final resolvedUrl = url.contains('.....')
+        ? _getFullLinkFromFetchedHtml(url)
+        : url;
+    final target = matchFALink(resolvedUrl);
+    if (target.type != FALinkTargetType.external) {
+      await widget.onBeforeInternalNavigation?.call();
+      if (!mounted) return;
+    }
+    await handleFALink(context, resolvedUrl);
+  }
+
   Future<String?> getPlainText() async {
     if (_submissionDescriptionHtml == null) return null;
     return _submissionDescriptionRepository.plainText(
@@ -310,8 +325,7 @@ class SubmissionDescriptionWebViewState
               onCreateWindow: (controller, createWindowReq) async {
                 final url = createWindowReq.request.url?.toString() ?? '';
                 if (url.isNotEmpty) {
-                  await handleFALink(context, url,
-                      htmlSource: url, getFullUrl: _getFullLinkFromFetchedHtml);
+                  await _handleLink(url);
                 }
                 return true;
               },
@@ -339,9 +353,7 @@ class SubmissionDescriptionWebViewState
                 final url = navAction.request.url.toString();
                 if (Platform.isAndroid) {
                   if (navAction.isForMainFrame) {
-                    await handleFALink(context, url,
-                        htmlSource: url,
-                        getFullUrl: _getFullLinkFromFetchedHtml);
+                    await _handleLink(url);
                     return NavigationActionPolicy.CANCEL;
                   }
                   return NavigationActionPolicy.ALLOW;
@@ -351,9 +363,7 @@ class SubmissionDescriptionWebViewState
                     if (url == "https://www.furaffinity.net/") {
                       return NavigationActionPolicy.ALLOW;
                     }
-                    await handleFALink(context, url,
-                        htmlSource: url,
-                        getFullUrl: _getFullLinkFromFetchedHtml);
+                    await _handleLink(url);
                     return NavigationActionPolicy.CANCEL;
                   }
                   return NavigationActionPolicy.ALLOW;

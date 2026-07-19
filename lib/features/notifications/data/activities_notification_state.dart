@@ -80,7 +80,6 @@ class ActivitiesNotificationStateStore {
 
   Future<ActivitiesDiff> recordAndDiffCurrentCounts({
     required NotificationCounts currentCounts,
-    required bool useObservedCounts,
   }) async {
     return _withMutex(() async {
       final prefs = await SharedPreferences.getInstance();
@@ -119,12 +118,10 @@ class ActivitiesNotificationStateStore {
         notes: prevNotes,
       );
 
-      final previousObservedCounts = useObservedCounts
-          ? _loadPreviousObservedCounts(
-              prefs,
-              fallback: previousCounts,
-            )
-          : previousCounts;
+      final previousObservedCounts = _loadPreviousObservedCounts(
+        prefs,
+        fallback: previousCounts,
+      );
       final diff = _countChangePolicy.diff(
         previous: previousObservedCounts,
         current: currentCounts,
@@ -393,37 +390,6 @@ class ActivitiesNotificationStateStore {
     await prefs.remove(_kDeferredNotes);
     await prefs.remove(_kDeferredBody);
     await prefs.remove(_kDeferredUpdatedAtMs);
-  }
-
-  Future<bool> areCurrentCountsLastShown({
-    required NotificationCounts currentCounts,
-    required bool submissionsEnabled,
-    required bool watchesEnabled,
-    required bool commentsEnabled,
-    required bool favoritesEnabled,
-    required bool journalsEnabled,
-    required bool notesEnabled,
-  }) {
-    return _withMutex(() async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.reload();
-
-      if (prefs.getString(_kLastShownBody) == null) return false;
-
-      return (!submissionsEnabled ||
-              prefs.getInt(_kLastShownSubmissions) ==
-                  currentCounts.submissions) &&
-          (!watchesEnabled ||
-              prefs.getInt(_kLastShownWatches) == currentCounts.watches) &&
-          (!commentsEnabled ||
-              prefs.getInt(_kLastShownComments) == currentCounts.comments) &&
-          (!favoritesEnabled ||
-              prefs.getInt(_kLastShownFavorites) == currentCounts.favorites) &&
-          (!journalsEnabled ||
-              prefs.getInt(_kLastShownJournals) == currentCounts.journals) &&
-          (!notesEnabled ||
-              prefs.getInt(_kLastShownNotes) == currentCounts.notes);
-    });
   }
 
   NotificationCounts _loadPreviousObservedCounts(

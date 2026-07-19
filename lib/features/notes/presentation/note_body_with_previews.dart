@@ -1,11 +1,13 @@
 import 'dart:convert';
 
 import 'package:FANotifier/features/notes/domain/note_image_preview_mode.dart';
+import 'package:FANotifier/features/notes/domain/note_image_preview_link.dart';
 import 'package:FANotifier/features/notes/domain/note_submission_preview.dart';
 import 'package:FANotifier/features/notes/domain/note_submission_preview_repository.dart';
 import 'package:FANotifier/features/profile/domain/avatar_image_data.dart';
 import 'package:FANotifier/features/profile/domain/profile_media_export_repository.dart';
 import 'package:FANotifier/features/profile/presentation/image_inspect_screen.dart';
+import 'package:FANotifier/shared/fa/user_submitted_html_linkifier.dart';
 import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
 import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/material.dart';
@@ -14,13 +16,11 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:provider/provider.dart';
 
-bool noteBodyContainsSubmissionLinks(
+bool noteBodyContainsPreviewLinks(
   String content, {
   required bool isHtml,
 }) {
-  return isHtml
-      ? _submissionCandidatePattern.hasMatch(content)
-      : _submissionTextPattern.hasMatch(content);
+  return _prepareNoteMarkup(content, isHtml: isHtml).urls.isNotEmpty;
 }
 
 class NoteBodyWithPreviews extends StatefulWidget {
@@ -94,7 +94,7 @@ class _NoteBodyWithPreviewsState extends State<NoteBodyWithPreviews> {
       for (final id in _prepared.urls.keys) {
         final state = _states[id];
         if (state != null && state.status == _PreviewStatus.idle) {
-          _load(id, expandAfterLoad: false);
+          _load(id, expandAfterLoad: true);
         }
       }
     });
@@ -165,86 +165,90 @@ class _NoteBodyWithPreviewsState extends State<NoteBodyWithPreviews> {
   Widget _buildControlValue(String id, _OccurrenceState state) {
     switch (state.status) {
       case _PreviewStatus.idle:
-        if (widget.mode == NoteImagePreviewMode.always) {
-          return const SizedBox(
-            width: 50,
-            height: 50,
-            child: Center(
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          );
-        }
-        return _buildIconControl(
-          icon: Icons.image_search,
-          color: const Color(0xFFE09321),
-          size: 34.5,
+        return _buildPreviewAction(
+          label: 'show image',
           onTap: () => _load(id, expandAfterLoad: true),
         );
       case _PreviewStatus.loading:
-        final size = widget.mode == NoteImagePreviewMode.always ? 50.0 : 28.0;
-        return SizedBox(
-          width: size,
-          height: size,
-          child: const Center(
-            child: SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          ),
+        return _buildPreviewAction(
+          label: 'show image',
+          isLoading: true,
         );
       case _PreviewStatus.error:
-        return _buildIconControl(
-          icon: Icons.error_outline,
-          color: Colors.redAccent,
-          size: widget.mode == NoteImagePreviewMode.always ? 50 : 28,
-          onTap: () => _load(
-            id,
-            expandAfterLoad: widget.mode == NoteImagePreviewMode.manual,
-          ),
+        return _buildPreviewAction(
+          label: 'show image',
+          hasError: true,
+          onTap: () => _load(id, expandAfterLoad: true),
         );
       case _PreviewStatus.loaded:
         final preview = state.preview;
         if (preview == null) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.only(right: 4),
-          child: GestureDetector(
-            onTap: () => _toggleExpanded(id),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: Image.memory(
-                preview.imageBytes,
-                width: 50,
-                height: 50,
-                fit: BoxFit.cover,
-                filterQuality: FilterQuality.high,
-                gaplessPlayback: true,
-              ),
-            ),
-          ),
+        return _buildPreviewAction(
+          label: state.expanded ? 'hide image' : 'show image',
+          onTap: () => _toggleExpanded(id),
         );
     }
   }
 
-  Widget _buildIconControl({
-    required IconData icon,
-    required Color color,
-    required double size,
-    required VoidCallback onTap,
+  Widget _buildPreviewAction({
+    required String label,
+    VoidCallback? onTap,
+    bool isLoading = false,
+    bool hasError = false,
   }) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: IconButton(
-        padding: EdgeInsets.zero,
-        constraints: BoxConstraints.tight(Size.square(size)),
-        splashRadius: size / 2,
-        icon: Icon(icon, color: color, size: size == 50 ? 28 : 24),
-        onPressed: onTap,
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 2, top: 2, right: 4),
+      child: Semantics(
+        button: true,
+        label: label,
+        child: Material(
+          color: const Color(0xFF2A2A2A),
+          shape: const StadiumBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 4,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.image_search,
+                    color: Color(0xFFE09321),
+                    size: 24,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Color(0xFFE09321),
+                      fontSize: 16,
+                    ),
+                  ),
+                  if (isLoading) ...[
+                    const SizedBox(width: 6),
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ],
+                  if (hasError) ...[
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.redAccent,
+                      size: 18,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -271,7 +275,7 @@ class _NoteBodyWithPreviewsState extends State<NoteBodyWithPreviews> {
                     width: width,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: _buildLargePreview(preview),
+                      child: _buildLargePreview(id, preview),
                     ),
                   )
                 : SizedBox.shrink(key: ValueKey('collapsed-$id')),
@@ -281,18 +285,54 @@ class _NoteBodyWithPreviewsState extends State<NoteBodyWithPreviews> {
     );
   }
 
-  Widget _buildLargePreview(NoteSubmissionPreview preview) {
+  Widget _buildLargePreview(
+    String id,
+    NoteSubmissionPreview preview,
+  ) {
     return Center(
-      child: GestureDetector(
-        onTap: () => _openImageInspector(preview),
-        onLongPressStart: (details) =>
-            _showImageMenu(details.globalPosition, preview),
-        child: Image.memory(
-          preview.imageBytes,
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.high,
-          gaplessPlayback: true,
-        ),
+      child: Stack(
+        children: [
+          GestureDetector(
+            onTap: () => _openImageInspector(preview),
+            onLongPressStart: (details) =>
+                _showImageMenu(details.globalPosition, preview),
+            child: Image.memory(
+              preview.imageBytes,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+              gaplessPlayback: true,
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF2A2A2A).withValues(alpha: 0.65),
+                border: Border.all(
+                  color: Colors.white12,
+                  width: 1,
+                ),
+              ),
+              child: IconButton(
+                onPressed: () => _toggleExpanded(id),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 48,
+                  height: 48,
+                ),
+                splashRadius: 24,
+                tooltip: 'Hide image',
+                icon: const Icon(
+                  Icons.image_not_supported_outlined,
+                  color: Color(0xFFE09321),
+                  size: 24,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -426,13 +466,19 @@ class _NoteBodyWithPreviewsState extends State<NoteBodyWithPreviews> {
           },
           extensions: [
             faHtmlImageExtension(),
-            html_pkg.TagExtension(
+            html_pkg.TagExtension.inline(
               tagsToExtend: {'note-preview-control'},
               builder: (extensionContext) {
                 final id = extensionContext.attributes['data-id'];
-                return id == null
-                    ? const SizedBox.shrink()
-                    : _buildControl(id);
+                return WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: Transform.translate(
+                    offset: const Offset(0, -1.0),
+                    child: id == null
+                        ? const SizedBox.shrink()
+                        : _buildControl(id),
+                  ),
+                );
               },
             ),
             html_pkg.TagExtension(
@@ -501,26 +547,17 @@ class _PreparedNoteMarkup {
   final Map<String, String> urls;
 }
 
-final RegExp _submissionTextPattern = RegExp(
-  r'https?://(?:www\.)?furaffinity\.net/view/\d+/?',
-  caseSensitive: false,
-);
-
-final RegExp _submissionCandidatePattern = RegExp(
-  r'''(?:https?:)?//(?:www\.)?furaffinity\.net/view/\d+/?|["']/view/\d+/?''',
-  caseSensitive: false,
-);
-
 _PreparedNoteMarkup _prepareNoteMarkup(
   String content, {
   required bool isHtml,
 }) {
-  final source = isHtml
+  final rawSource = isHtml
       ? content
       : const HtmlEscape(HtmlEscapeMode.element)
           .convert(content)
           .replaceAll('\r\n', '\n')
           .replaceAll('\n', '<br>');
+  final source = linkifyBareWebUrlsInHtml(rawSource);
   final document = html_parser.parse('<div id="note-preview-root">$source</div>');
   final root = document.querySelector('#note-preview-root')!;
   final urls = <String, String>{};
@@ -532,58 +569,22 @@ _PreparedNoteMarkup _prepareNoteMarkup(
     return id;
   }
 
-  final originalTextNodes = <dom.Text>[];
-  void collectTextNodes(dom.Node node, bool insideLink) {
-    final isLink = node is dom.Element && node.localName == 'a';
-    if (node is dom.Text && !insideLink) originalTextNodes.add(node);
-    for (final child in node.nodes) {
-      collectTextNodes(child, insideLink || isLink);
-    }
-  }
-
-  collectTextNodes(root, false);
-
   for (final anchor in root.querySelectorAll('a[href]').toList()) {
     final href = anchor.attributes['href'];
-    final submissionUrl = href == null ? null : _submissionUrlFrom(href);
-    if (submissionUrl == null) continue;
-    final id = addOccurrence(submissionUrl);
+    final previewUrl = href == null ? null : _previewUrlFrom(href);
+    if (previewUrl == null) continue;
+    final id = addOccurrence(previewUrl);
     final parent = anchor.parentNode;
     if (parent == null) continue;
-    parent.insertBefore(_previewElement('note-preview-control', id), anchor);
+    final anchorIndex = parent.nodes.indexOf(anchor);
     parent.nodes.insert(
-      parent.nodes.indexOf(anchor) + 1,
+      anchorIndex + 1,
+      _previewElement('note-preview-control', id),
+    );
+    parent.nodes.insert(
+      anchorIndex + 2,
       _previewElement('note-preview-expanded', id),
     );
-  }
-
-  for (final textNode in originalTextNodes) {
-    final text = textNode.data;
-    final matches = _submissionTextPattern.allMatches(text).toList();
-    if (matches.isEmpty) continue;
-    final parent = textNode.parentNode;
-    if (parent == null) continue;
-    var offset = 0;
-    for (final match in matches) {
-      if (match.start > offset) {
-        parent.insertBefore(dom.Text(text.substring(offset, match.start)), textNode);
-      }
-      final label = match.group(0)!;
-      final submissionUrl = _submissionUrlFrom(label);
-      if (submissionUrl == null) continue;
-      final id = addOccurrence(submissionUrl);
-      parent.insertBefore(_previewElement('note-preview-control', id), textNode);
-      final anchor = dom.Element.tag('a')
-        ..attributes['href'] = submissionUrl
-        ..text = label;
-      parent.insertBefore(anchor, textNode);
-      parent.insertBefore(_previewElement('note-preview-expanded', id), textNode);
-      offset = match.end;
-    }
-    if (offset < text.length) {
-      parent.insertBefore(dom.Text(text.substring(offset)), textNode);
-    }
-    textNode.remove();
   }
 
   return _PreparedNoteMarkup(root.innerHtml, urls);
@@ -593,24 +594,12 @@ dom.Element _previewElement(String tag, String id) {
   return dom.Element.tag(tag)..attributes['data-id'] = id;
 }
 
-String? _submissionUrlFrom(String value) {
-  final trimmed = value.trim();
-  final normalized = trimmed.startsWith('//')
-      ? 'https:$trimmed'
-      : trimmed.startsWith('/')
-          ? 'https://www.furaffinity.net$trimmed'
-          : trimmed;
-  final uri = Uri.tryParse(normalized);
-  if (uri == null) return null;
-  final host = uri.host.toLowerCase();
-  if (host != 'furaffinity.net' && !host.endsWith('.furaffinity.net')) {
-    return null;
+String? _previewUrlFrom(String value) {
+  var candidate = value.trim();
+  while (candidate.isNotEmpty &&
+      const {'.', ',', ';', ':', '!', '?', ')', ']', '}'}
+          .contains(candidate[candidate.length - 1])) {
+    candidate = candidate.substring(0, candidate.length - 1);
   }
-  final segments = uri.pathSegments.where((part) => part.isNotEmpty).toList();
-  if (segments.length < 2 ||
-      segments.first.toLowerCase() != 'view' ||
-      int.tryParse(segments[1]) == null) {
-    return null;
-  }
-  return 'https://www.furaffinity.net/view/${segments[1]}/';
+  return NoteImagePreviewLink.tryParse(candidate)?.url;
 }

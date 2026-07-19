@@ -1,8 +1,13 @@
 import 'package:html/parser.dart' as html_parser;
 
+import 'package:FANotifier/shared/fa/user_submitted_html_linkifier.dart';
+
 String normalizeOpenPostTruncatedLinks(String htmlContent) {
-  final document = html_parser.parse(htmlContent);
-  for (final anchor in document.querySelectorAll('a.auto_link_shortened')) {
+  final document = html_parser.parse(
+    '<div id="openpost-link-root">$htmlContent</div>',
+  );
+  final root = document.querySelector('#openpost-link-root')!;
+  for (final anchor in root.querySelectorAll('a.auto_link_shortened')) {
     if (anchor.text.contains('.....')) {
       final fullLink = anchor.attributes['title'];
       if (fullLink != null && fullLink.isNotEmpty) {
@@ -10,5 +15,5 @@ String normalizeOpenPostTruncatedLinks(String htmlContent) {
       }
     }
   }
-  return document.outerHtml;
+  return linkifyBareWebUrlsInHtml(root.innerHtml);
 }

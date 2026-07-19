@@ -415,7 +415,6 @@ class FaActivitiesPollingService
       final ActivitiesDiff diff = await activitiesStateStore
           .recordAndDiffCurrentCounts(
         currentCounts: currentCounts,
-        useObservedCounts: Platform.isIOS,
       );
       await activitiesStateStore.synchronizeDisabledCounts(
         currentCounts: currentCounts,
@@ -484,18 +483,6 @@ class FaActivitiesPollingService
         enabledIncreases,
       );
       if (!messageBody.contains('(+')) return;
-
-      final bool isDuplicate =
-          await activitiesStateStore.areCurrentCountsLastShown(
-        currentCounts: currentCounts,
-        submissionsEnabled: submissionsEnabled,
-        watchesEnabled: watchesEnabled,
-        commentsEnabled: commentsEnabled,
-        favoritesEnabled: favoritesEnabled,
-        journalsEnabled: journalsEnabled,
-        notesEnabled: notesEnabled,
-      );
-      if (isDuplicate) return;
 
       if (Platform.isIOS &&
           WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {

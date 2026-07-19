@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
+import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:FANotifier/features/notes/domain/note_reply_repository.dart';
@@ -72,7 +73,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     recipient = widget.username;
     _hasImagePreviewLinks =
         widget.imagePreviewMode != NoteImagePreviewMode.off &&
-            noteBodyContainsSubmissionLinks(
+            noteBodyContainsPreviewLinks(
               widget.originalContentHtml != null &&
                       widget.originalContentHtml!.isNotEmpty
                   ? widget.originalContentHtml!
@@ -648,8 +649,8 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
                                       ),
                                     ),
                                   )
-                                : SelectableText(
-                                    widget.originalContent,
+                                : SelectableLinkify(
+                                    text: widget.originalContent,
                                     onSelectionChanged:
                                         _updatePlainOriginalSelection,
                                     contextMenuBuilder:
@@ -658,7 +659,21 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
                                           _selectedOriginalText,
                                       includeIosTranslate: true,
                                     ),
-                                    style: const TextStyle(fontSize: 16, color: Colors.white),
+                                    onOpen: (link) async {
+                                      await handleFALink(context, link.url);
+                                    },
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.white,
+                                    ),
+                                    linkStyle: const TextStyle(
+                                      fontSize: 16,
+                                      color: Color(0xFFE09321),
+                                      decoration: TextDecoration.none,
+                                      decorationColor: Color(0xFFE09321),
+                                    ),
+                                    selectionControls:
+                                        MaterialTextSelectionControls(),
                                   ),
                           ),
                           const SizedBox(height: 16),

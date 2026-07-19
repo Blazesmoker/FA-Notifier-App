@@ -3,7 +3,11 @@ import 'package:FANotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
 
+import 'package:FANotifier/features/notes/domain/note_image_preview_mode.dart';
 import 'package:FANotifier/features/notes/domain/note_message_repository.dart';
+import 'package:FANotifier/features/notes/domain/note_submission_preview_repository.dart';
+import 'package:FANotifier/features/notes/presentation/note_body_with_previews.dart';
+import 'package:FANotifier/features/notes/presentation/note_image_preview_settings_provider.dart';
 import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
 import 'package:FANotifier/features/notes/domain/message_model.dart';
 import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
@@ -163,6 +167,22 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
       );
     }
 
+    final imagePreviewSettings =
+        context.watch<NoteImagePreviewSettingsProvider>();
+    final imagePreviewMode = imagePreviewSettings.loaded
+        ? imagePreviewSettings.mode
+        : NoteImagePreviewMode.off;
+    final isHtml = messageContentHtml.isNotEmpty;
+    final noteContent = isHtml ? messageContentHtml : messageContent;
+    final hasImagePreviewLinks =
+        imagePreviewMode != NoteImagePreviewMode.off &&
+            noteBodyContainsPreviewLinks(
+              noteContent,
+              isHtml: isHtml,
+            );
+    final imagePreviewRepository = hasImagePreviewLinks
+        ? context.read<NoteSubmissionPreviewRepository>()
+        : null;
     final maxHeight = MediaQuery.of(context).size.height * 0.8;
 
     return ConstrainedBox(
@@ -259,7 +279,33 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
               ),
 
               const Divider(height: 20, thickness: 1, color: Colors.white54),
-              if (messageContentHtml.isNotEmpty)
+              if (hasImagePreviewLinks)
+                Theme(
+                  data: Theme.of(context).copyWith(
+                    textSelectionTheme: TextSelectionThemeData(
+                      selectionColor:
+                          const Color(0xFFE09321).withValues(alpha: 0.4),
+                      selectionHandleColor: const Color(0xFFE09321),
+                    ),
+                  ),
+                  child: SelectionArea(
+                    onSelectionChanged: (content) {
+                      _selectedMessageText =
+                          content?.plainText.replaceAll('\uFFFC', '') ?? '';
+                    },
+                    contextMenuBuilder: ReadOnlySelectionContextMenu.builder(
+                      selectedTextProvider: () => _selectedMessageText,
+                      includeIosTranslate: true,
+                    ),
+                    child: NoteBodyWithPreviews(
+                      content: noteContent,
+                      isHtml: isHtml,
+                      mode: imagePreviewMode,
+                      repository: imagePreviewRepository!,
+                    ),
+                  ),
+                )
+              else if (messageContentHtml.isNotEmpty)
                 Theme(
                   data: Theme.of(context).copyWith(
                     textSelectionTheme: TextSelectionThemeData(

@@ -11,6 +11,16 @@ import 'package:FANotifier/core/network/fa_request_coordinator.dart';
 
 typedef _Call<T> = Future<T> Function();
 
+class FAHttpResolvedResponse {
+  const FAHttpResolvedResponse({
+    required this.response,
+    required this.resolvedUri,
+  });
+
+  final http.Response response;
+  final Uri resolvedUri;
+}
+
 class FAHttp {
   static const Duration defaultTimeout = Duration(seconds: 20);
   static const String appName = 'FA Notifier';
@@ -160,6 +170,41 @@ class FAHttp {
         responseBody: response.statusCode == 403 ? response.body : null,
       );
       return response;
+    });
+  }
+
+  static Future<FAHttpResolvedResponse> getWithResolvedUri(
+      Uri uri, {
+        Map<String, String>? headers,
+        Duration? timeout,
+      }) async {
+    final t = timeout ?? defaultTimeout;
+    return _withOneRetry(() async {
+      await FaRequestCoordinator.instance.waitForTurn(
+        label: 'GET $uri',
+      );
+      final c = _ensureClient(timeout: t);
+      return (() async {
+        final request = http.Request('GET', uri)
+          ..headers.addAll(_mergeHeaders(headers));
+        final streamedResponse = await c.send(request);
+        final resolvedUri =
+            streamedResponse is http.BaseResponseWithUrl
+                ? (streamedResponse as http.BaseResponseWithUrl).url
+                : uri;
+        final response = await http.Response.fromStream(streamedResponse);
+        FaRequestCoordinator.instance.recordHttpStatus(
+          statusCode: response.statusCode,
+          headers: response.headers,
+          responseBody:
+              response.statusCode == 403 ? response.body : null,
+        );
+        return FAHttpResolvedResponse(
+          response: response,
+          resolvedUri: resolvedUri,
+        );
+      })()
+          .timeout(t);
     });
   }
 

@@ -79,8 +79,8 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
             thickness: 3.0,
           ),
           ListTile(
-            leading: const Icon(Icons.notifications, color: Color(0xFFE09321)),
-            title: const Text('Notification Settings'),
+            leading: const Icon(Icons.notifications_none_rounded, color: Color(0xFFE09321)),
+            title: const Text('Notifications'),
             onTap: () {
               Navigator.push(
                 context,
@@ -100,7 +100,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               Icons.mail_outline_rounded,
               color: Color(0xFFE09321),
             ),
-            title: const Text('Notes Settings'),
+            title: const Text('Notes'),
             onTap: () {
               Navigator.push(
                 context,
@@ -120,7 +120,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               Icons.g_translate,
               color: Color(0xFFE09321),
             ),
-            title: const Text('Translator Settings'),
+            title: const Text('Translator'),
             onTap: () {
               Navigator.push(
                 context,

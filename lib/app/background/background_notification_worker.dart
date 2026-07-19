@@ -221,7 +221,6 @@ class BackgroundNotificationWorker {
               final ActivitiesDiff diff = await activitiesStateStore
                   .recordAndDiffCurrentCounts(
                 currentCounts: counts,
-                useObservedCounts: Platform.isIOS,
               );
               await activitiesStateStore.synchronizeDisabledCounts(
                 currentCounts: counts,
@@ -267,20 +266,7 @@ class BackgroundNotificationWorker {
                 final bool vibrationActivitiesEnabled =
                     prefs.getBool('vibration_new_activities_enabled') ?? true;
                 if (soundActivitiesEnabled || vibrationActivitiesEnabled) {
-                  final bool isDuplicate =
-                      await activitiesStateStore.areCurrentCountsLastShown(
-                    currentCounts: counts,
-                    submissionsEnabled: submissionsEnabled,
-                    watchesEnabled: watchesEnabled,
-                    commentsEnabled: commentsEnabled,
-                    favoritesEnabled: favoritesEnabled,
-                    journalsEnabled: journalsEnabled,
-                    notesEnabled: notesEnabled,
-                  );
-                  if (isDuplicate) {
-                    appLog(
-                        '[BG] Duplicate activity notification skipped: $messageBody');
-                  } else if (!messageBody.contains('(+')) {
+                  if (!messageBody.contains('(+')) {
                     await activitiesStateStore.acknowledgeCurrentCounts(
                       currentCounts: counts,
                     );

@@ -264,7 +264,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
         : NoteImagePreviewMode.off;
     final hasImagePreviewLinks =
         imagePreviewMode != NoteImagePreviewMode.off &&
-            noteBodyContainsSubmissionLinks(
+            noteBodyContainsPreviewLinks(
               messageContentHtml.isNotEmpty
                   ? messageContentHtml
                   : messageContent,

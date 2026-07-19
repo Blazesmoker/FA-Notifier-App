@@ -1,4 +1,5 @@
 import 'package:FANotifier/core/notifications/domain/local_notification_gateway.dart';
+import 'package:FANotifier/features/notes/data/google_images_webview_resolver.dart';
 import 'package:FANotifier/features/notes/data/new_message_service.dart';
 import 'package:FANotifier/features/notes/data/note_message_service.dart';
 import 'package:FANotifier/features/notes/data/note_submission_preview_repository_impl.dart';
@@ -58,6 +59,7 @@ class NotesFeature {
   }) {
     return NoteSubmissionPreviewRepositoryImpl(
       openPostRepository: openPostRepository,
+      googleImageResolver: GoogleImagesWebViewResolver(),
     );
   }
 

@@ -65,9 +65,11 @@ class FaRequestCoordinator {
       }
       if (allowedAt.isAfter(now)) {
         final wait = allowedAt.difference(now);
-        debugPrint(
-          '[FA request gate] #$id $requestLabel queued ${queueDelay.inMilliseconds}ms, waiting ${wait.inMilliseconds}ms',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '[FA request gate] #$id $requestLabel queued ${queueDelay.inMilliseconds}ms, waiting ${wait.inMilliseconds}ms',
+          );
+        }
         _setStatus(
           FaRequestSnapshot(
             state: FaRequestCoordinatorState.waitingToRetry,
@@ -76,13 +78,17 @@ class FaRequestCoordinator {
           ),
         );
         await Future.delayed(allowedAt.difference(now));
-        debugPrint(
-          '[FA request gate] #$id $requestLabel starting after ${DateTime.now().difference(requestedAt).inMilliseconds}ms total',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '[FA request gate] #$id $requestLabel starting after ${DateTime.now().difference(requestedAt).inMilliseconds}ms total',
+          );
+        }
       } else {
-        debugPrint(
-          '[FA request gate] #$id $requestLabel starting immediately after ${queueDelay.inMilliseconds}ms queued',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '[FA request gate] #$id $requestLabel starting immediately after ${queueDelay.inMilliseconds}ms queued',
+          );
+        }
       }
       _nextRequestAt = DateTime.now().add(minRequestSpacing);
       if (_blockedUntil != null &&
