@@ -60,6 +60,7 @@ class NotesScreenState extends State<NotesScreen>
   bool get isLoadingMoreSent => _notesState.isLoadingMoreSent;
   String get errorSent => _notesState.errorSent;
   List<Message> get sentMessages => _notesState.sentMessages;
+  bool get _hasLoadedSent => _notesController.hasLoadedSent;
   bool get _hasMoreSent => _notesState.hasMoreSent;
   bool get _selectionMode => _notesState.isSelectionMode;
   Set<String> get _selectedIds => _notesState.selectedIds;
@@ -587,7 +588,8 @@ class NotesScreenState extends State<NotesScreen>
                     onTapItem: _handleTapItem,
                   ),
                   SentTab(
-                    isLoading: isLoadingSent,
+                    isLoading:
+                        isLoadingSent || (!_hasLoadedSent && errorSent.isEmpty),
                     isLoadingMore: isLoadingMoreSent,
                     errorMessage: errorSent,
                     messages: sentMessages,

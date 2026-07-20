@@ -27,6 +27,7 @@ import 'package:fanotifier/features/notifications/presentation/notification_navi
 import 'package:fanotifier/features/notifications/presentation/notification_settings_provider.dart';
 import 'package:fanotifier/features/comments/comments_feature.dart';
 import 'package:fanotifier/features/comments/domain/comment_edit_repository.dart';
+import 'package:fanotifier/features/comments/presentation/comment_settings_provider.dart';
 import 'package:fanotifier/shared/fa/domain/submission_comment_repository.dart';
 import 'package:fanotifier/features/drawer/domain/app_update_repository.dart';
 import 'package:fanotifier/features/drawer/domain/nsfw_confirmation_repository.dart';
@@ -289,6 +290,9 @@ class AppProviders extends StatelessWidget {
         ),
         ChangeNotifierProvider<NoteImagePreviewSettingsProvider>(
           create: (_) => NoteImagePreviewSettingsProvider(),
+        ),
+        ChangeNotifierProvider<CommentSettingsProvider>(
+          create: (_) => CommentSettingsProvider(),
         ),
         ChangeNotifierProvider<FANotificationService>(
           create: (_) => NotificationsFeature.createNotificationService(),

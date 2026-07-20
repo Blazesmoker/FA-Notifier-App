@@ -29,6 +29,7 @@ import 'package:fanotifier/features/submissions/presentation/openpost_controller
 import 'package:fanotifier/features/submissions/presentation/edit_submission_screen.dart';
 import 'package:fanotifier/features/comments/presentation/editcommentscreen.dart';
 import 'package:fanotifier/features/comments/presentation/threaded_comments.dart';
+import 'package:fanotifier/features/comments/presentation/comment_settings_provider.dart';
 import 'package:fanotifier/features/search/presentation/keyword_search_screen.dart';
 import 'package:fanotifier/features/notes/presentation/new_message.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
@@ -2138,6 +2139,7 @@ class _OpenPostState extends State<OpenPost>
   @override
   Widget build(BuildContext context) {
     final translatorSettings = context.watch<TranslatorSettingsProvider>();
+    final commentSettings = context.watch<CommentSettingsProvider>();
     final bool showLoadingIndicator = !_detailsLoaded || !_webViewLoaded;
     final double viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
     return ExcludeSemantics(
@@ -3152,7 +3154,10 @@ class _OpenPostState extends State<OpenPost>
                                     ],
                                   ),
                                 ),
-                                ..._buildCommentSlivers(translatorSettings),
+                                ..._buildCommentSlivers(
+                                  translatorSettings,
+                                  commentSettings.collapsibleCommentsEnabled,
+                                ),
                                 SliverToBoxAdapter(
                                   child: ValueListenableBuilder<int>(
                                     valueListenable:
@@ -3346,6 +3351,7 @@ class _OpenPostState extends State<OpenPost>
 
   List<Widget> _buildCommentSlivers(
     TranslatorSettingsProvider translatorSettings,
+    bool collapsibleCommentsEnabled,
   ) {
     if (comments.isEmpty) {
       return const [
@@ -3368,6 +3374,7 @@ class _OpenPostState extends State<OpenPost>
             const EdgeInsets.only(top: 8.0, bottom: 0.0, right: 8.0, left: 8.0),
         sliver: SliverThreadedComments(
           comments: comments,
+          collapsible: collapsibleCommentsEnabled,
           itemBuilder: (context, item) {
             final index = item.index;
             final comment = item.comment;

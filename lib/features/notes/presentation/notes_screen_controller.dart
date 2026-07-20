@@ -35,6 +35,7 @@ class NotesScreenController {
 
   bool get isFetchingMoreInbox => _isFetchingMoreInbox;
   bool get isFetchingMoreSent => _isFetchingMoreSent;
+  bool get hasLoadedSent => _hasLoadedSent;
   Stream<void> get refreshStream => _repository.refreshStream;
 
   bool takePendingRefresh() => _repository.takePendingRefresh();

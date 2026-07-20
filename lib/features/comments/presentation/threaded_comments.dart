@@ -32,12 +32,14 @@ class SliverThreadedComments extends StatefulWidget {
     super.key,
     required this.comments,
     required this.itemBuilder,
+    this.collapsible = true,
     this.animationDuration = const Duration(milliseconds: 250),
     this.animationCurve = Curves.easeInOut,
   });
 
   final List<Map<String, dynamic>> comments;
   final ThreadedCommentItemBuilder itemBuilder;
+  final bool collapsible;
   final Duration animationDuration;
   final Curve animationCurve;
 
@@ -61,6 +63,10 @@ class _SliverThreadedCommentsState extends State<SliverThreadedComments> {
     if (!identical(oldWidget.comments, widget.comments)) {
       _controller.sync(widget.comments);
     }
+    if (oldWidget.collapsible != widget.collapsible &&
+        !widget.collapsible) {
+      _controller.expandAll();
+    }
   }
 
   @override
@@ -80,7 +86,8 @@ class _SliverThreadedCommentsState extends State<SliverThreadedComments> {
             index: index,
             treeLevels: node.treeLevels,
             collapsed: node.collapsed,
-            onToggleCollapse: () => _controller.toggle(index),
+            onToggleCollapse:
+                widget.collapsible ? () => _controller.toggle(index) : null,
             animationDuration: widget.animationDuration,
             animationCurve: widget.animationCurve,
           );
@@ -340,6 +347,19 @@ class _ThreadedCommentsController {
       }
     }
     _refreshTreeLevels();
+  }
+
+  void expandAll() {
+    var changed = false;
+    for (final node in _nodes) {
+      if (node.collapsed.value) {
+        node.collapsed.value = false;
+        changed = true;
+      }
+    }
+    if (changed) {
+      _refreshVisibility();
+    }
   }
 
   void _refreshVisibility() {

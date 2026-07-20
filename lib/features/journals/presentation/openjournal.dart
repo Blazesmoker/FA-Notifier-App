@@ -10,6 +10,7 @@ import 'package:fanotifier/features/journals/presentation/journal_reply_screen.d
 import 'package:fanotifier/features/journals/presentation/openjournal_controller.dart';
 import 'package:fanotifier/features/comments/presentation/inline_comment_composer.dart';
 import 'package:fanotifier/features/comments/presentation/threaded_comments.dart';
+import 'package:fanotifier/features/comments/presentation/comment_settings_provider.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/features/journals/presentation/openjournal_comments.dart';
 import 'package:fanotifier/features/journals/domain/journal_deletion_result.dart';
@@ -680,6 +681,7 @@ class _OpenJournalState extends State<OpenJournal>
   @override
   Widget build(BuildContext context) {
     final translatorSettings = context.watch<TranslatorSettingsProvider>();
+    final commentSettings = context.watch<CommentSettingsProvider>();
     final double viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
     return ValueListenableBuilder<bool>(
       valueListenable: _commentDraftHasText,
@@ -1309,6 +1311,7 @@ class _OpenJournalState extends State<OpenJournal>
                                   const EdgeInsets.symmetric(horizontal: 8.0),
                               sliver: SliverThreadedComments(
                                 comments: comments,
+                                collapsible: commentSettings.collapsibleCommentsEnabled,
                                 itemBuilder: (context, item) {
                                   final index = item.index;
                                   final comment = item.comment;

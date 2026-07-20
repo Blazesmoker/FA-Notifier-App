@@ -7,6 +7,7 @@ import 'package:fanotifier/features/settings/presentation/app_icon_settings_scre
 import 'package:fanotifier/features/settings/presentation/set_home_screen_screen.dart';
 import 'package:fanotifier/features/settings/presentation/translator_settings_screen.dart';
 import 'package:fanotifier/features/notes/presentation/notes_settings_screen.dart';
+import 'package:fanotifier/features/comments/presentation/comment_settings_screen.dart';
 
 class AppSettingsScreen extends StatefulWidget {
   const AppSettingsScreen({super.key});
@@ -106,6 +107,26 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => const NotesSettingsScreen(),
+                ),
+              );
+            },
+          ),
+          const Divider(
+            height: 1.0,
+            color: Color(0xFF111111),
+            thickness: 3.0,
+          ),
+          ListTile(
+            leading: const Icon(
+              Icons.forum_outlined,
+              color: Color(0xFFE09321),
+            ),
+            title: const Text('Comments'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CommentsSettingsScreen(),
                 ),
               );
             },
