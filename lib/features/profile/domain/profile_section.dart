@@ -1,1 +1,1 @@
-enum ProfileSection { Home, Gallery, Scraps, Favs, Journals }
+enum ProfileSection { home, gallery, scraps, favs, journals }

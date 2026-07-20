@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:auto_size_text/auto_size_text.dart';
-import 'package:FANotifier/features/profile/domain/shout.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 
 class ShoutWidget extends StatefulWidget {
   final Shout shout;
@@ -13,15 +13,15 @@ class ShoutWidget extends StatefulWidget {
   final bool isSelected;
 
   const ShoutWidget({
-    Key? key,
+    super.key,
     required this.shout,
     this.onDelete,
     this.isSelectionMode = false,
     this.isSelected = false,
-  }) : super(key: key);
+  });
 
   @override
-  _ShoutWidgetState createState() => _ShoutWidgetState();
+  State<ShoutWidget> createState() => _ShoutWidgetState();
 }
 
 class _ShoutWidgetState extends State<ShoutWidget> {

@@ -1,4 +1,4 @@
-import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 

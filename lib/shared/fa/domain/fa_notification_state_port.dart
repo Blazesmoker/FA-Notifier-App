@@ -1,4 +1,4 @@
-import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
+import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 
 abstract interface class FaNotificationStatePort {
   bool get hasValidLatestCountsSnapshot;

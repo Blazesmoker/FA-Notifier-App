@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/search/domain/find_source_models.dart';
+import 'package:fanotifier/features/search/domain/find_source_models.dart';
 
 abstract interface class FindSourceRepository {
   Future<String?> pickImagePath();

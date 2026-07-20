@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/shared/fa/domain/fa_activities_polling_port.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
-import 'package:FANotifier/features/submissions/domain/submission_list_item.dart';
-import 'package:FANotifier/features/submissions/domain/submissions_repository.dart';
-import 'package:FANotifier/features/submissions/presentation/submissions_controller.dart';
-import 'package:FANotifier/features/submissions/presentation/widgets/submission_favorite_image_tile.dart';
-import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
-import 'package:FANotifier/shared/widgets/fa_unavailable_screen.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
+import 'package:fanotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/features/submissions/domain/submission_list_item.dart';
+import 'package:fanotifier/features/submissions/domain/submissions_repository.dart';
+import 'package:fanotifier/features/submissions/presentation/submissions_controller.dart';
+import 'package:fanotifier/features/submissions/presentation/widgets/submission_favorite_image_tile.dart';
+import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
+import 'package:fanotifier/shared/widgets/fa_unavailable_screen.dart';
 
 class SubmissionsScreen extends StatefulWidget {
-  const SubmissionsScreen({Key? key}) : super(key: key);
+  const SubmissionsScreen({super.key});
 
   @override
   State<SubmissionsScreen> createState() => SubmissionsScreenState();

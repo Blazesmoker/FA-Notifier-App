@@ -23,7 +23,7 @@ class HeartAnimationOptimized extends StatefulWidget {
   final ValueChanged<bool> onToggle;
 
   const HeartAnimationOptimized({
-    Key? key,
+    super.key,
     required this.isFavorite,
     required this.wasInitiallyFavorited,
     required this.child,
@@ -31,7 +31,7 @@ class HeartAnimationOptimized extends StatefulWidget {
     required this.containerHeight,
     this.animationDuration = const Duration(milliseconds: 600),
     required this.onToggle,
-  }) : super(key: key);
+  });
 
   @override
   State<HeartAnimationOptimized> createState() => HeartAnimationOptimizedState();

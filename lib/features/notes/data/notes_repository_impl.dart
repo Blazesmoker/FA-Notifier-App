@@ -1,18 +1,18 @@
 import 'dart:async';
 
-import 'package:FANotifier/core/notifications/domain/local_notification_gateway.dart';
-import 'package:FANotifier/features/notes/data/message_storage.dart';
-import 'package:FANotifier/features/notes/data/note_unread_service.dart';
-import 'package:FANotifier/features/notes/data/notes_first_run_preference.dart';
-import 'package:FANotifier/features/notes/data/notes_unread_notification_service.dart';
-import 'package:FANotifier/features/notes/data/notesscreen_api_service.dart';
-import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/features/notes/domain/notes_page_result.dart';
-import 'package:FANotifier/features/notes/domain/notes_repository.dart';
-import 'package:FANotifier/features/notes/domain/notes_refresh_port.dart';
-import 'package:FANotifier/features/notes/domain/notes_unread_notification_result.dart';
-import 'package:FANotifier/shared/fa/domain/fa_activities_polling_port.dart';
-import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
+import 'package:fanotifier/core/notifications/domain/local_notification_gateway.dart';
+import 'package:fanotifier/features/notes/data/message_storage.dart';
+import 'package:fanotifier/features/notes/data/note_unread_service.dart';
+import 'package:fanotifier/features/notes/data/notes_first_run_preference.dart';
+import 'package:fanotifier/features/notes/data/notes_unread_notification_service.dart';
+import 'package:fanotifier/features/notes/data/notesscreen_api_service.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/notes_page_result.dart';
+import 'package:fanotifier/features/notes/domain/notes_repository.dart';
+import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
+import 'package:fanotifier/features/notes/domain/notes_unread_notification_result.dart';
+import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
+import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 
 class NotesRepositoryImpl implements NotesRepository {
   factory NotesRepositoryImpl.create({

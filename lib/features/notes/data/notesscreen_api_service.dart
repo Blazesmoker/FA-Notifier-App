@@ -12,15 +12,15 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
-import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/features/notes/domain/notes_trash_repository.dart';
-import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
-import 'package:FANotifier/core/utils/utils.dart';
-import 'package:FANotifier/shared/utils/notes_notifications_text_edit.dart';
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/core/network/fa_request_coordinator.dart';
-import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/notes_trash_repository.dart';
+import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
+import 'package:fanotifier/core/utils/utils.dart';
+import 'package:fanotifier/shared/utils/notes_notifications_text_edit.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/network/fa_request_coordinator.dart';
+import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
 
 class NotesPageSnapshot {
   const NotesPageSnapshot({

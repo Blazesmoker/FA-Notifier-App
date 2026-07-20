@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/profile/domain/user_profile_api_models.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
 
 ControlsShoutsPageInfo parseUserProfileControlsShoutsPage({
   required String htmlBody,

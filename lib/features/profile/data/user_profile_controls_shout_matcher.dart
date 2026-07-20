@@ -1,7 +1,7 @@
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/profile/domain/shout.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_api_models.dart';
+import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
 
 ControlsShoutEntry? findMatchingUserProfileControlsShout({
   required List<ControlsShoutEntry> entries,

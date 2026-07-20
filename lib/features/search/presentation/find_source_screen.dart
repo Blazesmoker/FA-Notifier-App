@@ -4,12 +4,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/search/domain/find_source_models.dart';
-import 'package:FANotifier/features/search/domain/find_source_repository.dart';
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/features/search/domain/find_source_models.dart';
+import 'package:fanotifier/features/search/domain/find_source_repository.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 
 class FindSourceScreen extends StatefulWidget {
-  const FindSourceScreen({Key? key}) : super(key: key);
+  const FindSourceScreen({super.key});
 
   @override
   State<FindSourceScreen> createState() => _FindSourceScreenState();

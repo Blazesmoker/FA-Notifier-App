@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/notes/presentation/message_detail_screen.dart';
-import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/features/notes/domain/notes_trash_repository.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:fanotifier/features/notes/presentation/message_detail_screen.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/notes_trash_repository.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:provider/provider.dart';
 
 /// Regulate selection highlight opacity here. Values 0.0–1.0.
@@ -10,7 +10,7 @@ import 'package:provider/provider.dart';
 const double _selectionOpacity = 0.07;
 
 class TrashScreen extends StatefulWidget {
-  const TrashScreen({Key? key}) : super(key: key);
+  const TrashScreen({super.key});
 
   @override
   TrashScreenState createState() => TrashScreenState();
@@ -182,7 +182,9 @@ class TrashScreenState extends State<TrashScreen> {
       if (messages.isEmpty) break;
       if (!mounted) return;
       setState(() {
-        for (final m in messages) _selectedIds.add(m.id);
+        for (final m in messages) {
+          _selectedIds.add(m.id);
+        }
       });
       page++;
       await Future.delayed(const Duration(seconds: _selectAllRateLimitSeconds));
@@ -463,7 +465,7 @@ class TrashMessageList extends StatelessWidget {
   final double selectionOpacity;
 
   const TrashMessageList({
-    Key? key,
+    super.key,
     required this.isLoading,
     required this.isLoadingMore,
     required this.errorMessage,
@@ -476,7 +478,7 @@ class TrashMessageList extends StatelessWidget {
     required this.onLongPressItem,
     required this.onTapItem,
     this.selectionOpacity = 0.18,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

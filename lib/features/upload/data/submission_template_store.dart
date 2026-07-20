@@ -4,7 +4,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/features/upload/domain/submission_template.dart';
+import 'package:fanotifier/features/upload/domain/submission_template.dart';
 
 class SubmissionTemplateStore {
   static const int version = 1;

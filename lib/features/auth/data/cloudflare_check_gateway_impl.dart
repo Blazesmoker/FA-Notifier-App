@@ -1,6 +1,6 @@
-import 'package:FANotifier/features/auth/data/cloudflare_http_access_verifier.dart';
-import 'package:FANotifier/features/auth/data/cloudflare_webview_cookie_service.dart';
-import 'package:FANotifier/features/auth/domain/cloudflare_check_gateway.dart';
+import 'package:fanotifier/features/auth/data/cloudflare_http_access_verifier.dart';
+import 'package:fanotifier/features/auth/data/cloudflare_webview_cookie_service.dart';
+import 'package:fanotifier/features/auth/domain/cloudflare_check_gateway.dart';
 
 class CloudflareCheckGatewayImpl implements CloudflareCheckGateway {
   const CloudflareCheckGatewayImpl({

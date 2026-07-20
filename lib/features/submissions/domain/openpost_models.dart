@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/submissions/domain/openpost_submission_attachment.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_submission_attachment.dart';
 
 class OpenPostParseResult {
   OpenPostParseResult({

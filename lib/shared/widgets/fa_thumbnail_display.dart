@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
-import 'package:FANotifier/shared/theme/app_theme.dart';
-import 'package:FANotifier/core/preferences/thumbnail_display_settings_provider.dart';
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/shared/theme/app_theme.dart';
+import 'package:fanotifier/core/preferences/thumbnail_display_settings_provider.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:provider/provider.dart';
 
 /// Applies an optional rating outline around the thumbnail.

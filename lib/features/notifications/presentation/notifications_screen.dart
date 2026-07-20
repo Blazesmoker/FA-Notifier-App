@@ -1,14 +1,14 @@
 import 'dart:async';
-import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
-import 'package:FANotifier/features/notifications/presentation/fa_notification_service.dart';
-import 'package:FANotifier/shared/fa/domain/fa_activities_polling_port.dart';
-import 'package:FANotifier/features/notifications/domain/notification_section_kind.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_activities_controller.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_counter_settings_controller.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_section_widget.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_settings_provider.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_shouts_section.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:fanotifier/features/drawer/presentation/drawer_user_controller.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
+import 'package:fanotifier/features/notifications/domain/notification_section_kind.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_activities_controller.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_counter_settings_controller.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_section_widget.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_settings_provider.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_shouts_section.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -19,11 +19,11 @@ class NotificationsScreen extends StatefulWidget {
   final GlobalKey<DrawerUserControllerState> drawerKey;
 
   const NotificationsScreen(
-      {Key? key, required this.drawerKey, this.initialSection})
-      : super(key: key);
+      {super.key, required this.drawerKey, this.initialSection})
+      ;
 
   @override
-  _NotificationsScreenState createState() => _NotificationsScreenState();
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen>

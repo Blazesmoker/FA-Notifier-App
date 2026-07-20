@@ -1,13 +1,13 @@
 import 'package:extended_text/extended_text.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
-import 'package:FANotifier/shared/widgets/comment_tree_painter.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/comment_tree_painter.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter_html/flutter_html.dart';
 
-import 'package:FANotifier/shared/utils/specialTextSpanBuilder.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/shared/utils/special_text_span_builder.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 
 /// Comment display widget extracted from openpost.dart
 class CommentWidget extends StatefulWidget {
@@ -31,7 +31,7 @@ class CommentWidget extends StatefulWidget {
   final VoidCallback? onTranslateToggle;
 
   const CommentWidget({
-    Key? key,
+    super.key,
     required this.comment,
     required this.treeLevels,
     required this.collapsed,
@@ -49,10 +49,10 @@ class CommentWidget extends StatefulWidget {
     this.contextMenuBuilder,
     this.showTranslateButton = false,
     this.onTranslateToggle,
-  }) : super(key: key);
+  });
 
   @override
-  _CommentWidgetState createState() => _CommentWidgetState();
+  State<CommentWidget> createState() => _CommentWidgetState();
 }
 
 class _CommentWidgetState extends State<CommentWidget> {
@@ -627,7 +627,7 @@ class _CommentWidgetState extends State<CommentWidget> {
       transitionBuilder: (child, animation) {
         return SizeTransition(
           sizeFactor: animation,
-          axisAlignment: -1,
+          alignment: const Alignment(-1.0, -1.0),
           child: FadeTransition(
             opacity: animation,
             child: child,

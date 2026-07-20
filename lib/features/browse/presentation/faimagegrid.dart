@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/browse/domain/browse_repository.dart';
-import 'package:FANotifier/features/browse/presentation/browse_image_grid_controller.dart';
-import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
-import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/shared/widgets/heart_animation.dart';
-import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
-import 'package:FANotifier/shared/widgets/fa_unavailable_screen.dart';
-import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/features/browse/domain/browse_repository.dart';
+import 'package:fanotifier/features/browse/presentation/browse_image_grid_controller.dart';
+import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/shared/widgets/heart_animation.dart';
+import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
+import 'package:fanotifier/shared/widgets/fa_unavailable_screen.dart';
+import 'package:fanotifier/features/auth/presentation/cloudflare_check_screen.dart';
+import 'package:fanotifier/features/submissions/presentation/openpost.dart';
 
 import '../../auth/domain/cloudflare_check_result.dart';
 
 class FAImageGrid extends StatefulWidget {
   final Map<String, String> selectedFilters;
-  const FAImageGrid({required this.selectedFilters, Key? key})
-      : super(key: key);
+  const FAImageGrid({required this.selectedFilters, super.key})
+      ;
 
   @override
   FAImageGridState createState() => FAImageGridState();
@@ -319,14 +319,13 @@ class _FavImageTile extends StatefulWidget {
   final VoidCallback onTap;
 
   const _FavImageTile({
-    Key? key,
     required this.image,
     required this.width,
     required this.height,
     required this.isFav,
     required this.onToggle,
     required this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   State<_FavImageTile> createState() => _FavImageTileState();

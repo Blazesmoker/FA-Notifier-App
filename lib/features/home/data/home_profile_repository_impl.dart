@@ -1,6 +1,6 @@
-import 'package:FANotifier/features/home/data/home_fa_service.dart';
-import 'package:FANotifier/features/home/domain/home_profile_repository.dart';
-import 'package:FANotifier/shared/fa/domain/user_profile.dart';
+import 'package:fanotifier/features/home/data/home_fa_service.dart';
+import 'package:fanotifier/features/home/domain/home_profile_repository.dart';
+import 'package:fanotifier/shared/fa/domain/user_profile.dart';
 
 class HomeProfileRepositoryImpl implements HomeProfileRepository {
   HomeProfileRepositoryImpl({FaService? faService})

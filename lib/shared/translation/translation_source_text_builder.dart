@@ -1,4 +1,4 @@
-import 'package:FANotifier/shared/translation/translation_service.dart';
+import 'package:fanotifier/shared/translation/translation_service.dart';
 
 class TranslationSourceTextBuilder {
   const TranslationSourceTextBuilder(this._translationService);

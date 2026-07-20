@@ -1,17 +1,17 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'package:FANotifier/features/profile/domain/shout.dart';
-import 'package:FANotifier/shared/fa/domain/user_link.dart';
-import 'package:FANotifier/features/profile/presentation/user_description_webview.dart';
-import 'package:FANotifier/features/profile/presentation/user_grid_section.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_components.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_shouts_section.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_styles.dart';
+import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/shared/fa/domain/user_link.dart';
+import 'package:fanotifier/features/profile/presentation/user_description_webview.dart';
+import 'package:fanotifier/features/profile/presentation/user_grid_section.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_components.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_shouts_section.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_styles.dart';
 
 class UserProfileHomeSection extends StatelessWidget {
   const UserProfileHomeSection({

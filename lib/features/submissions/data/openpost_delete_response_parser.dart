@@ -1,6 +1,6 @@
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_delete_models.dart';
 
 OpenPostDeleteConfirmationData? parseOpenPostDeleteConfirmation(
   String htmlBody,

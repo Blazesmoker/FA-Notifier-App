@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:FANotifier/shared/platform/android_ime_animation.dart';
-import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:fanotifier/shared/platform/android_ime_animation.dart';
+import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 

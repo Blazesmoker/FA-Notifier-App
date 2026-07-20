@@ -4,13 +4,13 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/core/utils/utils.dart';
-import 'package:FANotifier/features/notes/domain/note_reply_models.dart';
-import 'package:FANotifier/features/notes/domain/note_reply_repository.dart';
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/core/network/fa_request_coordinator.dart';
-import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
+import 'package:fanotifier/core/utils/utils.dart';
+import 'package:fanotifier/features/notes/domain/note_reply_models.dart';
+import 'package:fanotifier/features/notes/domain/note_reply_repository.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/network/fa_request_coordinator.dart';
+import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
 
 class NoteReplyService implements NoteReplyRepository {
   NoteReplyService({

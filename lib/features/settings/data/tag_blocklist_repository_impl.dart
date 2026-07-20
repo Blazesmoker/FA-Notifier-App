@@ -1,6 +1,6 @@
-import 'package:FANotifier/features/settings/data/tag_blocklist_service.dart';
-import 'package:FANotifier/features/settings/domain/tag_blocklist_parse_result.dart';
-import 'package:FANotifier/features/settings/domain/tag_blocklist_repository.dart';
+import 'package:fanotifier/features/settings/data/tag_blocklist_service.dart';
+import 'package:fanotifier/features/settings/domain/tag_blocklist_parse_result.dart';
+import 'package:fanotifier/features/settings/domain/tag_blocklist_repository.dart';
 
 class TagBlocklistRepositoryImpl implements TagBlocklistRepository {
   const TagBlocklistRepositoryImpl();

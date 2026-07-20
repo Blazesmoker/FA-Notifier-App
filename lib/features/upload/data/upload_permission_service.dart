@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:permission_handler/permission_handler.dart';
 
-import 'package:FANotifier/features/upload/domain/upload_permission_gateway.dart';
+import 'package:fanotifier/features/upload/domain/upload_permission_gateway.dart';
 
 class UploadPermissionService implements UploadPermissionGateway {
   const UploadPermissionService();

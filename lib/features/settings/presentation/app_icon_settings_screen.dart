@@ -1,12 +1,12 @@
 import 'dart:io';
 
-import 'package:FANotifier/features/settings/domain/app_icon_repository.dart';
+import 'package:fanotifier/features/settings/domain/app_icon_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 class AppIconSettingsScreen extends StatefulWidget {
-  const AppIconSettingsScreen({Key? key}) : super(key: key);
+  const AppIconSettingsScreen({super.key});
 
   @override
   State<AppIconSettingsScreen> createState() => _AppIconSettingsScreenState();

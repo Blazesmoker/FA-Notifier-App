@@ -2,47 +2,47 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math';
-import 'package:FANotifier/features/profile/presentation/user_description_webview.dart';
+import 'package:fanotifier/features/profile/presentation/user_description_webview.dart';
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:url_launcher/url_launcher_string.dart';
-import 'package:FANotifier/app/navigation/app_navigation.dart';
-import 'package:FANotifier/features/profile/domain/fa_folder.dart';
-import 'package:FANotifier/features/profile/domain/profile_section.dart';
-import 'package:FANotifier/features/profile/domain/shout.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_shout_deletion_result.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_repository.dart';
-import 'package:FANotifier/shared/utils/external_link_launcher.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_styles.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_components.dart';
-import 'package:FANotifier/features/journals/presentation/create_journal.dart';
-import 'package:FANotifier/features/notes/presentation/new_message.dart';
-import 'package:FANotifier/features/journals/presentation/openjournal.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/features/profile/presentation/post_shout.dart';
-import 'package:FANotifier/features/profile/presentation/profilejournals.dart';
-import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
-import 'package:FANotifier/shared/utils/utils.dart';
-import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_action_key.dart';
-import 'package:FANotifier/features/profile/presentation/profile_avatar_transparency_detector.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_controller.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_sliver_helpers.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_favorites_section.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_gallery_section.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_home_section.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_journals_section.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_scraps_section.dart';
-import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
-import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
-import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
-import 'package:FANotifier/shared/translation/translation_service.dart';
-import 'package:FANotifier/shared/navigation/transparent_slide_page_route.dart';
+import 'package:fanotifier/app/navigation/app_navigation.dart';
+import 'package:fanotifier/features/profile/domain/fa_folder.dart';
+import 'package:fanotifier/features/profile/domain/profile_section.dart';
+import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_shout_deletion_result.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_repository.dart';
+import 'package:fanotifier/shared/utils/external_link_launcher.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_styles.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_components.dart';
+import 'package:fanotifier/features/journals/presentation/create_journal.dart';
+import 'package:fanotifier/features/notes/presentation/new_message.dart';
+import 'package:fanotifier/features/journals/presentation/openjournal.dart';
+import 'package:fanotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/features/profile/presentation/post_shout.dart';
+import 'package:fanotifier/features/profile/presentation/profilejournals.dart';
+import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
+import 'package:fanotifier/shared/utils/utils.dart';
+import 'package:fanotifier/shared/navigation/detachable_webview_route_registry.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_action_key.dart';
+import 'package:fanotifier/features/profile/presentation/profile_avatar_transparency_detector.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_controller.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_sliver_helpers.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_favorites_section.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_gallery_section.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_home_section.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_journals_section.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_scraps_section.dart';
+import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
+import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
+import 'package:fanotifier/shared/translation/translation_service.dart';
+import 'package:fanotifier/shared/navigation/transparent_slide_page_route.dart';
 import 'package:provider/provider.dart';
 
 class _ProfileTabKeepAlive extends StatefulWidget {
@@ -75,22 +75,22 @@ class UserProfileScreen extends StatefulWidget {
   final String? initialFolderUrl;
   final String? initialFolderName;
   const UserProfileScreen({
-    Key? key,
+    super.key,
     required this.nickname,
-    this.initialSection = ProfileSection.Home,
+    this.initialSection = ProfileSection.home,
     this.initialFolderUrl,
     this.initialFolderName,
-  }) : super(key: key);
+  });
 
   static Route<T> route<T>({
     required String nickname,
-    ProfileSection initialSection = ProfileSection.Home,
+    ProfileSection initialSection = ProfileSection.home,
     String? initialFolderUrl,
     String? initialFolderName,
     RouteSettings? settings,
     bool instant = false,
   }) {
-    final builder = (BuildContext context) => UserProfileScreen(
+    Widget builder(BuildContext context) => UserProfileScreen(
           nickname: nickname,
           initialSection: initialSection,
           initialFolderUrl: initialFolderUrl,
@@ -189,10 +189,13 @@ class UserProfileScreenState extends State<UserProfileScreen>
     ).whenComplete(() {
       _suppressNextRouteDetach = false;
     });
+    if (!mounted) return;
     if (selected == 'copy') {
       final plainText = await _webViewKey.currentState?.getPlainText();
+      if (!mounted) return;
       if (plainText != null) {
         await Clipboard.setData(ClipboardData(text: plainText));
+        if (!mounted) return;
         showAppSnackBar(context, 'Text copied to clipboard',
             backgroundColor: Colors.green);
       }
@@ -316,7 +319,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     }
     IosScrollRecovery.addListener(_handleIosScrollRecovery);
 
-    if (widget.initialSection != ProfileSection.Home) {
+    if (widget.initialSection != ProfileSection.home) {
       _webViewLoaded = true;
     }
 
@@ -782,30 +785,30 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   IconData _getIconForSection(ProfileSection section) {
     switch (section) {
-      case ProfileSection.Home:
+      case ProfileSection.home:
         return Icons.home;
-      case ProfileSection.Gallery:
+      case ProfileSection.gallery:
         return Icons.photo;
-      case ProfileSection.Scraps:
+      case ProfileSection.scraps:
         return Icons.collections_bookmark;
-      case ProfileSection.Favs:
+      case ProfileSection.favs:
         return Icons.favorite;
-      case ProfileSection.Journals:
+      case ProfileSection.journals:
         return Icons.book;
     }
   }
 
   String _getTabTitle(ProfileSection section) {
     switch (section) {
-      case ProfileSection.Home:
+      case ProfileSection.home:
         return 'Home';
-      case ProfileSection.Gallery:
+      case ProfileSection.gallery:
         return 'Gallery';
-      case ProfileSection.Scraps:
+      case ProfileSection.scraps:
         return 'Scraps';
-      case ProfileSection.Favs:
+      case ProfileSection.favs:
         return 'Favs';
-      case ProfileSection.Journals:
+      case ProfileSection.journals:
         return 'Journals';
     }
   }
@@ -818,6 +821,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       sfwEnabled: _profileController.sfwEnabled,
     );
 
+    if (!mounted) return;
     if (result.missingCookies) {
       debugPrint('No cookies found. User might not be logged in.');
       showAppSnackBar(context, 'Please log in to perform this action.',
@@ -834,7 +838,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
       showAppSnackBar(
         context,
-        '${shouldWatch ? 'Now watching ${_profileController.username}' : 'Stopped watching ${_profileController.username}'}',
+        shouldWatch
+            ? 'Now watching ${_profileController.username}'
+            : 'Stopped watching ${_profileController.username}',
         backgroundColor: Colors.green,
       );
     } else if (result.error != null) {
@@ -1100,6 +1106,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         sfwEnabled: _profileController.sfwEnabled,
       );
 
+      if (!mounted) return;
       if (deletionResult.status ==
           UserProfileShoutDeletionStatus.unmatched) {
         showAppSnackBar(
@@ -1155,6 +1162,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
             backgroundColor: Colors.red);
       }
     } catch (e) {
+      if (!mounted) return;
       showAppSnackBar(context, "Error: $e", backgroundColor: Colors.red);
     } finally {
       if (mounted) {
@@ -1177,6 +1185,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   Future<void> _launchURL(String url) async {
     if (!await tryLaunchExternalUrl(url)) {
       debugPrint('Could not launch $url');
+      if (!mounted) return;
       showAppSnackBar(context, 'Could not launch URL: $url',
           backgroundColor: Colors.red);
     }
@@ -1193,7 +1202,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
           context,
           UserProfileScreen.route(
             nickname: target.username!,
-            initialSection: ProfileSection.Gallery,
+            initialSection: ProfileSection.gallery,
           ),
         );
         return;
@@ -1211,7 +1220,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
           context,
           UserProfileScreen.route(
             nickname: tappedUsername,
-            initialSection: ProfileSection.Gallery,
+            initialSection: ProfileSection.gallery,
             initialFolderUrl: folderUrl,
             initialFolderName: folderName,
           ),
@@ -1230,7 +1239,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
           context,
           UserProfileScreen.route(
             nickname: target.username!,
-            initialSection: ProfileSection.Journals,
+            initialSection: ProfileSection.journals,
           ),
         );
         return;
@@ -1283,7 +1292,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   void switchToGalleryTab() {
-    _tabController.animateTo(ProfileSection.Gallery.index);
+    _tabController.animateTo(ProfileSection.gallery.index);
   }
 
   Future<void> _loadMoreShouts() async {
@@ -1310,6 +1319,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
             _profileController.shouts.map((shout) => shout.id).toSet(),
       );
 
+      if (!mounted) return;
       if (payload == null) {
         debugPrint("Missing shout pagination key; cannot load more shouts.");
         return;
@@ -1320,12 +1330,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
       });
     } catch (e) {
       debugPrint('Error loading more shouts: $e');
+      if (!mounted) return;
       showAppSnackBar(context, 'Failed to load more shouts',
           backgroundColor: Colors.red);
     } finally {
-      setState(() {
-        isLoadingMoreShouts = false;
-      });
+      if (mounted) {
+        setState(() {
+          isLoadingMoreShouts = false;
+        });
+      }
     }
   }
 
@@ -1532,10 +1545,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
     final profileLink =
         'https://www.furaffinity.net/user/${_profileController.sanitizedUsername}/';
     Clipboard.setData(ClipboardData(text: profileLink)).then((_) {
+      if (!mounted) return;
       showAppSnackBar(context, 'Copied profile link!',
           backgroundColor: Colors.green);
     }).catchError((error) {
       debugPrint('Failed to copy profile link: $error');
+      if (!mounted) return;
       showAppSnackBar(context, 'Failed to copy profile link.',
           backgroundColor: Colors.red);
     });
@@ -1617,6 +1632,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       sanitizedUsername: _profileController.sanitizedUsername,
     );
 
+    if (!mounted) return;
     if (result.missingCookies) {
       showAppSnackBar(
         context,
@@ -1628,6 +1644,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
     if (result.success) {
       await _fetchUserProfile();
+      if (!mounted) return;
       showAppSnackBar(
         context,
         shouldBlock ? 'Author blocked' : 'Author unblocked',
@@ -1719,7 +1736,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     bool showLoadingIndicator = _profileController.isLoading ||
         (needsDescriptionLoad &&
             !_webViewLoaded &&
-            _tabController.index == ProfileSection.Home.index);
+            _tabController.index == ProfileSection.home.index);
     final platformViews = WidgetsBinding.instance.platformDispatcher.views;
     final baseView =
         platformViews.isNotEmpty ? platformViews.first : View.of(context);
@@ -2473,9 +2490,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
                               );
                             },
                             backgroundColor: const Color(0xFFE09321),
+                            tooltip: 'Scroll to Top',
                             child: const Icon(Icons.arrow_upward,
                                 color: Colors.white),
-                            tooltip: 'Scroll to Top',
                           ),
                         )
                       : null,
@@ -2516,15 +2533,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
     }
 
     switch (section) {
-      case ProfileSection.Home:
+      case ProfileSection.home:
         return _buildHomeSection();
-      case ProfileSection.Gallery:
+      case ProfileSection.gallery:
         return _buildGallerySection();
-      case ProfileSection.Scraps:
+      case ProfileSection.scraps:
         return _buildScrapsSection();
-      case ProfileSection.Favs:
+      case ProfileSection.favs:
         return _buildFavoritesSection();
-      case ProfileSection.Journals:
+      case ProfileSection.journals:
         return _buildJournalsSection();
     }
   }

@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:io' show Platform;
-import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
-import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
+import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
+import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 

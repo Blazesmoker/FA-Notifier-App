@@ -1,13 +1,13 @@
 import 'dart:io';
 
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/features/submissions/data/finalize_submission_parser.dart';
-import 'package:FANotifier/features/submissions/domain/finalize_submission_options.dart';
-import 'package:FANotifier/features/submissions/domain/finalize_submission_repository.dart';
-import 'package:FANotifier/features/submissions/domain/finalize_submission_request.dart';
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/core/network/fa_request_coordinator.dart';
+import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:fanotifier/features/submissions/data/finalize_submission_parser.dart';
+import 'package:fanotifier/features/submissions/domain/finalize_submission_options.dart';
+import 'package:fanotifier/features/submissions/domain/finalize_submission_repository.dart';
+import 'package:fanotifier/features/submissions/domain/finalize_submission_request.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';

@@ -1,6 +1,6 @@
 import 'package:html/dom.dart' as dom;
 
-import 'package:FANotifier/features/settings/domain/tag_blocklist_parse_result.dart';
+import 'package:fanotifier/features/settings/domain/tag_blocklist_parse_result.dart';
 
 class TagBlocklistApiService {
   static TagBlocklistParseResult parse(dom.Document document, String rawHtml) {

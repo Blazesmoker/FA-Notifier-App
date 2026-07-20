@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 
-import 'package:FANotifier/core/network/fa_request_coordinator.dart';
-import 'package:FANotifier/features/notes/domain/note_google_image_resolver.dart';
+import 'package:fanotifier/core/network/fa_request_coordinator.dart';
+import 'package:fanotifier/features/notes/domain/note_google_image_resolver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -306,10 +306,7 @@ String? _httpImageUrl(dynamic value) {
   var candidate = value.trim();
   if (candidate.isEmpty) return null;
   if (candidate.startsWith('"') && candidate.endsWith('"')) {
-    try {
-      final decoded = jsonDecode(candidate);
-      if (decoded is String) candidate = decoded;
-    } on FormatException {}
+    candidate = _decodeQuotedCandidate(candidate);
   }
   final uri = Uri.tryParse(candidate);
   if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
@@ -321,6 +318,15 @@ String? _httpImageUrl(dynamic value) {
     return null;
   }
   return uri.removeFragment().toString();
+}
+
+String _decodeQuotedCandidate(String candidate) {
+  try {
+    final decoded = jsonDecode(candidate);
+    return decoded is String ? decoded : candidate;
+  } on FormatException {
+    return candidate;
+  }
 }
 
 void _logWebView(String message) {

@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
-import 'package:FANotifier/features/journals/domain/journal_deletion_result.dart';
-import 'package:FANotifier/features/journals/domain/journal_optimistic_comment.dart';
-import 'package:FANotifier/features/journals/domain/journal_publication_time_parser.dart';
-import 'package:FANotifier/features/journals/domain/openjournal_fetch_result.dart';
-import 'package:FANotifier/features/journals/domain/openjournal_load_result.dart';
-import 'package:FANotifier/features/journals/domain/openjournal_repository.dart';
+import 'package:fanotifier/features/journals/domain/journal_deletion_result.dart';
+import 'package:fanotifier/features/journals/domain/journal_optimistic_comment.dart';
+import 'package:fanotifier/features/journals/domain/journal_publication_time_parser.dart';
+import 'package:fanotifier/features/journals/domain/openjournal_fetch_result.dart';
+import 'package:fanotifier/features/journals/domain/openjournal_load_result.dart';
+import 'package:fanotifier/features/journals/domain/openjournal_repository.dart';
 
 class OpenJournalController extends ChangeNotifier {
   OpenJournalController({

@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:FANotifier/features/notes/domain/new_message_repository.dart';
-import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
-import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
-import 'package:FANotifier/shared/widgets/cooldown_send_icon.dart';
+import 'package:fanotifier/features/notes/domain/new_message_repository.dart';
+import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
+import 'package:fanotifier/shared/widgets/cooldown_send_icon.dart';
 import 'package:provider/provider.dart';
 
 class NewMessageScreen extends StatefulWidget {
-  const NewMessageScreen({Key? key, this.recipient}) : super(key: key);
+  const NewMessageScreen({super.key, this.recipient});
 
   final String? recipient;
 

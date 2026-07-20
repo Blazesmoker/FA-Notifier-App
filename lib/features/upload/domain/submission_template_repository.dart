@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/upload/domain/submission_template.dart';
+import 'package:fanotifier/features/upload/domain/submission_template.dart';
 
 abstract interface class SubmissionTemplateRepository {
   Future<List<SubmissionTemplate>> loadTemplates();

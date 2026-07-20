@@ -1,5 +1,5 @@
-import 'package:FANotifier/features/profile/domain/shout.dart';
-import 'package:FANotifier/shared/fa/domain/user_link.dart';
+import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/shared/fa/domain/user_link.dart';
 
 class UserProfileParsed {
   UserProfileParsed({

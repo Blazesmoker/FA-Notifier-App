@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/notes/domain/note_message_models.dart';
+import 'package:fanotifier/features/notes/domain/note_message_models.dart';
 
 typedef NoteMessageRepositoryFactory = NoteMessageRepository Function();
 

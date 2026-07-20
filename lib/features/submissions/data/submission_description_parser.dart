@@ -1,6 +1,6 @@
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/submissions/data/openpost_html_link_normalizer.dart';
+import 'package:fanotifier/features/submissions/data/openpost_html_link_normalizer.dart';
 
 String extractSubmissionDescriptionHtml(
   String html, {

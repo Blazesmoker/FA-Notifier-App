@@ -1,13 +1,13 @@
-import 'package:FANotifier/features/profile/domain/shout.dart';
-import 'package:FANotifier/features/profile/domain/profile_shout_text_repository.dart';
-import 'package:FANotifier/features/profile/presentation/shout_widget.dart';
-import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
-import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
-import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
-import 'package:FANotifier/shared/translation/translation_service.dart';
-import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/features/profile/domain/profile_shout_text_repository.dart';
+import 'package:fanotifier/features/profile/presentation/shout_widget.dart';
+import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
+import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
+import 'package:fanotifier/shared/translation/translation_service.dart';
+import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -26,7 +26,7 @@ class UserProfileShoutsSection extends StatelessWidget {
   final void Function(Shout shout) onToggleShoutSelection;
 
   const UserProfileShoutsSection({
-    Key? key,
+    super.key,
     required this.shouts,
     required this.isOwnProfile,
     required this.isSelectionMode,
@@ -39,7 +39,7 @@ class UserProfileShoutsSection extends StatelessWidget {
     required this.onConfirmDeleteShout,
     required this.onToggleSelectionMode,
     required this.onToggleShoutSelection,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -364,6 +364,7 @@ class UserProfileShoutsSection extends StatelessWidget {
                                 if (action == 'copy') {
                                   await Clipboard.setData(
                                       ClipboardData(text: plainText));
+                                  if (!context.mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                       content: Text('Shout text copied'),

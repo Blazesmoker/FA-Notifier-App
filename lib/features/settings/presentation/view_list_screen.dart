@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/shared/fa/domain/user_link.dart';
-import 'package:FANotifier/features/settings/domain/watchlist_repository.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/shared/fa/domain/user_link.dart';
+import 'package:fanotifier/features/settings/domain/watchlist_repository.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 
 class ViewListScreen extends StatefulWidget {
   final String title;
@@ -11,14 +11,14 @@ class ViewListScreen extends StatefulWidget {
   final int expectedUserCount;
 
   const ViewListScreen({
-    Key? key,
+    super.key,
     required this.title,
     required this.sanitizedUsername,
     required this.expectedUserCount,
-  }) : super(key: key);
+  });
 
   @override
-  _ViewListScreenState createState() => _ViewListScreenState();
+  State<ViewListScreen> createState() => _ViewListScreenState();
 }
 
 class _ViewListScreenState extends State<ViewListScreen> {

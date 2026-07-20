@@ -7,7 +7,7 @@ import 'package:http/io_client.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/core/network/fa_request_coordinator.dart';
+import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 
 typedef _Call<T> = Future<T> Function();
 

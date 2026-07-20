@@ -1,10 +1,10 @@
-import 'package:FANotifier/features/notifications/presentation/fa_notification_service.dart';
-import 'package:FANotifier/shared/fa/domain/fa_activities_polling_port.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_shouts_controller.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:FANotifier/shared/utils/specialTextSpanBuilder.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_shouts_controller.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/shared/utils/special_text_span_builder.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:extended_text/extended_text.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -15,13 +15,13 @@ class ToggleableDate extends StatefulWidget {
   final String absoluteDate;
 
   const ToggleableDate({
-    Key? key,
+    super.key,
     required this.relativeDate,
     required this.absoluteDate,
-  }) : super(key: key);
+  });
 
   @override
-  _ToggleableDateState createState() => _ToggleableDateState();
+  State<ToggleableDate> createState() => _ToggleableDateState();
 }
 
 class _ToggleableDateState extends State<ToggleableDate> {
@@ -55,11 +55,11 @@ class AvatarWidget extends StatelessWidget {
   final double radius;
 
   const AvatarWidget({
-    Key? key,
+    super.key,
     required this.imageUrl,
     required this.fallbackAsset,
     this.radius = 24,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -90,11 +90,11 @@ class ShoutsSectionWidget extends StatefulWidget {
   final bool isActive;
 
   const ShoutsSectionWidget({
-    Key? key,
+    super.key,
     required this.service,
     required this.pollingService,
     required this.isActive,
-  }) : super(key: key);
+  });
 
   @override
   ShoutsSectionWidgetState createState() => ShoutsSectionWidgetState();

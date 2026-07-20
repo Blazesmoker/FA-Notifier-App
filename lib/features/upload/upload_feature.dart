@@ -1,15 +1,15 @@
-import 'package:FANotifier/features/upload/data/submission_template_repository_impl.dart';
-import 'package:FANotifier/features/upload/data/upload_file_picker_service.dart';
-import 'package:FANotifier/features/upload/data/upload_permission_service.dart';
-import 'package:FANotifier/features/upload/data/upload_submission_navigation_service.dart';
-import 'package:FANotifier/features/upload/data/upload_webview_script_repository_impl.dart';
-import 'package:FANotifier/features/upload/data/upload_webview_session_gateway_impl.dart';
-import 'package:FANotifier/features/upload/domain/submission_template_repository.dart';
-import 'package:FANotifier/features/upload/domain/upload_file_picker_gateway.dart';
-import 'package:FANotifier/features/upload/domain/upload_navigation_repository.dart';
-import 'package:FANotifier/features/upload/domain/upload_permission_gateway.dart';
-import 'package:FANotifier/features/upload/domain/upload_webview_script_repository.dart';
-import 'package:FANotifier/features/upload/domain/upload_webview_session_gateway.dart';
+import 'package:fanotifier/features/upload/data/submission_template_repository_impl.dart';
+import 'package:fanotifier/features/upload/data/upload_file_picker_service.dart';
+import 'package:fanotifier/features/upload/data/upload_permission_service.dart';
+import 'package:fanotifier/features/upload/data/upload_submission_navigation_service.dart';
+import 'package:fanotifier/features/upload/data/upload_webview_script_repository_impl.dart';
+import 'package:fanotifier/features/upload/data/upload_webview_session_gateway_impl.dart';
+import 'package:fanotifier/features/upload/domain/submission_template_repository.dart';
+import 'package:fanotifier/features/upload/domain/upload_file_picker_gateway.dart';
+import 'package:fanotifier/features/upload/domain/upload_navigation_repository.dart';
+import 'package:fanotifier/features/upload/domain/upload_permission_gateway.dart';
+import 'package:fanotifier/features/upload/domain/upload_webview_script_repository.dart';
+import 'package:fanotifier/features/upload/domain/upload_webview_session_gateway.dart';
 
 class UploadFeature {
   const UploadFeature._();

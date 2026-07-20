@@ -6,14 +6,14 @@ import 'package:intl/intl.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/journals/data/openjournal_cookies.dart';
-import 'package:FANotifier/features/journals/data/openjournal_comment_parser.dart';
-import 'package:FANotifier/features/journals/data/openjournal_delete_link_parser.dart';
-import 'package:FANotifier/features/journals/data/journal_url_builder.dart';
-import 'package:FANotifier/features/journals/domain/openjournal_fetch_result.dart';
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/shared/fa/user_submitted_html_linkifier.dart';
+import 'package:fanotifier/features/journals/data/openjournal_cookies.dart';
+import 'package:fanotifier/features/journals/data/openjournal_comment_parser.dart';
+import 'package:fanotifier/features/journals/data/openjournal_delete_link_parser.dart';
+import 'package:fanotifier/features/journals/data/journal_url_builder.dart';
+import 'package:fanotifier/features/journals/domain/openjournal_fetch_result.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/shared/fa/user_submitted_html_linkifier.dart';
 
 class OpenJournalApiService {
   OpenJournalApiService({

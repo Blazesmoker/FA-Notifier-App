@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/shared/fa/fa_thumbnail_parser.dart';
+import 'package:fanotifier/shared/fa/fa_thumbnail_parser.dart';
 
 Future<List<Map<String, dynamic>>> parseFaThumbnailHtml(String html) {
   return compute(_parseFaThumbnailHtml, html);

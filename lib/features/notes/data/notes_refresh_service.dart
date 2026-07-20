@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:FANotifier/features/notes/domain/notes_refresh_port.dart';
+import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
 
 class NotesRefreshService implements NotesRefreshPort {
   static final NotesRefreshService _i = NotesRefreshService._();

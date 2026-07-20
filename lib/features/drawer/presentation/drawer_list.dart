@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
+import 'package:fanotifier/features/drawer/domain/drawer_index.dart';
 
 class DrawerList {
   DrawerList({

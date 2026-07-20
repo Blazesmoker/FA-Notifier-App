@@ -1,8 +1,8 @@
-import 'package:FANotifier/features/submissions/data/openpost_cookie_service.dart';
-import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
-import 'package:FANotifier/shared/fa/parsing/submission_favorite_links_parser.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_favorite_links_load_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_page_response.dart';
+import 'package:fanotifier/features/submissions/data/openpost_cookie_service.dart';
+import 'package:fanotifier/features/submissions/data/openpost_html_parser.dart';
+import 'package:fanotifier/shared/fa/parsing/submission_favorite_links_parser.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_favorite_links_load_result.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_page_response.dart';
 
 class OpenPostFavoriteLinksLoader {
   const OpenPostFavoriteLinksLoader({

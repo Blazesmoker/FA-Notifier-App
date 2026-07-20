@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/comments/domain/comment_edit_models.dart';
+import 'package:fanotifier/features/comments/domain/comment_edit_models.dart';
 
 typedef CommentEditRepositoryFactory = CommentEditRepository Function();
 

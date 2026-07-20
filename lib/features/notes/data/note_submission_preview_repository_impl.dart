@@ -1,14 +1,14 @@
 import 'dart:async';
 
-import 'package:FANotifier/core/fa/fa_media_auth.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/features/notes/data/note_submission_preview_parser.dart';
-import 'package:FANotifier/features/notes/domain/note_google_image_resolver.dart';
-import 'package:FANotifier/features/notes/domain/note_image_preview_link.dart';
-import 'package:FANotifier/features/notes/domain/note_submission_preview.dart';
-import 'package:FANotifier/features/notes/domain/note_submission_preview_repository.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_repository.dart';
+import 'package:fanotifier/core/fa/fa_media_auth.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:fanotifier/features/notes/data/note_submission_preview_parser.dart';
+import 'package:fanotifier/features/notes/domain/note_google_image_resolver.dart';
+import 'package:fanotifier/features/notes/domain/note_image_preview_link.dart';
+import 'package:fanotifier/features/notes/domain/note_submission_preview.dart';
+import 'package:fanotifier/features/notes/domain/note_submission_preview_repository.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_repository.dart';
 import 'package:flutter/foundation.dart';
 
 class NoteSubmissionPreviewRepositoryImpl

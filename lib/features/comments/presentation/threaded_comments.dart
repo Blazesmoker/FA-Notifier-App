@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/comment_tree_painter.dart';
+import 'package:fanotifier/shared/widgets/comment_tree_painter.dart';
 
 typedef ThreadedCommentItemBuilder = Widget Function(
   BuildContext context,

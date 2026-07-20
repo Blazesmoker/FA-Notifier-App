@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
-import 'package:FANotifier/shared/widgets/StarBurstAnimation.dart';
+import 'package:fanotifier/shared/widgets/star_burst_animation.dart';
 
 class StarBurstOverlay extends StatefulWidget {
   final Offset origin;

@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:FANotifier/core/logging/app_logging.dart';
-import 'package:FANotifier/features/notifications/data/notification_service.dart';
+import 'package:fanotifier/core/logging/app_logging.dart';
+import 'package:fanotifier/features/notifications/data/notification_service.dart';
 import 'package:app_badge_plus/app_badge_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

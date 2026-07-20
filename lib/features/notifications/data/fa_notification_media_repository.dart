@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/notifications/data/fa_notification_cookie_header_provider.dart';
-import 'package:FANotifier/features/notifications/data/fa_notification_media_parser.dart';
-import 'package:FANotifier/features/notifications/data/simple_semaphore.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:fanotifier/features/notifications/data/fa_notification_cookie_header_provider.dart';
+import 'package:fanotifier/features/notifications/data/fa_notification_media_parser.dart';
+import 'package:fanotifier/features/notifications/data/simple_semaphore.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
 
 class FaNotificationMediaRepository {
   FaNotificationMediaRepository({

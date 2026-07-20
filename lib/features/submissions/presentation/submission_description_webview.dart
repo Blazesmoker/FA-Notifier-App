@@ -5,13 +5,13 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/submissions/domain/submission_description_repository.dart';
-import 'package:FANotifier/features/submissions/domain/submission_description_webview_content.dart';
-import 'package:FANotifier/shared/fa/fa_webview_document_scripts.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
-import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
-import 'package:FANotifier/shared/utils/utils.dart';
+import 'package:fanotifier/features/submissions/domain/submission_description_repository.dart';
+import 'package:fanotifier/features/submissions/domain/submission_description_webview_content.dart';
+import 'package:fanotifier/shared/fa/fa_webview_document_scripts.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
+import 'package:fanotifier/shared/utils/utils.dart';
 
 class SubmissionDescriptionWebView extends StatefulWidget {
   final String submissionId;
@@ -38,8 +38,8 @@ class SubmissionDescriptionWebView extends StatefulWidget {
     this.routeDetached = false,
     this.repository,
     this.onBeforeInternalNavigation,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   SubmissionDescriptionWebViewState createState() =>
@@ -407,8 +407,8 @@ class SubmissionDescriptionWebViewScreen extends StatelessWidget {
   final String submissionId;
   final String? initialHtml;
   const SubmissionDescriptionWebViewScreen(
-      {Key? key, required this.submissionId, this.initialHtml})
-      : super(key: key);
+      {super.key, required this.submissionId, this.initialHtml})
+      ;
 
   @override
   Widget build(BuildContext context) {

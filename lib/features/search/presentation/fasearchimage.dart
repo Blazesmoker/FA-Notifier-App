@@ -1,18 +1,18 @@
 // lib/fasearchimage.dart
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/search/domain/search_repository.dart';
-import 'package:FANotifier/features/search/presentation/search_image_controller.dart';
-import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
-import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/shared/widgets/heart_animation.dart';
-import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
-import 'package:FANotifier/shared/widgets/fa_unavailable_screen.dart';
-import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/features/search/domain/search_repository.dart';
+import 'package:fanotifier/features/search/presentation/search_image_controller.dart';
+import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/shared/widgets/heart_animation.dart';
+import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
+import 'package:fanotifier/shared/widgets/fa_unavailable_screen.dart';
+import 'package:fanotifier/features/auth/presentation/cloudflare_check_screen.dart';
+import 'package:fanotifier/features/submissions/presentation/openpost.dart';
 
 import '../../auth/domain/cloudflare_check_result.dart';
 
@@ -23,8 +23,8 @@ class FASearchImage extends StatefulWidget {
   const FASearchImage({
     required this.selectedFilters,
     required this.searchQuery,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   FASearchImageState createState() => FASearchImageState();
@@ -314,14 +314,13 @@ class _FavSearchTile extends StatefulWidget {
   final VoidCallback onTap;
 
   const _FavSearchTile({
-    Key? key,
     required this.item,
     required this.width,
     required this.height,
     required this.isFavorited,
     required this.onFinalFavState,
     required this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   State<_FavSearchTile> createState() => _FavSearchTileState();

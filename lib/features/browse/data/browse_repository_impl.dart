@@ -1,7 +1,7 @@
-import 'package:FANotifier/features/browse/data/browse_filter_options_service.dart';
-import 'package:FANotifier/features/browse/data/browse_image_parser.dart';
-import 'package:FANotifier/features/browse/data/browse_image_service.dart';
-import 'package:FANotifier/features/browse/domain/browse_repository.dart';
+import 'package:fanotifier/features/browse/data/browse_filter_options_service.dart';
+import 'package:fanotifier/features/browse/data/browse_image_parser.dart';
+import 'package:fanotifier/features/browse/data/browse_image_service.dart';
+import 'package:fanotifier/features/browse/domain/browse_repository.dart';
 
 class BrowseRepositoryImpl implements BrowseRepository {
   BrowseRepositoryImpl({BrowseImageService? imageService})

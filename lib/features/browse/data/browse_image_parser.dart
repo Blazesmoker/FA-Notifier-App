@@ -1,5 +1,5 @@
-import 'package:FANotifier/core/logging/app_logging.dart';
-import 'package:FANotifier/shared/fa/fa_thumbnail_processing.dart';
+import 'package:fanotifier/core/logging/app_logging.dart';
+import 'package:fanotifier/shared/fa/fa_thumbnail_processing.dart';
 
 Future<List<Map<String, dynamic>>> parseBrowseImageHtml(String html) async {
   final imageMetadata = await parseFaThumbnailHtml(html);

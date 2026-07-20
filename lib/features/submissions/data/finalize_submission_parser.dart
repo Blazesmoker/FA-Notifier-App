@@ -1,8 +1,8 @@
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/submissions/domain/finalize_submission_options.dart';
-import 'package:FANotifier/features/submissions/domain/submission_form_option.dart';
+import 'package:fanotifier/features/submissions/domain/finalize_submission_options.dart';
+import 'package:fanotifier/features/submissions/domain/submission_form_option.dart';
 
 FinalizeSubmissionOptions parseFinalizeSubmissionOptions(String html) {
   final document = html_parser.parse(html);

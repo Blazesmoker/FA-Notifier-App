@@ -1,7 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/features/notifications/domain/activity_count_change_policy.dart';
-import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
+import 'package:fanotifier/features/notifications/domain/activity_count_change_policy.dart';
+import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 
 class ActivitiesNotificationStateStore {
   static final ActivitiesNotificationStateStore _i =

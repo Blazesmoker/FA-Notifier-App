@@ -110,16 +110,16 @@ class NavigationSlider<T> extends StatefulWidget {
   final void Function(int index, bool isAlreadySelected)? onTabTapped;
 
   const NavigationSlider({
-    Key? key,
+    super.key,
     required this.sections,
     required this.tabController,
     required this.getTabTitle,
     required this.getIconForSection,
     this.onTabTapped,
-  }) : super(key: key);
+  });
 
   @override
-  _NavigationSliderState<T> createState() => _NavigationSliderState<T>();
+  State<NavigationSlider<T>> createState() => _NavigationSliderState<T>();
 }
 
 class _NavigationSliderState<T> extends State<NavigationSlider<T>> {

@@ -1,5 +1,5 @@
 import 'package:html/parser.dart' as html_parser;
-import 'package:FANotifier/features/comments/domain/comment_edit_models.dart';
+import 'package:fanotifier/features/comments/domain/comment_edit_models.dart';
 
 String? parseEditCommentTextarea(String html) {
   final document = html_parser.parse(html);

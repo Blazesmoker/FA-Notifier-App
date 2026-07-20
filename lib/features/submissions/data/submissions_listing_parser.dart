@@ -1,9 +1,9 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/submissions/domain/submission_image_group.dart';
-import 'package:FANotifier/features/submissions/domain/submissions_listing_parse_result.dart';
-import 'package:FANotifier/shared/fa/fa_thumbnail_parser.dart';
+import 'package:fanotifier/features/submissions/domain/submission_image_group.dart';
+import 'package:fanotifier/features/submissions/domain/submissions_listing_parse_result.dart';
+import 'package:fanotifier/shared/fa/fa_thumbnail_parser.dart';
 
 SubmissionsListingParseResult parseSubmissionsListing(String html) {
   final doc = html_parser.parse(html);

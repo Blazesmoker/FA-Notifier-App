@@ -1,5 +1,5 @@
-import 'package:FANotifier/features/submissions/domain/submission_fetch_models.dart';
-import 'package:FANotifier/features/submissions/domain/submissions_listing_parse_result.dart';
+import 'package:fanotifier/features/submissions/domain/submission_fetch_models.dart';
+import 'package:fanotifier/features/submissions/domain/submissions_listing_parse_result.dart';
 
 abstract interface class SubmissionsRepository {
   Future<bool> hasAuthCookies();

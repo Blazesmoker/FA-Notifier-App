@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:FANotifier/features/profile/presentation/profilescraps.dart';
+import 'package:fanotifier/features/profile/presentation/profilescraps.dart';
 
 class UserProfileScrapsSection extends StatefulWidget {
   const UserProfileScrapsSection({

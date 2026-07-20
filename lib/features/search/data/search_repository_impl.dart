@@ -1,6 +1,6 @@
-import 'package:FANotifier/features/search/data/search_image_parser.dart';
-import 'package:FANotifier/features/search/data/search_image_service.dart';
-import 'package:FANotifier/features/search/domain/search_repository.dart';
+import 'package:fanotifier/features/search/data/search_image_parser.dart';
+import 'package:fanotifier/features/search/data/search_image_service.dart';
+import 'package:fanotifier/features/search/domain/search_repository.dart';
 
 class SearchRepositoryImpl implements SearchRepository {
   SearchRepositoryImpl({SearchImageService? imageService})

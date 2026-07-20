@@ -2,10 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/submissions/domain/finalize_submission_repository.dart';
-import 'package:FANotifier/features/submissions/domain/finalize_submission_request.dart';
-import 'package:FANotifier/features/submissions/domain/submission_form_option.dart';
-import 'package:FANotifier/features/submissions/domain/finalize_submission_defaults.dart';
+import 'package:fanotifier/features/submissions/domain/finalize_submission_repository.dart';
+import 'package:fanotifier/features/submissions/domain/finalize_submission_request.dart';
+import 'package:fanotifier/features/submissions/domain/submission_form_option.dart';
+import 'package:fanotifier/features/submissions/domain/finalize_submission_defaults.dart';
 
 class FinalizeSubmissionScreen extends StatefulWidget {
   final String submissionKey;
@@ -14,15 +14,15 @@ class FinalizeSubmissionScreen extends StatefulWidget {
 
 
   const FinalizeSubmissionScreen({
-    Key? key,
+    super.key,
     required this.submissionKey,
     required this.submissionType,
     this.repository,
 
-  }) : super(key: key);
+  });
 
   @override
-  _FinalizeSubmissionScreenState createState() =>
+  State<FinalizeSubmissionScreen> createState() =>
       _FinalizeSubmissionScreenState();
 }
 
@@ -72,6 +72,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
 
     try {
       final parsed = await _finalizeSubmissionRepository.fetchOptions();
+      if (!mounted) return;
       final submissionKey = parsed.submissionKey;
       setState(() {
         _submissionKeyUpload = submissionKey;
@@ -86,6 +87,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
         _isLoadingOptions = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Error fetching options: $e';
         _isLoadingOptions = false;
@@ -131,6 +133,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
         ),
       );
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Submission uploaded successfully!'),
@@ -140,6 +143,7 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
       );
       Navigator.pop(context);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Error finalizing submission: $e';
       });
@@ -152,9 +156,11 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
         ),
       );
     } finally {
-      setState(() {
-        _isFinalizing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isFinalizing = false;
+        });
+      }
     }
   }
 
@@ -489,6 +495,11 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
 
               ElevatedButton(
                 onPressed: _isFinalizing ? null : _finalizeSubmission,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  textStyle: const TextStyle(fontSize: 18),
+                  backgroundColor: Colors.blue,
+                ),
                 child: _isFinalizing
                     ? const SizedBox(
                   width: 24,
@@ -499,11 +510,6 @@ class _FinalizeSubmissionScreenState extends State<FinalizeSubmissionScreen> {
                   ),
                 )
                     : const Text('Finalize'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16.0),
-                  textStyle: const TextStyle(fontSize: 18),
-                  backgroundColor: Colors.blue,
-                ),
               ),
 
               if (_errorMessage.isNotEmpty)

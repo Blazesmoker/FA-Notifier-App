@@ -1,5 +1,5 @@
-import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
-import 'package:FANotifier/features/notifications/domain/notification_shout_merge_policy.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:fanotifier/features/notifications/domain/notification_shout_merge_policy.dart';
 
 const NotificationShoutMergePolicy _shoutMergePolicy =
     NotificationShoutMergePolicy();

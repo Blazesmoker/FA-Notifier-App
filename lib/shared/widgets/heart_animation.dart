@@ -36,7 +36,7 @@ class HeartAnimationWidget extends StatefulWidget {
   final Duration debounceDuration;
 
   const HeartAnimationWidget({
-    Key? key,
+    super.key,
     required this.isFavorite,
     required this.child,
     required this.containerWidth,
@@ -44,7 +44,7 @@ class HeartAnimationWidget extends StatefulWidget {
     this.onDebounceComplete,
     this.animationDuration = const Duration(milliseconds: 600),
     this.debounceDuration = const Duration(seconds: 3),
-  }) : super(key: key);
+  });
 
   @override
   State<HeartAnimationWidget> createState() => _HeartAnimationWidgetState();

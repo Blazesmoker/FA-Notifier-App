@@ -5,17 +5,14 @@ class TransparentSlidePageRoute<T> extends PageRoute<T> {
     required this.builder,
     super.settings,
     super.requestFocus,
-    this.allowSnapshotting = true,
-    this.fullscreenDialog = false,
+    super.allowSnapshotting = true,
+    super.fullscreenDialog = false,
     this.maintainState = true,
     this.routeTransitionDuration = const Duration(milliseconds: 280),
     this.routeReverseTransitionDuration = const Duration(milliseconds: 280),
   });
 
   final WidgetBuilder builder;
-  final bool allowSnapshotting;
-  @override
-  final bool fullscreenDialog;
   @override
   final bool maintainState;
   final Duration routeTransitionDuration;

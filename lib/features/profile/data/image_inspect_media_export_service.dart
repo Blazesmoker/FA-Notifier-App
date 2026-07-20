@@ -1,7 +1,7 @@
-import 'package:FANotifier/features/profile/data/avatar_image_service.dart';
-import 'package:FANotifier/features/profile/domain/avatar_image_data.dart';
-import 'package:FANotifier/features/profile/domain/profile_media_export_repository.dart';
-import 'package:FANotifier/shared/platform/image_export_service.dart';
+import 'package:fanotifier/features/profile/data/avatar_image_service.dart';
+import 'package:fanotifier/features/profile/domain/avatar_image_data.dart';
+import 'package:fanotifier/features/profile/domain/profile_media_export_repository.dart';
+import 'package:fanotifier/shared/platform/image_export_service.dart';
 
 class ImageInspectMediaExportService implements ProfileMediaExportRepository {
   const ImageInspectMediaExportService({

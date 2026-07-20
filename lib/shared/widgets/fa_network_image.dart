@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 
-import 'package:FANotifier/core/fa/fa_media_auth.dart';
+import 'package:fanotifier/core/fa/fa_media_auth.dart';
 
 class FaNetworkImage extends StatefulWidget {
   const FaNetworkImage(
     this.src, {
-    Key? key,
+    super.key,
     this.width,
     this.height,
     this.fit,
@@ -27,7 +27,7 @@ class FaNetworkImage extends StatefulWidget {
     this.excludeFromSemantics = false,
     this.cacheWidth,
     this.cacheHeight,
-  }) : super(key: key);
+  });
 
   final String src;
   final double? width;

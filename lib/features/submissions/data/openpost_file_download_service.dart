@@ -1,13 +1,12 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 
-import 'package:FANotifier/features/submissions/data/openpost_cookie_service.dart';
-import 'package:FANotifier/features/submissions/data/openpost_submission_url.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_file_download_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_submission_attachment.dart';
+import 'package:fanotifier/features/submissions/data/openpost_cookie_service.dart';
+import 'package:fanotifier/features/submissions/data/openpost_submission_url.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_file_download_result.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_submission_attachment.dart';
 
 class OpenPostFileDownloadService {
   const OpenPostFileDownloadService({

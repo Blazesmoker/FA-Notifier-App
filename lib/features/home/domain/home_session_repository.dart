@@ -1,4 +1,4 @@
-import 'package:FANotifier/shared/fa/domain/user_profile.dart';
+import 'package:fanotifier/shared/fa/domain/user_profile.dart';
 
 abstract interface class HomeSessionRepository {
   Future<bool> loadIsLoggedIn();

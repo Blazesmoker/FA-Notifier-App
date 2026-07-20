@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/submissions/domain/submission_form_option.dart';
+import 'package:fanotifier/features/submissions/domain/submission_form_option.dart';
 
 class FinalizeSubmissionOptions {
   final String submissionKey;

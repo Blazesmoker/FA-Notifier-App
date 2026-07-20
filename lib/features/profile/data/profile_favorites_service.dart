@@ -2,11 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/features/profile/domain/profile_favorites_repository.dart';
-import 'package:FANotifier/features/profile/domain/profile_posts_parse_result.dart';
-import 'package:FANotifier/features/profile/data/profile_posts_parser.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:fanotifier/features/profile/domain/profile_favorites_repository.dart';
+import 'package:fanotifier/features/profile/domain/profile_posts_parse_result.dart';
+import 'package:fanotifier/features/profile/data/profile_posts_parser.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
 
 class ProfileFavoritesService implements ProfileFavoritesRepository {
   ProfileFavoritesService({

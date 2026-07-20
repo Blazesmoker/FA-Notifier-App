@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html;
 import 'package:provider/provider.dart';
 
-import 'package:FANotifier/shared/fa/domain/submission_comment_repository.dart';
-import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
-import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
+import 'package:fanotifier/shared/fa/domain/submission_comment_repository.dart';
+import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
 
 class ReplyScreen extends StatefulWidget {
   final Map<String, dynamic> comment;
@@ -20,11 +20,11 @@ class ReplyScreen extends StatefulWidget {
     required this.uniqueNumber,
     required this.isClassic,
     this.commentRepository,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
-  _ReplyScreenState createState() => _ReplyScreenState();
+  State<ReplyScreen> createState() => _ReplyScreenState();
 }
 
 class _ReplyScreenState extends State<ReplyScreen> {
@@ -71,22 +71,24 @@ class _ReplyScreenState extends State<ReplyScreen> {
         isClassic: widget.isClassic,
       );
 
+      if (!mounted) return;
       if (success) {
         widget.onSendReply(replyText);
-        Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Reply posted!'),
             backgroundColor: Colors.green,
           ),
         );
+        Navigator.pop(context, true);
       } else {
         _showError('Error posting reply.');
       }
     } catch (e) {
+      if (!mounted) return;
       _showError(e.toString());
     } finally {
-      setState(() => _isSending = false);
+      if (mounted) setState(() => _isSending = false);
     }
   }
 

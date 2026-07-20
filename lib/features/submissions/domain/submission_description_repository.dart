@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/submissions/domain/submission_description_webview_content.dart';
+import 'package:fanotifier/features/submissions/domain/submission_description_webview_content.dart';
 
 abstract interface class SubmissionDescriptionRepository {
   Future<SubmissionDescriptionWebViewContent> processInitialHtml(String html);

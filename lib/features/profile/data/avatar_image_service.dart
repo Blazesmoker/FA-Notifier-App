@@ -1,9 +1,9 @@
 import 'dart:typed_data';
 
-import 'package:FANotifier/features/profile/domain/avatar_image_data.dart';
-import 'package:FANotifier/shared/fa/fa_default_image_loader.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/core/fa/fa_media_auth.dart';
+import 'package:fanotifier/features/profile/domain/avatar_image_data.dart';
+import 'package:fanotifier/shared/fa/fa_default_image_loader.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/fa/fa_media_auth.dart';
 
 Future<AvatarImageData> fetchAvatarImageData(String imageUrl) async {
   final response = await FAHttp.getMedia(

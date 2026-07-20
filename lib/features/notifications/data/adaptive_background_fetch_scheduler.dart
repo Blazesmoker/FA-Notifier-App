@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:FANotifier/core/logging/app_logging.dart';
-import 'package:FANotifier/core/preferences/app_foreground_state_preference.dart';
-import 'package:FANotifier/features/notifications/data/background_workmanager_initializer.dart';
+import 'package:fanotifier/core/logging/app_logging.dart';
+import 'package:fanotifier/core/preferences/app_foreground_state_preference.dart';
+import 'package:fanotifier/features/notifications/data/background_workmanager_initializer.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';

@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 
-import 'package:FANotifier/features/upload/domain/upload_file_picker_gateway.dart';
-import 'package:FANotifier/features/upload/domain/upload_selected_file.dart';
+import 'package:fanotifier/features/upload/domain/upload_file_picker_gateway.dart';
+import 'package:fanotifier/features/upload/domain/upload_selected_file.dart';
 
 class UploadFilePickerService implements UploadFilePickerGateway {
   const UploadFilePickerService();

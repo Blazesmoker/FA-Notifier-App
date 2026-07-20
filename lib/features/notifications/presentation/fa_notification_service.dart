@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/fa/domain/notifications.dart';
-import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notifications_page_snapshot.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notifications_page_parser_state.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notifications_repository.dart';
-import 'package:FANotifier/shared/fa/domain/fa_notification_state_port.dart';
-import 'package:FANotifier/features/notifications/domain/notification_shout_merge_policy.dart';
+import 'package:fanotifier/shared/fa/domain/notifications.dart';
+import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notifications_page_snapshot.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notifications_page_parser_state.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notifications_repository.dart';
+import 'package:fanotifier/shared/fa/domain/fa_notification_state_port.dart';
+import 'package:fanotifier/features/notifications/domain/notification_shout_merge_policy.dart';
 
 /// Centralized service for notifications.
 class FANotificationService with ChangeNotifier implements FaNotificationStatePort {
@@ -20,6 +20,7 @@ class FANotificationService with ChangeNotifier implements FaNotificationStatePo
 
   bool isLoading = true;
   bool hasFetched = false;
+  @override
   String? errorMessage;
   List<NotificationSection> sections = [];
   String? currentUsername;
@@ -45,7 +46,9 @@ class FANotificationService with ChangeNotifier implements FaNotificationStatePo
   }
   /// Stores counts from the message-bar (e.g., {"W": 1, "F": 2, "J": 3}).
   Map<String, int> messageBarCounts = {};
+  @override
   bool hasValidLatestCountsSnapshot = false;
+  @override
   NotificationCounts latestCounts = NotificationCounts(
     submissions: 0,
     watches: 0,
@@ -64,6 +67,7 @@ class FANotificationService with ChangeNotifier implements FaNotificationStatePo
     registeredUsersOnline: '0',
   );
 
+  @override
   void applyTopbarCounts(NotificationCounts counts) {
     hasValidLatestCountsSnapshot = true;
     latestCounts = counts;
@@ -107,6 +111,7 @@ class FANotificationService with ChangeNotifier implements FaNotificationStatePo
   }
 
   /// Fetch and parse notifications from /msg/others/.
+  @override
   Future<void> fetchNotifications() async {
     isLoading = true;
     errorMessage = null;

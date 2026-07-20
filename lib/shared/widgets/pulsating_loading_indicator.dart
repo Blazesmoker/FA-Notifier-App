@@ -8,13 +8,13 @@ class PulsatingLoadingIndicator extends StatefulWidget {
   final String assetPath;
 
   const PulsatingLoadingIndicator({
-    Key? key,
+    super.key,
     this.size = 50.0,
     required this.assetPath,
-  }) : super(key: key);
+  });
 
   @override
-  _PulsatingLoadingIndicatorState createState() =>
+  State<PulsatingLoadingIndicator> createState() =>
       _PulsatingLoadingIndicatorState();
 }
 

@@ -3,12 +3,12 @@ import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'package:FANotifier/features/profile/data/shout_form_parser.dart';
-import 'package:FANotifier/features/profile/domain/post_shout_result.dart';
-import 'package:FANotifier/features/profile/domain/profile_shout_repository.dart';
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/core/network/fa_request_coordinator.dart';
+import 'package:fanotifier/features/profile/data/shout_form_parser.dart';
+import 'package:fanotifier/features/profile/domain/post_shout_result.dart';
+import 'package:fanotifier/features/profile/domain/profile_shout_repository.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 
 class ShoutService implements ProfileShoutRepository {
   ShoutService({

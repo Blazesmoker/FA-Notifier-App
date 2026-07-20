@@ -3,22 +3,22 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:provider/provider.dart';
 
-import 'package:FANotifier/features/profile/domain/avatar_image_data.dart';
-import 'package:FANotifier/features/profile/domain/profile_media_export_repository.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:fanotifier/features/profile/domain/avatar_image_data.dart';
+import 'package:fanotifier/features/profile/domain/profile_media_export_repository.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 
 class ImageInspectScreen extends StatefulWidget {
   final String imageUrl;
   final AvatarImageData? imageData;
 
   const ImageInspectScreen({
-    Key? key,
+    super.key,
     required this.imageUrl,
     this.imageData,
-  }) : super(key: key);
+  });
 
   static Route<void> route({
     required String imageUrl,
@@ -123,6 +123,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
       final isPermissionGranted =
           await _mediaExportRepository.requestImageExportPermission();
 
+      if (!context.mounted) return;
       if (!isPermissionGranted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Photo permission denied'), backgroundColor: Colors.red),
@@ -132,9 +133,11 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
 
       final imageData = widget.imageData ??
           await _mediaExportRepository.fetchImageData(widget.imageUrl);
+      if (!context.mounted) return;
       final isSaved =
           await _mediaExportRepository.saveImageToGallery(imageData);
 
+      if (!context.mounted) return;
       if (isSaved) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Image saved to gallery!'), backgroundColor: Colors.green),
@@ -145,6 +148,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
         );
       }
     } catch (e) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to download image: $e'), backgroundColor: Colors.red),
       );
@@ -156,6 +160,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
       final isPermissionGranted =
           await _mediaExportRepository.requestImageExportPermission();
 
+      if (!context.mounted) return;
       if (!isPermissionGranted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Permission denied'), backgroundColor: Colors.red),
@@ -165,8 +170,10 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
 
       final imageData = widget.imageData ??
           await _mediaExportRepository.fetchImageData(widget.imageUrl);
+      if (!context.mounted) return;
       await _mediaExportRepository.shareImage(imageData);
     } catch (e) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to share image: $e'), backgroundColor: Colors.red),
       );
@@ -349,11 +356,13 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
 
     final localPosition = renderObject.globalToLocal(globalPosition);
     final zoom = Matrix4.identity()
-      ..translate(
+      ..translateByDouble(
         -localPosition.dx * (_doubleTapScale - 1),
         -localPosition.dy * (_doubleTapScale - 1),
+        0.0,
+        1.0,
       )
-      ..scale(_doubleTapScale);
+      ..scaleByDouble(_doubleTapScale, _doubleTapScale, _doubleTapScale, 1.0);
     _animateDoubleTapZoomTo(zoom);
   }
 
@@ -456,7 +465,7 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
             Positioned.fill(
               child: IgnorePointer(
                 child: ColoredBox(
-                  color: Colors.black.withOpacity(backgroundOpacity),
+                  color: Colors.black.withValues(alpha: backgroundOpacity),
                 ),
               ),
             ),

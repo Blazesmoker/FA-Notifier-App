@@ -3,15 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:FANotifier/app/navigation/app_navigation.dart';
-import 'package:FANotifier/core/logging/app_logging.dart';
-import 'package:FANotifier/features/notes/domain/notes_refresh_port.dart';
-import 'package:FANotifier/features/notes/notes_feature.dart';
-import 'package:FANotifier/features/notifications/domain/notification_payloads.dart';
-import 'package:FANotifier/features/notifications/domain/notification_refresh_port.dart';
-import 'package:FANotifier/features/notifications/domain/pending_navigation_repository.dart';
-import 'package:FANotifier/features/notifications/notifications_feature.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_navigation_provider.dart';
+import 'package:fanotifier/app/navigation/app_navigation.dart';
+import 'package:fanotifier/core/logging/app_logging.dart';
+import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
+import 'package:fanotifier/features/notes/notes_feature.dart';
+import 'package:fanotifier/features/notifications/domain/notification_payloads.dart';
+import 'package:fanotifier/features/notifications/domain/notification_refresh_port.dart';
+import 'package:fanotifier/features/notifications/domain/pending_navigation_repository.dart';
+import 'package:fanotifier/features/notifications/notifications_feature.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_navigation_provider.dart';
 
 final AppNotificationNavigation appNotificationNavigation =
     AppNotificationNavigation(
@@ -68,6 +68,12 @@ class AppNotificationNavigation {
     if (context == null || navigator == null) {
       debugPrint(
         '[PENDING_NAV] no context yet; keeping pending (from=$from)',
+      );
+      return;
+    }
+    if (!context.mounted) {
+      debugPrint(
+        '[PENDING_NAV] context is no longer mounted; keeping pending (from=$from)',
       );
       return;
     }

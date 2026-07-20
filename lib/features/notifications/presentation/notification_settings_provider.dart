@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-import 'package:FANotifier/features/notifications/domain/notification_setting.dart';
-import 'package:FANotifier/features/notifications/domain/notification_settings_repository.dart';
+import 'package:fanotifier/features/notifications/domain/notification_setting.dart';
+import 'package:fanotifier/features/notifications/domain/notification_settings_repository.dart';
 
 class NotificationSettingsProvider with ChangeNotifier {
   NotificationSettingsProvider({

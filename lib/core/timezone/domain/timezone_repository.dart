@@ -1,4 +1,4 @@
-import 'package:FANotifier/core/timezone/domain/timezone_settings.dart';
+import 'package:fanotifier/core/timezone/domain/timezone_settings.dart';
 
 abstract class TimezoneRepository {
   Future<CachedTimezoneSettings?> loadCached();

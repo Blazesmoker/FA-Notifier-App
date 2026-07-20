@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
 
 class NotificationShoutMergePolicy {
   const NotificationShoutMergePolicy();

@@ -4,14 +4,14 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/features/notifications/domain/activity_count_change_policy.dart';
-import 'package:FANotifier/shared/fa/domain/fa_activities_polling_port.dart';
-import 'package:FANotifier/shared/fa/domain/fa_notification_state_port.dart';
-import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
-import 'package:FANotifier/features/notes/data/notes_refresh_service.dart';
-import 'package:FANotifier/features/notifications/data/activities_notification_state.dart';
-import 'package:FANotifier/features/notifications/data/notification_refresh_service.dart';
-import 'package:FANotifier/features/notifications/data/notification_service.dart';
+import 'package:fanotifier/features/notifications/domain/activity_count_change_policy.dart';
+import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
+import 'package:fanotifier/shared/fa/domain/fa_notification_state_port.dart';
+import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
+import 'package:fanotifier/features/notes/data/notes_refresh_service.dart';
+import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
+import 'package:fanotifier/features/notifications/data/notification_refresh_service.dart';
+import 'package:fanotifier/features/notifications/data/notification_service.dart';
 
 class FaActivitiesPollingService
     with WidgetsBindingObserver
@@ -75,6 +75,7 @@ class FaActivitiesPollingService
       _activeNotificationSectionLower.contains('journal') &&
       !_activeNotificationSectionLower.contains('comment');
 
+  @override
   void start({required FaNotificationStatePort faNotificationService}) {
     _faNotificationService = faNotificationService;
     if (!_observerAttached) {
@@ -95,6 +96,7 @@ class FaActivitiesPollingService
     }
   }
 
+  @override
   void stop() {
     _timer?.cancel();
     _timer = null;
@@ -120,11 +122,13 @@ class FaActivitiesPollingService
     }
   }
 
+  @override
   void resetSchedule() {
     if (_faNotificationService == null) return;
     _resetTimer();
   }
 
+  @override
   void setNotesScreenVisible(bool visible) {
     if (_notesScreenVisible == visible) return;
     _notesScreenVisible = visible;
@@ -133,6 +137,7 @@ class FaActivitiesPollingService
     }
   }
 
+  @override
   void setSubmissionsScreenVisible(bool visible) {
     if (_submissionsScreenVisible == visible) return;
     _submissionsScreenVisible = visible;
@@ -141,6 +146,7 @@ class FaActivitiesPollingService
     }
   }
 
+  @override
   void setNotificationsScreenVisible(
     bool visible, {
     String? activeSectionTitle,
@@ -160,6 +166,7 @@ class FaActivitiesPollingService
     _handleAcknowledgingScreenVisibilityChange(wasVisible);
   }
 
+  @override
   void setNotificationsScreenActiveSection(String? sectionTitle) {
     if (_activeNotificationSectionTitle == sectionTitle) return;
     final wasVisible = _acknowledgingScreenVisible;
@@ -224,6 +231,7 @@ class FaActivitiesPollingService
     );
   }
 
+  @override
   Future<void> triggerNow({required bool resetTimer, required String source}) {
     if (resetTimer) {
       _resetTimer();
@@ -266,6 +274,7 @@ class FaActivitiesPollingService
     );
   }
 
+  @override
   Future<void> handleExternalCounts({
     required NotificationCounts currentCounts,
     required bool resetTimer,

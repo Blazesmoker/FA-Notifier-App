@@ -1,23 +1,23 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:FANotifier/features/notes/domain/note_message_repository.dart';
-import 'package:FANotifier/features/notes/domain/notes_refresh_port.dart';
-import 'package:FANotifier/app/navigation/app_navigation.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/notes/presentation/note_reply_screen.dart';
-import 'package:FANotifier/features/notes/domain/note_image_preview_mode.dart';
-import 'package:FANotifier/features/notes/domain/note_submission_preview_repository.dart';
-import 'package:FANotifier/features/notes/presentation/note_body_with_previews.dart';
-import 'package:FANotifier/features/notes/presentation/note_image_preview_settings_provider.dart';
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
-import 'package:FANotifier/shared/utils/utils.dart';
-import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
-import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
-import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/features/notes/domain/note_message_repository.dart';
+import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
+import 'package:fanotifier/app/navigation/app_navigation.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/features/notes/presentation/note_reply_screen.dart';
+import 'package:fanotifier/features/notes/domain/note_image_preview_mode.dart';
+import 'package:fanotifier/features/notes/domain/note_submission_preview_repository.dart';
+import 'package:fanotifier/features/notes/presentation/note_body_with_previews.dart';
+import 'package:fanotifier/features/notes/presentation/note_image_preview_settings_provider.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/shared/utils/utils.dart';
+import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
+import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
 import 'package:provider/provider.dart';
 
 const double _messageActionsFadeCeilingAboveButtons = 0.0;
@@ -89,13 +89,13 @@ class MessageDetailScreen extends StatefulWidget {
   final String folder;
 
   const MessageDetailScreen({
-    Key? key,
+    super.key,
     required this.messageLink,
     required this.folder,
-  }) : super(key: key);
+  });
 
   @override
-  _MessageDetailScreenState createState() => _MessageDetailScreenState();
+  State<MessageDetailScreen> createState() => _MessageDetailScreenState();
 }
 
 class _MessageDetailScreenState extends State<MessageDetailScreen> {
@@ -143,6 +143,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
         folder: widget.folder,
       );
 
+      if (!mounted) return;
       if (result.redirected) {
         setState(() {
           errorMessage = 'Redirected. Possibly authentication issues.';
@@ -178,6 +179,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         errorMessage = 'An error occurred: $e';
         isLoading = false;
@@ -195,6 +197,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
         pageNumber: pageNumber,
       );
 
+      if (!mounted) return;
       if (statusCode == 302 || statusCode == 200) {
         showAppSnackBar(context, 'Message marked as unread');
         _triggerNotesRefreshOnce();
@@ -205,6 +208,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         errorMessage = 'An error occurred: $e';
       });

@@ -1,4 +1,4 @@
-import 'package:FANotifier/shared/fa/domain/user_link.dart';
+import 'package:fanotifier/shared/fa/domain/user_link.dart';
 
 abstract interface class WatchlistRepository {
   Future<String> buildCookieHeader();

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 
 Map<String, html_pkg.Style> userProfileHtmlStyles() {

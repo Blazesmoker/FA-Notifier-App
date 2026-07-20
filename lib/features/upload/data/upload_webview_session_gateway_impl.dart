@@ -1,5 +1,5 @@
-import 'package:FANotifier/features/upload/domain/upload_webview_session_gateway.dart';
-import 'package:FANotifier/core/fa/fa_webview_cookie_service.dart';
+import 'package:fanotifier/features/upload/domain/upload_webview_session_gateway.dart';
+import 'package:fanotifier/core/fa/fa_webview_cookie_service.dart';
 
 class UploadWebViewSessionGatewayImpl
     implements UploadWebViewSessionGateway {

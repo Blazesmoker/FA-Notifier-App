@@ -1,15 +1,15 @@
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/features/journals/presentation/openjournal.dart';
-import 'package:FANotifier/features/notifications/presentation/fa_notification_service.dart';
-import 'package:FANotifier/features/notifications/domain/notification_message_formatter.dart';
-import 'package:FANotifier/features/notifications/domain/notification_section_kind.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_activities_controller.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_shouts_section.dart';
-import 'package:FANotifier/features/profile/domain/profile_section.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:fanotifier/features/journals/presentation/openjournal.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/features/notifications/domain/notification_message_formatter.dart';
+import 'package:fanotifier/features/notifications/domain/notification_section_kind.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_activities_controller.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_shouts_section.dart';
+import 'package:fanotifier/features/profile/domain/profile_section.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:html/dom.dart' as dom;
@@ -21,11 +21,11 @@ class NotificationSectionWidget extends StatelessWidget {
   final NotificationActivitiesController controller;
   final SfwModePreference _sfwModePreference = const SfwModePreference();
   const NotificationSectionWidget({
-    Key? key,
+    super.key,
     required this.sectionIndex,
     required this.controller,
   })
-      : super(key: key);
+      ;
 
   Future<bool> isSfwModeEnabled() async {
     return _sfwModePreference.loadSfwEnabled();
@@ -292,7 +292,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                                             target.username!,
                                                         initialSection:
                                                             ProfileSection
-                                                                .Gallery,
+                                                                .gallery,
                                                       ),
                                                     );
                                                     return;
@@ -318,7 +318,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                                             tappedUsername,
                                                         initialSection:
                                                             ProfileSection
-                                                                .Gallery,
+                                                                .gallery,
                                                         initialFolderUrl:
                                                             folderUrl,
                                                         initialFolderName:
@@ -344,7 +344,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                                             target.username!,
                                                         initialSection:
                                                             ProfileSection
-                                                                .Journals,
+                                                                .journals,
                                                       ),
                                                     );
                                                     return;
@@ -540,14 +540,14 @@ class FadeInNetworkImage extends StatefulWidget {
   final Widget errorWidget;
 
   const FadeInNetworkImage({
-    Key? key,
+    super.key,
     required this.imageUrl,
     required this.placeholder,
     required this.errorWidget,
     this.fit = BoxFit.cover,
     this.alignment = Alignment.center,
     this.duration = const Duration(milliseconds: 250),
-  }) : super(key: key);
+  });
 
   @override
   State<FadeInNetworkImage> createState() => _FadeInNetworkImageState();

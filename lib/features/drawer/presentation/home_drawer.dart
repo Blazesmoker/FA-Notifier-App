@@ -1,32 +1,32 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_switch/flutter_switch.dart';
 import 'package:url_launcher/url_launcher_string.dart';
-import 'package:FANotifier/features/drawer/domain/app_update_repository.dart';
-import 'package:FANotifier/features/drawer/domain/nsfw_confirmation_repository.dart';
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/shared/fa/domain/user_profile.dart';
-import 'package:FANotifier/shared/fa/domain/notifications.dart';
-import 'package:FANotifier/features/search/presentation/find_source_screen.dart';
-import 'package:FANotifier/features/settings/presentation/settings_screen.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:FANotifier/features/notifications/presentation/fa_notification_service.dart';
-import 'package:FANotifier/features/drawer/presentation/drawer_list.dart';
-import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
-import 'package:FANotifier/core/links/app_external_links.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/shared/widgets/StarBurstAnimation.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_badge.dart';
+import 'package:fanotifier/features/drawer/domain/app_update_repository.dart';
+import 'package:fanotifier/features/drawer/domain/nsfw_confirmation_repository.dart';
+import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:fanotifier/shared/fa/domain/user_profile.dart';
+import 'package:fanotifier/shared/fa/domain/notifications.dart';
+import 'package:fanotifier/features/search/presentation/find_source_screen.dart';
+import 'package:fanotifier/features/settings/presentation/settings_screen.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/features/drawer/presentation/drawer_list.dart';
+import 'package:fanotifier/features/drawer/domain/drawer_index.dart';
+import 'package:fanotifier/core/links/app_external_links.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/shared/widgets/star_burst_animation.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_badge.dart';
 import 'dart:async';
-import 'package:FANotifier/shared/theme/app_theme.dart';
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/shared/theme/app_theme.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:provider/provider.dart';
 
 class HomeDrawer extends StatefulWidget {
   const HomeDrawer({
-    Key? key,
+    super.key,
     this.screenIndex,
     this.iconAnimationController,
     this.callBackIndex,
@@ -37,7 +37,7 @@ class HomeDrawer extends StatefulWidget {
     required this.onNotificationsUpdated,
     required this.onBadgeTap,
     this.isUserProfileLoading = false,
-  }) : super(key: key);
+  });
 
   final AnimationController? iconAnimationController;
   final DrawerIndex? screenIndex;
@@ -51,7 +51,7 @@ class HomeDrawer extends StatefulWidget {
   final bool isUserProfileLoading;
 
   @override
-  _HomeDrawerState createState() => _HomeDrawerState();
+  State<HomeDrawer> createState() => _HomeDrawerState();
 }
 
 class _HomeDrawerState extends State<HomeDrawer> {
@@ -73,7 +73,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
   late final NsfwConfirmationRepository _nsfwConfirmationRepository;
   bool _sfwEnabled = true;
 
-  GlobalKey _kofiKey = GlobalKey();
+  final GlobalKey _kofiKey = GlobalKey();
   List<Offset>? _starOrigins;
 
   Timer? _kofiTimer;
@@ -145,27 +145,27 @@ class _HomeDrawerState extends State<HomeDrawer> {
   void setDrawerListArray() {
     drawerList = <DrawerList>[
       DrawerList(
-        index: DrawerIndex.Upload,
+        index: DrawerIndex.upload,
         labelName: 'Upload Submission',
         icon: const Icon(Icons.upload),
       ),
       DrawerList(
-        index: DrawerIndex.Help,
+        index: DrawerIndex.help,
         labelName: 'Find Source',
         icon: const Icon(Icons.image_search),
       ),
       DrawerList(
-        index: DrawerIndex.Help,
+        index: DrawerIndex.help,
         labelName: 'Open Link',
         icon: const Icon(Icons.open_in_browser),
       ),
       DrawerList(
-        index: DrawerIndex.Help,
+        index: DrawerIndex.help,
         labelName: 'Settings',
         icon: const Icon(Icons.settings),
       ),
       DrawerList(
-        index: DrawerIndex.Help,
+        index: DrawerIndex.help,
         labelName: 'Support us on Ko-Fi!',
         isAssetsImage: true,
         imageName: 'assets/images/kofi_symbol.png',
@@ -358,7 +358,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
   }
 
   void _showOpenLinkDialog(BuildContext context) {
-    final TextEditingController _controller = TextEditingController();
+    final TextEditingController controller = TextEditingController();
 
     showDialog(
       context: context,
@@ -366,7 +366,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
         return AlertDialog(
           title: const Text('Open Link'),
           content: TextField(
-            controller: _controller,
+            controller: controller,
             decoration: const InputDecoration(labelText: 'Enter link'),
           ),
           actions: [
@@ -384,7 +384,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
                 foregroundColor: Colors.white,
               ),
               onPressed: () {
-                final String url = _controller.text.trim();
+                final String url = controller.text.trim();
                 if (url.isNotEmpty) {
                   // Close dialog first, then handle the link
                   Navigator.of(context).pop();
@@ -440,7 +440,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
     String targetMode = currentSfw ? "NSFW" : "SFW";
     Color yesColor = Colors.white;
     String dialogMessage = "Are you sure you want to enable $targetMode mode?";
-    bool _dontAskAgain = false;
+    bool dontAskAgain = false;
 
     final result = await showDialog<bool>(
       context: context,
@@ -506,10 +506,10 @@ class _HomeDrawerState extends State<HomeDrawer> {
                             checkColor: WidgetStateProperty.all(Colors.white),
                           ),
                           child: Checkbox(
-                            value: _dontAskAgain,
+                            value: dontAskAgain,
                             onChanged: (bool? value) {
                               setStateDialog(() {
-                                _dontAskAgain = value ?? false;
+                                dontAskAgain = value ?? false;
                               });
                             },
                           ),
@@ -528,8 +528,9 @@ class _HomeDrawerState extends State<HomeDrawer> {
       },
     );
 
+    if (!mounted) return;
     if (result == true) {
-      if (_dontAskAgain) {
+      if (dontAskAgain) {
         await _nsfwConfirmationRepository.saveDisabled(true);
       }
       await _toggleNsfwMode();
@@ -537,7 +538,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
   }
 
   Future<void> navigationtoScreen(DrawerIndex indexScreen) async {
-    if (indexScreen == DrawerIndex.Help) {
+    if (indexScreen == DrawerIndex.help) {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -560,6 +561,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
     });
     await _saveSfwEnabled();
     await Future.delayed(const Duration(seconds: 1));
+    if (!mounted) return;
     Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
   }
 
@@ -578,7 +580,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
         GestureDetector(
           onTap: () {
             widget.onBadgeTap('Submissions');
-            widget.callBackIndex!(DrawerIndex.Submissions);
+            widget.callBackIndex!(DrawerIndex.submissions);
           },
           child: NotificationBadge(
             count: _notifications.submissions,
@@ -592,7 +594,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
         GestureDetector(
           onTap: () {
             widget.onBadgeTap('Watches');
-            widget.callBackIndex!(DrawerIndex.Notifications);
+            widget.callBackIndex!(DrawerIndex.notifications);
           },
           child: NotificationBadge(
             count: _notifications.watches,
@@ -606,7 +608,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
         GestureDetector(
           onTap: () {
             widget.onBadgeTap('Comments');
-            widget.callBackIndex!(DrawerIndex.Notifications);
+            widget.callBackIndex!(DrawerIndex.notifications);
           },
           child: NotificationBadge(
             count: _notifications.comments,
@@ -620,7 +622,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
         GestureDetector(
           onTap: () {
             widget.onBadgeTap('Favorites');
-            widget.callBackIndex!(DrawerIndex.Notifications);
+            widget.callBackIndex!(DrawerIndex.notifications);
           },
           child: NotificationBadge(
             count: _notifications.favorites,
@@ -634,7 +636,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
         GestureDetector(
           onTap: () {
             widget.onBadgeTap('Journals');
-            widget.callBackIndex!(DrawerIndex.Notifications);
+            widget.callBackIndex!(DrawerIndex.notifications);
           },
           child: NotificationBadge(
             count: _notifications.journals,
@@ -648,7 +650,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
         GestureDetector(
           onTap: () {
             widget.onBadgeTap('Notes');
-            widget.callBackIndex!(DrawerIndex.Notes);
+            widget.callBackIndex!(DrawerIndex.notes);
           },
           child: NotificationBadge(
             count: _notifications.notes,

@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/journals/domain/openjournal_fetch_result.dart';
+import 'package:fanotifier/features/journals/domain/openjournal_fetch_result.dart';
 
 enum OpenJournalLoadStatus {
   available,

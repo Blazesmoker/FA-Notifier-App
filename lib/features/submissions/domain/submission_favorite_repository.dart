@@ -1,4 +1,4 @@
-import 'package:FANotifier/shared/fa/domain/submission_favorite_links.dart';
+import 'package:fanotifier/shared/fa/domain/submission_favorite_links.dart';
 
 abstract interface class SubmissionFavoriteRepository {
   Future<bool> executePostWithRetry(String url);

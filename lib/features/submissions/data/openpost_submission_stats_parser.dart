@@ -1,7 +1,7 @@
 import 'package:html/dom.dart' as dom;
 
-import 'package:FANotifier/core/utils/html_tags_debug.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_parse_sections.dart';
+import 'package:fanotifier/core/utils/html_tags_debug.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_parse_sections.dart';
 
 OpenPostSubmissionStats parseOpenPostSubmissionStats(dom.Document document) {
   dom.Element? submissionPageStat(String label) {

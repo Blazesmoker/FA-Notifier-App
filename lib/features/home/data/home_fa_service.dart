@@ -3,10 +3,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
-import 'package:FANotifier/shared/fa/domain/user_profile.dart';
-import 'package:FANotifier/shared/fa/domain/notifications.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/shared/fa/parsing_utils.dart';
+import 'package:fanotifier/shared/fa/domain/user_profile.dart';
+import 'package:fanotifier/shared/fa/domain/notifications.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/shared/fa/parsing_utils.dart';
 
 class FaService {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
@@ -107,7 +107,7 @@ class FaService {
               final avatarElement = profileDoc.querySelector('img.avatar');
               profileImageUrl = avatarElement?.attributes['src'];
               if (profileImageUrl != null && profileImageUrl.startsWith('//')) {
-                profileImageUrl = 'https:' + profileImageUrl;
+                profileImageUrl = 'https:$profileImageUrl';
               }
             } else {
               debugPrint('[FaService] Failed to load user profile page: ${profileResponse.statusCode}');
@@ -189,12 +189,19 @@ class FaService {
           for (var link in links) {
             final title = link.attributes['title'] ?? '';
             final count = _extractNumber(title);
-            if (title.contains('Submission')) submissions = count;
-            else if (title.contains('Watch')) watches = count;
-            else if (title.contains('Journal')) journals = count;
-            else if (title.contains('Note')) notes = count;
-            else if (title.contains('Comment')) comments = count;
-            else if (title.contains('Favorite')) favorites = count;
+            if (title.contains('Submission')) {
+              submissions = count;
+            } else if (title.contains('Watch')) {
+              watches = count;
+            } else if (title.contains('Journal')) {
+              journals = count;
+            } else if (title.contains('Note')) {
+              notes = count;
+            } else if (title.contains('Comment')) {
+              comments = count;
+            } else if (title.contains('Favorite')) {
+              favorites = count;
+            }
           }
         }
       } else {
@@ -204,12 +211,19 @@ class FaService {
           for (var link in links) {
             final title = link.attributes['title'] ?? '';
             final count = _extractNumber(title);
-            if (title.contains('Submission')) submissions = count;
-            else if (title.contains('Watch')) watches = count;
-            else if (title.contains('Journal')) journals = count;
-            else if (title.contains('Note')) notes = count;
-            else if (title.contains('Comment')) comments = count;
-            else if (title.contains('Favorite')) favorites = count;
+            if (title.contains('Submission')) {
+              submissions = count;
+            } else if (title.contains('Watch')) {
+              watches = count;
+            } else if (title.contains('Journal')) {
+              journals = count;
+            } else if (title.contains('Note')) {
+              notes = count;
+            } else if (title.contains('Comment')) {
+              comments = count;
+            } else if (title.contains('Favorite')) {
+              favorites = count;
+            }
           }
         }
       }

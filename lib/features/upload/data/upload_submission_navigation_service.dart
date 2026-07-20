@@ -1,5 +1,5 @@
-import 'package:FANotifier/features/upload/data/upload_webview_navigation_policy.dart';
-import 'package:FANotifier/features/upload/domain/upload_navigation_repository.dart';
+import 'package:fanotifier/features/upload/data/upload_webview_navigation_policy.dart';
+import 'package:fanotifier/features/upload/domain/upload_navigation_repository.dart';
 
 class UploadSubmissionNavigationService
     implements UploadNavigationRepository {

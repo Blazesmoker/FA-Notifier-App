@@ -1,6 +1,6 @@
 import 'package:html/dom.dart' as dom;
 
-import 'package:FANotifier/features/journals/data/journal_url_builder.dart';
+import 'package:fanotifier/features/journals/data/journal_url_builder.dart';
 
 List<Map<String, dynamic>> parseOpenJournalComments(dom.Document document) {
   final commentBodies = <Map<String, dynamic>>[];

@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/notifications/domain/notification_setting.dart';
+import 'package:fanotifier/features/notifications/domain/notification_setting.dart';
 
 abstract class NotificationSettingsRepository {
   Future<Map<NotificationSetting, bool>> load();

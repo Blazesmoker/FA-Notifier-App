@@ -1,6 +1,6 @@
-import 'package:FANotifier/features/upload/domain/submission_template.dart';
-import 'package:FANotifier/features/upload/domain/upload_selected_file.dart';
-import 'package:FANotifier/features/upload/domain/upload_webview_results.dart';
+import 'package:fanotifier/features/upload/domain/submission_template.dart';
+import 'package:fanotifier/features/upload/domain/upload_selected_file.dart';
+import 'package:fanotifier/features/upload/domain/upload_webview_results.dart';
 
 abstract interface class UploadWebViewScriptRepository {
   String buildWrapSelectionScript(String tag);

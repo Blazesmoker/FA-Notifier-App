@@ -1,41 +1,41 @@
 import 'dart:async';
-import 'package:FANotifier/features/notifications/presentation/notification_navigation_provider.dart';
-import 'package:FANotifier/features/browse/presentation/faimagegrid.dart';
-import 'package:FANotifier/features/browse/presentation/filters_screen.dart';
-import 'package:FANotifier/features/notes/domain/notes_repository.dart';
-import 'package:FANotifier/features/notes/presentation/notesscreen.dart';
-import 'package:FANotifier/features/notifications/presentation/notifications_screen.dart';
-import 'package:FANotifier/features/search/presentation/search_screen.dart';
-import 'package:FANotifier/features/submissions/presentation/submissions_screen.dart';
-import 'package:FANotifier/features/upload/presentation/upload_submission.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:FANotifier/shared/fa/domain/fa_activities_polling_port.dart';
-import 'package:FANotifier/features/notifications/presentation/fa_notification_service.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_navigation_provider.dart';
+import 'package:fanotifier/features/browse/presentation/faimagegrid.dart';
+import 'package:fanotifier/features/browse/presentation/filters_screen.dart';
+import 'package:fanotifier/features/notes/domain/notes_repository.dart';
+import 'package:fanotifier/features/notes/presentation/notesscreen.dart';
+import 'package:fanotifier/features/notifications/presentation/notifications_screen.dart';
+import 'package:fanotifier/features/search/presentation/search_screen.dart';
+import 'package:fanotifier/features/submissions/presentation/submissions_screen.dart';
+import 'package:fanotifier/features/upload/presentation/upload_submission.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
-import 'package:FANotifier/shared/utils/content_rating_filters.dart';
-import 'package:FANotifier/shared/utils/external_link_launcher.dart';
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
-import 'package:FANotifier/shared/theme/app_theme.dart';
-import 'package:FANotifier/shared/fa/domain/user_profile.dart';
-import 'package:FANotifier/shared/fa/domain/notifications.dart';
-import 'package:FANotifier/features/home/domain/home_login_webview_support.dart';
-import 'package:FANotifier/features/home/domain/home_profile_repository.dart';
-import 'package:FANotifier/features/home/domain/home_session_repository.dart';
-import 'package:FANotifier/features/home/domain/home_start_screen_preference.dart';
-import 'package:FANotifier/features/home/domain/home_start_screen_preference_repository.dart';
-import 'package:FANotifier/features/auth/domain/startup_cloudflare_checker.dart';
-import 'package:FANotifier/features/auth/presentation/cloudflare_check_screen.dart';
-import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_settings_provider.dart';
-import 'package:FANotifier/features/notifications/domain/enabled_notification_items_count.dart';
+import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
+import 'package:fanotifier/shared/utils/content_rating_filters.dart';
+import 'package:fanotifier/shared/utils/external_link_launcher.dart';
+import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:fanotifier/features/drawer/presentation/drawer_user_controller.dart';
+import 'package:fanotifier/shared/theme/app_theme.dart';
+import 'package:fanotifier/shared/fa/domain/user_profile.dart';
+import 'package:fanotifier/shared/fa/domain/notifications.dart';
+import 'package:fanotifier/features/home/domain/home_login_webview_support.dart';
+import 'package:fanotifier/features/home/domain/home_profile_repository.dart';
+import 'package:fanotifier/features/home/domain/home_session_repository.dart';
+import 'package:fanotifier/features/home/domain/home_start_screen_preference.dart';
+import 'package:fanotifier/features/home/domain/home_start_screen_preference_repository.dart';
+import 'package:fanotifier/features/auth/domain/startup_cloudflare_checker.dart';
+import 'package:fanotifier/features/auth/presentation/cloudflare_check_screen.dart';
+import 'package:fanotifier/features/drawer/domain/drawer_index.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_settings_provider.dart';
+import 'package:fanotifier/features/notifications/domain/enabled_notification_items_count.dart';
 
 import '../../auth/domain/cloudflare_check_result.dart';
 
@@ -45,7 +45,7 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({this.initialSearchQuery, super.key});
 
   @override
-  _HomeScreenState createState() => _HomeScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
@@ -55,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   UserProfile? _userProfile;
   bool isLoadingProfile = true;
-  DrawerIndex drawerIndex = DrawerIndex.HOME;
+  DrawerIndex drawerIndex = DrawerIndex.home;
   int _selectedIndex = 0;
   bool isCheckingLoginStatus = true;
   bool isLoggedIn = false;
@@ -400,7 +400,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onNoteCounterTap() {
-    _changeIndex(DrawerIndex.Notes);
+    _changeIndex(DrawerIndex.notes);
   }
 
   bool get _shouldHoldForStartupProfile {
@@ -554,6 +554,7 @@ class _HomeScreenState extends State<HomeScreen> {
             return NavigationActionPolicy.CANCEL;
           } else {
             debugPrint('Could not launch $uri');
+            if (!mounted) return NavigationActionPolicy.CANCEL;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                   content: Text('Could not open link. Please try again.')),
@@ -831,7 +832,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _changeIndex(DrawerIndex indexScreen) {
-    if (indexScreen == DrawerIndex.Upload) {
+    if (indexScreen == DrawerIndex.upload) {
       setState(() {
         drawerIndex = indexScreen;
       });
@@ -841,7 +842,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ).then((_) {
         if (!mounted) return;
         setState(() {
-          drawerIndex = DrawerIndex.HOME;
+          drawerIndex = DrawerIndex.home;
           _selectedIndex = 0;
           _loadedHomeIndexes.add(0);
         });
@@ -850,20 +851,20 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         drawerIndex = indexScreen;
         switch (indexScreen) {
-          case DrawerIndex.HOME:
+          case DrawerIndex.home:
             _selectedIndex = 0;
             _loadedHomeIndexes.add(0);
             break;
-          case DrawerIndex.Submissions:
+          case DrawerIndex.submissions:
             _selectedIndex = 2;
             _loadedHomeIndexes.add(2);
             _submissionsKey.currentState?.refreshSubmissionsManually();
             break;
-          case DrawerIndex.Notes:
+          case DrawerIndex.notes:
             _selectedIndex = 4;
             _loadedHomeIndexes.add(4);
             break;
-          case DrawerIndex.Notifications:
+          case DrawerIndex.notifications:
             _selectedIndex = 3;
             _loadedHomeIndexes.add(3);
             break;
@@ -874,10 +875,10 @@ class _HomeScreenState extends State<HomeScreen> {
             break;
         }
       });
-      if (drawerIndex != DrawerIndex.HOME) {
+      if (drawerIndex != DrawerIndex.home) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           setState(() {
-            drawerIndex = DrawerIndex.HOME;
+            drawerIndex = DrawerIndex.home;
           });
         });
       }
@@ -897,6 +898,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _activitiesPolling.stop();
       await _homeSessionRepository.clearLocalSession();
 
+      if (!mounted) return;
       final faNotificationService =
           Provider.of<FANotificationService>(context, listen: false);
       faNotificationService.clearAllNotifications();
@@ -906,7 +908,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _userProfile = null;
         _unreadCount = 0;
         isLoadingProfile = false;
-        drawerIndex = DrawerIndex.HOME;
+        drawerIndex = DrawerIndex.home;
         _selectedIndex = 0;
         _loadedHomeIndexes
           ..clear()
@@ -930,6 +932,7 @@ class _HomeScreenState extends State<HomeScreen> {
         const SnackBar(content: Text('Logged out successfully')),
       );
     } catch (e) {
+      if (!mounted) return;
       Navigator.of(context).pop();
       debugPrint('[Logout] Error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1047,13 +1050,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                 showBadge: _getNotificationsEnabledSum(
                                         settings, faNotificationService) >
                                     0,
-                                child: const Icon(Icons.notifications),
                                 position: badges.BadgePosition.topEnd(
                                     top: -5, end: -7),
                                 badgeStyle: const badges.BadgeStyle(
                                   padding: EdgeInsets.all(2),
                                   badgeColor: Colors.red,
                                 ),
+                                child: const Icon(Icons.notifications),
                               ),
                               label: 'Notifications',
                               backgroundColor: AppTheme.background,
@@ -1074,13 +1077,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ),
                                 showBadge: _unreadCount > 0,
-                                child: const Icon(Icons.mail),
                                 position: badges.BadgePosition.topEnd(
                                     top: -5, end: -7),
                                 badgeStyle: const badges.BadgeStyle(
                                   padding: EdgeInsets.all(2),
                                   badgeColor: Colors.red,
                                 ),
+                                child: const Icon(Icons.mail),
                               ),
                               label: 'Notes',
                               backgroundColor: AppTheme.background,

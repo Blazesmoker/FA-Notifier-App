@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/profile/domain/profile_journals_repository.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
-import 'package:FANotifier/features/journals/presentation/openjournal.dart';
+import 'package:fanotifier/features/profile/domain/profile_journals_repository.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/features/journals/presentation/openjournal.dart';
 
 class ProfileJournals extends StatefulWidget {
   final String username;
 
-  const ProfileJournals({required this.username, Key? key}) : super(key: key);
+  const ProfileJournals({required this.username, super.key});
 
   @override
   ProfileJournalsState createState() => ProfileJournalsState();

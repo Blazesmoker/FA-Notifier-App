@@ -1,12 +1,12 @@
-import 'package:FANotifier/features/journals/data/create_journal_repository_impl.dart';
-import 'package:FANotifier/features/journals/data/journal_action_service.dart';
-import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
-import 'package:FANotifier/features/journals/data/journal_deletion_coordinator.dart';
-import 'package:FANotifier/features/journals/data/openjournal_api_service.dart';
-import 'package:FANotifier/features/journals/data/openjournal_load_coordinator.dart';
-import 'package:FANotifier/features/journals/data/openjournal_repository_impl.dart';
-import 'package:FANotifier/features/journals/domain/create_journal_repository.dart';
-import 'package:FANotifier/features/journals/domain/openjournal_repository.dart';
+import 'package:fanotifier/features/journals/data/create_journal_repository_impl.dart';
+import 'package:fanotifier/features/journals/data/journal_action_service.dart';
+import 'package:fanotifier/features/journals/data/journal_comment_service.dart';
+import 'package:fanotifier/features/journals/data/journal_deletion_coordinator.dart';
+import 'package:fanotifier/features/journals/data/openjournal_api_service.dart';
+import 'package:fanotifier/features/journals/data/openjournal_load_coordinator.dart';
+import 'package:fanotifier/features/journals/data/openjournal_repository_impl.dart';
+import 'package:fanotifier/features/journals/domain/create_journal_repository.dart';
+import 'package:fanotifier/features/journals/domain/openjournal_repository.dart';
 
 class JournalsFeature {
   const JournalsFeature._();

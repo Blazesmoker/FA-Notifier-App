@@ -1,9 +1,9 @@
 import 'package:html/dom.dart' as dom;
 
-import 'package:FANotifier/core/utils/utils.dart';
-import 'package:FANotifier/features/notes/domain/background_inbox_models.dart';
-import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
+import 'package:fanotifier/core/utils/utils.dart';
+import 'package:fanotifier/features/notes/domain/background_inbox_models.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 
 BackgroundInboxPage parseBackgroundInboxPage(
   dom.Document document, {

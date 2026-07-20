@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/notes/domain/note_image_preview_mode.dart';
+import 'package:fanotifier/features/notes/domain/note_image_preview_mode.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class NoteImagePreviewPreference {

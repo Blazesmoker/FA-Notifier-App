@@ -1,7 +1,7 @@
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/notes/domain/note_message_models.dart';
-import 'package:FANotifier/shared/fa/user_submitted_html_linkifier.dart';
+import 'package:fanotifier/features/notes/domain/note_message_models.dart';
+import 'package:fanotifier/shared/fa/user_submitted_html_linkifier.dart';
 
 NoteMessageDetails parseNoteMessageDetails(String decodedBody, String messageLink) {
   final document = html_parser.parse(decodedBody);

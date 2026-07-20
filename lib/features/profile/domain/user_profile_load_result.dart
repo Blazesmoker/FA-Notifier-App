@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/profile/domain/user_profile_api_models.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
 
 class UserProfileLoadResult {
   const UserProfileLoadResult({

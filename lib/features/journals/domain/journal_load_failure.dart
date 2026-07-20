@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/journals/domain/journal_not_found_exception.dart';
+import 'package:fanotifier/features/journals/domain/journal_not_found_exception.dart';
 
 String journalLoadFailureMessage(Object error) {
   final lower = error.toString().toLowerCase();

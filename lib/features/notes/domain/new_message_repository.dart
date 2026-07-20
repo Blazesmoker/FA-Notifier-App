@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/notes/domain/new_message_send_result.dart';
+import 'package:fanotifier/features/notes/domain/new_message_send_result.dart';
 
 typedef NewMessageRepositoryFactory = NewMessageRepository Function();
 

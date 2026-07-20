@@ -1,6 +1,5 @@
-import 'package:FANotifier/features/drawer/data/app_update_service.dart';
-import 'package:FANotifier/features/drawer/domain/app_update_info.dart';
-import 'package:FANotifier/features/drawer/domain/app_update_repository.dart';
+import 'package:fanotifier/features/drawer/data/app_update_service.dart';
+import 'package:fanotifier/features/drawer/domain/app_update_repository.dart';
 
 class AppUpdateRepositoryImpl implements AppUpdateRepository {
   const AppUpdateRepositoryImpl();

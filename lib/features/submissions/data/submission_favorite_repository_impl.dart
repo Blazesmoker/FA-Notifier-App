@@ -1,7 +1,7 @@
-import 'package:FANotifier/features/submissions/data/favorite_service.dart';
-import 'package:FANotifier/features/submissions/data/submission_favorite_details_service.dart';
-import 'package:FANotifier/shared/fa/domain/submission_favorite_links.dart';
-import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/features/submissions/data/favorite_service.dart';
+import 'package:fanotifier/features/submissions/data/submission_favorite_details_service.dart';
+import 'package:fanotifier/shared/fa/domain/submission_favorite_links.dart';
+import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
 
 class SubmissionFavoriteRepositoryImpl
     implements SubmissionFavoriteRepository {

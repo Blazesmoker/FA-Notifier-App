@@ -1,9 +1,9 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'package:FANotifier/shared/fa/domain/user_link.dart';
-import 'package:FANotifier/features/settings/data/watchlist_user_parser.dart';
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:fanotifier/shared/fa/domain/user_link.dart';
+import 'package:fanotifier/features/settings/data/watchlist_user_parser.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
 
 typedef WatchlistRetryCallback = void Function(String message);
 

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-import 'package:FANotifier/core/timezone/domain/timezone_repository.dart';
-import 'package:FANotifier/core/timezone/domain/timezone_settings.dart';
+import 'package:fanotifier/core/timezone/domain/timezone_repository.dart';
+import 'package:fanotifier/core/timezone/domain/timezone_settings.dart';
 
 class TimezoneProvider with ChangeNotifier {
   TimezoneProvider({required TimezoneRepository repository})

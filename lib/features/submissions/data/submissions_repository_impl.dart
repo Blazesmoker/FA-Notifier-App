@@ -1,7 +1,7 @@
-import 'package:FANotifier/features/submissions/data/submissions_service.dart';
-import 'package:FANotifier/features/submissions/domain/submission_fetch_models.dart';
-import 'package:FANotifier/features/submissions/domain/submissions_listing_parse_result.dart';
-import 'package:FANotifier/features/submissions/domain/submissions_repository.dart';
+import 'package:fanotifier/features/submissions/data/submissions_service.dart';
+import 'package:fanotifier/features/submissions/domain/submission_fetch_models.dart';
+import 'package:fanotifier/features/submissions/domain/submissions_listing_parse_result.dart';
+import 'package:fanotifier/features/submissions/domain/submissions_repository.dart';
 
 class SubmissionsRepositoryImpl implements SubmissionsRepository {
   SubmissionsRepositoryImpl({SubmissionsService? service})

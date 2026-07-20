@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/profile/domain/profile_posts_parse_result.dart';
+import 'package:fanotifier/features/profile/domain/profile_posts_parse_result.dart';
 
 abstract interface class ProfileFavoritesRepository {
   String buildInitialFavoritesPageUrl(String username);

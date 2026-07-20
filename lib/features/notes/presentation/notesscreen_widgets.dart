@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
-import 'package:FANotifier/shared/widgets/fa_unavailable_screen.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
+import 'package:fanotifier/shared/widgets/fa_unavailable_screen.dart';
 
 class MessageList extends StatelessWidget {
   static const Color _accent = Color(0xFFE09321);
@@ -29,7 +29,7 @@ class MessageList extends StatelessWidget {
   final void Function(Message msg)? onTapItem;
 
   const MessageList({
-    Key? key,
+    super.key,
     required this.isLoading,
     required this.isLoadingMore,
     required this.errorMessage,
@@ -46,17 +46,17 @@ class MessageList extends StatelessWidget {
     this.selectedIds = const {},
     this.onLongPressItem,
     this.onTapItem,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
-    final onRefresh = () async {
+    Future<void> onRefresh() async {
       if (folder == 'inbox') {
         await refreshInbox();
       } else {
         await refreshSent();
       }
-    };
+    }
 
     if (errorMessage.isNotEmpty &&
         isFaMaintenanceOrUnavailableText(errorMessage)) {

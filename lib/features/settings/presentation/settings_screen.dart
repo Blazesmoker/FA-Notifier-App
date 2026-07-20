@@ -1,25 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/theme/app_theme.dart';
-import 'package:FANotifier/core/links/app_external_links.dart';
-import 'package:FANotifier/features/settings/domain/settings_app_info_repository.dart';
-import 'package:FANotifier/shared/utils/external_link_launcher.dart';
+import 'package:fanotifier/shared/theme/app_theme.dart';
+import 'package:fanotifier/core/links/app_external_links.dart';
+import 'package:fanotifier/features/settings/domain/settings_app_info_repository.dart';
+import 'package:fanotifier/shared/utils/external_link_launcher.dart';
 import 'package:provider/provider.dart';
 
-import 'package:FANotifier/features/settings/presentation/siteSettings.dart';
-import 'package:FANotifier/features/settings/presentation/appSettings.dart';
+import 'package:fanotifier/features/settings/presentation/site_settings.dart';
+import 'package:fanotifier/features/settings/presentation/app_settings.dart';
 
 class SettingsScreen extends StatelessWidget {
   final Function onLogout;
 
   const SettingsScreen({
-    Key? key,
+    super.key,
     required this.onLogout,
-  }) : super(key: key);
+  });
 
   Future<void> _openTelegram(BuildContext context) async {
     try {
       await launchExternalUriWithFallback(AppExternalLinks.telegramUri);
     } catch (_) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open the Telegram link')),
       );

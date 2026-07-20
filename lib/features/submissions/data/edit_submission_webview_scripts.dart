@@ -1,4 +1,4 @@
-import 'package:FANotifier/shared/fa/fa_bbcode_webview_scripts.dart';
+import 'package:fanotifier/shared/fa/fa_bbcode_webview_scripts.dart';
 
 String buildEditSubmissionBaseScript() {
   return '''

@@ -1,9 +1,9 @@
-import 'package:FANotifier/core/notifications/domain/local_notification_gateway.dart';
-import 'package:FANotifier/features/notes/data/message_storage.dart';
-import 'package:FANotifier/features/notes/data/note_unread_service.dart';
-import 'package:FANotifier/features/notes/data/notesscreen_api_service.dart';
-import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/features/notes/domain/notes_unread_notification_result.dart';
+import 'package:fanotifier/core/notifications/domain/local_notification_gateway.dart';
+import 'package:fanotifier/features/notes/data/message_storage.dart';
+import 'package:fanotifier/features/notes/data/note_unread_service.dart';
+import 'package:fanotifier/features/notes/data/notesscreen_api_service.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/notes_unread_notification_result.dart';
 
 class NotesUnreadNotificationService {
   const NotesUnreadNotificationService({

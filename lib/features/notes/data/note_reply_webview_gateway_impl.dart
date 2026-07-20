@@ -1,7 +1,7 @@
-import 'package:FANotifier/features/notes/data/note_reply_webview_cookie_service.dart';
-import 'package:FANotifier/features/notes/data/note_reply_webview_navigation_service.dart';
-import 'package:FANotifier/features/notes/data/note_reply_webview_scripts.dart';
-import 'package:FANotifier/features/notes/domain/note_reply_webview_gateway.dart';
+import 'package:fanotifier/features/notes/data/note_reply_webview_cookie_service.dart';
+import 'package:fanotifier/features/notes/data/note_reply_webview_navigation_service.dart';
+import 'package:fanotifier/features/notes/data/note_reply_webview_scripts.dart';
+import 'package:fanotifier/features/notes/domain/note_reply_webview_gateway.dart';
 
 class NoteReplyWebViewGatewayImpl implements NoteReplyWebViewGateway {
   const NoteReplyWebViewGatewayImpl({

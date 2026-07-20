@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
-import 'package:FANotifier/shared/fa/parsing_utils.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_models.dart';
+import 'package:fanotifier/shared/fa/parsing_utils.dart';
 
 String decodeOpenPostResponseBody(List<int> bodyBytes) {
   try {

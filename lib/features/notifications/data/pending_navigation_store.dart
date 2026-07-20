@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/features/notifications/domain/pending_navigation_repository.dart';
+import 'package:fanotifier/features/notifications/domain/pending_navigation_repository.dart';
 
 class PendingNavigationStore implements PendingNavigationRepository {
   const PendingNavigationStore();

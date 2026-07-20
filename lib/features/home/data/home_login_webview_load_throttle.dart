@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/features/home/domain/home_login_webview_support.dart';
+import 'package:fanotifier/features/home/domain/home_login_webview_support.dart';
 
 class HomeLoginWebViewLoadThrottle {
   const HomeLoginWebViewLoadThrottle();
@@ -26,6 +26,7 @@ class HomeLoginWebViewLoadSlot implements HomeLoginLoadSlot {
 
   final SharedPreferences _preferences;
 
+  @override
   Future<void> recordLoadStart() async {
     await _preferences.setInt(
       HomeLoginWebViewLoadThrottle._lastLoadAtMsKey,

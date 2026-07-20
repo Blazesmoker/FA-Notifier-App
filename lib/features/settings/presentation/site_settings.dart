@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/settings/presentation/tag_blocklist_screen.dart';
+import 'package:fanotifier/features/settings/presentation/tag_blocklist_screen.dart';
 
 class SiteSettingsScreen extends StatelessWidget {
   const SiteSettingsScreen({super.key});

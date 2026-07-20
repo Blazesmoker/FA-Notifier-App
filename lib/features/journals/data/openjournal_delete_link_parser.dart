@@ -1,6 +1,6 @@
 import 'package:html/dom.dart' as dom;
 
-import 'package:FANotifier/features/journals/data/journal_url_builder.dart';
+import 'package:fanotifier/features/journals/data/journal_url_builder.dart';
 
 String? extractOpenJournalDeleteLink(
   dom.Document document,

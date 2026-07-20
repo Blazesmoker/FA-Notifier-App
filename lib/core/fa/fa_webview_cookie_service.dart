@@ -1,4 +1,4 @@
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 

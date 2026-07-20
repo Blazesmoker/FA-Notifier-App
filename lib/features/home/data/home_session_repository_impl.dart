@@ -1,9 +1,9 @@
-import 'package:FANotifier/features/home/data/home_auth_cookie_service.dart';
-import 'package:FANotifier/features/home/data/home_logout_cleanup_service.dart';
-import 'package:FANotifier/features/home/data/home_profile_cache.dart';
-import 'package:FANotifier/features/home/data/home_session_preference.dart';
-import 'package:FANotifier/features/home/domain/home_session_repository.dart';
-import 'package:FANotifier/shared/fa/domain/user_profile.dart';
+import 'package:fanotifier/features/home/data/home_auth_cookie_service.dart';
+import 'package:fanotifier/features/home/data/home_logout_cleanup_service.dart';
+import 'package:fanotifier/features/home/data/home_profile_cache.dart';
+import 'package:fanotifier/features/home/data/home_session_preference.dart';
+import 'package:fanotifier/features/home/domain/home_session_repository.dart';
+import 'package:fanotifier/shared/fa/domain/user_profile.dart';
 
 class HomeSessionRepositoryImpl implements HomeSessionRepository {
   factory HomeSessionRepositoryImpl.create() {

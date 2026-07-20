@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/submissions/domain/submission_image_group.dart';
+import 'package:fanotifier/features/submissions/domain/submission_image_group.dart';
 
 class SubmissionsListingParseResult {
   final bool isClassicStyle;

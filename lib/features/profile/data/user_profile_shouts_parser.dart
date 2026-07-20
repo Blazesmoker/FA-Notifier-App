@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/features/profile/domain/shout.dart';
 
 List<Shout> parseAdditionalProfileShoutsJson(
   String jsonBody,

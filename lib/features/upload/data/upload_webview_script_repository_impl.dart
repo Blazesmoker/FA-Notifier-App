@@ -1,14 +1,14 @@
-import 'package:FANotifier/features/upload/data/upload_file_webview_scripts.dart'
+import 'package:fanotifier/features/upload/data/upload_file_webview_scripts.dart'
     as file_scripts;
-import 'package:FANotifier/features/upload/data/upload_js_result_decoder.dart';
-import 'package:FANotifier/features/upload/data/upload_page_webview_scripts.dart'
+import 'package:fanotifier/features/upload/data/upload_js_result_decoder.dart';
+import 'package:fanotifier/features/upload/data/upload_page_webview_scripts.dart'
     as page_scripts;
-import 'package:FANotifier/features/upload/data/upload_template_js_builder.dart'
+import 'package:fanotifier/features/upload/data/upload_template_js_builder.dart'
     as template_scripts;
-import 'package:FANotifier/features/upload/domain/submission_template.dart';
-import 'package:FANotifier/features/upload/domain/upload_selected_file.dart';
-import 'package:FANotifier/features/upload/domain/upload_webview_script_repository.dart';
-import 'package:FANotifier/features/upload/domain/upload_webview_results.dart';
+import 'package:fanotifier/features/upload/domain/submission_template.dart';
+import 'package:fanotifier/features/upload/domain/upload_selected_file.dart';
+import 'package:fanotifier/features/upload/domain/upload_webview_script_repository.dart';
+import 'package:fanotifier/features/upload/domain/upload_webview_results.dart';
 import 'package:flutter/foundation.dart';
 
 class UploadWebViewScriptRepositoryImpl

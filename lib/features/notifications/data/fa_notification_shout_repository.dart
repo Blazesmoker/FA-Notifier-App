@@ -2,12 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/notifications/data/fa_notification_cookie_header_provider.dart';
-import 'package:FANotifier/features/notifications/data/fa_notification_profile_shouts_parser.dart';
-import 'package:FANotifier/features/notifications/data/notification_shout_parser.dart';
-import 'package:FANotifier/features/notifications/data/simple_semaphore.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:fanotifier/features/notifications/data/fa_notification_cookie_header_provider.dart';
+import 'package:fanotifier/features/notifications/data/fa_notification_profile_shouts_parser.dart';
+import 'package:fanotifier/features/notifications/data/notification_shout_parser.dart';
+import 'package:fanotifier/features/notifications/data/simple_semaphore.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
 
 class FaNotificationShoutRepository {
   FaNotificationShoutRepository({

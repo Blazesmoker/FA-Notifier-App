@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/profile/domain/fa_folder.dart';
+import 'package:fanotifier/features/profile/domain/fa_folder.dart';
 
 FaFolder resolveProfileFolderSelection({
   required List<FaFolder> folders,

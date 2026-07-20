@@ -1,6 +1,6 @@
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/shared/fa/user_submitted_html_linkifier.dart';
+import 'package:fanotifier/shared/fa/user_submitted_html_linkifier.dart';
 
 String normalizeOpenPostTruncatedLinks(String htmlContent) {
   final document = html_parser.parse(

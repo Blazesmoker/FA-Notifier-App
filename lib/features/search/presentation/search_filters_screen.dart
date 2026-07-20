@@ -1,22 +1,22 @@
 
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/search/domain/search_filter_date_range.dart';
-import 'package:FANotifier/features/search/domain/search_filter_options.dart';
-import 'package:FANotifier/shared/utils/content_rating_filters.dart';
-import 'package:FANotifier/shared/utils/string_extensions.dart';
+import 'package:fanotifier/features/search/domain/search_filter_date_range.dart';
+import 'package:fanotifier/features/search/domain/search_filter_options.dart';
+import 'package:fanotifier/shared/utils/content_rating_filters.dart';
+import 'package:fanotifier/shared/utils/string_extensions.dart';
 
 class SearchFiltersScreen extends StatefulWidget {
   final Map<String, String> selectedSearchFilters;
   final bool sfwEnabled;
 
-  SearchFiltersScreen({
+  const SearchFiltersScreen({
     required this.selectedSearchFilters,
     required this.sfwEnabled,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
-  _SearchFiltersScreenState createState() => _SearchFiltersScreenState();
+  State<SearchFiltersScreen> createState() => _SearchFiltersScreenState();
 }
 
 class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
@@ -105,6 +105,7 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
         },
       );
 
+      if (!mounted) return;
       if (fieldToEdit == null) {
         finishedEditing = true;
       } else {
@@ -113,6 +114,7 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
 
         await Future.delayed(Duration.zero);
 
+        if (!mounted) return;
         final pickedDate = await showDatePicker(
           context: context,
           initialDate: initialDate,
@@ -120,6 +122,7 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
           lastDate: DateTime.now(),
         );
 
+        if (!mounted) return;
         if (pickedDate != null) {
           setState(() {
             if (fieldToEdit == 'from') {

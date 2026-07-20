@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/features/settings/domain/app_icon_repository.dart';
+import 'package:fanotifier/features/settings/domain/app_icon_repository.dart';
 
 class AppIconService implements AppIconRepository {
   static const _platform = MethodChannel('com.blazesmoker.fanotifier/icon');

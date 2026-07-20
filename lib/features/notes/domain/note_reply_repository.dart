@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/notes/domain/note_reply_models.dart';
+import 'package:fanotifier/features/notes/domain/note_reply_models.dart';
 
 typedef NoteReplyRepositoryFactory = NoteReplyRepository Function();
 

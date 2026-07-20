@@ -1,19 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/profile/domain/profile_favorites_repository.dart';
-import 'package:FANotifier/features/profile/presentation/profile_image_row_layout.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
-import 'package:FANotifier/shared/widgets/heart_animation.dart';
-import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
+import 'package:fanotifier/features/profile/domain/profile_favorites_repository.dart';
+import 'package:fanotifier/features/profile/presentation/profile_image_row_layout.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/shared/widgets/heart_animation.dart';
+import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
 
 class ProfileFavsSliver extends StatefulWidget {
   final String username;
 
-  const ProfileFavsSliver({required this.username, Key? key}) : super(key: key);
+  const ProfileFavsSliver({required this.username, super.key});
 
   @override
   ProfileFavsSliverState createState() => ProfileFavsSliverState();
@@ -339,7 +339,6 @@ class _FavImageTileFavs extends StatefulWidget {
   final VoidCallback onTap;
 
   const _FavImageTileFavs({
-    Key? key,
     required this.width,
     required this.height,
     required this.imageUrl,
@@ -349,7 +348,7 @@ class _FavImageTileFavs extends StatefulWidget {
     required this.author,
     required this.onToggle,
     required this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   State<_FavImageTileFavs> createState() => _FavImageTileFavsState();

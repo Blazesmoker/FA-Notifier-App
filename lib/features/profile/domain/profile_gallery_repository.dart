@@ -1,5 +1,5 @@
-import 'package:FANotifier/features/profile/domain/profile_gallery_page_data.dart';
-import 'package:FANotifier/features/profile/domain/profile_submission_data.dart';
+import 'package:fanotifier/features/profile/domain/profile_gallery_page_data.dart';
+import 'package:fanotifier/features/profile/domain/profile_submission_data.dart';
 
 abstract interface class ProfileGalleryRepository {
   String buildInitialGalleryUrl(String username, String selectedFolderUrl);

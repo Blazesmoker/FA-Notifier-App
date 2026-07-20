@@ -1,8 +1,8 @@
-import 'package:FANotifier/core/fa/fa_webview_cookie_service.dart';
-import 'package:FANotifier/features/journals/data/create_journal_service.dart';
-import 'package:FANotifier/features/journals/data/create_journal_webview_scripts.dart'
+import 'package:fanotifier/core/fa/fa_webview_cookie_service.dart';
+import 'package:fanotifier/features/journals/data/create_journal_service.dart';
+import 'package:fanotifier/features/journals/data/create_journal_webview_scripts.dart'
     as scripts;
-import 'package:FANotifier/features/journals/domain/create_journal_repository.dart';
+import 'package:fanotifier/features/journals/domain/create_journal_repository.dart';
 
 class CreateJournalRepositoryImpl implements CreateJournalRepository {
   const CreateJournalRepositoryImpl({

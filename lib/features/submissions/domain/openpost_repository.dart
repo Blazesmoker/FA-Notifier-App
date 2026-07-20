@@ -1,12 +1,12 @@
-import 'package:FANotifier/features/submissions/domain/openpost_action_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_details_load_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_favorite_links_load_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_file_download_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_media_export_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_page_response.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_submission_attachment.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_user_actions_load_result.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_action_result.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_delete_models.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_details_load_result.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_favorite_links_load_result.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_file_download_result.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_media_export_result.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_page_response.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_submission_attachment.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_user_actions_load_result.dart';
 
 abstract interface class OpenPostRepository {
   Future<bool> loadSfwEnabled();

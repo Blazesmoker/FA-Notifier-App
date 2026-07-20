@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 
-import 'package:FANotifier/features/auth/domain/cloudflare_check_gateway.dart';
-import 'package:FANotifier/features/auth/domain/cloudflare_check_result.dart';
-import 'package:FANotifier/shared/fa/fa_webview_document_scripts.dart';
+import 'package:fanotifier/features/auth/domain/cloudflare_check_gateway.dart';
+import 'package:fanotifier/features/auth/domain/cloudflare_check_result.dart';
+import 'package:fanotifier/shared/fa/fa_webview_document_scripts.dart';
 
 class CloudflareCheckScreen extends StatefulWidget {
   final String initialUrl;

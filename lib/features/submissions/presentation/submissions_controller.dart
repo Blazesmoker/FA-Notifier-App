@@ -3,13 +3,13 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
-import 'package:FANotifier/features/submissions/domain/submission_fetch_models.dart';
-import 'package:FANotifier/features/submissions/domain/submission_image_group.dart';
-import 'package:FANotifier/features/submissions/domain/submission_list_item.dart';
-import 'package:FANotifier/features/submissions/domain/submissions_listing_parse_result.dart';
-import 'package:FANotifier/features/submissions/domain/submissions_repository.dart';
+import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/features/submissions/domain/submission_fetch_models.dart';
+import 'package:fanotifier/features/submissions/domain/submission_image_group.dart';
+import 'package:fanotifier/features/submissions/domain/submission_list_item.dart';
+import 'package:fanotifier/features/submissions/domain/submissions_listing_parse_result.dart';
+import 'package:fanotifier/features/submissions/domain/submissions_repository.dart';
 
 class SubmissionsController extends ChangeNotifier {
   SubmissionsController({

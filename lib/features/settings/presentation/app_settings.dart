@@ -1,15 +1,15 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/notifications/presentation/notificationsSettings.dart';
-import 'package:FANotifier/features/browse/presentation/thumbnail_display_settings_screen.dart';
-import 'package:FANotifier/features/settings/presentation/app_icon_settings_screen.dart';
-import 'package:FANotifier/features/settings/presentation/set_home_screen_screen.dart';
-import 'package:FANotifier/features/settings/presentation/translator_settings_screen.dart';
-import 'package:FANotifier/features/notes/presentation/notes_settings_screen.dart';
+import 'package:fanotifier/features/notifications/presentation/notifications_settings.dart';
+import 'package:fanotifier/features/browse/presentation/thumbnail_display_settings_screen.dart';
+import 'package:fanotifier/features/settings/presentation/app_icon_settings_screen.dart';
+import 'package:fanotifier/features/settings/presentation/set_home_screen_screen.dart';
+import 'package:fanotifier/features/settings/presentation/translator_settings_screen.dart';
+import 'package:fanotifier/features/notes/presentation/notes_settings_screen.dart';
 
 class AppSettingsScreen extends StatefulWidget {
-  const AppSettingsScreen({Key? key}) : super(key: key);
+  const AppSettingsScreen({super.key});
 
   @override
   State<AppSettingsScreen> createState() => _AppSettingsScreenState();

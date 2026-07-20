@@ -1,18 +1,18 @@
-// lib/screens/notificationsSettings.dart
+// lib/screens/notifications_settings.dart
 
 import 'dart:io';
 
-import 'package:FANotifier/features/notifications/domain/notification_permission_state.dart';
-import 'package:FANotifier/features/notifications/domain/notification_platform_settings_repository.dart';
+import 'package:fanotifier/features/notifications/domain/notification_permission_state.dart';
+import 'package:fanotifier/features/notifications/domain/notification_platform_settings_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/notifications/presentation/notification_settings_provider.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_settings_provider.dart';
 
 class NotificationsSettingsScreen extends StatefulWidget {
   const NotificationsSettingsScreen({
-    Key? key,
+    super.key,
     this.platformSettingsRepository,
-  }) : super(key: key);
+  });
 
   final NotificationPlatformSettingsRepository? platformSettingsRepository;
 
@@ -47,6 +47,7 @@ class _NotificationsSettingsScreenState
     setState(() => useAdaptiveNotificationIcon = value);
     await _notificationSettingsService.setUseAdaptiveNotificationIcon(value);
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: Colors.green,

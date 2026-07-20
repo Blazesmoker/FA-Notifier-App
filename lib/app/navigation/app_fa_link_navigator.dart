@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
-import 'package:FANotifier/features/journals/presentation/openjournal.dart';
-import 'package:FANotifier/features/profile/domain/profile_section.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
-import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
+import 'package:fanotifier/features/journals/presentation/openjournal.dart';
+import 'package:fanotifier/features/profile/domain/profile_section.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
 
 class AppFaLinkNavigator extends FaLinkNavigator {
   const AppFaLinkNavigator();
@@ -23,7 +23,7 @@ class AppFaLinkNavigator extends FaLinkNavigator {
           context,
           UserProfileScreen.route(
             nickname: target.username!,
-            initialSection: ProfileSection.Gallery,
+            initialSection: ProfileSection.gallery,
           ),
         );
         return;
@@ -40,7 +40,7 @@ class AppFaLinkNavigator extends FaLinkNavigator {
           context,
           UserProfileScreen.route(
             nickname: username,
-            initialSection: ProfileSection.Gallery,
+            initialSection: ProfileSection.gallery,
             initialFolderUrl: folderUrl,
             initialFolderName: folderName,
           ),
@@ -57,7 +57,7 @@ class AppFaLinkNavigator extends FaLinkNavigator {
           context,
           UserProfileScreen.route(
             nickname: target.username!,
-            initialSection: ProfileSection.Journals,
+            initialSection: ProfileSection.journals,
           ),
         );
         return;

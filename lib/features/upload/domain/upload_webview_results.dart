@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/upload/domain/submission_template.dart';
+import 'package:fanotifier/features/upload/domain/submission_template.dart';
 
 enum UploadClearFormStatus {
   unavailable,

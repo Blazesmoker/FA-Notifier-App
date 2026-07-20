@@ -2,11 +2,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/core/timezone/domain/timezone_repository.dart';
-import 'package:FANotifier/core/timezone/domain/timezone_settings.dart';
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/core/timezone/data/fa_timezone_to_iana.dart';
+import 'package:fanotifier/core/timezone/domain/timezone_repository.dart';
+import 'package:fanotifier/core/timezone/domain/timezone_settings.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/timezone/data/fa_timezone_to_iana.dart';
 
 class FaTimezoneRepository implements TimezoneRepository {
   const FaTimezoneRepository({

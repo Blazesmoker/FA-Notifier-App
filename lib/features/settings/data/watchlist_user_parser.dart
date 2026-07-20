@@ -1,6 +1,6 @@
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/shared/fa/domain/user_link.dart';
+import 'package:fanotifier/shared/fa/domain/user_link.dart';
 
 List<UserLink> parseWatchlistUsers(String html) {
   final document = html_parser.parse(html);

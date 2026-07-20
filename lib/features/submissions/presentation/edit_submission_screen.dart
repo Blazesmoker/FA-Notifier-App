@@ -4,17 +4,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/submissions/domain/edit_submission_page_repository.dart';
+import 'package:fanotifier/features/submissions/domain/edit_submission_page_repository.dart';
 
 class EditSubmissionScreen extends StatefulWidget {
   final String initialUrl;
   final EditSubmissionPageRepository? repository;
 
   const EditSubmissionScreen({
-    Key? key,
+    super.key,
     required this.initialUrl,
     this.repository,
-  }) : super(key: key);
+  });
 
   @override
   State<EditSubmissionScreen> createState() => _EditSubmissionScreenState();
@@ -106,7 +106,7 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
             if (uri != null &&
                 _repository.isSubmissionViewUrl(uri.toString())) {
               await Future.delayed(const Duration(milliseconds: 50));
-              if (mounted) Navigator.pop(context, true);
+              if (context.mounted) Navigator.pop(context, true);
             }
           },
         ),

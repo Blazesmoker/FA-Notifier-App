@@ -2,9 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import 'package:FANotifier/features/drawer/domain/app_update_info.dart';
+import 'package:fanotifier/features/drawer/domain/app_update_info.dart';
 
-export 'package:FANotifier/features/drawer/domain/app_update_info.dart';
+export 'package:fanotifier/features/drawer/domain/app_update_info.dart';
 
 AppUpdateInfo? _cachedUpdateInfo;
 Future<AppUpdateInfo?>? _inFlightUpdateInfoFuture;

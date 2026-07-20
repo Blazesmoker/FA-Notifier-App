@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:FANotifier/features/home/domain/home_start_screen_preference.dart';
-import 'package:FANotifier/features/home/domain/home_start_screen_preference_repository.dart';
-import 'package:FANotifier/features/settings/presentation/home_start_screen_preference_labels.dart';
+import 'package:fanotifier/features/home/domain/home_start_screen_preference.dart';
+import 'package:fanotifier/features/home/domain/home_start_screen_preference_repository.dart';
+import 'package:fanotifier/features/settings/presentation/home_start_screen_preference_labels.dart';
 
 class SetHomeScreenScreen extends StatefulWidget {
   const SetHomeScreenScreen({super.key});

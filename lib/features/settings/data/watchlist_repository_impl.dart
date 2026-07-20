@@ -1,6 +1,6 @@
-import 'package:FANotifier/shared/fa/domain/user_link.dart';
-import 'package:FANotifier/features/settings/data/watchlist_user_service.dart';
-import 'package:FANotifier/features/settings/domain/watchlist_repository.dart';
+import 'package:fanotifier/shared/fa/domain/user_link.dart';
+import 'package:fanotifier/features/settings/data/watchlist_user_service.dart';
+import 'package:fanotifier/features/settings/domain/watchlist_repository.dart';
 
 class WatchlistRepositoryImpl implements WatchlistRepository {
   const WatchlistRepositoryImpl();

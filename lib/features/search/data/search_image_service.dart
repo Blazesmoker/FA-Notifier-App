@@ -1,13 +1,13 @@
 import 'dart:io';
 
-import 'package:FANotifier/features/search/data/search_image_parser.dart';
-import 'package:FANotifier/features/search/data/search_query_builder.dart';
-import 'package:FANotifier/shared/fa/cloudflare_challenge_exception.dart';
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/core/network/fa_request_coordinator.dart';
-import 'package:FANotifier/shared/fa/fa_system_message_parser.dart';
-import 'package:FANotifier/shared/utils/content_rating_filters.dart';
+import 'package:fanotifier/features/search/data/search_image_parser.dart';
+import 'package:fanotifier/features/search/data/search_query_builder.dart';
+import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/network/fa_request_coordinator.dart';
+import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
+import 'package:fanotifier/shared/utils/content_rating_filters.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SearchImageService {

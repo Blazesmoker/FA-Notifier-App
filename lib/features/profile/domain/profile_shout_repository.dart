@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/profile/domain/post_shout_result.dart';
+import 'package:fanotifier/features/profile/domain/post_shout_result.dart';
 
 typedef ProfileShoutRepositoryFactory = ProfileShoutRepository Function();
 

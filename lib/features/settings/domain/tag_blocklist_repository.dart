@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/settings/domain/tag_blocklist_parse_result.dart';
+import 'package:fanotifier/features/settings/domain/tag_blocklist_parse_result.dart';
 
 abstract interface class TagBlocklistRepository {
   Future<TagBlocklistParseResult> fetch({required bool sfwEnabled});

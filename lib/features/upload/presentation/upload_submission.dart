@@ -5,25 +5,26 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:FANotifier/shared/widgets/tags_and_codes_webview_widget.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost.dart';
-import 'package:FANotifier/features/upload/domain/submission_template.dart';
-import 'package:FANotifier/features/upload/domain/submission_template_repository.dart';
-import 'package:FANotifier/features/upload/domain/upload_file_picker_gateway.dart';
-import 'package:FANotifier/features/upload/domain/upload_navigation_repository.dart';
-import 'package:FANotifier/features/upload/domain/upload_permission_gateway.dart';
-import 'package:FANotifier/features/upload/domain/upload_webview_results.dart';
-import 'package:FANotifier/features/upload/domain/upload_webview_script_repository.dart';
-import 'package:FANotifier/features/upload/domain/upload_webview_session_gateway.dart';
-import 'package:FANotifier/features/upload/presentation/submission_templates_screen.dart';
-import 'package:FANotifier/features/upload/presentation/upload_webview_bridge.dart';
+import 'package:fanotifier/shared/widgets/tags_and_codes_webview_widget.dart';
+import 'package:fanotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/features/upload/domain/submission_template.dart';
+import 'package:fanotifier/features/upload/domain/submission_template_repository.dart';
+import 'package:fanotifier/features/upload/domain/upload_file_picker_gateway.dart';
+import 'package:fanotifier/features/upload/domain/upload_navigation_repository.dart';
+import 'package:fanotifier/features/upload/domain/upload_permission_gateway.dart';
+import 'package:fanotifier/features/upload/domain/upload_webview_results.dart';
+import 'package:fanotifier/features/upload/domain/upload_webview_script_repository.dart';
+import 'package:fanotifier/features/upload/domain/upload_webview_session_gateway.dart';
+import 'package:fanotifier/features/upload/presentation/submission_templates_screen.dart';
+import 'package:fanotifier/features/upload/presentation/upload_webview_bridge.dart';
 import 'package:provider/provider.dart';
 
 class UploadSubmissionScreen extends StatefulWidget {
-  const UploadSubmissionScreen({Key? key}) : super(key: key);
+  const UploadSubmissionScreen({super.key});
 
   @override
-  _UploadSubmissionScreenState createState() => _UploadSubmissionScreenState();
+  State<UploadSubmissionScreen> createState() =>
+      _UploadSubmissionScreenState();
 }
 
 class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with TickerProviderStateMixin {

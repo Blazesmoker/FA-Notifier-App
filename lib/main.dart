@@ -3,19 +3,19 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 
-import 'package:FANotifier/shared/theme/app_theme.dart';
-import 'package:FANotifier/app/bootstrap/app_bootstrap.dart';
-import 'package:FANotifier/app/composition/app_providers.dart';
-import 'package:FANotifier/app/navigation/app_navigation.dart';
-import 'package:FANotifier/app/navigation/app_notification_navigation.dart';
-import 'package:FANotifier/core/preferences/app_foreground_state_preference.dart';
-import 'package:FANotifier/features/drawer/data/app_update_service.dart';
-import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
-import 'package:FANotifier/features/drawer/presentation/update_screen.dart';
-import 'package:FANotifier/features/home/presentation/home_screen.dart';
-import 'package:FANotifier/features/notifications/data/notification_badge_state.dart'
+import 'package:fanotifier/shared/theme/app_theme.dart';
+import 'package:fanotifier/app/bootstrap/app_bootstrap.dart';
+import 'package:fanotifier/app/composition/app_providers.dart';
+import 'package:fanotifier/app/navigation/app_navigation.dart';
+import 'package:fanotifier/app/navigation/app_notification_navigation.dart';
+import 'package:fanotifier/core/preferences/app_foreground_state_preference.dart';
+import 'package:fanotifier/features/drawer/data/app_update_service.dart';
+import 'package:fanotifier/features/drawer/presentation/drawer_user_controller.dart';
+import 'package:fanotifier/features/drawer/presentation/update_screen.dart';
+import 'package:fanotifier/features/home/presentation/home_screen.dart';
+import 'package:fanotifier/features/notifications/data/notification_badge_state.dart'
     as notification_badge;
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 
 import 'core/logging/app_logging.dart';
 

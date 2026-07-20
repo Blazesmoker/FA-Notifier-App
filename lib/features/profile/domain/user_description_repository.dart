@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/profile/domain/user_description_webview_content.dart';
+import 'package:fanotifier/features/profile/domain/user_description_webview_content.dart';
 
 abstract interface class UserDescriptionRepository {
   Future<String> extractInitialHtml(String html);

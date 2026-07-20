@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 
 class ProfileStatItem extends StatelessWidget {
   final String count;
   final String label;
 
   const ProfileStatItem({
-    Key? key,
+    super.key,
     required this.count,
     required this.label,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -37,10 +37,10 @@ class ContactInformationSection extends StatelessWidget {
   final void Function(String url) onLinkTap;
 
   const ContactInformationSection({
-    Key? key,
+    super.key,
     required this.contacts,
     required this.onLinkTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -110,11 +110,11 @@ class FeaturedSubmissionSection extends StatelessWidget {
   final VoidCallback onTap;
 
   const FeaturedSubmissionSection({
-    Key? key,
+    super.key,
     required this.imageUrl,
     required this.title,
     required this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

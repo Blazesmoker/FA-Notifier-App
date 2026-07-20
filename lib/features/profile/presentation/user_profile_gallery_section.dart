@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:FANotifier/features/profile/domain/fa_folder.dart';
-import 'package:FANotifier/features/profile/domain/profile_gallery_repository.dart';
-import 'package:FANotifier/features/profile/presentation/profilegallery.dart';
+import 'package:fanotifier/features/profile/domain/fa_folder.dart';
+import 'package:fanotifier/features/profile/domain/profile_gallery_repository.dart';
+import 'package:fanotifier/features/profile/presentation/profilegallery.dart';
 
 class UserProfileGallerySection extends StatefulWidget {
   const UserProfileGallerySection({

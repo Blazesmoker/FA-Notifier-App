@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:FANotifier/shared/fa/tags_and_codes_webview_document.dart';
+import 'package:fanotifier/shared/fa/tags_and_codes_webview_document.dart';
 
 class InfoIconButton extends StatelessWidget {
   final String url;
   final String title;
 
   const InfoIconButton({
-    Key? key,
+    super.key,
     this.url = 'https://www.furaffinity.net/help/#tags-and-codes',
     this.title = 'Tags & Codes',
-  }) : super(key: key);
+  });
 
   Future<void> _openDialog(BuildContext context) async {
     await showDialog(
@@ -35,7 +35,7 @@ class InfoIconButton extends StatelessWidget {
 }
 
 class InfoWebViewDialog extends StatefulWidget {
-  const InfoWebViewDialog({Key? key}) : super(key: key);
+  const InfoWebViewDialog({super.key});
 
   @override
   State<InfoWebViewDialog> createState() => _InfoWebViewDialogState();
@@ -165,9 +165,7 @@ class _InfoWebViewDialogState extends State<InfoWebViewDialog> {
                     });
                   },
                   onConsoleMessage: (controller, consoleMessage) {
-                    try {
-                      print('Console: ${consoleMessage.message}');
-                    } catch (_) {}
+                      debugPrint('Console: ${consoleMessage.message}');
                   },
                 ),
                 if (_isLoading)
@@ -193,7 +191,9 @@ class _InfoWebViewDialogState extends State<InfoWebViewDialog> {
                                 label: const Text('Open full page in browser'),
                                 onPressed: () async {
                                   final uri = Uri.tryParse('https://www.furaffinity.net/help/#tags-and-codes');
-                                  if (uri != null && await canLaunchUrl(uri)) {
+                                  final canLaunch = uri != null && await canLaunchUrl(uri);
+                                  if (!context.mounted) return;
+                                  if (uri != null && canLaunch) {
                                     await launchUrl(uri, mode: LaunchMode.externalApplication);
                                   } else {
                                     ScaffoldMessenger.of(context).showSnackBar(

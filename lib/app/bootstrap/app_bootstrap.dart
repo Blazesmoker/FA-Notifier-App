@@ -1,26 +1,25 @@
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:workmanager/workmanager.dart';
 
-import 'package:FANotifier/app/analytics_privacy.dart';
-import 'package:FANotifier/app/navigation/app_notification_navigation.dart';
-import 'package:FANotifier/core/cache/CacheMonitorService.dart';
-import 'package:FANotifier/core/cache/custom_cache_manager.dart';
-import 'package:FANotifier/core/logging/app_logging.dart';
-import 'package:FANotifier/core/network/fresh_http_overrides.dart';
-import 'package:FANotifier/core/timezone/presentation/timezone_provider.dart';
-import 'package:FANotifier/features/notifications/data/adaptive_background_fetch_scheduler.dart'
+import 'package:fanotifier/app/analytics_privacy.dart';
+import 'package:fanotifier/app/navigation/app_notification_navigation.dart';
+import 'package:fanotifier/core/cache/cache_monitor_service.dart';
+import 'package:fanotifier/core/cache/custom_cache_manager.dart';
+import 'package:fanotifier/core/logging/app_logging.dart';
+import 'package:fanotifier/core/network/fresh_http_overrides.dart';
+import 'package:fanotifier/core/timezone/presentation/timezone_provider.dart';
+import 'package:fanotifier/features/notifications/data/adaptive_background_fetch_scheduler.dart'
     as background_scheduler;
-import 'package:FANotifier/app/background/background_notification_worker.dart';
-import 'package:FANotifier/features/notifications/data/background_workmanager_initializer.dart';
-import 'package:FANotifier/features/notifications/data/notification_service.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:fanotifier/app/background/background_notification_worker.dart';
+import 'package:fanotifier/features/notifications/data/background_workmanager_initializer.dart';
+import 'package:fanotifier/features/notifications/data/notification_service.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
 
 late final BackgroundWorkmanagerInitializer backgroundWorkmanagerInitializer;
 late final background_scheduler.AdaptiveBackgroundFetchScheduler

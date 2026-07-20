@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:FANotifier/features/comments/domain/comment_edit_repository.dart';
-import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:fanotifier/features/comments/domain/comment_edit_repository.dart';
+import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 
 class EditJournalCommentScreen extends StatefulWidget {
   final Map<String, dynamic> comment;
@@ -11,7 +11,8 @@ class EditJournalCommentScreen extends StatefulWidget {
   final VoidCallback onUpdateComment;
   final CommentEditRepository? commentEditRepository;
 
-  EditJournalCommentScreen({
+  const EditJournalCommentScreen({
+    super.key,
     required this.comment,
     required this.editLink,
     required this.onUpdateComment,
@@ -19,7 +20,8 @@ class EditJournalCommentScreen extends StatefulWidget {
   });
 
   @override
-  _EditJournalCommentScreenState createState() => _EditJournalCommentScreenState();
+  State<EditJournalCommentScreen> createState() =>
+      _EditJournalCommentScreenState();
 }
 
 class _EditJournalCommentScreenState extends State<EditJournalCommentScreen> {
@@ -53,6 +55,7 @@ class _EditJournalCommentScreenState extends State<EditJournalCommentScreen> {
       editLink: widget.editLink,
     );
 
+    if (!mounted) return;
     if (result.errorMessage != null) {
       _showMessage(result.errorMessage!, isError: true);
     } else if (result.textarea != null) {
@@ -76,6 +79,7 @@ class _EditJournalCommentScreenState extends State<EditJournalCommentScreen> {
       logFormDebug: true,
     );
 
+    if (!mounted) return;
     if (result.success) {
       widget.onUpdateComment();
       _showMessage("Comment successfully updated!", isError: false);
@@ -84,7 +88,7 @@ class _EditJournalCommentScreenState extends State<EditJournalCommentScreen> {
       _showMessage(result.errorMessage!, isError: true);
     }
 
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoading = false);
   }
 
   void _showMessage(String message, {bool isError = false}) {

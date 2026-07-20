@@ -1,7 +1,7 @@
-import 'package:FANotifier/features/upload/data/submission_template_save_service.dart';
-import 'package:FANotifier/features/upload/data/submission_template_store.dart';
-import 'package:FANotifier/features/upload/domain/submission_template.dart';
-import 'package:FANotifier/features/upload/domain/submission_template_repository.dart';
+import 'package:fanotifier/features/upload/data/submission_template_save_service.dart';
+import 'package:fanotifier/features/upload/data/submission_template_store.dart';
+import 'package:fanotifier/features/upload/domain/submission_template.dart';
+import 'package:fanotifier/features/upload/domain/submission_template_repository.dart';
 
 class SubmissionTemplateRepositoryImpl
     implements SubmissionTemplateRepository {

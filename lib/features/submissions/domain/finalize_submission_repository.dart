@@ -1,5 +1,5 @@
-import 'package:FANotifier/features/submissions/domain/finalize_submission_options.dart';
-import 'package:FANotifier/features/submissions/domain/finalize_submission_request.dart';
+import 'package:fanotifier/features/submissions/domain/finalize_submission_options.dart';
+import 'package:fanotifier/features/submissions/domain/finalize_submission_request.dart';
 
 typedef FinalizeSubmissionRepositoryFactory =
     FinalizeSubmissionRepository Function();

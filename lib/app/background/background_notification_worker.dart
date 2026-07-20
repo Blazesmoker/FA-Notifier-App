@@ -3,27 +3,27 @@ import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 
-import 'package:FANotifier/core/logging/app_logging.dart';
-import 'package:FANotifier/core/network/fresh_http_overrides.dart';
-import 'package:FANotifier/core/preferences/app_foreground_state_preference.dart';
-import 'package:FANotifier/features/drawer/data/app_update_service.dart';
-import 'package:FANotifier/features/notes/data/background_inbox_service.dart';
-import 'package:FANotifier/features/notes/data/background_note_content_service.dart';
-import 'package:FANotifier/features/notes/data/background_note_unread_service.dart';
-import 'package:FANotifier/features/notes/data/message_storage.dart';
-import 'package:FANotifier/features/notes/domain/background_inbox_models.dart';
-import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/features/notifications/data/activities_notification_state.dart';
-import 'package:FANotifier/features/notifications/data/adaptive_background_fetch_scheduler.dart'
+import 'package:fanotifier/core/logging/app_logging.dart';
+import 'package:fanotifier/core/network/fresh_http_overrides.dart';
+import 'package:fanotifier/core/preferences/app_foreground_state_preference.dart';
+import 'package:fanotifier/features/drawer/data/app_update_service.dart';
+import 'package:fanotifier/features/notes/data/background_inbox_service.dart';
+import 'package:fanotifier/features/notes/data/background_note_content_service.dart';
+import 'package:fanotifier/features/notes/data/background_note_unread_service.dart';
+import 'package:fanotifier/features/notes/data/message_storage.dart';
+import 'package:fanotifier/features/notes/domain/background_inbox_models.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
+import 'package:fanotifier/features/notifications/data/adaptive_background_fetch_scheduler.dart'
     as background_scheduler;
-import 'package:FANotifier/features/notifications/data/notification_badge_state.dart'
+import 'package:fanotifier/features/notifications/data/notification_badge_state.dart'
     as notification_badge;
-import 'package:FANotifier/features/notifications/data/notification_service.dart';
-import 'package:FANotifier/features/notifications/domain/activity_count_change_policy.dart';
-import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
-import 'package:FANotifier/features/notifications/domain/notification_message_formatter.dart';
-import 'package:FANotifier/features/notifications/domain/stable_notification_id.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:fanotifier/features/notifications/data/notification_service.dart';
+import 'package:fanotifier/features/notifications/domain/activity_count_change_policy.dart';
+import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
+import 'package:fanotifier/features/notifications/domain/notification_message_formatter.dart';
+import 'package:fanotifier/features/notifications/domain/stable_notification_id.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
 
 class BackgroundNotificationWorker {
   static const ActivityCountChangePolicy _countChangePolicy =

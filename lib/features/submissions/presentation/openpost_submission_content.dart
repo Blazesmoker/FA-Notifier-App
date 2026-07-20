@@ -10,9 +10,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-import 'package:FANotifier/features/submissions/domain/openpost_file_download_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_submission_attachment.dart';
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_file_download_result.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_submission_attachment.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 
 const Color _attachmentSurfaceColor = Color(0xFF151515);
 
@@ -160,10 +160,8 @@ class _OpenPostSubmissionContentState
                         const SizedBox(height: 2.0),
                         Text(
                           isMusic
-                              ? 'Music · ' +
-                                  attachment.extension.toUpperCase()
-                              : 'Document · ' +
-                                  attachment.extension.toUpperCase(),
+                              ? 'Music · ${attachment.extension.toUpperCase()}'
+                              : 'Document · ${attachment.extension.toUpperCase()}',
                           style: const TextStyle(
                             color: Colors.grey,
                             fontSize: 12.0,
@@ -761,11 +759,7 @@ class _OpenPostDocumentViewerState extends State<_OpenPostDocumentViewer> {
                   child: InAppWebView(
                 gestureRecognizers: _viewerGestureRecognizers(),
                 key: ValueKey<String>(
-                  widget.attachment.contentUrl +
-                      '|' +
-                      (widget.attachment.viewerUrl ?? '') +
-                      '|' +
-                      widget.inspectionMode.toString(),
+                  '${widget.attachment.contentUrl}|${widget.attachment.viewerUrl ?? ''}|${widget.inspectionMode}',
                 ),
                 initialData: _isOdt
                     ? InAppWebViewInitialData(
@@ -944,9 +938,7 @@ class _OpenPostDocumentViewerState extends State<_OpenPostDocumentViewer> {
                   if (!_isCurrentViewer(viewerGeneration)) return;
                   if (request.isForMainFrame == false) return;
                   _setError(
-                    'Unable to preview this file. HTTP ' +
-                        errorResponse.statusCode.toString() +
-                        '.',
+                    'Unable to preview this file. HTTP ${errorResponse.statusCode}.',
                     viewerGeneration,
                   );
                 },

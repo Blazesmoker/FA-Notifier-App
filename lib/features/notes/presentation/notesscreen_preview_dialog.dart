@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
 
-import 'package:FANotifier/features/notes/domain/note_image_preview_mode.dart';
-import 'package:FANotifier/features/notes/domain/note_message_repository.dart';
-import 'package:FANotifier/features/notes/domain/note_submission_preview_repository.dart';
-import 'package:FANotifier/features/notes/presentation/note_body_with_previews.dart';
-import 'package:FANotifier/features/notes/presentation/note_image_preview_settings_provider.dart';
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
-import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
-import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
-import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/features/notes/domain/note_image_preview_mode.dart';
+import 'package:fanotifier/features/notes/domain/note_message_repository.dart';
+import 'package:fanotifier/features/notes/domain/note_submission_preview_repository.dart';
+import 'package:fanotifier/features/notes/presentation/note_body_with_previews.dart';
+import 'package:fanotifier/features/notes/presentation/note_image_preview_settings_provider.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
+import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
 import 'package:provider/provider.dart';
 
 /// Dialog content for previewing a note/message.
@@ -22,14 +22,14 @@ class PreviewDialogContent extends StatefulWidget {
   final VoidCallback? onMarkedUnread;
 
   const PreviewDialogContent({
-    Key? key,
+    super.key,
     required this.message,
     required this.folder,
     this.onMarkedUnread,
-  }) : super(key: key);
+  });
 
   @override
-  _PreviewDialogContentState createState() => _PreviewDialogContentState();
+  State<PreviewDialogContent> createState() => _PreviewDialogContentState();
 }
 
 class _PreviewDialogContentState extends State<PreviewDialogContent> {

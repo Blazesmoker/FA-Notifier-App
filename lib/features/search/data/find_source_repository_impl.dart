@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:FANotifier/features/search/data/find_source_image_input_service.dart';
-import 'package:FANotifier/features/search/data/find_source_service.dart';
-import 'package:FANotifier/features/search/domain/find_source_models.dart';
-import 'package:FANotifier/features/search/domain/find_source_repository.dart';
+import 'package:fanotifier/features/search/data/find_source_image_input_service.dart';
+import 'package:fanotifier/features/search/data/find_source_service.dart';
+import 'package:fanotifier/features/search/domain/find_source_models.dart';
+import 'package:fanotifier/features/search/domain/find_source_repository.dart';
 
 class FindSourceRepositoryImpl implements FindSourceRepository {
   FindSourceRepositoryImpl({

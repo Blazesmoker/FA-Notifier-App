@@ -1,5 +1,5 @@
-import 'package:FANotifier/features/profile/data/user_profile_api_service.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_load_result.dart';
+import 'package:fanotifier/features/profile/data/user_profile_api_service.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_load_result.dart';
 import 'package:flutter/foundation.dart';
 
 class UserProfileLoader {

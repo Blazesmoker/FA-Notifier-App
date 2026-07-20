@@ -4,7 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 
 enum FaRequestCoordinatorState {
   normal,

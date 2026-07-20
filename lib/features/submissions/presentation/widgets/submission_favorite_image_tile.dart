@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
-import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
-import 'package:FANotifier/shared/widgets/heart_animation_optimized.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
+import 'package:fanotifier/shared/widgets/heart_animation_optimized.dart';
 
 class SubmissionFavoriteImageTile extends StatelessWidget {
   const SubmissionFavoriteImageTile({

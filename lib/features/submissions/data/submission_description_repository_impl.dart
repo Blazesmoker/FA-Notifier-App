@@ -1,7 +1,7 @@
-import 'package:FANotifier/features/submissions/data/submission_description_service.dart';
-import 'package:FANotifier/features/submissions/data/submission_description_webview_html_builder.dart';
-import 'package:FANotifier/features/submissions/domain/submission_description_repository.dart';
-import 'package:FANotifier/features/submissions/domain/submission_description_webview_content.dart';
+import 'package:fanotifier/features/submissions/data/submission_description_service.dart';
+import 'package:fanotifier/features/submissions/data/submission_description_webview_html_builder.dart';
+import 'package:fanotifier/features/submissions/domain/submission_description_repository.dart';
+import 'package:fanotifier/features/submissions/domain/submission_description_webview_content.dart';
 
 class SubmissionDescriptionRepositoryImpl
     implements SubmissionDescriptionRepository {

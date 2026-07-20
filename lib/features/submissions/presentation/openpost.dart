@@ -1,51 +1,50 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter/scheduler.dart';
-import 'package:FANotifier/features/comments/presentation/reply_screen.dart';
-import 'package:FANotifier/features/comments/presentation/inline_comment_composer.dart';
+import 'package:fanotifier/features/comments/presentation/reply_screen.dart';
+import 'package:fanotifier/features/comments/presentation/inline_comment_composer.dart';
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:like_button/like_button.dart';
-import 'package:FANotifier/shared/theme/app_theme.dart';
-import 'package:FANotifier/app/navigation/app_navigation.dart';
-import 'package:FANotifier/shared/fa/fa_username.dart';
-import 'package:FANotifier/shared/utils/comment_composer_lines.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/submissions/presentation/SubmissionDescriptionWebview.dart';
-import 'package:FANotifier/features/profile/presentation/image_inspect_screen.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_details_load_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_media_export_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_action_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_repository.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_submission_attachment.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost_controller.dart';
-import 'package:FANotifier/features/submissions/presentation/edit_submission_screen.dart';
-import 'package:FANotifier/features/comments/presentation/editcommentscreen.dart';
-import 'package:FANotifier/features/comments/presentation/threaded_comments.dart';
-import 'package:FANotifier/features/search/presentation/keyword_search_screen.dart';
-import 'package:FANotifier/features/notes/presentation/new_message.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:FANotifier/features/journals/presentation/openjournal.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost_comments.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost_submission_content.dart';
-import 'package:FANotifier/features/profile/domain/profile_section.dart';
-import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
-import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
-import 'package:FANotifier/shared/navigation/detachable_webview_route_registry.dart';
-import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
-import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
-import 'package:FANotifier/shared/translation/translation_service.dart';
-import 'package:FANotifier/shared/translation/translation_source_text_builder.dart';
-import 'package:FANotifier/shared/platform/fa_share_service.dart';
-import 'package:FANotifier/shared/navigation/transparent_slide_page_route.dart';
+import 'package:fanotifier/shared/theme/app_theme.dart';
+import 'package:fanotifier/app/navigation/app_navigation.dart';
+import 'package:fanotifier/shared/fa/fa_username.dart';
+import 'package:fanotifier/shared/utils/comment_composer_lines.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_description_webview.dart';
+import 'package:fanotifier/features/profile/presentation/image_inspect_screen.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_models.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_details_load_result.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_media_export_result.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_action_result.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_repository.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_delete_models.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_submission_attachment.dart';
+import 'package:fanotifier/features/submissions/presentation/openpost_controller.dart';
+import 'package:fanotifier/features/submissions/presentation/edit_submission_screen.dart';
+import 'package:fanotifier/features/comments/presentation/editcommentscreen.dart';
+import 'package:fanotifier/features/comments/presentation/threaded_comments.dart';
+import 'package:fanotifier/features/search/presentation/keyword_search_screen.dart';
+import 'package:fanotifier/features/notes/presentation/new_message.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/features/journals/presentation/openjournal.dart';
+import 'package:fanotifier/features/submissions/presentation/openpost_comments.dart';
+import 'package:fanotifier/features/submissions/presentation/openpost_submission_content.dart';
+import 'package:fanotifier/features/profile/domain/profile_section.dart';
+import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
+import 'package:fanotifier/shared/navigation/detachable_webview_route_registry.dart';
+import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
+import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
+import 'package:fanotifier/shared/translation/translation_service.dart';
+import 'package:fanotifier/shared/translation/translation_source_text_builder.dart';
+import 'package:fanotifier/shared/platform/fa_share_service.dart';
+import 'package:fanotifier/shared/navigation/transparent_slide_page_route.dart';
 import 'package:provider/provider.dart';
 
 import '../../../shared/utils/bbcode_context_menu.dart';
@@ -61,8 +60,8 @@ class OpenPost extends StatefulWidget {
     required this.uniqueNumber,
     this.skipInitialWatchCheck = false,
     this.repository,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   static Route<T> route<T>({
     required String imageUrl,
@@ -70,7 +69,7 @@ class OpenPost extends StatefulWidget {
     bool skipInitialWatchCheck = false,
     RouteSettings? settings,
   }) {
-    final builder = (BuildContext context) => OpenPost(
+    Widget builder(BuildContext context) => OpenPost(
           imageUrl: imageUrl,
           uniqueNumber: uniqueNumber,
           skipInitialWatchCheck: skipInitialWatchCheck,
@@ -87,7 +86,7 @@ class OpenPost extends StatefulWidget {
   }
 
   @override
-  _OpenPostState createState() => _OpenPostState();
+  State<OpenPost> createState() => _OpenPostState();
 }
 
 class _OpenPostState extends State<OpenPost>
@@ -441,20 +440,6 @@ class _OpenPostState extends State<OpenPost>
       return;
     }
     _commentSelectedTexts[selectionId] = text;
-  }
-
-  bool _shouldOfferPostTranslation(
-    TranslatorSettingsProvider settings, {
-    VoidCallback? onLanguageDetectionUpdated,
-  }) {
-    return _translationService.shouldOfferTranslation(
-      _translationSourceTextBuilder.content(
-        title: submissionTitle,
-        descriptionHtml: submissionDescription,
-      ),
-      settings,
-      onLanguageDetectionUpdated: onLanguageDetectionUpdated,
-    );
   }
 
   bool _shouldOfferCommentTranslation(
@@ -818,6 +803,7 @@ class _OpenPostState extends State<OpenPost>
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -919,6 +905,7 @@ class _OpenPostState extends State<OpenPost>
       final result =
           await _controller.performBlockUnblock(urlPath, keyValue);
 
+      if (!mounted) return;
       if (result.status == OpenPostActionStatus.missingAuth) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -931,10 +918,12 @@ class _OpenPostState extends State<OpenPost>
 
       if (result.status == OpenPostActionStatus.success) {
         await _fetchUserPageLinks();
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content:
-                Text('${shouldBlock ? 'Author blocked' : 'Author unblocked'}'),
+            content: Text(
+              shouldBlock ? 'Author blocked' : 'Author unblocked',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -948,6 +937,7 @@ class _OpenPostState extends State<OpenPost>
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -962,6 +952,7 @@ class _OpenPostState extends State<OpenPost>
       {required bool shouldWatch}) async {
     try {
       final result = await _controller.performWatchUnwatch(urlPath);
+      if (!mounted) return;
       if (result.status == OpenPostActionStatus.missingAuth) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -973,10 +964,12 @@ class _OpenPostState extends State<OpenPost>
       }
       if (result.status == OpenPostActionStatus.success) {
         await _fetchUserPageLinks();
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                '${shouldWatch ? 'Now watching $username' : 'Stopped watching $username'}'),
+              shouldWatch ? 'Now watching $username' : 'Stopped watching $username',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -990,6 +983,7 @@ class _OpenPostState extends State<OpenPost>
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -1045,6 +1039,7 @@ class _OpenPostState extends State<OpenPost>
     if (shouldHide == true) {
       try {
         final statusCode = await _controller.sendAuthenticatedGet(hideLink);
+        if (!mounted) return;
         if (statusCode == null) return;
         if (statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1144,6 +1139,7 @@ class _OpenPostState extends State<OpenPost>
     try {
       final result = await _controller.prepareDeletion();
 
+      if (!mounted) return;
       if (result == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1178,6 +1174,7 @@ class _OpenPostState extends State<OpenPost>
     } catch (e, stackTrace) {
       debugPrint('Error initiating deletion: $e');
       debugPrint('Stack trace: $stackTrace');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('An unexpected error occurred.'),
@@ -1302,6 +1299,7 @@ class _OpenPostState extends State<OpenPost>
         password: password,
       );
 
+      if (!mounted) return;
       if (success == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1326,6 +1324,7 @@ class _OpenPostState extends State<OpenPost>
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('An error occurred while deleting the submission.'),
@@ -1419,7 +1418,7 @@ class _OpenPostState extends State<OpenPost>
 
   void _sharePost() {
     final postUrl = _controller.submissionViewUrl;
-    final shareContent = '$postUrl';
+    final shareContent = postUrl;
     const FaShareService().shareText(
       text: shareContent,
       subject: submissionTitle ?? 'Fur Affinity Post',
@@ -1499,6 +1498,7 @@ class _OpenPostState extends State<OpenPost>
         _commentFocusNode.unfocus();
         await _fetchPostDetails();
 
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Comment posted!'),
@@ -1556,6 +1556,7 @@ class _OpenPostState extends State<OpenPost>
       try {
         final statusCode =
             await _controller.sendAuthenticatedGet(unhideLink);
+        if (!mounted) return;
         if (statusCode == null) return;
         if (statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1578,6 +1579,7 @@ class _OpenPostState extends State<OpenPost>
   Future<void> _downloadImage(BuildContext context, String imageUrl) async {
     try {
       final result = await _controller.exportToGallery(imageUrl);
+      if (!context.mounted) return;
       if (result.status == OpenPostMediaExportStatus.permissionDenied) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1601,6 +1603,7 @@ class _OpenPostState extends State<OpenPost>
         );
       }
     } catch (e) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to download image: $e'),
@@ -1615,6 +1618,7 @@ class _OpenPostState extends State<OpenPost>
   Future<void> _shareImage(BuildContext context, String imageUrl) async {
     try {
       final result = await _controller.shareFromUrl(imageUrl);
+      if (!context.mounted) return;
       if (result.status == OpenPostMediaExportStatus.permissionDenied) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1625,6 +1629,7 @@ class _OpenPostState extends State<OpenPost>
         return;
       }
     } catch (e) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to share image: $e'),
@@ -1664,7 +1669,7 @@ class _OpenPostState extends State<OpenPost>
           context,
           UserProfileScreen.route(
             nickname: target.username!,
-            initialSection: ProfileSection.Gallery,
+            initialSection: ProfileSection.gallery,
           ),
         );
         return;
@@ -1681,7 +1686,7 @@ class _OpenPostState extends State<OpenPost>
           context,
           UserProfileScreen.route(
             nickname: tappedUsername,
-            initialSection: ProfileSection.Gallery,
+            initialSection: ProfileSection.gallery,
             initialFolderUrl: folderUrl,
             initialFolderName: folderName,
           ),
@@ -1698,7 +1703,7 @@ class _OpenPostState extends State<OpenPost>
           context,
           UserProfileScreen.route(
             nickname: target.username!,
-            initialSection: ProfileSection.Journals,
+            initialSection: ProfileSection.journals,
           ),
         );
         return;
@@ -2259,6 +2264,7 @@ class _OpenPostState extends State<OpenPost>
                               _suppressNextRouteDetach = false;
                             });
 
+                            if (!context.mounted) return;
                             switch (selected) {
                               case 'report':
                                 launchUrlString(_controller.troubleTicketsUrl);
@@ -2279,6 +2285,7 @@ class _OpenPostState extends State<OpenPost>
                                 final postUrl = _controller.submissionViewUrl;
                                 await Clipboard.setData(
                                     ClipboardData(text: postUrl));
+                                if (!context.mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text('Link copied to clipboard'),
@@ -2581,6 +2588,7 @@ class _OpenPostState extends State<OpenPost>
                                                 _suppressNextRouteDetach =
                                                     false;
                                               });
+                                              if (!context.mounted) return;
                                               if (selected == 'download') {
                                                 debugPrint(
                                                     "$fullViewImageUrl image2");
@@ -2835,6 +2843,7 @@ class _OpenPostState extends State<OpenPost>
                                                 _suppressNextRouteDetach =
                                                     false;
                                               });
+                                              if (!context.mounted) return;
                                               if (selected == 'copy') {
                                                 String? plainText =
                                                     await _submissionWebViewKey
@@ -2844,6 +2853,7 @@ class _OpenPostState extends State<OpenPost>
                                                   await Clipboard.setData(
                                                       ClipboardData(
                                                           text: plainText));
+                                                  if (!context.mounted) return;
                                                   ScaffoldMessenger.of(context)
                                                       .showSnackBar(
                                                     const SnackBar(
@@ -3023,7 +3033,7 @@ class _OpenPostState extends State<OpenPost>
                                                                   linkUsername!,
                                                               initialSection:
                                                                   ProfileSection
-                                                                      .Gallery,
+                                                                      .gallery,
                                                             ),
                                                           );
                                                         } else {

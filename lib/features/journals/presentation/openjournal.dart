@@ -1,31 +1,31 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/journals/domain/openjournal_repository.dart';
-import 'package:FANotifier/features/journals/presentation/create_journal.dart';
-import 'package:FANotifier/features/journals/presentation/editjournalcommentscreen.dart';
-import 'package:FANotifier/features/journals/presentation/journal_reply_screen.dart';
-import 'package:FANotifier/features/journals/presentation/openjournal_controller.dart';
-import 'package:FANotifier/features/comments/presentation/inline_comment_composer.dart';
-import 'package:FANotifier/features/comments/presentation/threaded_comments.dart';
-import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:FANotifier/features/journals/presentation/openjournal_comments.dart';
-import 'package:FANotifier/features/journals/domain/journal_deletion_result.dart';
-import 'package:FANotifier/features/journals/domain/journal_load_failure.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/features/journals/domain/openjournal_repository.dart';
+import 'package:fanotifier/features/journals/presentation/create_journal.dart';
+import 'package:fanotifier/features/journals/presentation/editjournalcommentscreen.dart';
+import 'package:fanotifier/features/journals/presentation/journal_reply_screen.dart';
+import 'package:fanotifier/features/journals/presentation/openjournal_controller.dart';
+import 'package:fanotifier/features/comments/presentation/inline_comment_composer.dart';
+import 'package:fanotifier/features/comments/presentation/threaded_comments.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/features/journals/presentation/openjournal_comments.dart';
+import 'package:fanotifier/features/journals/domain/journal_deletion_result.dart';
+import 'package:fanotifier/features/journals/domain/journal_load_failure.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
-import 'package:FANotifier/shared/utils/utils.dart';
-import 'package:FANotifier/shared/utils/comment_composer_lines.dart';
-import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
-import 'package:FANotifier/core/preferences/translator_settings_provider.dart';
-import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
-import 'package:FANotifier/shared/translation/native_translate_launcher.dart';
-import 'package:FANotifier/shared/translation/translation_service.dart';
-import 'package:FANotifier/shared/translation/translation_source_text_builder.dart';
-import 'package:FANotifier/shared/platform/fa_share_service.dart';
-import 'package:FANotifier/app/navigation/app_navigation.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/shared/utils/utils.dart';
+import 'package:fanotifier/shared/utils/comment_composer_lines.dart';
+import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
+import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
+import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
+import 'package:fanotifier/shared/translation/translation_service.dart';
+import 'package:fanotifier/shared/translation/translation_source_text_builder.dart';
+import 'package:fanotifier/shared/platform/fa_share_service.dart';
+import 'package:fanotifier/app/navigation/app_navigation.dart';
 import 'package:provider/provider.dart';
 
 import '../../../shared/utils/bbcode_context_menu.dart';
@@ -39,11 +39,11 @@ class OpenJournal extends StatefulWidget {
     required this.uniqueNumber,
     this.onJournalMutated,
     this.repository,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
-  _OpenJournalState createState() => _OpenJournalState();
+  State<OpenJournal> createState() => _OpenJournalState();
 }
 
 class _OpenJournalState extends State<OpenJournal>
@@ -225,20 +225,6 @@ class _OpenJournalState extends State<OpenJournal>
       return;
     }
     _commentSelectedTexts[selectionId] = text;
-  }
-
-  bool _shouldOfferJournalTranslation(
-    TranslatorSettingsProvider settings, {
-    VoidCallback? onLanguageDetectionUpdated,
-  }) {
-    return _translationService.shouldOfferTranslation(
-      _translationSourceTextBuilder.content(
-        title: submissionTitle,
-        descriptionHtml: submissionDescription,
-      ),
-      settings,
-      onLanguageDetectionUpdated: onLanguageDetectionUpdated,
-    );
   }
 
   bool _shouldOfferCommentTranslation(
@@ -440,6 +426,7 @@ class _OpenJournalState extends State<OpenJournal>
 
     try {
       final result = await _controller.deleteJournal();
+      if (!mounted) return;
       if (result.status == JournalDeletionStatus.invalidDeleteLink) {
         showAppSnackBar(context,
             "Safe delete failed: couldn't confirm delete link for this journal.",
@@ -454,7 +441,6 @@ class _OpenJournalState extends State<OpenJournal>
       }
 
       if (result.status == JournalDeletionStatus.httpFailure) {
-        if (!mounted) return;
         showAppSnackBar(context, 'Delete failed (HTTP ${result.statusCode}).',
             backgroundColor: Colors.red);
         return;
@@ -503,9 +489,11 @@ class _OpenJournalState extends State<OpenJournal>
         );
       },
     );
+    if (!mounted) return;
     if (shouldHide == true) {
       try {
         final statusCode = await _controller.updateCommentVisibility(hideLink);
+        if (!mounted) return;
         if (statusCode == null) return;
         if (statusCode == 200) {
           showAppSnackBar(context, "Comment successfully hidden!",
@@ -540,10 +528,12 @@ class _OpenJournalState extends State<OpenJournal>
         );
       },
     );
+    if (!mounted) return;
     if (shouldUnhide == true) {
       try {
         final statusCode =
             await _controller.updateCommentVisibility(unhideLink);
+        if (!mounted) return;
         if (statusCode == null) return;
         if (statusCode == 200) {
           showAppSnackBar(context, "Comment successfully un-hidden!",
@@ -560,7 +550,7 @@ class _OpenJournalState extends State<OpenJournal>
 
   void _sharePost() {
     final postUrl = _controller.journalUrl;
-    final shareContent = '$postUrl';
+    final shareContent = postUrl;
     const FaShareService().shareText(
       text: shareContent,
       subject: submissionTitle ?? 'Fur Affinity Post',
@@ -636,6 +626,7 @@ class _OpenJournalState extends State<OpenJournal>
         _commentFocusNode.unfocus();
         await _fetchPostDetailsNew();
 
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Comment posted!'),
@@ -1192,9 +1183,10 @@ class _OpenJournalState extends State<OpenJournal>
                                                           context) {
                                                     final src = context
                                                         .attributes['src'];
-                                                    if (src == null)
+                                                    if (src == null) {
                                                       return const SizedBox
                                                           .shrink();
+                                                    }
                                                     final resolvedUrl =
                                                         src.startsWith('//')
                                                             ? 'https:$src'
@@ -1280,7 +1272,7 @@ class _OpenJournalState extends State<OpenJournal>
                               ),
                             ),
                             const SliverToBoxAdapter(
-                              child: const Divider(
+                              child: Divider(
                                 height: 3.0,
                                 color: Color(0xFF111111),
                                 thickness: 3.0,
@@ -1303,7 +1295,7 @@ class _OpenJournalState extends State<OpenJournal>
                               ),
                             ),
                             const SliverToBoxAdapter(
-                              child: const Divider(
+                              child: Divider(
                                 height: 3.0,
                                 color: Color(0xFF111111),
                                 thickness: 3.0,

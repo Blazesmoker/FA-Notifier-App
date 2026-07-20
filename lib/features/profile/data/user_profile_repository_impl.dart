@@ -1,11 +1,11 @@
-import 'package:FANotifier/features/profile/data/user_profile_api_service.dart';
-import 'package:FANotifier/features/profile/data/user_profile_loader.dart';
-import 'package:FANotifier/features/profile/data/user_profile_shout_deletion_coordinator.dart';
-import 'package:FANotifier/features/profile/domain/shout.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_api_models.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_load_result.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_repository.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_shout_deletion_result.dart';
+import 'package:fanotifier/features/profile/data/user_profile_api_service.dart';
+import 'package:fanotifier/features/profile/data/user_profile_loader.dart';
+import 'package:fanotifier/features/profile/data/user_profile_shout_deletion_coordinator.dart';
+import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_load_result.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_repository.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_shout_deletion_result.dart';
 
 class UserProfileRepositoryImpl implements UserProfileRepository {
   UserProfileRepositoryImpl({UserProfileApiService? api})

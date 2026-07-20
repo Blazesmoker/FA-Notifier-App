@@ -1,4 +1,4 @@
-import 'package:FANotifier/shared/fa/parsing_utils.dart';
+import 'package:fanotifier/shared/fa/parsing_utils.dart';
 
 String? normalizeOpenPostSubmissionUrl(String? value) {
   final normalized = normalizeFaUrl(value);

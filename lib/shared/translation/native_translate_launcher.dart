@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:FANotifier/shared/translation/ios_scroll_recovery.dart';
+import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 class NativeTranslateLauncher {

@@ -1,9 +1,9 @@
 // user_grid_section.dart
 
-import 'package:FANotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/fa/domain/user_link.dart';
-import 'package:FANotifier/features/settings/presentation/view_list_screen.dart';
+import 'package:fanotifier/shared/fa/domain/user_link.dart';
+import 'package:fanotifier/features/settings/presentation/view_list_screen.dart';
 
 class UserGridSection extends StatelessWidget {
   final String title;
@@ -13,13 +13,13 @@ class UserGridSection extends StatelessWidget {
   final String sanitizedUsername;
 
   const UserGridSection({
-    Key? key,
+    super.key,
     required this.title,
     required this.viewListText,
     required this.totalUsersCount,
     required this.users,
     required this.sanitizedUsername,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

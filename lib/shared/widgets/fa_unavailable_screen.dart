@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:FANotifier/core/network/fa_request_coordinator.dart';
+import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 
 class FaUnavailableScreen extends StatefulWidget {
   const FaUnavailableScreen({

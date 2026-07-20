@@ -4,17 +4,17 @@ import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:FANotifier/features/notes/domain/note_reply_repository.dart';
-import 'package:FANotifier/features/notes/domain/note_reply_webview_gateway.dart';
-import 'package:FANotifier/features/notes/presentation/note_reply_webview_controller_factory.dart';
-import 'package:FANotifier/features/notes/domain/note_image_preview_mode.dart';
-import 'package:FANotifier/features/notes/domain/note_submission_preview_repository.dart';
-import 'package:FANotifier/features/notes/presentation/note_body_with_previews.dart';
-import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
-import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
-import 'package:FANotifier/shared/widgets/cooldown_send_icon.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/features/notes/domain/note_reply_repository.dart';
+import 'package:fanotifier/features/notes/domain/note_reply_webview_gateway.dart';
+import 'package:fanotifier/features/notes/presentation/note_reply_webview_controller_factory.dart';
+import 'package:fanotifier/features/notes/domain/note_image_preview_mode.dart';
+import 'package:fanotifier/features/notes/domain/note_submission_preview_repository.dart';
+import 'package:fanotifier/features/notes/presentation/note_body_with_previews.dart';
+import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
+import 'package:fanotifier/shared/widgets/cooldown_send_icon.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:provider/provider.dart';
 
 class NoteReplyScreen extends StatefulWidget {
@@ -27,7 +27,7 @@ class NoteReplyScreen extends StatefulWidget {
   final NoteImagePreviewMode imagePreviewMode;
 
   const NoteReplyScreen({
-    Key? key,
+    super.key,
     required this.subject,
     required this.originalContent,
     this.originalContentHtml,
@@ -35,10 +35,10 @@ class NoteReplyScreen extends StatefulWidget {
     required this.messageId,
     required this.messageLink,
     required this.imagePreviewMode,
-  }) : super(key: key);
+  });
 
   @override
-  _NoteReplyScreenState createState() => _NoteReplyScreenState();
+  State<NoteReplyScreen> createState() => _NoteReplyScreenState();
 }
 
 class _NoteReplyScreenState extends State<NoteReplyScreen> {

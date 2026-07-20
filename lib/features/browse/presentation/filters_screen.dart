@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/browse/domain/browse_repository.dart';
-import 'package:FANotifier/features/browse/domain/browse_filter_display_names.dart';
-import 'package:FANotifier/shared/utils/content_rating_filters.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:fanotifier/features/browse/domain/browse_repository.dart';
+import 'package:fanotifier/features/browse/domain/browse_filter_display_names.dart';
+import 'package:fanotifier/shared/utils/content_rating_filters.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 
 class FiltersScreen extends StatefulWidget {
   /// Pass in the currently selected filters.
@@ -14,11 +14,11 @@ class FiltersScreen extends StatefulWidget {
   const FiltersScreen({
     required this.selectedFilters,
     required this.sfwEnabled,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
-  _FiltersScreenState createState() => _FiltersScreenState();
+  State<FiltersScreen> createState() => _FiltersScreenState();
 }
 
 class _FiltersScreenState extends State<FiltersScreen> {
@@ -156,7 +156,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
                             const SizedBox(height: 20),
                           ],
                         );
-                      }).toList(),
+                      }),
                       const SizedBox(height: 10),
                       Container(
                         alignment: Alignment.centerLeft,

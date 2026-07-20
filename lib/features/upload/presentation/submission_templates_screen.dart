@@ -4,16 +4,16 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-import 'package:FANotifier/features/upload/domain/submission_template.dart';
-import 'package:FANotifier/features/upload/domain/submission_template_repository.dart';
+import 'package:fanotifier/features/upload/domain/submission_template.dart';
+import 'package:fanotifier/features/upload/domain/submission_template_repository.dart';
 
 class SubmissionTemplatesScreen extends StatefulWidget {
   final SubmissionTemplateRepository repository;
 
   const SubmissionTemplatesScreen({
-    Key? key,
+    super.key,
     required this.repository,
-  }) : super(key: key);
+  });
 
   @override
   State<SubmissionTemplatesScreen> createState() => _SubmissionTemplatesScreenState();

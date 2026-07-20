@@ -1,10 +1,10 @@
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/profile/domain/shout.dart';
-import 'package:FANotifier/shared/fa/domain/user_link.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_api_models.dart';
-import 'package:FANotifier/shared/fa/parsing_utils.dart';
+import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/shared/fa/domain/user_link.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
+import 'package:fanotifier/shared/fa/parsing_utils.dart';
 
 UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
   final document = html_parser.parse(htmlBody);
@@ -192,12 +192,12 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
     }
     if (classicStatsTable != null) {
       var statsCell = classicStatsTable
-          .querySelector('tr:nth-child(2) td[align=\"left\"]');
+          .querySelector('tr:nth-child(2) td[align="left"]');
       statsText = statsCell?.text.trim() ?? "";
     }
   }
 
-  int? _extract(String label) {
+  int? extract(String label) {
     final regex = RegExp('$label\\s*(\\d+)');
     final match = regex.firstMatch(statsText);
     if (match != null && match.groupCount > 0) {
@@ -208,13 +208,13 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
 
 
   if (statsText.isNotEmpty) {
-    views = _extract('Views:') ?? _extract('Page Visits:');
-    submissions = _extract('Submissions:');
-    favs = _extract('Favs:') ?? _extract('Favorites:');
+    views = extract('Views:') ?? extract('Page Visits:');
+    submissions = extract('Submissions:');
+    favs = extract('Favs:') ?? extract('Favorites:');
     commentsEarned =
-        _extract('Comments Earned:') ?? _extract('Comments Received:');
-    commentsMade = _extract('Comments Made:') ?? _extract('Comments Given:');
-    journals = _extract('Journals:');
+        extract('Comments Earned:') ?? extract('Comments Received:');
+    commentsMade = extract('Comments Made:') ?? extract('Comments Given:');
+    journals = extract('Journals:');
   } else {
     views = 0;
     submissions = 0;
@@ -667,7 +667,7 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
 
       String shoutId = '';
       final anchor =
-          container.querySelector('a.comment_anchor[id^=\"shout-\"]');
+          container.querySelector('a.comment_anchor[id^="shout-"]');
       if (anchor != null) {
         final idAttr = anchor.attributes['id'] ?? '';
         if (idAttr.startsWith('shout-')) {
@@ -687,8 +687,9 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
               String? src = imgElem.attributes['src'];
               if (src != null) {
                 if (src.startsWith('//')) return 'https:$src';
-                if (src.startsWith('/'))
+                if (src.startsWith('/')) {
                   return 'https://www.furaffinity.net$src';
+                }
                 return src;
               }
               return '';
@@ -703,8 +704,9 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
               String? src = imgElem.attributes['src'];
               if (src != null) {
                 if (src.startsWith('//')) return 'https:$src';
-                if (src.startsWith('/'))
+                if (src.startsWith('/')) {
                   return 'https://www.furaffinity.net$src';
+                }
                 return src;
               }
               return '';
@@ -733,11 +735,11 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
         document.querySelector('form.c-shoutPaginationForm');
     if (shoutPaginationForm != null) {
       final keyInput =
-          shoutPaginationForm.querySelector('input[name=\"key\"]');
+          shoutPaginationForm.querySelector('input[name="key"]');
       shoutPaginationKey = keyInput?.attributes['value'];
 
       final pageSelect =
-          shoutPaginationForm.querySelector('select[name=\"shout_page\"]');
+          shoutPaginationForm.querySelector('select[name="shout_page"]');
       if (pageSelect != null) {
         final options = pageSelect.querySelectorAll('option');
         if (options.isNotEmpty) {
@@ -753,24 +755,24 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
   }
 
   var watchLinkElement =
-      document.querySelector('a.button.standard.go[href^=\"/watch/\"]') ??
-          document.querySelector('a[href^=\"/watch/\"]');
+      document.querySelector('a.button.standard.go[href^="/watch/"]') ??
+          document.querySelector('a[href^="/watch/"]');
 
   var unwatchLinkElement =
-      document.querySelector('a.button.standard.stop[href^=\"/unwatch/\"]') ??
-          document.querySelector('a[href^=\"/unwatch/\"]');
+      document.querySelector('a.button.standard.stop[href^="/unwatch/"]') ??
+          document.querySelector('a[href^="/unwatch/"]');
 
   var blockLinkElement =
-      document.querySelector('a.button.standard.stop[href^=\"/block/\"]') ??
-          document.querySelector('form[action^=\"/block/\"]');
+      document.querySelector('a.button.standard.stop[href^="/block/"]') ??
+          document.querySelector('form[action^="/block/"]');
   String? computedBlockLink;
   bool blockUsesPost = false;
   if (blockLinkElement != null) {
     if (blockLinkElement.localName == 'form') {
       blockUsesPost = true;
       final actionUrl = blockLinkElement.attributes['action'];
-      final keyElem = blockLinkElement.querySelector('input[name=\"key\"]') ??
-          blockLinkElement.querySelector('button[name=\"key\"]');
+      final keyElem = blockLinkElement.querySelector('input[name="key"]') ??
+          blockLinkElement.querySelector('button[name="key"]');
       final keyValue = keyElem?.attributes['value'] ?? '';
 
       if (actionUrl != null && keyValue.isNotEmpty) {
@@ -786,8 +788,8 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
   }
 
   var unblockLinkElement =
-      document.querySelector('a.button.standard.stop[href^=\"/unblock/\"]') ??
-          document.querySelector('form[action^=\"/unblock/\"]');
+      document.querySelector('a.button.standard.stop[href^="/unblock/"]') ??
+          document.querySelector('form[action^="/unblock/"]');
   String? computedUnblockLink;
   bool unblockUsesPost = false;
   if (unblockLinkElement != null) {
@@ -795,8 +797,8 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
       unblockUsesPost = true;
       final actionUrl = unblockLinkElement.attributes['action'];
       final keyElem =
-          unblockLinkElement.querySelector('input[name=\"key\"]') ??
-              unblockLinkElement.querySelector('button[name=\"key\"]');
+          unblockLinkElement.querySelector('input[name="key"]') ??
+              unblockLinkElement.querySelector('button[name="key"]');
       final keyValue = keyElem?.attributes['value'] ?? '';
 
       if (actionUrl != null && keyValue.isNotEmpty) {

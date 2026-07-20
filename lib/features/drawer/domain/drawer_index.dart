@@ -1,13 +1,15 @@
 // lib/enums/drawer_index.dart
 
 enum DrawerIndex {
-  HOME,
-  FeedBack,
-  Help,
-  Share,
-  About,
-  Invite,
-  Testing,
-  Notes,
-  Upload, Notifications, Submissions
+  home,
+  feedBack,
+  help,
+  share,
+  about,
+  invite,
+  testing,
+  notes,
+  upload,
+  notifications,
+  submissions
 }

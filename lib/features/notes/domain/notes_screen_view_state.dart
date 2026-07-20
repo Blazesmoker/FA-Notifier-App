@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
 
 class NotesScreenViewState {
   const NotesScreenViewState({

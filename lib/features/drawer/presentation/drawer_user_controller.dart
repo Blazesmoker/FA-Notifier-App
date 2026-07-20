@@ -1,12 +1,12 @@
 // lib/custom_drawer/drawer_user_controller.dart
 
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
-import 'package:FANotifier/features/drawer/presentation/home_drawer.dart';
-import 'package:FANotifier/features/drawer/domain/drawer_index.dart';
-import 'package:FANotifier/shared/fa/domain/user_profile.dart';
-import 'package:FANotifier/shared/theme/app_theme.dart';
-import 'package:FANotifier/shared/fa/domain/notifications.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/features/drawer/presentation/home_drawer.dart';
+import 'package:fanotifier/features/drawer/domain/drawer_index.dart';
+import 'package:fanotifier/shared/fa/domain/user_profile.dart';
+import 'package:fanotifier/shared/theme/app_theme.dart';
+import 'package:fanotifier/shared/fa/domain/notifications.dart';
 
 class DrawerUserController extends StatefulWidget {
 
@@ -197,7 +197,7 @@ class DrawerUserControllerState extends State<DrawerUserController>
                         0.0,
                       ),
                       child: HomeDrawer(
-                        screenIndex: widget.screenIndex ?? DrawerIndex.HOME,
+                        screenIndex: widget.screenIndex ?? DrawerIndex.home,
                         iconAnimationController: iconAnimationController,
                         callBackIndex: (DrawerIndex indexType) {
 
@@ -246,7 +246,7 @@ class DrawerUserControllerState extends State<DrawerUserController>
                           onTap: onDrawerClick,
                         ),
                       // The top-left menu icon
-                      if (widget.screenIndex != DrawerIndex.Notifications)
+                      if (widget.screenIndex != DrawerIndex.notifications)
                         Padding(
                           padding: EdgeInsets.only(
                             top: topPadding + 4,
@@ -310,11 +310,11 @@ class AvatarWidget extends StatelessWidget {
   final double radius;
 
   const AvatarWidget({
-    Key? key,
+    super.key,
     required this.imageUrl,
     required this.fallbackAsset,
     this.radius = 24,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'package:FANotifier/core/fa/fa_media_auth.dart';
+import 'package:fanotifier/core/fa/fa_media_auth.dart';
 
 class FaCookieHelper {
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(

@@ -1,9 +1,9 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/shared/fa/domain/submission_favorite_links.dart';
+import 'package:fanotifier/shared/fa/domain/submission_favorite_links.dart';
 
-export 'package:FANotifier/shared/fa/domain/submission_favorite_links.dart';
+export 'package:fanotifier/shared/fa/domain/submission_favorite_links.dart';
 
 SubmissionFavoriteLinks parseSubmissionFavoriteLinksFromHtml(
   String html, {

@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/features/drawer/domain/nsfw_confirmation_repository.dart';
+import 'package:fanotifier/features/drawer/domain/nsfw_confirmation_repository.dart';
 
 class NsfwConfirmationPreference implements NsfwConfirmationRepository {
   static const _disabledKey = 'nsfwConfirmationDisabled';

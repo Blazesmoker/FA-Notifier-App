@@ -2,13 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:FANotifier/core/logging/app_logging.dart';
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/features/auth/domain/cloudflare_check_result.dart';
-import 'package:FANotifier/features/browse/domain/browse_repository.dart';
-import 'package:FANotifier/features/submissions/domain/submission_favorite_repository.dart';
-import 'package:FANotifier/shared/fa/cloudflare_challenge_exception.dart';
-import 'package:FANotifier/shared/fa/fa_thumbnail_processing.dart';
+import 'package:fanotifier/core/logging/app_logging.dart';
+import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:fanotifier/features/auth/domain/cloudflare_check_result.dart';
+import 'package:fanotifier/features/browse/domain/browse_repository.dart';
+import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
+import 'package:fanotifier/shared/fa/fa_thumbnail_processing.dart';
 
 typedef BrowseCloudflareChallengeHandler = Future<CloudflareCheckResult?>
     Function(String? initialUrl);

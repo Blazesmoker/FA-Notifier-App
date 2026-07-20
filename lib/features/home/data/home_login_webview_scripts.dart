@@ -1,4 +1,4 @@
-import 'package:FANotifier/shared/fa/fa_webview_document_scripts.dart';
+import 'package:fanotifier/shared/fa/fa_webview_document_scripts.dart';
 
 const String homeLoginInitialHtml =
     '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#000;"></body></html>';

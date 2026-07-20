@@ -1,8 +1,8 @@
-import 'package:FANotifier/core/fa/fa_webview_cookie_service.dart';
-import 'package:FANotifier/features/submissions/data/edit_submission_navigation_service.dart';
-import 'package:FANotifier/features/submissions/data/edit_submission_webview_scripts.dart'
+import 'package:fanotifier/core/fa/fa_webview_cookie_service.dart';
+import 'package:fanotifier/features/submissions/data/edit_submission_navigation_service.dart';
+import 'package:fanotifier/features/submissions/data/edit_submission_webview_scripts.dart'
     as scripts;
-import 'package:FANotifier/features/submissions/domain/edit_submission_page_repository.dart';
+import 'package:fanotifier/features/submissions/domain/edit_submission_page_repository.dart';
 
 class EditSubmissionPageRepositoryImpl
     implements EditSubmissionPageRepository {

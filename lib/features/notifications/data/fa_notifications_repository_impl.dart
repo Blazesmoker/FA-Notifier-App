@@ -1,14 +1,14 @@
-import 'package:FANotifier/features/notifications/data/fa_notification_cookie_header_provider.dart';
-import 'package:FANotifier/features/notifications/data/fa_notification_media_repository.dart';
-import 'package:FANotifier/features/notifications/data/fa_notification_shout_repository.dart';
-import 'package:FANotifier/features/notifications/data/fa_notifications_page_parser.dart';
-import 'package:FANotifier/features/notifications/data/fa_notifications_remote_data_source.dart';
-import 'package:FANotifier/features/notifications/data/notification_removal_request_builder.dart';
-import 'package:FANotifier/features/notifications/data/simple_semaphore.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notifications_page_parser_state.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notifications_page_snapshot.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notifications_repository.dart';
+import 'package:fanotifier/features/notifications/data/fa_notification_cookie_header_provider.dart';
+import 'package:fanotifier/features/notifications/data/fa_notification_media_repository.dart';
+import 'package:fanotifier/features/notifications/data/fa_notification_shout_repository.dart';
+import 'package:fanotifier/features/notifications/data/fa_notifications_page_parser.dart';
+import 'package:fanotifier/features/notifications/data/fa_notifications_remote_data_source.dart';
+import 'package:fanotifier/features/notifications/data/notification_removal_request_builder.dart';
+import 'package:fanotifier/features/notifications/data/simple_semaphore.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notifications_page_parser_state.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notifications_page_snapshot.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notifications_repository.dart';
 
 class FaNotificationsRepositoryImpl implements FaNotificationsRepository {
   factory FaNotificationsRepositoryImpl({

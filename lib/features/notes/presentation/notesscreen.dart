@@ -1,31 +1,31 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'package:FANotifier/app/navigation/app_navigation.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/features/notes/presentation/message_detail_screen.dart';
-import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/features/notes/domain/notes_repository.dart';
-import 'package:FANotifier/features/notes/presentation/new_message.dart';
-import 'package:FANotifier/features/drawer/presentation/drawer_user_controller.dart';
-import 'package:FANotifier/features/notes/domain/notes_screen_view_state.dart';
-import 'package:FANotifier/features/notes/presentation/notesscreen_preview_dialog.dart';
-import 'package:FANotifier/features/notes/presentation/notesscreen_inbox.dart';
-import 'package:FANotifier/features/notes/presentation/notesscreen_sent.dart';
-import 'package:FANotifier/features/notes/presentation/notes_screen_controller.dart';
-import 'package:FANotifier/features/notes/presentation/trash_screen.dart';
+import 'package:fanotifier/app/navigation/app_navigation.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/features/notes/presentation/message_detail_screen.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/notes_repository.dart';
+import 'package:fanotifier/features/notes/presentation/new_message.dart';
+import 'package:fanotifier/features/drawer/presentation/drawer_user_controller.dart';
+import 'package:fanotifier/features/notes/domain/notes_screen_view_state.dart';
+import 'package:fanotifier/features/notes/presentation/notesscreen_preview_dialog.dart';
+import 'package:fanotifier/features/notes/presentation/notesscreen_inbox.dart';
+import 'package:fanotifier/features/notes/presentation/notesscreen_sent.dart';
+import 'package:fanotifier/features/notes/presentation/notes_screen_controller.dart';
+import 'package:fanotifier/features/notes/presentation/trash_screen.dart';
 
 class NotesScreen extends StatefulWidget {
   final GlobalKey<DrawerUserControllerState> drawerKey;
   final bool forceRefresh;
   final NotesRepository Function() repositoryFactory;
 
-  NotesScreen({
-    Key? key,
+  const NotesScreen({
+    super.key,
     required this.drawerKey,
     required this.repositoryFactory,
     this.forceRefresh = false,
-  }) : super(key: key);
+  });
 
   @override
   NotesScreenState createState() => NotesScreenState();

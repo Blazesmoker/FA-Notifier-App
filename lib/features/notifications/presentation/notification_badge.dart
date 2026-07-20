@@ -4,7 +4,7 @@ class NotificationBadge extends StatelessWidget {
   final String count;
   final String label;
 
-  const NotificationBadge({Key? key, required this.count, required this.label}) : super(key: key);
+  const NotificationBadge({super.key, required this.count, required this.label});
 
   @override
   Widget build(BuildContext context) {

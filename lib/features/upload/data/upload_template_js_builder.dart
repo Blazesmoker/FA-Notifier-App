@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:FANotifier/features/upload/domain/submission_template.dart';
+import 'package:fanotifier/features/upload/domain/submission_template.dart';
 
 String buildReadSubmissionTemplateFieldsScript() {
   return '''

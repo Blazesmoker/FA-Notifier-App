@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:FANotifier/features/profile/presentation/profilefavs.dart';
+import 'package:fanotifier/features/profile/presentation/profilefavs.dart';
 
 class UserProfileFavoritesSection extends StatefulWidget {
   const UserProfileFavoritesSection({

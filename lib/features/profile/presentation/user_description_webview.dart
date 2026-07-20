@@ -6,11 +6,11 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/profile/domain/user_description_repository.dart';
-import 'package:FANotifier/features/profile/domain/user_description_webview_content.dart';
-import 'package:FANotifier/shared/fa/fa_webview_document_scripts.dart';
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
+import 'package:fanotifier/features/profile/domain/user_description_repository.dart';
+import 'package:fanotifier/features/profile/domain/user_description_webview_content.dart';
+import 'package:fanotifier/shared/fa/fa_webview_document_scripts.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 
 enum UserDescriptionWebViewPauseReason { route, visibility, scrolling }
 
@@ -26,7 +26,7 @@ class UserDescriptionWebView extends StatefulWidget {
   final ValueChanged<bool>? onWebViewLoaded;
 
   const UserDescriptionWebView({
-    Key? key,
+    super.key,
     required this.sanitizedUsername,
     this.initialHtml,
     this.onDispose,
@@ -36,7 +36,7 @@ class UserDescriptionWebView extends StatefulWidget {
     this.fillAvailableHeight = false,
     this.forceHybridComposition = false,
     this.onWebViewLoaded,
-  }) : super(key: key);
+  });
 
   @override
   UserDescriptionWebViewState createState() => UserDescriptionWebViewState();
@@ -420,8 +420,8 @@ class UserDescriptionWebViewScreen extends StatelessWidget {
   final String sanitizedUsername;
   final String? initialHtml;
   const UserDescriptionWebViewScreen(
-      {Key? key, required this.sanitizedUsername, this.initialHtml})
-      : super(key: key);
+      {super.key, required this.sanitizedUsername, this.initialHtml})
+      ;
 
   @override
   Widget build(BuildContext context) {

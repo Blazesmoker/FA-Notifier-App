@@ -1,9 +1,9 @@
 import 'dart:typed_data';
 
-import 'package:FANotifier/features/submissions/data/openpost_image_service.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_media_export_result.dart';
-import 'package:FANotifier/shared/fa/fa_default_image_loader.dart';
-import 'package:FANotifier/shared/platform/image_export_service.dart';
+import 'package:fanotifier/features/submissions/data/openpost_image_service.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_media_export_result.dart';
+import 'package:fanotifier/shared/fa/fa_default_image_loader.dart';
+import 'package:fanotifier/shared/platform/image_export_service.dart';
 
 class OpenPostMediaExportService {
   const OpenPostMediaExportService({

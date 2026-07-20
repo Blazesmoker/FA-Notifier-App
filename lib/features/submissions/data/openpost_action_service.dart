@@ -1,9 +1,9 @@
-import 'package:FANotifier/features/submissions/data/openpost_delete_response_parser.dart';
-import 'package:FANotifier/features/submissions/data/openpost_url_builder.dart';
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_delete_models.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_action_result.dart';
+import 'package:fanotifier/features/submissions/data/openpost_delete_response_parser.dart';
+import 'package:fanotifier/features/submissions/data/openpost_url_builder.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_delete_models.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_action_result.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class OpenPostActionService {

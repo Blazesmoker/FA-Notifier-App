@@ -1,18 +1,18 @@
 // keyword_search_screen.dart
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/search/presentation/fasearchimage.dart';
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/shared/utils/content_rating_filters.dart';
-import 'package:FANotifier/features/search/presentation/search_filters_screen.dart';
+import 'package:fanotifier/features/search/presentation/fasearchimage.dart';
+import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:fanotifier/shared/utils/content_rating_filters.dart';
+import 'package:fanotifier/features/search/presentation/search_filters_screen.dart';
 
 class KeywordSearchScreen extends StatefulWidget {
   final String initialKeyword;
 
-  const KeywordSearchScreen({required this.initialKeyword, Key? key})
-      : super(key: key);
+  const KeywordSearchScreen({required this.initialKeyword, super.key})
+      ;
 
   @override
-  _KeywordSearchScreenState createState() => _KeywordSearchScreenState();
+  State<KeywordSearchScreen> createState() => _KeywordSearchScreenState();
 }
 
 class _KeywordSearchScreenState extends State<KeywordSearchScreen> {

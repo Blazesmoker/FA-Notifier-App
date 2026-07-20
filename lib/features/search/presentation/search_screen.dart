@@ -2,8 +2,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:FANotifier/features/search/presentation/fasearchimage.dart';
-import 'package:FANotifier/features/search/presentation/search_filters_screen.dart';
+import 'package:fanotifier/features/search/presentation/fasearchimage.dart';
+import 'package:fanotifier/features/search/presentation/search_filters_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   final Map<String, String> searchFilters;
@@ -14,8 +14,8 @@ class SearchScreen extends StatefulWidget {
     required this.searchFilters,
     required this.sfwEnabled,
     required this.onFilterUpdated,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   SearchScreenState createState() => SearchScreenState();

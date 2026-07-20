@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/notifications/presentation/notification_settings_provider.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_settings_provider.dart';
 
 class NotificationCounterSettingsController {
   const NotificationCounterSettingsController(this._settings);

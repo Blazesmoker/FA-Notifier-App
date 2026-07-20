@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:FANotifier/shared/fa/domain/submission_comment_repository.dart';
-import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
-import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
+import 'package:fanotifier/shared/fa/domain/submission_comment_repository.dart';
+import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
 
 class AddPostCommentScreen extends StatefulWidget {
   final String submissionTitle;
@@ -16,8 +16,8 @@ class AddPostCommentScreen extends StatefulWidget {
     required this.onSendComment,
     required this.uniqueNumber,
     this.commentRepository,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   State<AddPostCommentScreen> createState() => _AddPostCommentScreenState();

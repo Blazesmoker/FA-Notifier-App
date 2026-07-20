@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/features/profile/domain/profile_shout_repository.dart';
-import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
-import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
+import 'package:fanotifier/features/profile/domain/profile_shout_repository.dart';
+import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
 
 class PostShoutScreen extends StatefulWidget {
   final String username;
 
-  const PostShoutScreen({Key? key, required this.username}) : super(key: key);
+  const PostShoutScreen({super.key, required this.username});
 
   @override
-  _PostShoutScreenState createState() => _PostShoutScreenState();
+  State<PostShoutScreen> createState() => _PostShoutScreenState();
 }
 
 class _PostShoutScreenState extends State<PostShoutScreen> {
@@ -75,6 +75,7 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
       shout: _shoutController.text.trim(),
     );
 
+    if (!mounted) return;
     if (result.message != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

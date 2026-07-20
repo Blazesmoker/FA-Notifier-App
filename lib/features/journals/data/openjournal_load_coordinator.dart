@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 
-import 'package:FANotifier/features/journals/data/openjournal_api_service.dart';
-import 'package:FANotifier/features/journals/domain/journal_availability_detector.dart';
-import 'package:FANotifier/features/journals/domain/openjournal_load_result.dart';
+import 'package:fanotifier/features/journals/data/openjournal_api_service.dart';
+import 'package:fanotifier/features/journals/domain/journal_availability_detector.dart';
+import 'package:fanotifier/features/journals/domain/openjournal_load_result.dart';
 
 class OpenJournalLoadCoordinator {
   const OpenJournalLoadCoordinator({

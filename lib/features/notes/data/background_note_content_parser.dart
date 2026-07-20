@@ -1,6 +1,6 @@
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/shared/utils/notes_notifications_text_edit.dart';
+import 'package:fanotifier/shared/utils/notes_notifications_text_edit.dart';
 
 String parseBackgroundNoteContent(dynamic htmlBody) {
   final document = html_parser.parse(htmlBody);

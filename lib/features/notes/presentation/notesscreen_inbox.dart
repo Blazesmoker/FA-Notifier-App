@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/features/notes/presentation/notesscreen_widgets.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/presentation/notesscreen_widgets.dart';
 
 class InboxTab extends StatelessWidget {
   final bool isLoading;
@@ -21,7 +21,7 @@ class InboxTab extends StatelessWidget {
   final void Function(Message msg) onTapItem;
 
   const InboxTab({
-    Key? key,
+    super.key,
     required this.isLoading,
     required this.isLoadingMore,
     required this.errorMessage,
@@ -37,7 +37,7 @@ class InboxTab extends StatelessWidget {
     required this.selectedIds,
     required this.onLongPressItem,
     required this.onTapItem,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

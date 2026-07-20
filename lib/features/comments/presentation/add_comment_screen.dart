@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:FANotifier/shared/fa/domain/submission_comment_repository.dart';
-import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
-import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
+import 'package:fanotifier/shared/fa/domain/submission_comment_repository.dart';
+import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
 
 class AddCommentScreen extends StatefulWidget {
   final String submissionTitle;
@@ -16,11 +16,11 @@ class AddCommentScreen extends StatefulWidget {
     required this.onSendComment,
     required this.uniqueNumber,
     this.commentRepository,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
-  _AddCommentScreenState createState() => _AddCommentScreenState();
+  State<AddCommentScreen> createState() => _AddCommentScreenState();
 }
 
 class _AddCommentScreenState extends State<AddCommentScreen> {
@@ -44,11 +44,9 @@ class _AddCommentScreenState extends State<AddCommentScreen> {
         submissionId: widget.uniqueNumber,
       );
 
+      if (!mounted) return;
       if (success) {
         widget.onSendComment(commentText);
-        Navigator.pop(context, true);
-
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Comment posted!'),
@@ -56,8 +54,8 @@ class _AddCommentScreenState extends State<AddCommentScreen> {
             duration: const Duration(seconds: 2),
           ),
         );
+        Navigator.pop(context, true);
       } else {
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Error posting comment. Please try again.'),
@@ -67,7 +65,7 @@ class _AddCommentScreenState extends State<AddCommentScreen> {
         );
       }
     } catch (e) {
-
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error: $e'),
@@ -77,6 +75,7 @@ class _AddCommentScreenState extends State<AddCommentScreen> {
       );
     }
 
+    if (!mounted) return;
     setState(() {
       _isSending = false;
     });

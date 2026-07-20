@@ -3,15 +3,15 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-import 'package:FANotifier/features/profile/domain/shout.dart';
-import 'package:FANotifier/features/profile/data/user_profile_html_parser.dart';
-import 'package:FANotifier/features/profile/data/user_profile_shouts_parser.dart';
-import 'package:FANotifier/features/profile/data/user_profile_controls_shout_matcher.dart';
-import 'package:FANotifier/features/profile/data/user_profile_controls_shouts_parser.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_api_models.dart';
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/shared/fa/fa_username.dart';
+import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/features/profile/data/user_profile_html_parser.dart';
+import 'package:fanotifier/features/profile/data/user_profile_shouts_parser.dart';
+import 'package:fanotifier/features/profile/data/user_profile_controls_shout_matcher.dart';
+import 'package:fanotifier/features/profile/data/user_profile_controls_shouts_parser.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/shared/fa/fa_username.dart';
 import 'package:flutter/material.dart';
 
 UserProfileParsed parseUserProfileHtml(String htmlBody) {

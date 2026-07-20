@@ -1,6 +1,6 @@
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/profile/domain/profile_shout_text_repository.dart';
+import 'package:fanotifier/features/profile/domain/profile_shout_text_repository.dart';
 
 class ShoutTextParser implements ProfileShoutTextRepository {
   const ShoutTextParser();

@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:FANotifier/features/notes/domain/inbox_second_page_policy.dart';
-import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/features/notes/domain/notes_page_result.dart';
-import 'package:FANotifier/features/notes/domain/notes_repository.dart';
-import 'package:FANotifier/features/notes/domain/notes_screen_view_state.dart';
+import 'package:fanotifier/features/notes/domain/inbox_second_page_policy.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/notes_page_result.dart';
+import 'package:fanotifier/features/notes/domain/notes_repository.dart';
+import 'package:fanotifier/features/notes/domain/notes_screen_view_state.dart';
 
 typedef NotesScreenStateUpdater = void Function(VoidCallback update);
 

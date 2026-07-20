@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/shared/fa/domain/submission_comment_repository.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/shared/fa/domain/submission_comment_repository.dart';
 
 String extractClassicSubmissionCommentReplyId(String input) {
   final regex = RegExp(r'/replyto/submission/(\d+)/');
@@ -36,6 +36,7 @@ class PostCommentService implements SubmissionCommentRepository {
     );
   }
 
+  @override
   Future<bool> submitReply({
     required String message,
     required String submissionId,

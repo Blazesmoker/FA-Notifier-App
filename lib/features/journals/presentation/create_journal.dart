@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 
-import 'package:FANotifier/features/journals/domain/create_journal_repository.dart';
-import 'package:FANotifier/shared/widgets/tags_and_codes_webview_widget.dart';
-import 'package:FANotifier/features/journals/presentation/openjournal.dart';
+import 'package:fanotifier/features/journals/domain/create_journal_repository.dart';
+import 'package:fanotifier/shared/widgets/tags_and_codes_webview_widget.dart';
+import 'package:fanotifier/features/journals/presentation/openjournal.dart';
 
 class CreateJournalScreen extends StatefulWidget {
   final String? uniqueNumber;
@@ -14,14 +14,14 @@ class CreateJournalScreen extends StatefulWidget {
   final CreateJournalRepository? repository;
 
   const CreateJournalScreen({
-    Key? key,
+    super.key,
     this.uniqueNumber,
     this.onJournalSubmitted,
     this.repository,
-  }) : super(key: key);
+  });
 
   @override
-  _CreateJournalScreenState createState() => _CreateJournalScreenState();
+  State<CreateJournalScreen> createState() => _CreateJournalScreenState();
 }
 
 class _CreateJournalScreenState extends State<CreateJournalScreen>

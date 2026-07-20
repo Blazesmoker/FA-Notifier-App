@@ -1,15 +1,15 @@
 import 'dart:convert';
 
-import 'package:FANotifier/features/notes/domain/note_image_preview_mode.dart';
-import 'package:FANotifier/features/notes/domain/note_image_preview_link.dart';
-import 'package:FANotifier/features/notes/domain/note_submission_preview.dart';
-import 'package:FANotifier/features/notes/domain/note_submission_preview_repository.dart';
-import 'package:FANotifier/features/profile/domain/avatar_image_data.dart';
-import 'package:FANotifier/features/profile/domain/profile_media_export_repository.dart';
-import 'package:FANotifier/features/profile/presentation/image_inspect_screen.dart';
-import 'package:FANotifier/shared/fa/user_submitted_html_linkifier.dart';
-import 'package:FANotifier/shared/navigation/fa_link_handler.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/features/notes/domain/note_image_preview_mode.dart';
+import 'package:fanotifier/features/notes/domain/note_image_preview_link.dart';
+import 'package:fanotifier/features/notes/domain/note_submission_preview.dart';
+import 'package:fanotifier/features/notes/domain/note_submission_preview_repository.dart';
+import 'package:fanotifier/features/profile/domain/avatar_image_data.dart';
+import 'package:fanotifier/features/profile/domain/profile_media_export_repository.dart';
+import 'package:fanotifier/features/profile/presentation/image_inspect_screen.dart';
+import 'package:fanotifier/shared/fa/user_submitted_html_linkifier.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:html/dom.dart' as dom;

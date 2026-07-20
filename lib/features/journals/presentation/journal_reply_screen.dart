@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html;
 import 'package:provider/provider.dart';
 
-import 'package:FANotifier/features/journals/domain/openjournal_repository.dart';
-import 'package:FANotifier/shared/utils/bbcode_context_menu.dart';
-import 'package:FANotifier/shared/widgets/confirm_close_dialog.dart';
+import 'package:fanotifier/features/journals/domain/openjournal_repository.dart';
+import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
+import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
 
 class JournalReplyScreen extends StatefulWidget {
   final String submissionId; // Journal ID
@@ -31,11 +31,11 @@ class JournalReplyScreen extends StatefulWidget {
     this.repository,
     this.commentText,
     this.commentHtml,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
-  _JournalReplyScreenState createState() => _JournalReplyScreenState();
+  State<JournalReplyScreen> createState() => _JournalReplyScreenState();
 }
 
 class _JournalReplyScreenState extends State<JournalReplyScreen> {
@@ -89,6 +89,7 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
         commentId: widget.commentId,
       );
 
+      if (!mounted) return;
       if (success) {
         widget.onSendReply(replyText);
         _replyController.clear();
@@ -97,9 +98,10 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
         _showError('Failed to post reply.');
       }
     } catch (e) {
+      if (!mounted) return;
       _showError(e.toString());
     } finally {
-      setState(() => _isSending = false);
+      if (mounted) setState(() => _isSending = false);
     }
   }
 

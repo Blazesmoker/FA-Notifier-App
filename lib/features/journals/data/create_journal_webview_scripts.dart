@@ -1,4 +1,4 @@
-import 'package:FANotifier/shared/fa/fa_bbcode_webview_scripts.dart';
+import 'package:fanotifier/shared/fa/fa_bbcode_webview_scripts.dart';
 
 String buildFindCreatedJournalPathScript() {
   return '''
@@ -21,7 +21,7 @@ String buildJournalFormInjectionScript() {
 
         var style = document.createElement('style');
         style.type = 'text/css';
-        style.innerHTML = \`
+        style.innerHTML = `
           .sidebar {
             display: none !important;
           }
@@ -59,7 +59,7 @@ String buildJournalFormInjectionScript() {
           .dropzone { 
             display: none !important; 
           }
-        \`;
+        `;
         document.head.appendChild(style);
 
         var headers = document.querySelectorAll('.section-header h2');

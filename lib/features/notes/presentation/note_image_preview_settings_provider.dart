@@ -1,5 +1,5 @@
-import 'package:FANotifier/features/notes/data/note_image_preview_preference.dart';
-import 'package:FANotifier/features/notes/domain/note_image_preview_mode.dart';
+import 'package:fanotifier/features/notes/data/note_image_preview_preference.dart';
+import 'package:fanotifier/features/notes/domain/note_image_preview_mode.dart';
 import 'package:flutter/foundation.dart';
 
 class NoteImagePreviewSettingsProvider with ChangeNotifier {

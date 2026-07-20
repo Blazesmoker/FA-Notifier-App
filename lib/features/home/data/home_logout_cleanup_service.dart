@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
-import 'package:FANotifier/features/home/data/home_auth_cookie_service.dart';
-import 'package:FANotifier/features/home/data/home_profile_cache.dart';
-import 'package:FANotifier/features/home/data/home_session_preference.dart';
+import 'package:fanotifier/features/home/data/home_auth_cookie_service.dart';
+import 'package:fanotifier/features/home/data/home_profile_cache.dart';
+import 'package:fanotifier/features/home/data/home_session_preference.dart';
 
 class HomeLogoutCleanupService {
   HomeLogoutCleanupService({

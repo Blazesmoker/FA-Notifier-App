@@ -1,6 +1,6 @@
 import 'package:html/parser.dart';
 
-import 'package:FANotifier/features/profile/domain/profile_journals_models.dart';
+import 'package:fanotifier/features/profile/domain/profile_journals_models.dart';
 
 ProfileJournalsParseResult parseProfileJournalsHtml(String html) {
   final document = parse(html);

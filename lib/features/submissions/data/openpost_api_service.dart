@@ -1,12 +1,12 @@
 import 'package:html/dom.dart' as dom;
-import 'package:FANotifier/core/utils/html_tags_debug.dart';
-import 'package:FANotifier/features/submissions/data/openpost_comments_parser.dart';
-import 'package:FANotifier/features/submissions/data/openpost_html_link_normalizer.dart';
-import 'package:FANotifier/features/submissions/data/openpost_submission_metadata_parser.dart';
-import 'package:FANotifier/features/submissions/data/openpost_submission_stats_parser.dart';
-import 'package:FANotifier/features/submissions/data/openpost_submission_attachment_parser.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
-import 'package:FANotifier/shared/fa/parsing_utils.dart';
+import 'package:fanotifier/core/utils/html_tags_debug.dart';
+import 'package:fanotifier/features/submissions/data/openpost_comments_parser.dart';
+import 'package:fanotifier/features/submissions/data/openpost_html_link_normalizer.dart';
+import 'package:fanotifier/features/submissions/data/openpost_submission_metadata_parser.dart';
+import 'package:fanotifier/features/submissions/data/openpost_submission_stats_parser.dart';
+import 'package:fanotifier/features/submissions/data/openpost_submission_attachment_parser.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_models.dart';
+import 'package:fanotifier/shared/fa/parsing_utils.dart';
 
 class OpenPostApiService {
   /// Parses the main post document and returns structured data.
@@ -88,7 +88,7 @@ class OpenPostApiService {
             '.submission-description, td.alt1[width="70%"][valign="top"][align="left"][style*="padding:8px"]');
     String fixedDescription = '';
 
-    void _fixPrefixedLinks(dom.Element root) {
+    void fixPrefixedLinks(dom.Element root) {
       for (final a in root.querySelectorAll('a[href]')) {
         final href = a.attributes['href']!;
         if (href.startsWith('/https://') || href.startsWith('/http://')) {
@@ -98,7 +98,7 @@ class OpenPostApiService {
     }
 
     if (descElem != null) {
-      _fixPrefixedLinks(descElem);
+      fixPrefixedLinks(descElem);
       fixedDescription = normalizeOpenPostTruncatedLinks(descElem.outerHtml);
     }
 

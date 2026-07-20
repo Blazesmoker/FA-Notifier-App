@@ -1,9 +1,9 @@
-import 'package:FANotifier/features/home/data/home_login_html_detector.dart'
+import 'package:fanotifier/features/home/data/home_login_html_detector.dart'
     as home_login_html;
-import 'package:FANotifier/features/home/data/home_login_webview_load_throttle.dart';
-import 'package:FANotifier/features/home/data/home_login_webview_navigation_policy.dart';
-import 'package:FANotifier/features/home/data/home_login_webview_scripts.dart';
-import 'package:FANotifier/features/home/domain/home_login_webview_support.dart';
+import 'package:fanotifier/features/home/data/home_login_webview_load_throttle.dart';
+import 'package:fanotifier/features/home/data/home_login_webview_navigation_policy.dart';
+import 'package:fanotifier/features/home/data/home_login_webview_scripts.dart';
+import 'package:fanotifier/features/home/domain/home_login_webview_support.dart';
 
 class HomeLoginWebViewSupportImpl implements HomeLoginWebViewSupport {
   const HomeLoginWebViewSupportImpl({

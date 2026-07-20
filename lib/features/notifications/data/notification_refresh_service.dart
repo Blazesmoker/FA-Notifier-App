@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:FANotifier/features/notifications/domain/notification_refresh_port.dart';
+import 'package:fanotifier/features/notifications/domain/notification_refresh_port.dart';
 
 class NotificationRefreshService implements NotificationRefreshPort {
   static final NotificationRefreshService _instance = NotificationRefreshService._internal();
@@ -9,8 +9,7 @@ class NotificationRefreshService implements NotificationRefreshPort {
     return _instance;
   }
 
-  NotificationRefreshService._internal() {
-  }
+  NotificationRefreshService._internal();
 
   final StreamController<void> _refreshController = StreamController<void>.broadcast();
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:FANotifier/shared/utils/fa_link_matcher.dart';
+import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
 
 abstract class FaLinkNavigator {
   const FaLinkNavigator();

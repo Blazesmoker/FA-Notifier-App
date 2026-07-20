@@ -1,14 +1,14 @@
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/notifications/data/fa_notification_link_parser.dart';
-import 'package:FANotifier/features/notifications/data/notification_section_parser_helpers.dart';
-import 'package:FANotifier/features/notifications/data/notification_shout_parser.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notifications_page_parser_state.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notifications_page_snapshot.dart';
-import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
-import 'package:FANotifier/shared/fa/domain/notifications.dart';
+import 'package:fanotifier/features/notifications/data/fa_notification_link_parser.dart';
+import 'package:fanotifier/features/notifications/data/notification_section_parser_helpers.dart';
+import 'package:fanotifier/features/notifications/data/notification_shout_parser.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notifications_page_parser_state.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notifications_page_snapshot.dart';
+import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
+import 'package:fanotifier/shared/fa/domain/notifications.dart';
 
 FaNotificationsPageSnapshot parseFaNotificationsPage(
   String htmlBody, {
@@ -216,16 +216,12 @@ FaNotificationsPageSnapshot parseFaNotificationsPage(
           url = journLink.attributes['href'];
           journalId = extractNotificationJournalIdFromHref(url);
         }
-        if (username != null && journalId != null) {
-          content = '$username replied to your journal $journalId';
-        } else {
-          content = content
-              .replaceFirst(
-                RegExp(r'\s*has replied to your journal titled\s*'),
-                ' replied to your journal ',
-              )
-              .replaceAll('"', '');
-        }
+        content = content
+            .replaceFirst(
+              RegExp(r'\s*has replied to your journal titled\s*'),
+              ' replied to your journal ',
+            )
+            .replaceAll('"', '');
         if (content.isNotEmpty) {
           content = content.substring(0, content.length - 1);
         }

@@ -1,5 +1,5 @@
-import 'package:FANotifier/shared/fa/domain/fa_notification_state_port.dart';
-import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
+import 'package:fanotifier/shared/fa/domain/fa_notification_state_port.dart';
+import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 
 abstract interface class FaActivitiesPollingPort {
   void start({required FaNotificationStatePort faNotificationService});

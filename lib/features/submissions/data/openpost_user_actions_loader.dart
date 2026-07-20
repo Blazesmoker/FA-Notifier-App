@@ -1,6 +1,6 @@
-import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_page_response.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_user_actions_load_result.dart';
+import 'package:fanotifier/features/submissions/data/openpost_html_parser.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_page_response.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_user_actions_load_result.dart';
 
 class OpenPostUserActionsLoader {
   const OpenPostUserActionsLoader();

@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as dom;
 
-import 'package:FANotifier/features/notifications/data/fa_notification_link_parser.dart';
-import 'package:FANotifier/features/notifications/domain/fa_notification_models.dart';
+import 'package:fanotifier/features/notifications/data/fa_notification_link_parser.dart';
+import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
 
 String extractNotificationMenubarUsername(dom.Document document) {
   final body = document.querySelector('body');

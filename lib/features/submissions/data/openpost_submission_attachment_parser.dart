@@ -1,7 +1,7 @@
 import 'package:html/dom.dart' as dom;
 
-import 'package:FANotifier/features/submissions/data/openpost_submission_url.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_submission_attachment.dart';
+import 'package:fanotifier/features/submissions/data/openpost_submission_url.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_submission_attachment.dart';
 
 const Set<String> _musicExtensions = <String>{'mp3', 'wav', 'mid'};
 const Set<String> _textExtensions = <String>{

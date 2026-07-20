@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/submissions/domain/openpost_models.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_models.dart';
 
 class OpenPostSubmissionStats {
   const OpenPostSubmissionStats({

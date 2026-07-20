@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-import 'package:FANotifier/features/upload/data/submission_template_store.dart';
-import 'package:FANotifier/features/upload/domain/submission_template.dart';
+import 'package:fanotifier/features/upload/data/submission_template_store.dart';
+import 'package:fanotifier/features/upload/domain/submission_template.dart';
 
 class SubmissionTemplateSaveService {
   const SubmissionTemplateSaveService({

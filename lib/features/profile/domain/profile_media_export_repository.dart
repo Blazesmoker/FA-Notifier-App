@@ -1,4 +1,4 @@
-import 'package:FANotifier/features/profile/domain/avatar_image_data.dart';
+import 'package:fanotifier/features/profile/domain/avatar_image_data.dart';
 
 abstract interface class ProfileMediaExportRepository {
   Future<bool> requestImageExportPermission();

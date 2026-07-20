@@ -1,5 +1,5 @@
-import 'package:FANotifier/shared/theme/app_theme.dart';
-import 'package:FANotifier/core/links/app_external_links.dart';
+import 'package:fanotifier/shared/theme/app_theme.dart';
+import 'package:fanotifier/core/links/app_external_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher_string.dart';

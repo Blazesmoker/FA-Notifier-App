@@ -4,16 +4,16 @@ import 'dart:async';
 import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:FANotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'package:FANotifier/features/profile/domain/profile_gallery_repository.dart';
-import 'package:FANotifier/features/profile/domain/profile_gallery_favorite_repository.dart';
-import 'package:FANotifier/features/profile/domain/fa_folder.dart';
-import 'package:FANotifier/shared/widgets/PulsatingLoadingIndicator.dart';
-import 'package:FANotifier/shared/widgets/heart_animation_optimized.dart';
-import 'package:FANotifier/shared/widgets/fa_thumbnail_display.dart';
-import 'package:FANotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/features/profile/domain/profile_gallery_repository.dart';
+import 'package:fanotifier/features/profile/domain/profile_gallery_favorite_repository.dart';
+import 'package:fanotifier/features/profile/domain/fa_folder.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/shared/widgets/heart_animation_optimized.dart';
+import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
+import 'package:fanotifier/features/submissions/presentation/openpost.dart';
 
 /// Callback used to report the list of folders to a parent widget.
 typedef FoldersCallback = void Function(List<FaFolder>);
@@ -25,11 +25,11 @@ class ProfileGallerySliver extends StatefulWidget {
   final FoldersCallback onFoldersParsed;
 
   const ProfileGallerySliver({
-    Key? key,
+    super.key,
     required this.username,
     required this.onFoldersParsed,
     this.selectedFolderUrl,
-  }) : super(key: key);
+  });
 
   @override
   ProfileGallerySliverState createState() => ProfileGallerySliverState();
@@ -129,18 +129,21 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
         url: _nextPageUrl!,
         selectedFolderUrl: widget.selectedFolderUrl,
       );
-      if (_isDisposed || fetchGeneration != _fetchGeneration) return;
+      if (_isDisposed || !mounted || fetchGeneration != _fetchGeneration) return;
 
       _images.addAll(result.posts);
       widget.onFoldersParsed(result.folders);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_isDisposed || fetchGeneration != _fetchGeneration) return;
+        if (_isDisposed || !mounted || fetchGeneration != _fetchGeneration) {
+          return;
+        }
         for (var post in result.posts) {
           faNetworkImageProvider(post['thumbnailUrl']).then((provider) {
-            if (!_isDisposed && fetchGeneration == _fetchGeneration) {
-              precacheImage(provider, context);
+            if (_isDisposed || !mounted || fetchGeneration != _fetchGeneration) {
+              return;
             }
+            precacheImage(provider, context);
           });
         }
       });
@@ -151,7 +154,9 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
         _isLoading = false;
       });
     } catch (e) {
-      if (_isDisposed || fetchGeneration != _fetchGeneration) return;
+      if (_isDisposed || !mounted || fetchGeneration != _fetchGeneration) {
+        return;
+      }
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error loading gallery: $e')),
@@ -215,8 +220,8 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
       isFav: isFav,
       favUrl: favUrl,
       unfavUrl: unfavUrl,
-      onPostComplete: (num, finalState) {
-        _refreshLinksAfterPost(num);
+      onPostComplete: (uniqueNumber, finalState) {
+        _refreshLinksAfterPost(uniqueNumber);
       },
     );
   }
@@ -361,7 +366,7 @@ class _FavImageTile extends StatelessWidget {
   final ValueChanged<bool> onToggle;
   final VoidCallback onTap;
   const _FavImageTile({
-    Key? key,
+    super.key,
     required this.width,
     required this.height,
     required this.aspectRatio,
@@ -374,7 +379,7 @@ class _FavImageTile extends StatelessWidget {
     required this.author,
     required this.onToggle,
     required this.onTap,
-  }) : super(key: key);
+  });
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(

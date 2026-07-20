@@ -1,5 +1,5 @@
-import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
-import 'package:FANotifier/shared/fa/domain/notifications.dart';
+import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
+import 'package:fanotifier/shared/fa/domain/notifications.dart';
 
 class FaNotificationsPageParserState {
   FaNotificationsPageParserState({

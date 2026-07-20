@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:FANotifier/features/notes/domain/message_model.dart';
-import 'package:FANotifier/features/notes/domain/notes_page_result.dart';
-import 'package:FANotifier/features/notes/domain/notes_unread_notification_result.dart';
-import 'package:FANotifier/shared/fa/domain/notification_counts.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/notes_page_result.dart';
+import 'package:fanotifier/features/notes/domain/notes_unread_notification_result.dart';
+import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 
 typedef NotesRepositoryFactory = NotesRepository Function();
 

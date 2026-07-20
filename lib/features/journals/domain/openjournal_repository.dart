@@ -1,5 +1,5 @@
-import 'package:FANotifier/features/journals/domain/journal_deletion_result.dart';
-import 'package:FANotifier/features/journals/domain/openjournal_load_result.dart';
+import 'package:fanotifier/features/journals/domain/journal_deletion_result.dart';
+import 'package:fanotifier/features/journals/domain/openjournal_load_result.dart';
 
 abstract class OpenJournalRepository {
   Future<OpenJournalLoadResult> loadJournal(String journalId);

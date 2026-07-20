@@ -1,9 +1,9 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/profile/domain/profile_posts_parse_result.dart';
-import 'package:FANotifier/features/profile/domain/fa_folder.dart';
-import 'package:FANotifier/shared/fa/fa_thumbnail_parser.dart';
+import 'package:fanotifier/features/profile/domain/profile_posts_parse_result.dart';
+import 'package:fanotifier/features/profile/domain/fa_folder.dart';
+import 'package:fanotifier/shared/fa/fa_thumbnail_parser.dart';
 
 class ProfileGalleryHtmlParseResult {
   final List<Map<String, dynamic>> posts;

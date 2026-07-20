@@ -1,7 +1,7 @@
-import 'package:FANotifier/features/submissions/data/openpost_api_service.dart';
-import 'package:FANotifier/features/submissions/data/openpost_html_parser.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_details_load_result.dart';
-import 'package:FANotifier/features/submissions/domain/openpost_page_response.dart';
+import 'package:fanotifier/features/submissions/data/openpost_api_service.dart';
+import 'package:fanotifier/features/submissions/data/openpost_html_parser.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_details_load_result.dart';
+import 'package:fanotifier/features/submissions/domain/openpost_page_response.dart';
 
 class OpenPostDetailsLoader {
   const OpenPostDetailsLoader();

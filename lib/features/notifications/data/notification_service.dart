@@ -5,11 +5,11 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:FANotifier/features/notifications/data/activities_notification_state.dart';
-import 'package:FANotifier/features/notifications/data/pending_navigation_store.dart';
-import 'package:FANotifier/features/notifications/domain/notification_payloads.dart';
-import 'package:FANotifier/core/logging/app_logging.dart';
-import 'package:FANotifier/core/notifications/domain/local_notification_gateway.dart';
+import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
+import 'package:fanotifier/features/notifications/data/pending_navigation_store.dart';
+import 'package:fanotifier/features/notifications/domain/notification_payloads.dart';
+import 'package:fanotifier/core/logging/app_logging.dart';
+import 'package:fanotifier/core/notifications/domain/local_notification_gateway.dart';
 
 typedef NotificationTapHandler = Future<void> Function(
   String payload,
@@ -247,6 +247,7 @@ class NotificationService implements LocalNotificationGateway {
   String _capitalize(String s) =>
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
+  @override
   Future<void> showNotification(
     int id,
     String title,

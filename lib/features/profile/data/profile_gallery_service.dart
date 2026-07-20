@@ -4,13 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/features/profile/data/profile_posts_parser.dart';
-import 'package:FANotifier/features/profile/domain/profile_gallery_page_data.dart';
-import 'package:FANotifier/features/profile/domain/profile_gallery_repository.dart';
-import 'package:FANotifier/features/profile/domain/profile_submission_data.dart';
-import 'package:FANotifier/shared/fa/parsing/submission_favorite_links_parser.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:fanotifier/features/profile/data/profile_posts_parser.dart';
+import 'package:fanotifier/features/profile/domain/profile_gallery_page_data.dart';
+import 'package:fanotifier/features/profile/domain/profile_gallery_repository.dart';
+import 'package:fanotifier/features/profile/domain/profile_submission_data.dart';
+import 'package:fanotifier/shared/fa/parsing/submission_favorite_links_parser.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
 
 String buildDefaultProfileGalleryUrl(String username) {
   return 'https://www.furaffinity.net/gallery/$username/';

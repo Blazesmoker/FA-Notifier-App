@@ -94,7 +94,7 @@ String _buildUploadInitialIosScript() {
         (function() {
           var style = document.createElement('style');
           style.type = 'text/css';
-          style.innerHTML = \`
+          style.innerHTML = `
             .mobile-navigation,
             #header,
             #footer,
@@ -130,7 +130,7 @@ String _buildUploadInitialIosScript() {
               display: block !important;
               visibility: visible !important;
             }
-          \`;
+          `;
           document.head.appendChild(style);
           
           function ensureTurnstile() {
@@ -164,7 +164,7 @@ String _buildUploadInitialDefaultScript() {
         (function() {
           var style = document.createElement('style');
           style.type = 'text/css';
-          style.innerHTML = \`
+          style.innerHTML = `
             .mobile-navigation,
             #header,
             #footer,
@@ -193,7 +193,7 @@ String _buildUploadInitialDefaultScript() {
               margin: 0 !important;
               padding: 0 !important;
             }
-          \`;
+          `;
           document.head.appendChild(style);
         })();
       ''';
@@ -204,7 +204,7 @@ String _buildUploadFinalizeIosScript() {
         (function() {
           var style = document.createElement('style');
           style.type = 'text/css';
-          style.innerHTML = \`
+          style.innerHTML = `
             .mobile-navigation,
             #header,
             #footer,
@@ -238,7 +238,7 @@ String _buildUploadFinalizeIosScript() {
               display: block !important;
               visibility: visible !important;
             }
-          \`;
+          `;
           document.head.appendChild(style);
           
           function ensureTurnstile() {
@@ -272,7 +272,7 @@ String _buildUploadFinalizeDefaultScript() {
         (function() {
           var style = document.createElement('style');
           style.type = 'text/css';
-          style.innerHTML = \`
+          style.innerHTML = `
             .mobile-navigation,
             #header,
             #footer,
@@ -299,7 +299,7 @@ String _buildUploadFinalizeDefaultScript() {
               margin: 0 !important;
               padding: 0 !important;
             }
-          \`;
+          `;
           document.head.appendChild(style);
         })();
       ''';

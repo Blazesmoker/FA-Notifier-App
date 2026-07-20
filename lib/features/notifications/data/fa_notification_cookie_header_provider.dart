@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'package:FANotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 
 class FaNotificationCookieHeaderProvider {
   const FaNotificationCookieHeaderProvider();

@@ -2,12 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
-import 'package:FANotifier/features/comments/data/fa_edit_comment_parser.dart';
-import 'package:FANotifier/features/comments/domain/comment_edit_models.dart';
-import 'package:FANotifier/features/comments/domain/comment_edit_repository.dart';
-import 'package:FANotifier/core/fa/fa_cookie_helper.dart';
-import 'package:FANotifier/core/network/fa_http.dart';
-import 'package:FANotifier/core/network/fa_request_coordinator.dart';
+import 'package:fanotifier/features/comments/data/fa_edit_comment_parser.dart';
+import 'package:fanotifier/features/comments/domain/comment_edit_models.dart';
+import 'package:fanotifier/features/comments/domain/comment_edit_repository.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 
 class FaEditCommentService {
   FaEditCommentService({http.Client? client}) : _client = client ?? http.Client();

@@ -1,8 +1,8 @@
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:FANotifier/features/submissions/data/openpost_html_link_normalizer.dart';
-import 'package:FANotifier/shared/fa/parsing_utils.dart';
+import 'package:fanotifier/features/submissions/data/openpost_html_link_normalizer.dart';
+import 'package:fanotifier/shared/fa/parsing_utils.dart';
 
 List<Map<String, dynamic>> parseOpenPostComments(dom.Document document) {
   final commentContainers =

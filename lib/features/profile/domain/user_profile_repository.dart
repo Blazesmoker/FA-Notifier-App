@@ -1,7 +1,7 @@
-import 'package:FANotifier/features/profile/domain/shout.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_api_models.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_load_result.dart';
-import 'package:FANotifier/features/profile/domain/user_profile_shout_deletion_result.dart';
+import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_load_result.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_shout_deletion_result.dart';
 
 abstract class UserProfileRepository {
   Future<UserProfileLoadResult> loadProfile({

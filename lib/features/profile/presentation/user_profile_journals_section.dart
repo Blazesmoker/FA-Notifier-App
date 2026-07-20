@@ -2,7 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 
-import 'package:FANotifier/features/profile/presentation/profilejournals.dart';
+import 'package:fanotifier/features/profile/presentation/profilejournals.dart';
 
 class UserProfileJournalsSection extends StatefulWidget {
   const UserProfileJournalsSection({

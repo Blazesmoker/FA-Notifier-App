@@ -1,12 +1,12 @@
-import 'package:FANotifier/features/journals/data/journal_action_service.dart';
-import 'package:FANotifier/features/journals/data/journal_comment_service.dart';
-import 'package:FANotifier/features/journals/data/journal_deletion_coordinator.dart';
-import 'package:FANotifier/features/journals/data/journal_link_parser.dart';
-import 'package:FANotifier/features/journals/data/journal_url_builder.dart';
-import 'package:FANotifier/features/journals/data/openjournal_load_coordinator.dart';
-import 'package:FANotifier/features/journals/domain/journal_deletion_result.dart';
-import 'package:FANotifier/features/journals/domain/openjournal_load_result.dart';
-import 'package:FANotifier/features/journals/domain/openjournal_repository.dart';
+import 'package:fanotifier/features/journals/data/journal_action_service.dart';
+import 'package:fanotifier/features/journals/data/journal_comment_service.dart';
+import 'package:fanotifier/features/journals/data/journal_deletion_coordinator.dart';
+import 'package:fanotifier/features/journals/data/journal_link_parser.dart';
+import 'package:fanotifier/features/journals/data/journal_url_builder.dart';
+import 'package:fanotifier/features/journals/data/openjournal_load_coordinator.dart';
+import 'package:fanotifier/features/journals/domain/journal_deletion_result.dart';
+import 'package:fanotifier/features/journals/domain/openjournal_load_result.dart';
+import 'package:fanotifier/features/journals/domain/openjournal_repository.dart';
 
 class OpenJournalRepositoryImpl implements OpenJournalRepository {
   const OpenJournalRepositoryImpl({
