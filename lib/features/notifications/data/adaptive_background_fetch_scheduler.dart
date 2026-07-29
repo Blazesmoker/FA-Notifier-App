@@ -105,7 +105,7 @@ class AdaptiveBackgroundFetchScheduler {
         if (_foregroundStatePreference.isAppForegroundActive(prefs)) {
           appLog(
             '[BG] iOS foreground active; stored ${intervalMinutes}m interval. '
-            'Native will schedule ASAP on next background entry.',
+            'Native active lifecycle scheduling remains in effect.',
           );
           return;
         }

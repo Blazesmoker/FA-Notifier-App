@@ -42,7 +42,8 @@ private func submitBackgroundFetch(
     UserDefaults.standard.set(normalizedMinutes, forKey: adaptiveBackgroundIntervalKey)
     UserDefaults.standard.synchronize()
     if replacingPending {
-        backgroundFetchLog("Replacement requested; keeping any pending BGTask until a new one is accepted")
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: adaptiveBackgroundTaskIdentifier)
+        backgroundFetchLog("Cancelled pending BGTask for replacement")
     }
     let request = BGAppRefreshTaskRequest(identifier: adaptiveBackgroundTaskIdentifier)
     let delaySeconds = earliestBeginInSeconds ?? TimeInterval(normalizedMinutes * 60)
@@ -360,10 +361,15 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         fLog("App became active (\(source))")
         setFlutterSharedBool(true, forKey: "isAppActive")
         UserDefaults.standard.set(0, forKey: adaptiveBackgroundEmptyStreakKey)
-        UserDefaults.standard.set(15, forKey: adaptiveBackgroundIntervalKey)
-        UserDefaults.standard.synchronize()
-        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: backgroundTaskIdentifier)
-        fLog("Background fetch interval reset to 15m; pending request cleared while app is active")
+        do {
+            let scheduledAt = try submitBackgroundFetch(
+                minutes: 15,
+                replacingPending: true
+            )
+            fLog("Background fetch reset to 15m after app became active: \(scheduledAt)")
+        } catch {
+            fLog("Failed to reset background fetch after app became active: \(error.localizedDescription)")
+        }
         getPendingBackgroundTasks()
         logApproxNextFetch("didBecomeActive:\(source)")
     }
