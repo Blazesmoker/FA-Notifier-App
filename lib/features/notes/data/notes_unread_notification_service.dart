@@ -4,6 +4,7 @@ import 'package:fanotifier/features/notes/data/note_unread_service.dart';
 import 'package:fanotifier/features/notes/data/notesscreen_api_service.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/features/notes/domain/notes_unread_notification_result.dart';
+import 'package:fanotifier/features/notifications/domain/stable_notification_id.dart';
 
 class NotesUnreadNotificationService {
   const NotesUnreadNotificationService({
@@ -82,7 +83,7 @@ class NotesUnreadNotificationService {
         try {
           final content = await _notesApi.fetchMessageContent(msg.link);
           await _notificationGateway.showNotification(
-            msg.id.hashCode,
+            stableNotificationIdFromString(msg.id),
             'New Note from ${msg.sender}',
             content,
             'note_${msg.id}',

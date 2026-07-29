@@ -134,13 +134,13 @@ class BackgroundNotificationWorker {
                 fetchedInbox.where((m) => m.isUnread).toList();
             kDebugPrint('[BG] Found ${unread.length} unread messages');
             if (unread.isNotEmpty) {
+              final claimedNoteIds = <String>{...shownSet};
               final List<Message> newNotes =
-                  unread.where((m) => !shownSet.contains(m.id)).toList();
+                  unread.where((m) => claimedNoteIds.add(m.id)).toList();
               if (newNotes.isNotEmpty) {
                 didFindNewNotificationContent = true;
               }
               kDebugPrint('[BG] New unread messages: ${newNotes.length}');
-              final List<String> shownNewNoteIds = <String>[];
               bool noteProcessingFailed = false;
               for (var msg in newNotes) {
                 try {
@@ -165,9 +165,9 @@ class BackgroundNotificationWorker {
                     badgeNumber: badgeNumber,
                   );
                   didShowBackgroundNotification = true;
+                  await MessageStorage.addShownNoteIds(<String>[msg.id]);
                   await notification_badge
                       .commitIOSNoteBadgeNumber(badgeNumber);
-                  shownNewNoteIds.add(msg.id);
                   kDebugPrint('[BG] Notification shown for message ${msg.id}');
                   if (badgeNumber != null) {
                     kDebugPrint('[BG] Badge updated to: $badgeNumber');
@@ -180,11 +180,6 @@ class BackgroundNotificationWorker {
                   kDebugPrint(
                       '[BG ERROR] Failed to process message ${msg.id}: $e');
                 }
-              }
-              if (shownNewNoteIds.isNotEmpty) {
-                await MessageStorage.addShownNoteIds(shownNewNoteIds);
-                kDebugPrint(
-                    '[BG] Saved ${shownNewNoteIds.length} new message IDs');
               }
               didCompleteNotesCheck = !noteProcessingFailed;
             } else {
