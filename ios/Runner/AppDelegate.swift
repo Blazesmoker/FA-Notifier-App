@@ -352,7 +352,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     func handleDidEnterBackground(source: String) {
         fLog("App entering background (\(source))")
         setFlutterSharedBool(false, forKey: "isAppActive")
-        scheduleBackgroundFetch(asSoonAsPossible: true, source: "didEnterBackground:\(source)")
+        scheduleBackgroundFetch(asSoonAsPossible: false, source: "didEnterBackground:\(source)")
         logApproxNextFetch("didEnterBackground:\(source)")
     }
 
