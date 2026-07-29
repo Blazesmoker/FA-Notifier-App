@@ -47,7 +47,7 @@
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
-		<true/>
+		<false/>
 	</dict>
 	<key>NSLocalNotificationUsageDescription</key>
 	<string>We use notifications to alert you about new FA notes and activity.</string>

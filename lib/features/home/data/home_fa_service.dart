@@ -23,7 +23,7 @@ class FaService {
     String? cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     String? cfClearance = await _secureStorage.read(key: 'fa_cookie_cf_clearance');
 
-    debugPrint('[FaService] fetchUserProfile: cookieA=$cookieA, cookieB=$cookieB, cf_clearance=$cfClearance');
+    debugPrint('[FaService] fetchUserProfile: cookies present=${cookieA != null}');
 
     if (cookieA == null || cookieB == null) {
       debugPrint('[FaService] No cookies found. User might not be logged in.');
@@ -38,7 +38,7 @@ class FaService {
 
     const String url = 'https://www.furaffinity.net/';
     if (homeHtml == null) {
-      debugPrint('[FaService] Making HTTP GET request to $url with cookies: $cookiesHeader');
+      debugPrint('[FaService] Making HTTP GET request to $url');
     } else {
       debugPrint('[FaService] Parsing user profile from startup home HTML');
     }

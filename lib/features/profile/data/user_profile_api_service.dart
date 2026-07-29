@@ -242,14 +242,7 @@ class UserProfileApiService {
         'Referer': 'https://www.furaffinity.net/user/$refererUsername/',
       };
 
-      headers.forEach((k, v) {
-        if (k.toLowerCase() == 'cookie') {
-          debugPrint(
-              '  $k: ${v.substring(0, v.length.clamp(0, 200))}${v.length > 200 ? '... (truncated)' : ''}');
-        } else {
-          debugPrint('  $k: $v');
-        }
-      });
+      debugPrint('[_sendBlockUnblockRequest] headers prepared');
 
       late http.Response response;
 

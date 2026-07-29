@@ -13,7 +13,9 @@ void kDebugPrint(String? message, {int? wrapWidth}) {
 }
 
 void appLog(String? message, {int? wrapWidth}) {
-  debugPrintSynchronously(message, wrapWidth: wrapWidth);
+  if (kDebugMode) {
+    debugPrintSynchronously(message, wrapWidth: wrapWidth);
+  }
 }
 
 void _noopDebugPrint(String? message, {int? wrapWidth}) {}

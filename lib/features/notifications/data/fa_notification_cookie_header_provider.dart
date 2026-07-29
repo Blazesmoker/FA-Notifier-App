@@ -35,7 +35,7 @@ class FaNotificationCookieHeaderProvider {
       cookieHeader = cookieHeader.trim();
       cookieHeader =
           await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader);
-      debugPrint('[_getCookieHeader] $cookieHeader');
+      debugPrint('[_getCookieHeader] cookie header built');
       return cookieHeader;
     } catch (error) {
       debugPrint('[_getCookieHeader] Error reading cookies: $error');
