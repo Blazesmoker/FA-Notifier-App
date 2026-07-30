@@ -79,6 +79,9 @@ final class AdaptiveBackgroundFetchPlugin: NSObject, FlutterPlugin {
             result(FlutterMethodNotImplemented)
             return
         }
+        let previousMinutes = normalizedBackgroundFetchMinutes(
+            (arguments["previousMinutes"] as? NSNumber)?.intValue ?? storedBackgroundFetchMinutes()
+        )
         do {
             let scheduledAt = try submitBackgroundFetch(
                 minutes: minutesNumber.intValue,
@@ -86,11 +89,31 @@ final class AdaptiveBackgroundFetchPlugin: NSObject, FlutterPlugin {
             )
             backgroundFetchLog("Dart requested BGTask reschedule for ~\(scheduledAt)")
             result(true)
-        } catch {
+        } catch let replacementError {
+            do {
+                let restoredAt = try submitBackgroundFetch(
+                    minutes: previousMinutes,
+                    replacingPending: false
+                )
+#if DEBUG
+                backgroundFetchLog("Restored previous \(previousMinutes)m BGTask after replacement failure: \(restoredAt)")
+#endif
+                _ = restoredAt
+            } catch let restorationError {
+                result(FlutterError(
+                    code: "background_fetch_reschedule_failed",
+                    message: replacementError.localizedDescription,
+                    details: [
+                        "previousMinutes": previousMinutes,
+                        "restorationError": restorationError.localizedDescription
+                    ] as [String: Any]
+                ))
+                return
+            }
             result(FlutterError(
-                code: "background_fetch_reschedule_failed",
-                message: error.localizedDescription,
-                details: nil
+                code: "background_fetch_reschedule_restored",
+                message: replacementError.localizedDescription,
+                details: ["restoredMinutes": previousMinutes]
             ))
         }
     }

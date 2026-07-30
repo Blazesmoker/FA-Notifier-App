@@ -12,6 +12,12 @@ const String iOSWorkInitTask = "com.blazesmoker.FANotifier.refresh";
 const int backgroundFetchFastIntervalMinutes = 15;
 const int backgroundFetchSlowIntervalMinutes = 30;
 
+int _normalizedBackgroundFetchIntervalMinutes(int? minutes) {
+  return minutes != null && minutes >= backgroundFetchSlowIntervalMinutes
+      ? backgroundFetchSlowIntervalMinutes
+      : backgroundFetchFastIntervalMinutes;
+}
+
 class AdaptiveBackgroundFetchScheduler {
   AdaptiveBackgroundFetchScheduler({
     required BackgroundWorkmanagerInitializer workmanagerInitializer,
@@ -43,14 +49,18 @@ class AdaptiveBackgroundFetchScheduler {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
+    final previousIntervalMinutes = _normalizedBackgroundFetchIntervalMinutes(
+      prefs.getInt(_intervalMinutesKey),
+    );
     if (_foregroundStatePreference.isAppForegroundActive(prefs)) {
       await prefs.setInt(_noNotificationStreakKey, 0);
       await prefs.setInt(
         _intervalMinutesKey,
         backgroundFetchFastIntervalMinutes,
       );
-      await applyBackgroundFetchInterval(
+      await _applyBackgroundFetchIntervalIfNeeded(
         backgroundFetchFastIntervalMinutes,
+        previousIntervalMinutes: previousIntervalMinutes,
       );
       return;
     }
@@ -68,7 +78,10 @@ class AdaptiveBackgroundFetchScheduler {
         : backgroundFetchFastIntervalMinutes;
     await prefs.setInt(_noNotificationStreakKey, streak);
     await prefs.setInt(_intervalMinutesKey, intervalMinutes);
-    await applyBackgroundFetchInterval(intervalMinutes);
+    await _applyBackgroundFetchIntervalIfNeeded(
+      intervalMinutes,
+      previousIntervalMinutes: previousIntervalMinutes,
+    );
     appLog(
         '[BG] Adaptive interval set to ${intervalMinutes}m '
         '(empty streak: $streak, notification shown: $didShowNotification)');
@@ -76,15 +89,36 @@ class AdaptiveBackgroundFetchScheduler {
 
   Future<void> resetAdaptiveBackgroundFetch() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    final previousIntervalMinutes = _normalizedBackgroundFetchIntervalMinutes(
+      prefs.getInt(_intervalMinutesKey),
+    );
     await prefs.setInt(_noNotificationStreakKey, 0);
     await prefs.setInt(
       _intervalMinutesKey,
       backgroundFetchFastIntervalMinutes,
     );
-    await applyBackgroundFetchInterval(backgroundFetchFastIntervalMinutes);
+    await _applyBackgroundFetchIntervalIfNeeded(
+      backgroundFetchFastIntervalMinutes,
+      previousIntervalMinutes: previousIntervalMinutes,
+    );
   }
 
-  Future<void> applyBackgroundFetchInterval(int intervalMinutes) async {
+  Future<void> _applyBackgroundFetchIntervalIfNeeded(
+    int intervalMinutes, {
+    required int previousIntervalMinutes,
+  }) async {
+    if (Platform.isIOS && intervalMinutes == previousIntervalMinutes) return;
+    await applyBackgroundFetchInterval(
+      intervalMinutes,
+      previousIntervalMinutes: previousIntervalMinutes,
+    );
+  }
+
+  Future<void> applyBackgroundFetchInterval(
+    int intervalMinutes, {
+    int? previousIntervalMinutes,
+  }) async {
     if (Platform.isAndroid) {
       await _workmanagerInitializer.ensureWorkmanagerInitialized();
       await Workmanager().registerPeriodicTask(
@@ -115,7 +149,11 @@ class AdaptiveBackgroundFetchScheduler {
         );
         await _backgroundFetchChannel.invokeMethod<void>(
           'reschedule',
-          <String, int>{'minutes': intervalMinutes},
+          <String, int>{
+            'minutes': intervalMinutes,
+            if (previousIntervalMinutes != null)
+              'previousMinutes': previousIntervalMinutes,
+          },
         );
         appLog(
           '[BG] iOS background fetch reschedule request sent: '

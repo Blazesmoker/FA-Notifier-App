@@ -73,12 +73,11 @@ Future<void> removePreviousActivityNotification(
   final previousActivityNotificationId =
       prefs.getInt(_currentActivityNotificationIdKey);
   if (Platform.isIOS) {
-    final idsToCancel = <int>{
-      if (previousActivityNotificationId != null) previousActivityNotificationId,
-      if (replacingWithId != null) replacingWithId,
-    };
-    for (final id in idsToCancel) {
-      await notificationService.cancelNotification(id);
+    if (previousActivityNotificationId != null &&
+        previousActivityNotificationId != replacingWithId) {
+      await notificationService.cancelNotification(
+        previousActivityNotificationId,
+      );
     }
     return;
   }
