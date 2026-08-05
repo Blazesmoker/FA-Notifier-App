@@ -23,3 +23,10 @@ bool isNoteNotificationPayload(String payload) {
       payload.contains('DrawerIndex.Notes') ||
       payload == 'note_native';
 }
+
+String? noteIdFromNotificationPayload(String payload) {
+  const prefix = 'note_';
+  if (!payload.startsWith(prefix)) return null;
+  final noteId = payload.substring(prefix.length).trim();
+  return noteId.isEmpty ? null : noteId;
+}

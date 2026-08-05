@@ -8,6 +8,7 @@ export 'package:fanotifier/features/drawer/domain/app_update_info.dart';
 
 AppUpdateInfo? _cachedUpdateInfo;
 Future<AppUpdateInfo?>? _inFlightUpdateInfoFuture;
+const Duration _githubRequestTimeout = Duration(seconds: 15);
 
 Future<AppUpdateInfo?> fetchLatestAppUpdateInfo({bool forceRefresh = false}) {
   if (!forceRefresh && _cachedUpdateInfo != null) {
@@ -115,6 +116,9 @@ Dio _createGitHubDio() {
   return Dio(
     BaseOptions(
       baseUrl: 'https://api.github.com/repos/Blazesmoker/FA-Notifier-App',
+      connectTimeout: _githubRequestTimeout,
+      sendTimeout: _githubRequestTimeout,
+      receiveTimeout: _githubRequestTimeout,
       headers: {
         'Accept': 'application/vnd.github+json',
         'User-Agent': 'FA-Notifier/UpdateCheck',

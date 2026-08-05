@@ -59,7 +59,6 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   bool isCheckingLoginStatus = true;
   bool isLoggedIn = false;
-  bool _forceNotesRefresh = false;
   bool _sfwEnabled = true;
   final SfwModePreference _sfwModePreference = SfwModePreference();
   late final HomeSessionRepository _homeSessionRepository;
@@ -169,7 +168,6 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _selectedIndex = next;
       _loadedHomeIndexes.add(next);
-      if (next == 4) _forceNotesRefresh = true;
     });
   }
 
@@ -735,16 +733,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSelectedScreen() {
-    bool shouldForceRefresh = _forceNotesRefresh;
-    if (_forceNotesRefresh && _selectedIndex == 4) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {
-            _forceNotesRefresh = false;
-          });
-        }
-      });
-    }
     return IndexedStack(
       index: _selectedIndex,
       children: [
@@ -823,7 +811,6 @@ class _HomeScreenState extends State<HomeScreen> {
           () => NotesScreen(
             drawerKey: _drawerKey,
             repositoryFactory: context.read<NotesRepositoryFactory>(),
-            forceRefresh: shouldForceRefresh,
             key: _notesKey,
           ),
         ),

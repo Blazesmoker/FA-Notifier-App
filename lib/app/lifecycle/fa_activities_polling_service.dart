@@ -45,9 +45,11 @@ class FaActivitiesPollingService
   bool _pendingResumeActivityNotification = false;
 
   bool get _acknowledgingScreenVisible =>
-      _notesScreenVisible ||
       _submissionsScreenVisible ||
       _notificationsActiveSectionAcknowledgesAny;
+
+  bool get _isResumed =>
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
 
   bool get _notificationsActiveSectionAcknowledgesAny =>
       _acknowledgeWatchesVisible ||
@@ -132,9 +134,6 @@ class FaActivitiesPollingService
   void setNotesScreenVisible(bool visible) {
     if (_notesScreenVisible == visible) return;
     _notesScreenVisible = visible;
-    if (visible) {
-      _acknowledgeCurrentVisibleCountsWithoutFetch();
-    }
   }
 
   @override
@@ -175,7 +174,7 @@ class FaActivitiesPollingService
   }
 
   void _handleAcknowledgingScreenVisibilityChange(bool wasVisible) {
-    if (wasVisible || !_acknowledgingScreenVisible) return;
+    if (wasVisible || !_acknowledgingScreenVisible || !_isResumed) return;
 
     final source = _foregroundEntryCheckPending
         ? 'foreground_entry_visible'
@@ -202,7 +201,9 @@ class FaActivitiesPollingService
 
   void _acknowledgeCurrentVisibleCountsWithoutFetch() {
     final svc = _faNotificationService;
-    if (svc == null || !svc.hasValidLatestCountsSnapshot) return;
+    if (!_isResumed || svc == null || !svc.hasValidLatestCountsSnapshot) {
+      return;
+    }
     unawaited(_acknowledgeVisibleCounts(
       ActivitiesNotificationStateStore(),
       svc.latestCounts,
@@ -220,6 +221,7 @@ class FaActivitiesPollingService
     ActivitiesNotificationStateStore activitiesStateStore,
     NotificationCounts currentCounts,
   ) {
+    if (!_isResumed) return Future<void>.value();
     return activitiesStateStore.acknowledgeVisibleCounts(
       currentCounts: currentCounts,
       acknowledgeSubmissions: _submissionsScreenVisible,
@@ -227,7 +229,6 @@ class FaActivitiesPollingService
       acknowledgeComments: _acknowledgeCommentsVisible,
       acknowledgeFavorites: _acknowledgeFavoritesVisible,
       acknowledgeJournals: _acknowledgeJournalsVisible,
-      acknowledgeNotes: _notesScreenVisible,
     );
   }
 
@@ -414,17 +415,20 @@ class FaActivitiesPollingService
       final bool notesEnabled =
           prefs.getBool('drawer_notif_notes_enabled') ?? true;
 
-      final acknowledgeVisible = !foregroundEntryCheck;
+      final acknowledgeVisible = !foregroundEntryCheck && _isResumed;
       if (acknowledgeVisible) {
         await _acknowledgeVisibleCounts(
           activitiesStateStore,
           currentCounts,
         );
       }
-      final ActivitiesDiff diff = await activitiesStateStore
-          .recordAndDiffCurrentCounts(
+      final RecordedActivitiesDiff recordedDiff =
+          await activitiesStateStore.recordAndDiffCurrentCounts(
         currentCounts: currentCounts,
       );
+      final ActivitiesDiff observedDiff = recordedDiff.observed;
+      final ActivitiesDiff unacknowledgedDiff =
+          recordedDiff.unacknowledged;
       await activitiesStateStore.synchronizeDisabledCounts(
         currentCounts: currentCounts,
         submissionsEnabled: submissionsEnabled,
@@ -436,7 +440,8 @@ class FaActivitiesPollingService
       );
 
       if (triggerNotesRefreshOnNotesIncrease &&
-          diff.increasedBy.notes > 0 &&
+          _isResumed &&
+          observedDiff.increasedBy.notes > 0 &&
           (!acknowledgeVisible || !_notesScreenVisible)) {
         NotesRefreshService().triggerRefresh();
       }
@@ -451,31 +456,42 @@ class FaActivitiesPollingService
         return;
       }
 
-      final decision = _countChangePolicy.notificationDecision(
-        diff: diff,
-        submissionsEnabled: submissionsEnabled &&
-            (!acknowledgeVisible || !_submissionsScreenVisible),
-        watchesEnabled: watchesEnabled &&
-            (!acknowledgeVisible || !_acknowledgeWatchesVisible),
-        commentsEnabled: commentsEnabled &&
-            (!acknowledgeVisible || !_acknowledgeCommentsVisible),
-        favoritesEnabled: favoritesEnabled &&
-            (!acknowledgeVisible || !_acknowledgeFavoritesVisible),
-        journalsEnabled: journalsEnabled &&
-            (!acknowledgeVisible || !_acknowledgeJournalsVisible),
-        notesEnabled:
-            notesEnabled && (!acknowledgeVisible || !_notesScreenVisible),
+      final bool submissionsNotificationEnabled = submissionsEnabled &&
+          (!acknowledgeVisible || !_submissionsScreenVisible);
+      final bool watchesNotificationEnabled = watchesEnabled &&
+          (!acknowledgeVisible || !_acknowledgeWatchesVisible);
+      final bool commentsNotificationEnabled = commentsEnabled &&
+          (!acknowledgeVisible || !_acknowledgeCommentsVisible);
+      final bool favoritesNotificationEnabled = favoritesEnabled &&
+          (!acknowledgeVisible || !_acknowledgeFavoritesVisible);
+      final bool journalsNotificationEnabled = journalsEnabled &&
+          (!acknowledgeVisible || !_acknowledgeJournalsVisible);
+      final bool notesNotificationEnabled = notesEnabled;
+      final displayDecision = _countChangePolicy.notificationDecision(
+        diff: unacknowledgedDiff,
+        submissionsEnabled: submissionsNotificationEnabled,
+        watchesEnabled: watchesNotificationEnabled,
+        commentsEnabled: commentsNotificationEnabled,
+        favoritesEnabled: favoritesNotificationEnabled,
+        journalsEnabled: journalsNotificationEnabled,
+        notesEnabled: notesNotificationEnabled,
       );
-      final enabledIncreases = decision.increasedBy;
-      if (!decision.shouldNotify) {
+      final enabledIncreases = displayDecision.increasedBy;
+      if (!displayDecision.shouldNotify) {
         return;
       }
 
-      final bool soundActivitiesEnabled =
-          prefs.getBool('sound_new_activities_enabled') ?? true;
-      final bool vibrationActivitiesEnabled =
-          prefs.getBool('vibration_new_activities_enabled') ?? true;
-      if (!soundActivitiesEnabled && !vibrationActivitiesEnabled) {
+      final alreadyShown =
+          await activitiesStateStore.areCurrentCountsLastShown(
+        currentCounts: currentCounts,
+        submissionsEnabled: submissionsNotificationEnabled,
+        watchesEnabled: watchesNotificationEnabled,
+        commentsEnabled: commentsNotificationEnabled,
+        favoritesEnabled: favoritesNotificationEnabled,
+        journalsEnabled: journalsNotificationEnabled,
+        notesEnabled: notesNotificationEnabled,
+      );
+      if (alreadyShown) {
         return;
       }
 
@@ -497,7 +513,7 @@ class FaActivitiesPollingService
           WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
         await activitiesStateStore.deferActivityNotification(
           currentCounts: currentCounts,
-          previousObservedCounts: diff.previous,
+          previousObservedCounts: observedDiff.previous,
           body: messageBody,
         );
         _pendingResumeActivityNotification = true;

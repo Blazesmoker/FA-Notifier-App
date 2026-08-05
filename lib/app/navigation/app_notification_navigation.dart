@@ -7,6 +7,7 @@ import 'package:fanotifier/app/navigation/app_navigation.dart';
 import 'package:fanotifier/core/logging/app_logging.dart';
 import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
 import 'package:fanotifier/features/notes/notes_feature.dart';
+import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
 import 'package:fanotifier/features/notifications/domain/notification_payloads.dart';
 import 'package:fanotifier/features/notifications/domain/notification_refresh_port.dart';
 import 'package:fanotifier/features/notifications/domain/pending_navigation_repository.dart';
@@ -100,6 +101,10 @@ class AppNotificationNavigation {
     await _waitForNavigationFrame();
 
     try {
+      if (isActivityNotificationPayload(payload)) {
+        await ActivitiesNotificationStateStore()
+            .acknowledgeLastShownCounts();
+      }
       if (isNotes) {
         _notesRefreshPort.triggerRefresh();
         debugPrint('NOTES REFRESH TRIGGERED_pending_nav ($from)');

@@ -4,6 +4,7 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 
 import 'package:fanotifier/shared/theme/app_theme.dart';
+import 'package:fanotifier/app/background/experimental_ios_stable_fetch.dart';
 import 'package:fanotifier/app/bootstrap/app_bootstrap.dart';
 import 'package:fanotifier/app/composition/app_providers.dart';
 import 'package:fanotifier/app/navigation/app_navigation.dart';
@@ -31,6 +32,13 @@ const AppForegroundStatePreference _appForegroundStatePreference =
 void callbackDispatcher() {
   configureBackgroundWorkmanager(callbackDispatcher);
   runBackgroundNotificationWorker();
+}
+
+@pragma('vm:entry-point')
+void experimentalIosStableFetchEntrypoint() {
+  startExperimentalIosStableFetch(
+    callbackDispatcher: callbackDispatcher,
+  );
 }
 
 void main() async {

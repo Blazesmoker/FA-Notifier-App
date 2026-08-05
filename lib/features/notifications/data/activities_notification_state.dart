@@ -59,6 +59,12 @@ class ActivitiesNotificationStateStore {
 
   static Future<void> _mutex = Future<void>.value();
 
+  static int _minCount(int first, int second) =>
+      first <= second ? first : second;
+
+  static int _maxCount(int first, int second) =>
+      first >= second ? first : second;
+
   static Future<T> _withMutex<T>(Future<T> Function() fn) {
     final operation = _mutex.catchError((_) {}).then((_) => fn());
     _mutex = operation.then<void>((_) {}, onError: (_, __) {});
@@ -78,7 +84,7 @@ class ActivitiesNotificationStateStore {
     );
   }
 
-  Future<ActivitiesDiff> recordAndDiffCurrentCounts({
+  Future<RecordedActivitiesDiff> recordAndDiffCurrentCounts({
     required NotificationCounts currentCounts,
   }) async {
     return _withMutex(() async {
@@ -96,9 +102,13 @@ class ActivitiesNotificationStateStore {
       if (!hasBaseline) {
         await _saveLastSeenCounts(prefs, currentCounts);
         await _saveLastObservedCounts(prefs, currentCounts);
-        return _countChangePolicy.diff(
+        final diff = _countChangePolicy.diff(
           previous: currentCounts,
           current: currentCounts,
+        );
+        return RecordedActivitiesDiff(
+          observed: diff,
+          unacknowledged: diff,
         );
       }
 
@@ -122,8 +132,12 @@ class ActivitiesNotificationStateStore {
         prefs,
         fallback: previousCounts,
       );
-      final diff = _countChangePolicy.diff(
+      final observedDiff = _countChangePolicy.diff(
         previous: previousObservedCounts,
+        current: currentCounts,
+      );
+      final unacknowledgedDiff = _countChangePolicy.diff(
+        previous: previousCounts,
         current: currentCounts,
       );
 
@@ -132,9 +146,13 @@ class ActivitiesNotificationStateStore {
         previousCounts: previousCounts,
         currentCounts: currentCounts,
       );
+      await _lowerLastShownForCurrentCounts(prefs, currentCounts);
       await _saveLastObservedCounts(prefs, currentCounts);
 
-      return diff;
+      return RecordedActivitiesDiff(
+        observed: observedDiff,
+        unacknowledged: unacknowledgedDiff,
+      );
     });
   }
 
@@ -145,6 +163,66 @@ class ActivitiesNotificationStateStore {
       final prefs = await SharedPreferences.getInstance();
       await _saveLastSeenCounts(prefs, currentCounts);
       await _saveLastObservedCounts(prefs, currentCounts);
+      await _clearLastShownNotification(prefs);
+      await _clearDeferredActivityNotification(prefs);
+    });
+  }
+
+  Future<void> acknowledgeLastShownCounts() {
+    return _withMutex(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final hasLastShownCounts = prefs.getString(_kLastShownBody) != null &&
+          prefs.containsKey(_kLastShownSubmissions) &&
+          prefs.containsKey(_kLastShownWatches) &&
+          prefs.containsKey(_kLastShownComments) &&
+          prefs.containsKey(_kLastShownFavorites) &&
+          prefs.containsKey(_kLastShownJournals) &&
+          prefs.containsKey(_kLastShownNotes);
+      if (!hasLastShownCounts) return;
+
+      final lastShownCounts = NotificationCounts(
+        submissions: prefs.getInt(_kLastShownSubmissions)!,
+        watches: prefs.getInt(_kLastShownWatches)!,
+        comments: prefs.getInt(_kLastShownComments)!,
+        favorites: prefs.getInt(_kLastShownFavorites)!,
+        journals: prefs.getInt(_kLastShownJournals)!,
+        notes: prefs.getInt(_kLastShownNotes)!,
+      );
+      final lastObservedCounts = _loadPreviousObservedCounts(
+        prefs,
+        fallback: lastShownCounts,
+      );
+      final acknowledgedCounts = NotificationCounts(
+        submissions: _maxCount(
+          prefs.getInt(_kSubmissions) ?? 0,
+          _minCount(
+            lastShownCounts.submissions,
+            lastObservedCounts.submissions,
+          ),
+        ),
+        watches: _maxCount(
+          prefs.getInt(_kWatches) ?? 0,
+          _minCount(lastShownCounts.watches, lastObservedCounts.watches),
+        ),
+        comments: _maxCount(
+          prefs.getInt(_kComments) ?? 0,
+          _minCount(lastShownCounts.comments, lastObservedCounts.comments),
+        ),
+        favorites: _maxCount(
+          prefs.getInt(_kFavorites) ?? 0,
+          _minCount(lastShownCounts.favorites, lastObservedCounts.favorites),
+        ),
+        journals: _maxCount(
+          prefs.getInt(_kJournals) ?? 0,
+          _minCount(lastShownCounts.journals, lastObservedCounts.journals),
+        ),
+        notes: _maxCount(
+          prefs.getInt(_kNotes) ?? 0,
+          _minCount(lastShownCounts.notes, lastObservedCounts.notes),
+        ),
+      );
+      await _saveLastSeenCounts(prefs, acknowledgedCounts);
       await _clearLastShownNotification(prefs);
       await _clearDeferredActivityNotification(prefs);
     });
@@ -183,7 +261,18 @@ class ActivitiesNotificationStateStore {
   }) async {
     return _withMutex(() async {
       final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
       final changed = await _saveSelectedLastSeenCounts(
+        prefs,
+        currentCounts,
+        acknowledgeSubmissions: acknowledgeSubmissions,
+        acknowledgeWatches: acknowledgeWatches,
+        acknowledgeComments: acknowledgeComments,
+        acknowledgeFavorites: acknowledgeFavorites,
+        acknowledgeJournals: acknowledgeJournals,
+        acknowledgeNotes: acknowledgeNotes,
+      );
+      await _saveSelectedLastShownCounts(
         prefs,
         currentCounts,
         acknowledgeSubmissions: acknowledgeSubmissions,
@@ -330,33 +419,72 @@ class ActivitiesNotificationStateStore {
     return changed;
   }
 
+  Future<void> _saveSelectedLastShownCounts(
+    SharedPreferences prefs,
+    NotificationCounts counts, {
+    required bool acknowledgeSubmissions,
+    required bool acknowledgeWatches,
+    required bool acknowledgeComments,
+    required bool acknowledgeFavorites,
+    required bool acknowledgeJournals,
+    required bool acknowledgeNotes,
+  }) async {
+    if (prefs.getString(_kLastShownBody) == null) return;
+    if (acknowledgeSubmissions) {
+      await prefs.setInt(_kLastShownSubmissions, counts.submissions);
+    }
+    if (acknowledgeWatches) {
+      await prefs.setInt(_kLastShownWatches, counts.watches);
+    }
+    if (acknowledgeComments) {
+      await prefs.setInt(_kLastShownComments, counts.comments);
+    }
+    if (acknowledgeFavorites) {
+      await prefs.setInt(_kLastShownFavorites, counts.favorites);
+    }
+    if (acknowledgeJournals) {
+      await prefs.setInt(_kLastShownJournals, counts.journals);
+    }
+    if (acknowledgeNotes) {
+      await prefs.setInt(_kLastShownNotes, counts.notes);
+    }
+  }
+
   Future<void> _lowerBaselineForDecreases(
     SharedPreferences prefs, {
     required NotificationCounts previousCounts,
     required NotificationCounts currentCounts,
   }) async {
     bool changed = false;
-    if (currentCounts.submissions < previousCounts.submissions) {
+    final submissionsDecreased =
+        currentCounts.submissions < previousCounts.submissions;
+    final watchesDecreased = currentCounts.watches < previousCounts.watches;
+    final commentsDecreased = currentCounts.comments < previousCounts.comments;
+    final favoritesDecreased =
+        currentCounts.favorites < previousCounts.favorites;
+    final journalsDecreased = currentCounts.journals < previousCounts.journals;
+    final notesDecreased = currentCounts.notes < previousCounts.notes;
+    if (submissionsDecreased) {
       await prefs.setInt(_kSubmissions, currentCounts.submissions);
       changed = true;
     }
-    if (currentCounts.watches < previousCounts.watches) {
+    if (watchesDecreased) {
       await prefs.setInt(_kWatches, currentCounts.watches);
       changed = true;
     }
-    if (currentCounts.comments < previousCounts.comments) {
+    if (commentsDecreased) {
       await prefs.setInt(_kComments, currentCounts.comments);
       changed = true;
     }
-    if (currentCounts.favorites < previousCounts.favorites) {
+    if (favoritesDecreased) {
       await prefs.setInt(_kFavorites, currentCounts.favorites);
       changed = true;
     }
-    if (currentCounts.journals < previousCounts.journals) {
+    if (journalsDecreased) {
       await prefs.setInt(_kJournals, currentCounts.journals);
       changed = true;
     }
-    if (currentCounts.notes < previousCounts.notes) {
+    if (notesDecreased) {
       await prefs.setInt(_kNotes, currentCounts.notes);
       changed = true;
     }
@@ -366,6 +494,35 @@ class ActivitiesNotificationStateStore {
         DateTime.now().millisecondsSinceEpoch,
       );
     }
+  }
+
+  Future<void> _lowerLastShownForCurrentCounts(
+    SharedPreferences prefs,
+    NotificationCounts currentCounts,
+  ) {
+    final lastShownSubmissions =
+        prefs.getInt(_kLastShownSubmissions) ?? currentCounts.submissions;
+    final lastShownWatches =
+        prefs.getInt(_kLastShownWatches) ?? currentCounts.watches;
+    final lastShownComments =
+        prefs.getInt(_kLastShownComments) ?? currentCounts.comments;
+    final lastShownFavorites =
+        prefs.getInt(_kLastShownFavorites) ?? currentCounts.favorites;
+    final lastShownJournals =
+        prefs.getInt(_kLastShownJournals) ?? currentCounts.journals;
+    final lastShownNotes =
+        prefs.getInt(_kLastShownNotes) ?? currentCounts.notes;
+    return _saveSelectedLastShownCounts(
+      prefs,
+      currentCounts,
+      acknowledgeSubmissions:
+          currentCounts.submissions < lastShownSubmissions,
+      acknowledgeWatches: currentCounts.watches < lastShownWatches,
+      acknowledgeComments: currentCounts.comments < lastShownComments,
+      acknowledgeFavorites: currentCounts.favorites < lastShownFavorites,
+      acknowledgeJournals: currentCounts.journals < lastShownJournals,
+      acknowledgeNotes: currentCounts.notes < lastShownNotes,
+    );
   }
 
   Future<void> _clearLastShownNotification(SharedPreferences prefs) async {
@@ -390,6 +547,38 @@ class ActivitiesNotificationStateStore {
     await prefs.remove(_kDeferredNotes);
     await prefs.remove(_kDeferredBody);
     await prefs.remove(_kDeferredUpdatedAtMs);
+  }
+
+  Future<bool> areCurrentCountsLastShown({
+    required NotificationCounts currentCounts,
+    required bool submissionsEnabled,
+    required bool watchesEnabled,
+    required bool commentsEnabled,
+    required bool favoritesEnabled,
+    required bool journalsEnabled,
+    required bool notesEnabled,
+  }) {
+    return _withMutex(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+
+      if (prefs.getString(_kLastShownBody) == null) return false;
+
+      return (!submissionsEnabled ||
+              prefs.getInt(_kLastShownSubmissions) ==
+                  currentCounts.submissions) &&
+          (!watchesEnabled ||
+              prefs.getInt(_kLastShownWatches) == currentCounts.watches) &&
+          (!commentsEnabled ||
+              prefs.getInt(_kLastShownComments) == currentCounts.comments) &&
+          (!favoritesEnabled ||
+              prefs.getInt(_kLastShownFavorites) ==
+                  currentCounts.favorites) &&
+          (!journalsEnabled ||
+              prefs.getInt(_kLastShownJournals) == currentCounts.journals) &&
+          (!notesEnabled ||
+              prefs.getInt(_kLastShownNotes) == currentCounts.notes);
+    });
   }
 
   NotificationCounts _loadPreviousObservedCounts(
@@ -491,4 +680,14 @@ class ActivitiesNotificationStateStore {
       await _clearDeferredActivityNotification(prefs);
     });
   }
+}
+
+class RecordedActivitiesDiff {
+  const RecordedActivitiesDiff({
+    required this.observed,
+    required this.unacknowledged,
+  });
+
+  final ActivitiesDiff observed;
+  final ActivitiesDiff unacknowledged;
 }

@@ -82,6 +82,8 @@ class NotesUnreadNotificationService {
       for (final msg in newUnread) {
         try {
           final content = await _notesApi.fetchMessageContent(msg.link);
+          final claimed = await MessageStorage.claimUnshownNoteId(msg.id);
+          if (!claimed) continue;
           await _notificationGateway.showNotification(
             stableNotificationIdFromString(msg.id),
             'New Note from ${msg.sender}',

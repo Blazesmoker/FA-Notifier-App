@@ -1,9 +1,12 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 
+import 'package:fanotifier/app/background/ios_stable_fetch_diagnostics.dart';
 import 'package:fanotifier/core/logging/app_logging.dart';
+import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 import 'package:fanotifier/core/network/fresh_http_overrides.dart';
 import 'package:fanotifier/core/preferences/app_foreground_state_preference.dart';
 import 'package:fanotifier/features/drawer/data/app_update_service.dart';
@@ -25,26 +28,305 @@ import 'package:fanotifier/features/notifications/domain/notification_message_fo
 import 'package:fanotifier/features/notifications/domain/stable_notification_id.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
 
+class BackgroundNotificationExecutionResult {
+  const BackgroundNotificationExecutionResult({
+    required this.success,
+    required this.didExecute,
+  });
+
+  final bool success;
+  final bool didExecute;
+}
+
 class BackgroundNotificationWorker {
   static const ActivityCountChangePolicy _countChangePolicy =
       ActivityCountChangePolicy();
+  static const int _unreadRestoreMaxAttempts = 2;
+  static const Duration _unreadRestoreAfterReadDelay = Duration(seconds: 1);
+  static const Duration _unreadRestoreRetryDelay = Duration(seconds: 2);
+  static const MethodChannel _backgroundFetchChannel =
+      MethodChannel('app.background_fetch');
+  static const String _experimentalIOSFetchEnabledPreferenceKey =
+      'experimentalStableIOSBackgroundFetchEnabled';
+  static int _nextWorkerRunId = 0;
 
   BackgroundNotificationWorker({
     required background_scheduler.AdaptiveBackgroundFetchScheduler
         adaptiveBackgroundFetchScheduler,
     AppForegroundStatePreference appForegroundStatePreference =
         const AppForegroundStatePreference(),
+    bool requiresIOSExecutionLease = false,
   })  : _adaptiveBackgroundFetchScheduler = adaptiveBackgroundFetchScheduler,
-        _appForegroundStatePreference = appForegroundStatePreference;
+        _appForegroundStatePreference = appForegroundStatePreference,
+        _requiresIOSExecutionLease = requiresIOSExecutionLease;
 
   final background_scheduler.AdaptiveBackgroundFetchScheduler
       _adaptiveBackgroundFetchScheduler;
   final AppForegroundStatePreference _appForegroundStatePreference;
+  final bool _requiresIOSExecutionLease;
+
+  Future<bool> _restorePendingUnreadNote(
+    PendingNoteUnreadRestore pending, {
+    required String source,
+    required String runId,
+  }) async {
+    for (var attempt = 1; attempt <= _unreadRestoreMaxAttempts; attempt++) {
+      iosStableFetchDiagnostic(
+        'NOTE_UNREAD_ATTEMPT_START',
+        <String, Object?>{
+          'runId': runId,
+          'noteId': pending.noteId,
+          'source': source,
+          'attempt': attempt,
+          'maxAttempts': _unreadRestoreMaxAttempts,
+        },
+      );
+      appLog(
+        '[BG_NOTE_UNREAD] noteId=${pending.noteId} source=$source '
+        'phase=attempt_start attempt=$attempt/$_unreadRestoreMaxAttempts',
+      );
+      BackgroundNoteUnreadResult result;
+      try {
+        result = await restoreBackgroundNoteAsUnread(
+          noteId: pending.noteId,
+          link: pending.link,
+        );
+      } catch (error) {
+        iosStableFetchDiagnostic(
+          'NOTE_UNREAD_ATTEMPT_FINISH',
+          <String, Object?>{
+            'runId': runId,
+            'noteId': pending.noteId,
+            'source': source,
+            'attempt': attempt,
+            'confirmed': false,
+            'error': error.runtimeType.toString(),
+          },
+        );
+        appLog(
+          '[BG_NOTE_UNREAD] noteId=${pending.noteId} source=$source '
+          'phase=attempt_end attempt=$attempt/$_unreadRestoreMaxAttempts '
+          'confirmed=false status=none outcome=${error.runtimeType} durationMs=unknown',
+        );
+        return false;
+      }
+
+      appLog(
+        '[BG_NOTE_UNREAD] noteId=${pending.noteId} source=$source '
+        'phase=attempt_end attempt=$attempt/$_unreadRestoreMaxAttempts '
+        'confirmed=${result.success} status=${result.statusCode ?? 'none'} '
+        'outcome=${result.outcome.name} '
+        'durationMs=${result.duration.inMilliseconds}',
+      );
+      iosStableFetchDiagnostic(
+        'NOTE_UNREAD_ATTEMPT_FINISH',
+        <String, Object?>{
+          'runId': runId,
+          'noteId': pending.noteId,
+          'source': source,
+          'attempt': attempt,
+          'confirmed': result.success,
+          'status': result.statusCode,
+          'outcome': result.outcome.name,
+          'durationMs': result.duration.inMilliseconds,
+        },
+      );
+      if (result.success) {
+        try {
+          await MessageStorage.removePendingUnreadRestore(pending.noteId);
+          appLog(
+            '[BG_NOTE_UNREAD] noteId=${pending.noteId} source=$source '
+            'phase=pending_cleared confirmed=true',
+          );
+          iosStableFetchDiagnostic(
+            'NOTE_UNREAD_PENDING_CLEARED',
+            <String, Object?>{
+              'runId': runId,
+              'noteId': pending.noteId,
+              'source': source,
+            },
+          );
+          return true;
+        } catch (error) {
+          appLog(
+            '[BG_NOTE_UNREAD] noteId=${pending.noteId} source=$source '
+            'phase=pending_clear_failed error=${error.runtimeType}',
+          );
+          return false;
+        }
+      }
+
+      if (!result.shouldRetryImmediately ||
+          attempt == _unreadRestoreMaxAttempts) {
+        break;
+      }
+      await Future<void>.delayed(_unreadRestoreRetryDelay);
+    }
+
+    appLog(
+      '[BG_NOTE_UNREAD] noteId=${pending.noteId} source=$source '
+      'phase=pending_retained confirmed=false',
+    );
+    iosStableFetchDiagnostic(
+      'NOTE_UNREAD_PENDING_RETAINED',
+      <String, Object?>{
+        'runId': runId,
+        'noteId': pending.noteId,
+        'source': source,
+      },
+    );
+    return false;
+  }
+
+  Future<void> _logActiveNotificationSnapshot(
+    NotificationService notificationService, {
+    required String runId,
+    required String noteId,
+    required String phase,
+  }) async {
+    if (!Platform.isIOS || !await isIOSStableFetchDiagnosticsEnabled()) return;
+    try {
+      final notifications = await notificationService
+          .getActiveNotificationDiagnostics()
+          .timeout(const Duration(seconds: 2));
+      iosStableFetchDiagnostic(
+        'DELIVERED_NOTIFICATIONS_SNAPSHOT',
+        <String, Object?>{
+          'runId': runId,
+          'noteId': noteId,
+          'phase': phase,
+          'count': notifications.length,
+          'notifications': notifications,
+        },
+      );
+    } catch (error) {
+      iosStableFetchDiagnostic(
+        'DELIVERED_NOTIFICATIONS_SNAPSHOT_ERROR',
+        <String, Object?>{
+          'runId': runId,
+          'noteId': noteId,
+          'phase': phase,
+          'error': error.runtimeType.toString(),
+        },
+      );
+    }
+  }
 
   Future<bool> execute(
     String task,
     Map<String, dynamic>? inputData,
   ) async {
+    final executionResult = await executeForExperimental(
+      task,
+      inputData,
+    );
+    return executionResult.success;
+  }
+
+  Future<BackgroundNotificationExecutionResult> executeForExperimental(
+    String task,
+    Map<String, dynamic>? inputData,
+  ) async {
+    final runId =
+        'worker-${DateTime.now().millisecondsSinceEpoch}-${++_nextWorkerRunId}';
+    final executionStopwatch = Stopwatch()..start();
+    iosStableFetchDiagnostic(
+      'WORKER_DISPATCH',
+      <String, Object?>{
+        'runId': runId,
+        'task': task,
+        'requiresIOSExecutionLease': _requiresIOSExecutionLease,
+      },
+    );
+    String? executionLeaseToken;
+    bool executionLeaseProtocolAvailable = false;
+    if (Platform.isIOS) {
+      try {
+        executionLeaseToken = await _backgroundFetchChannel
+            .invokeMethod<String>('acquireExecution');
+        executionLeaseProtocolAvailable = true;
+      } catch (_) {}
+      if (!executionLeaseProtocolAvailable) {
+        var requiresExecutionLease = _requiresIOSExecutionLease;
+        if (!requiresExecutionLease) {
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.reload();
+            requiresExecutionLease =
+                prefs.getBool(_experimentalIOSFetchEnabledPreferenceKey) ??
+                    false;
+          } catch (_) {}
+        }
+        if (requiresExecutionLease) {
+          iosStableFetchDiagnostic(
+            'WORKER_SKIPPED',
+            <String, Object?>{
+              'runId': runId,
+              'reason': 'leaseProtocolUnavailable',
+            },
+          );
+          return const BackgroundNotificationExecutionResult(
+            success: false,
+            didExecute: false,
+          );
+        }
+      }
+      if (executionLeaseProtocolAvailable && executionLeaseToken == null) {
+        iosStableFetchDiagnostic(
+          'WORKER_SKIPPED',
+          <String, Object?>{
+            'runId': runId,
+            'reason': 'leaseDenied',
+          },
+        );
+        return const BackgroundNotificationExecutionResult(
+          success: true,
+          didExecute: false,
+        );
+      }
+      if (executionLeaseToken?.isEmpty == true) {
+        executionLeaseToken = null;
+      }
+    }
+
+    try {
+      final success = await _executeInternal(
+        task,
+        inputData,
+        runId: runId,
+      );
+      executionStopwatch.stop();
+      iosStableFetchDiagnostic(
+        'WORKER_FINISH',
+        <String, Object?>{
+          'runId': runId,
+          'success': success,
+          'didExecute': true,
+          'durationMs': executionStopwatch.elapsedMilliseconds,
+        },
+      );
+      return BackgroundNotificationExecutionResult(
+        success: success,
+        didExecute: true,
+      );
+    } finally {
+      final token = executionLeaseToken;
+      if (token != null) {
+        try {
+          await _backgroundFetchChannel.invokeMethod<void>(
+            'releaseExecution',
+            <String, String>{'token': token},
+          );
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<bool> _executeInternal(
+    String task,
+    Map<String, dynamic>? inputData, {
+    required String runId,
+  }) async {
     appLog("===============================================");
     appLog("BACKGROUND TASK TRIGGERED: $task");
     appLog("Time: ${DateTime.now()}");
@@ -58,6 +340,13 @@ class BackgroundNotificationWorker {
       final notificationService = NotificationService();
       await notificationService.init();
       appLog("[BG] NotificationService initialized");
+      iosStableFetchDiagnostic(
+        'WORKER_STAGE',
+        <String, Object?>{
+          'runId': runId,
+          'stage': 'notificationServiceReady',
+        },
+      );
       SharedPreferences prefs;
       try {
         prefs = await SharedPreferences.getInstance();
@@ -85,7 +374,48 @@ class BackgroundNotificationWorker {
         appLog('[BG] Valid background task detected: $task');
         kDebugPrint('[BG] Headless background worker is running.');
         try {
+          final preflightStopwatch = Stopwatch()..start();
+          bool pendingUnreadRestoreFailed = false;
+          final pendingUnreadRestores =
+              await MessageStorage.getPendingUnreadRestores();
+          if (pendingUnreadRestores.isNotEmpty) {
+            appLog(
+              '[BG_NOTE_UNREAD] phase=pending_drain_start '
+              'count=${pendingUnreadRestores.length}',
+            );
+          }
+          for (final pending in pendingUnreadRestores) {
+            await prefs.reload();
+            if (_appForegroundStatePreference.isAppForegroundActive(prefs)) {
+              return Future.value(true);
+            }
+            final restored = await _restorePendingUnreadNote(
+              pending,
+              source: 'pending_cycle',
+              runId: runId,
+            );
+            if (!restored) {
+              pendingUnreadRestoreFailed = true;
+              if (FaRequestCoordinator
+                      .instance.status.value.remaining >
+                  Duration.zero) {
+                break;
+              }
+            }
+          }
           final currentVersionAllowed = await isCurrentAppVersionAllowed();
+          preflightStopwatch.stop();
+          iosStableFetchDiagnostic(
+            'WORKER_STAGE',
+            <String, Object?>{
+              'runId': runId,
+              'stage': 'pendingAndVersionCheck',
+              'durationMs': preflightStopwatch.elapsedMilliseconds,
+              'pendingCount': pendingUnreadRestores.length,
+              'pendingFailed': pendingUnreadRestoreFailed,
+              'currentVersionAllowed': currentVersionAllowed,
+            },
+          );
           if (currentVersionAllowed == false) {
             appLog('[BG] Current app version is not allowed - skipping fetch');
             await _showBackgroundUpdateNotificationIfNeeded(
@@ -104,15 +434,36 @@ class BackgroundNotificationWorker {
 
           appLog('[BG] === Starting UNREAD NOTES CHECK ===');
           try {
+            bool noteProcessingFailed = pendingUnreadRestoreFailed;
+            final pendingRetryWait =
+                FaRequestCoordinator.instance.status.value.remaining;
+            if (pendingRetryWait > Duration.zero) {
+              throw StateError(
+                'Pending note unread restore deferred for '
+                '${pendingRetryWait.inMilliseconds}ms',
+              );
+            }
             final Set<String> shownSet = await MessageStorage.getShownNoteIds();
             final Set<String> seenSet = await MessageStorage.getSeenNoteIds();
+            final inboxStopwatch = Stopwatch()..start();
             final BackgroundInboxSnapshot snapshot =
                 await fetchBackgroundInboxSnapshot(
               shownNoteIds: shownSet,
               seenNoteIds: seenSet,
             );
+            inboxStopwatch.stop();
             final List<Message> fetchedInbox = snapshot.messages;
             currentCounts = snapshot.topbarCounts;
+            iosStableFetchDiagnostic(
+              'WORKER_STAGE',
+              <String, Object?>{
+                'runId': runId,
+                'stage': 'inboxFetched',
+                'durationMs': inboxStopwatch.elapsedMilliseconds,
+                'messageCount': fetchedInbox.length,
+                'fetchedPage2': snapshot.fetchedPage2,
+              },
+            );
             await prefs.reload();
             if (_appForegroundStatePreference.isAppForegroundActive(prefs)) {
               return Future.value(true);
@@ -141,50 +492,225 @@ class BackgroundNotificationWorker {
                 didFindNewNotificationContent = true;
               }
               kDebugPrint('[BG] New unread messages: ${newNotes.length}');
-              bool noteProcessingFailed = false;
               for (var msg in newNotes) {
+                final noteRetryWait =
+                    FaRequestCoordinator.instance.status.value.remaining;
+                if (noteRetryWait > Duration.zero) {
+                  noteProcessingFailed = true;
+                  iosStableFetchDiagnostic(
+                    'NOTE_PROCESSING_DEFERRED',
+                    <String, Object?>{
+                      'runId': runId,
+                      'noteId': msg.id,
+                      'remainingMs': noteRetryWait.inMilliseconds,
+                    },
+                  );
+                  break;
+                }
+                PendingNoteUnreadRestore? pendingRestore;
+                var restorationAttempted = false;
+                var claimed = false;
+                var notificationShown = false;
                 try {
                   kDebugPrint(
                       '[BG] Processing message: ${msg.id} from ${msg.sender}');
-                  final String content =
-                      await fetchBackgroundNoteContent(msg.link);
+                  final queuedRestore =
+                      await MessageStorage.addPendingUnreadRestore(
+                    noteId: msg.id,
+                    link: msg.link,
+                  );
+                  pendingRestore = queuedRestore;
+                  appLog(
+                    '[BG_NOTE_UNREAD] noteId=${msg.id} source=new_note '
+                    'phase=pending_persisted',
+                  );
+                  iosStableFetchDiagnostic(
+                    'NOTE_PENDING_PERSISTED',
+                    <String, Object?>{
+                      'runId': runId,
+                      'noteId': msg.id,
+                    },
+                  );
+
+                  final contentStopwatch = Stopwatch()..start();
+                  late final String content;
+                  try {
+                    content = await fetchBackgroundNoteContent(msg.link);
+                    contentStopwatch.stop();
+                    appLog(
+                      '[BG_NOTE_CONTENT] noteId=${msg.id} success=true status=200 '
+                      'durationMs=${contentStopwatch.elapsedMilliseconds} '
+                      'bodyLength=${content.length}',
+                    );
+                    iosStableFetchDiagnostic(
+                      'NOTE_CONTENT_FINISH',
+                      <String, Object?>{
+                        'runId': runId,
+                        'noteId': msg.id,
+                        'success': true,
+                        'status': 200,
+                        'durationMs': contentStopwatch.elapsedMilliseconds,
+                        'bodyLength': content.length,
+                      },
+                    );
+                  } catch (error) {
+                    contentStopwatch.stop();
+                    appLog(
+                      '[BG_NOTE_CONTENT] noteId=${msg.id} '
+                      'success=false status=unknown '
+                      'durationMs=${contentStopwatch.elapsedMilliseconds} '
+                      'error=${error.runtimeType}',
+                    );
+                    iosStableFetchDiagnostic(
+                      'NOTE_CONTENT_FINISH',
+                      <String, Object?>{
+                        'runId': runId,
+                        'noteId': msg.id,
+                        'success': false,
+                        'durationMs': contentStopwatch.elapsedMilliseconds,
+                        'error': error.runtimeType.toString(),
+                      },
+                    );
+                    rethrow;
+                  }
+
+                  restorationAttempted = true;
+                  await Future<void>.delayed(_unreadRestoreAfterReadDelay);
+                  final restored = await _restorePendingUnreadNote(
+                    queuedRestore,
+                    source: 'new_note',
+                    runId: runId,
+                  );
+                  if (!restored) {
+                    noteProcessingFailed = true;
+                  }
+
                   await prefs.reload();
                   if (_appForegroundStatePreference
                       .isAppForegroundActive(prefs)) {
                     return Future.value(true);
                   }
                   final String payload = 'note_${msg.id}';
+                  claimed = await MessageStorage.claimUnshownNoteId(msg.id);
+                  appLog(
+                    '[BG_NOTE_CLAIM] noteId=${msg.id} claimed=$claimed',
+                  );
+                  iosStableFetchDiagnostic(
+                    'NOTE_NOTIFICATION_CLAIM',
+                    <String, Object?>{
+                      'runId': runId,
+                      'noteId': msg.id,
+                      'claimed': claimed,
+                    },
+                  );
+                  if (!claimed) continue;
                   final int? badgeNumber = await notification_badge
                       .nextIOSNoteBadgeNumberForNotification();
-                  await notificationService.showNotification(
-                    stableNotificationIdFromString(msg.id),
-                    'New Note from ${msg.sender}',
-                    content,
-                    payload,
-                    'notes',
-                    badgeNumber: badgeNumber,
+                  final notificationId = stableNotificationIdFromString(msg.id);
+                  await _logActiveNotificationSnapshot(
+                    notificationService,
+                    runId: runId,
+                    noteId: msg.id,
+                    phase: 'beforeShow',
                   );
+                  final notificationStopwatch = Stopwatch()..start();
+                  try {
+                    await notificationService.showNotification(
+                      notificationId,
+                      'New Note from ${msg.sender}',
+                      content,
+                      payload,
+                      'notes',
+                      badgeNumber: badgeNumber,
+                    );
+                    notificationShown = true;
+                    notificationStopwatch.stop();
+                    appLog(
+                      '[BG_NOTE_NOTIFICATION] noteId=${msg.id} '
+                      'notificationId=$notificationId success=true '
+                      'durationMs=${notificationStopwatch.elapsedMilliseconds}',
+                    );
+                    iosStableFetchDiagnostic(
+                      'NOTE_NOTIFICATION_FINISH',
+                      <String, Object?>{
+                        'runId': runId,
+                        'noteId': msg.id,
+                        'notificationId': notificationId,
+                        'success': true,
+                        'durationMs':
+                            notificationStopwatch.elapsedMilliseconds,
+                      },
+                    );
+                    await _logActiveNotificationSnapshot(
+                      notificationService,
+                      runId: runId,
+                      noteId: msg.id,
+                      phase: 'afterShow',
+                    );
+                  } catch (error) {
+                    notificationStopwatch.stop();
+                    appLog(
+                      '[BG_NOTE_NOTIFICATION] noteId=${msg.id} '
+                      'notificationId=$notificationId success=false '
+                      'durationMs=${notificationStopwatch.elapsedMilliseconds} '
+                      'error=${error.runtimeType}',
+                    );
+                    iosStableFetchDiagnostic(
+                      'NOTE_NOTIFICATION_FINISH',
+                      <String, Object?>{
+                        'runId': runId,
+                        'noteId': msg.id,
+                        'notificationId': notificationId,
+                        'success': false,
+                        'durationMs':
+                            notificationStopwatch.elapsedMilliseconds,
+                        'error': error.runtimeType.toString(),
+                      },
+                    );
+                    rethrow;
+                  }
                   didShowBackgroundNotification = true;
-                  await MessageStorage.addShownNoteIds(<String>[msg.id]);
                   await notification_badge
                       .commitIOSNoteBadgeNumber(badgeNumber);
                   kDebugPrint('[BG] Notification shown for message ${msg.id}');
                   if (badgeNumber != null) {
                     kDebugPrint('[BG] Badge updated to: $badgeNumber');
                   }
-                  await markBackgroundNoteAsUnread(msg);
-                  kDebugPrint(
-                      '[BG] Message ${msg.id} marked as unread on server');
-                } catch (e) {
+                } catch (error) {
                   noteProcessingFailed = true;
+                  if (claimed && !notificationShown) {
+                    try {
+                      await MessageStorage.releaseClaimedNoteId(msg.id);
+                      appLog(
+                        '[BG_NOTE_CLAIM] noteId=${msg.id} phase=released '
+                        'notificationShown=false',
+                      );
+                    } catch (releaseError) {
+                      appLog(
+                        '[BG_NOTE_CLAIM] noteId=${msg.id} '
+                        'phase=release_failed error=${releaseError.runtimeType}',
+                      );
+                    }
+                  }
+                  final pending = pendingRestore;
+                  if (pending != null && !restorationAttempted) {
+                    final restored = await _restorePendingUnreadNote(
+                      pending,
+                      source: 'content_failure',
+                      runId: runId,
+                    );
+                    if (!restored) {
+                      noteProcessingFailed = true;
+                    }
+                  }
                   kDebugPrint(
-                      '[BG ERROR] Failed to process message ${msg.id}: $e');
+                    '[BG ERROR] Failed to process message ${msg.id}: '
+                    '${error.runtimeType}',
+                  );
                 }
               }
-              didCompleteNotesCheck = !noteProcessingFailed;
-            } else {
-              didCompleteNotesCheck = true;
             }
+            didCompleteNotesCheck = !noteProcessingFailed;
             final fetchedIds = fetchedInbox.map((m) => m.id).toList();
             if (fetchedIds.isNotEmpty) {
               await MessageStorage.addSeenNoteIds(fetchedIds);
@@ -213,10 +739,13 @@ class BackgroundNotificationWorker {
                   prefs.getBool('drawer_notif_notes_enabled') ?? true;
 
               final activitiesStateStore = ActivitiesNotificationStateStore();
-              final ActivitiesDiff diff = await activitiesStateStore
-                  .recordAndDiffCurrentCounts(
+              final RecordedActivitiesDiff recordedDiff =
+                  await activitiesStateStore.recordAndDiffCurrentCounts(
                 currentCounts: counts,
               );
+              final ActivitiesDiff observedDiff = recordedDiff.observed;
+              final ActivitiesDiff unacknowledgedDiff =
+                  recordedDiff.unacknowledged;
               await activitiesStateStore.synchronizeDisabledCounts(
                 currentCounts: counts,
                 submissionsEnabled: submissionsEnabled,
@@ -227,12 +756,12 @@ class BackgroundNotificationWorker {
                 notesEnabled: notesEnabled,
               );
               kDebugPrint(
-                  '[BG] Last-seen counts: S:${diff.previous.submissions} W:${diff.previous.watches} C:${diff.previous.comments} F:${diff.previous.favorites} J:${diff.previous.journals} N:${diff.previous.notes}');
+                  '[BG] Last-seen counts: S:${observedDiff.previous.submissions} W:${observedDiff.previous.watches} C:${observedDiff.previous.comments} F:${observedDiff.previous.favorites} J:${observedDiff.previous.journals} N:${observedDiff.previous.notes}');
               kDebugPrint(
-                  '[BG] Increased by:     S:${diff.increasedBy.submissions} W:${diff.increasedBy.watches} C:${diff.increasedBy.comments} F:${diff.increasedBy.favorites} J:${diff.increasedBy.journals} N:${diff.increasedBy.notes}');
+                  '[BG] Increased by:     S:${observedDiff.increasedBy.submissions} W:${observedDiff.increasedBy.watches} C:${observedDiff.increasedBy.comments} F:${observedDiff.increasedBy.favorites} J:${observedDiff.increasedBy.journals} N:${observedDiff.increasedBy.notes}');
 
-              final decision = _countChangePolicy.notificationDecision(
-                diff: diff,
+              final displayDecision = _countChangePolicy.notificationDecision(
+                diff: unacknowledgedDiff,
                 submissionsEnabled: submissionsEnabled,
                 watchesEnabled: watchesEnabled,
                 commentsEnabled: commentsEnabled,
@@ -240,7 +769,7 @@ class BackgroundNotificationWorker {
                 journalsEnabled: journalsEnabled,
                 notesEnabled: notesEnabled,
               );
-              final enabledIncreases = decision.increasedBy;
+              final enabledIncreases = displayDecision.increasedBy;
 
               final NotificationCounts filteredCounts = NotificationCounts(
                 submissions: submissionsEnabled ? counts.submissions : 0,
@@ -255,78 +784,80 @@ class BackgroundNotificationWorker {
                 enabledIncreases,
               );
 
-              if (decision.shouldNotify) {
-                final bool soundActivitiesEnabled =
-                    prefs.getBool('sound_new_activities_enabled') ?? true;
-                final bool vibrationActivitiesEnabled =
-                    prefs.getBool('vibration_new_activities_enabled') ?? true;
-                if (soundActivitiesEnabled || vibrationActivitiesEnabled) {
-                  if (!messageBody.contains('(+')) {
-                    await activitiesStateStore.acknowledgeCurrentCounts(
+              if (displayDecision.shouldNotify) {
+                final bool alreadyShown =
+                    await activitiesStateStore.areCurrentCountsLastShown(
+                  currentCounts: counts,
+                  submissionsEnabled: submissionsEnabled,
+                  watchesEnabled: watchesEnabled,
+                  commentsEnabled: commentsEnabled,
+                  favoritesEnabled: favoritesEnabled,
+                  journalsEnabled: journalsEnabled,
+                  notesEnabled: notesEnabled,
+                );
+                if (!alreadyShown && messageBody.contains('(+')) {
+                  didFindNewNotificationContent = true;
+                  await prefs.reload();
+                  if (_appForegroundStatePreference
+                      .isAppForegroundActive(prefs)) {
+                    await activitiesStateStore.deferActivityNotification(
                       currentCounts: counts,
+                      previousObservedCounts: observedDiff.previous,
+                      body: messageBody,
                     );
+                    appLog(
+                        '[BG] Activity notification deferred for foreground: $messageBody');
+                    kDebugPrint(
+                        '[BG] Activity notification deferred for foreground: $messageBody');
                   } else {
-                    didFindNewNotificationContent = true;
-                    await prefs.reload();
-                    if (_appForegroundStatePreference
-                        .isAppForegroundActive(prefs)) {
-                      await activitiesStateStore.deferActivityNotification(
-                        currentCounts: counts,
-                        previousObservedCounts: diff.previous,
-                        body: messageBody,
-                      );
-                      appLog(
-                          '[BG] Activity notification deferred for foreground: $messageBody');
-                      kDebugPrint(
-                          '[BG] Activity notification deferred for foreground: $messageBody');
-                    } else {
-                      final int activityNotificationId =
-                          NotificationService.activityNotificationId;
-                      await notification_badge
-                          .removePreviousActivityNotification(
-                        notificationService,
-                        replacingWithId:
-                            Platform.isIOS ? activityNotificationId : null,
-                      );
-                      final int? badgeNumber = await notification_badge
-                          .nextIOSActivityBadgeNumberForNotification();
-                      await notificationService.showNotification(
-                        activityNotificationId,
-                        'New FA Activity',
-                        messageBody,
-                        'fa_activity_$activityNotificationId',
-                        'activities',
-                        badgeNumber: badgeNumber,
-                      );
-                      didShowBackgroundNotification = true;
-                      await notification_badge
-                          .commitIOSActivityBadgeNumber(badgeNumber);
-                      await notification_badge.rememberActivityNotification(
-                        activityNotificationId,
-                      );
-                      await activitiesStateStore.markActivityNotificationShown(
-                        currentCounts: counts,
-                        body: messageBody,
-                      );
-                      appLog('[BG] Activity notification shown.');
-                      kDebugPrint(
-                          '[BG] Activity notification shown: $messageBody');
-                    }
+                    final int activityNotificationId =
+                        NotificationService.activityNotificationId;
+                    await notification_badge.removePreviousActivityNotification(
+                      notificationService,
+                      replacingWithId:
+                          Platform.isIOS ? activityNotificationId : null,
+                    );
+                    final int? badgeNumber = await notification_badge
+                        .nextIOSActivityBadgeNumberForNotification();
+                    await notificationService.showNotification(
+                      activityNotificationId,
+                      'New FA Activity',
+                      messageBody,
+                      'fa_activity_$activityNotificationId',
+                      'activities',
+                      badgeNumber: badgeNumber,
+                    );
+                    iosStableFetchDiagnostic(
+                      'ACTIVITY_NOTIFICATION_SHOWN',
+                      <String, Object?>{
+                        'runId': runId,
+                        'notificationId': activityNotificationId,
+                        'badgeNumber': badgeNumber,
+                      },
+                    );
+                    await _logActiveNotificationSnapshot(
+                      notificationService,
+                      runId: runId,
+                      noteId: 'activity',
+                      phase: 'afterActivityShow',
+                    );
+                    didShowBackgroundNotification = true;
+                    await activitiesStateStore.markActivityNotificationShown(
+                      currentCounts: counts,
+                      body: messageBody,
+                    );
+                    await notification_badge
+                        .commitIOSActivityBadgeNumber(badgeNumber);
+                    await notification_badge.rememberActivityNotification(
+                      activityNotificationId,
+                    );
+                    appLog('[BG] Activity notification shown.');
+                    kDebugPrint(
+                        '[BG] Activity notification shown: $messageBody');
                   }
-                } else {
-                  appLog(
-                      '[BG] Activities sound+vibration disabled; not showing notification.');
-                  await activitiesStateStore.acknowledgeCurrentCounts(
-                    currentCounts: counts,
-                  );
                 }
               } else {
                 appLog('[BG] No enabled category increased; not notifying.');
-                if (diff.hasAnyIncrease) {
-                  await activitiesStateStore.acknowledgeCurrentCounts(
-                    currentCounts: counts,
-                  );
-                }
               }
               didCompleteActivitiesCheck = true;
             } else {
@@ -343,9 +874,31 @@ class BackgroundNotificationWorker {
                 !didFindNewNotificationContent,
           );
           appLog('[BG] Adaptive background scheduler update completed.');
+          iosStableFetchDiagnostic(
+            'WORKER_STAGE',
+            <String, Object?>{
+              'runId': runId,
+              'stage': 'adaptiveSchedulerUpdated',
+              'didShowNotification': didShowBackgroundNotification,
+              'didCompleteNotesCheck': didCompleteNotesCheck,
+              'didCompleteActivitiesCheck': didCompleteActivitiesCheck,
+              'didFindNewNotificationContent':
+                  didFindNewNotificationContent,
+            },
+          );
+          final updateStopwatch = Stopwatch()..start();
           await _showBackgroundUpdateNotificationIfNeeded(
             notificationService,
             prefs,
+          );
+          updateStopwatch.stop();
+          iosStableFetchDiagnostic(
+            'WORKER_STAGE',
+            <String, Object?>{
+              'runId': runId,
+              'stage': 'updateCheckFinished',
+              'durationMs': updateStopwatch.elapsedMilliseconds,
+            },
           );
           appLog('[BG] === Task completed successfully ===');
           appLog(

@@ -6,6 +6,10 @@
 	<array>
 		<string>com.blazesmoker.FANotifier.refresh</string>
 	</array>
+	<key>FAExperimentalStableIOSBackgroundFetchEnabled</key>
+	<true/>
+	<key>FAStableFetchDiagnosticsEnabled</key>
+	<true/>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

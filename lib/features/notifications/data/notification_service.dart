@@ -1,11 +1,12 @@
 // lib/services/notification_service.dart
 import 'dart:io';
 import 'dart:ui';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
+import 'package:fanotifier/features/notes/data/message_storage.dart';
 import 'package:fanotifier/features/notifications/data/pending_navigation_store.dart';
 import 'package:fanotifier/features/notifications/domain/notification_payloads.dart';
 import 'package:fanotifier/core/logging/app_logging.dart';
@@ -15,6 +16,12 @@ typedef NotificationTapHandler = Future<void> Function(
   String payload,
   String source,
 );
+
+Future<void> _markTappedNoteAsShown(String payload) async {
+  final noteId = noteIdFromNotificationPayload(payload);
+  if (noteId == null) return;
+  await MessageStorage.addShownNoteIds(<String>[noteId]);
+}
 
 /// Manages notification channels, shows notifications, and handles taps.
 class NotificationService implements LocalNotificationGateway {
@@ -32,9 +39,13 @@ class NotificationService implements LocalNotificationGateway {
   static const int activityNotificationId = _kActivityNotificationIdBase;
   static const int appUpdateNotificationId = 1400000000;
   static const String appUpdatePayload = appUpdateNotificationPayload;
+  static const MethodChannel _iosNotificationChannel =
+      MethodChannel('app.notifications');
   NotificationTapHandler? _notificationTapHandler;
   bool _tapHandlingInitialized = false;
   bool _platformConfigured = false;
+  bool _iosNotificationHandlerInstalled = false;
+  bool _iosNotificationBridgeReady = false;
 
   Future<int> allocateActivityNotificationId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -64,11 +75,30 @@ class NotificationService implements LocalNotificationGateway {
     return flutterLocalNotificationsPlugin.cancel(id: id);
   }
 
+  Future<List<Map<String, Object?>>> getActiveNotificationDiagnostics() async {
+    final notifications =
+        await flutterLocalNotificationsPlugin.getActiveNotifications();
+    return notifications
+        .map(
+          (notification) => <String, Object?>{
+            'id': notification.id,
+            'titleLength': notification.title?.length ?? 0,
+            'bodyLength': notification.body?.length ?? 0,
+            'payload': notification.payload ?? '',
+            'groupKey': notification.groupKey ?? '',
+          },
+        )
+        .toList(growable: false);
+  }
+
   Future<void> init({
     NotificationTapHandler? onNotificationTap,
   }) async {
     if (onNotificationTap != null) {
       _notificationTapHandler = onNotificationTap;
+    }
+    if (_notificationTapHandler != null) {
+      await _initializeIOSNotificationBridge();
     }
     if (_tapHandlingInitialized) return;
 
@@ -100,14 +130,35 @@ class NotificationService implements LocalNotificationGateway {
         details?.notificationResponse != null) {
       final payload = details!.notificationResponse!.payload;
       if (payload != null && payload.isNotEmpty) {
-        if (isActivityNotificationPayload(payload)) {
-          await ActivitiesNotificationStateStore()
-              .requestAcknowledgeOnNextForegroundFetch();
-        }
+        await _markTappedNoteAsShown(payload);
         await const PendingNavigationStore().savePayload(payload);
       }
     }
     _tapHandlingInitialized = true;
+  }
+
+  Future<void> _initializeIOSNotificationBridge() async {
+    if (!Platform.isIOS) return;
+
+    if (!_iosNotificationHandlerInstalled) {
+      _iosNotificationHandlerInstalled = true;
+      _iosNotificationChannel.setMethodCallHandler((call) async {
+        if (call.method != 'notificationTapped') return false;
+        final payload = call.arguments;
+        if (payload is! String || payload.isEmpty) return false;
+        await _handleTapPayload(payload, source: 'iosChannel');
+        return true;
+      });
+    }
+
+    if (_iosNotificationBridgeReady) return;
+    try {
+      _iosNotificationBridgeReady =
+          await _iosNotificationChannel.invokeMethod<bool>(
+                'notifications.ready',
+              ) ??
+              false;
+    } catch (_) {}
   }
 
   Future<void> configurePlatform() async {
@@ -221,10 +272,7 @@ class NotificationService implements LocalNotificationGateway {
         return;
       }
 
-      if (isActivityNotificationPayload(payload)) {
-        await ActivitiesNotificationStateStore()
-            .requestAcknowledgeOnNextForegroundFetch();
-      }
+      await _markTappedNoteAsShown(payload);
       appLog('[NOTIF] Notification tap received (source=$source)');
       kDebugPrint(
         'NOTES REFRESH TRIGGERED_handletappayload (source=$source, payload=$payload)',
@@ -355,10 +403,7 @@ void notificationTapBackground(NotificationResponse response) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final payload = response.payload ?? '';
-  if (isActivityNotificationPayload(payload)) {
-    await ActivitiesNotificationStateStore()
-        .requestAcknowledgeOnNextForegroundFetch();
-  }
+  await _markTappedNoteAsShown(payload);
   await const PendingNavigationStore().savePayload(payload);
   appLog('[NOTIF_TAP_BG] saved pending notification payload.');
   kDebugPrint('[NOTIF_TAP_BG] saved payload "$payload"');

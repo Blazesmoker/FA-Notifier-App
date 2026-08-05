@@ -32,6 +32,8 @@ class NotesScreenController {
   bool _sentNeedsRefresh = true;
   bool _didFirstRunSkip = false;
   NotesPageResult? _pendingFirstRunPage1;
+  Future<void>? _inFlightInboxPageOne;
+  Future<void> _newUnreadHandlingQueue = Future<void>.value();
 
   bool get isFetchingMoreInbox => _isFetchingMoreInbox;
   bool get isFetchingMoreSent => _isFetchingMoreSent;
@@ -209,6 +211,36 @@ class NotesScreenController {
     int page = 1,
     bool clearOld = false,
     bool suppressNewUnreadNotifications = false,
+  }) {
+    final shouldCoalesce = page == 1 &&
+        !clearOld &&
+        !suppressNewUnreadNotifications;
+    final inFlight = _inFlightInboxPageOne;
+    if (shouldCoalesce && inFlight != null) {
+      return inFlight;
+    }
+
+    final operation = _fetchInbox(
+      page: page,
+      clearOld: clearOld,
+      suppressNewUnreadNotifications: suppressNewUnreadNotifications,
+    );
+    if (!shouldCoalesce) return operation;
+
+    late final Future<void> tracked;
+    tracked = operation.whenComplete(() {
+      if (identical(_inFlightInboxPageOne, tracked)) {
+        _inFlightInboxPageOne = null;
+      }
+    });
+    _inFlightInboxPageOne = tracked;
+    return tracked;
+  }
+
+  Future<void> _fetchInbox({
+    required int page,
+    required bool clearOld,
+    required bool suppressNewUnreadNotifications,
   }) async {
     if (page == 1) {
       _setState(() {
@@ -364,14 +396,21 @@ class NotesScreenController {
     _isFetchingMoreSent = false;
   }
 
-  Future<int> _handleNewUnreadMessages(List<Message> fetchedInbox) async {
-    final result = await _repository.handleNewUnreadMessages(
-      fetchedInbox: fetchedInbox,
-      previousTopId: _lastInboxTopId,
-      didFirstRunSkip: _didFirstRunSkip,
+  Future<int> _handleNewUnreadMessages(List<Message> fetchedInbox) {
+    final operation = _newUnreadHandlingQueue.then((_) async {
+      final result = await _repository.handleNewUnreadMessages(
+        fetchedInbox: fetchedInbox,
+        previousTopId: _lastInboxTopId,
+        didFirstRunSkip: _didFirstRunSkip,
+      );
+      _lastInboxTopId = result.latestTopId;
+      return result.shownCount;
+    });
+    _newUnreadHandlingQueue = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
     );
-    _lastInboxTopId = result.latestTopId;
-    return result.shownCount;
+    return operation;
   }
 
   Future<void> markAsUnreadWithoutRefetch(Message message) {

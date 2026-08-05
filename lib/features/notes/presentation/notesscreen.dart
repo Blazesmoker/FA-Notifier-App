@@ -17,14 +17,12 @@ import 'package:fanotifier/features/notes/presentation/trash_screen.dart';
 
 class NotesScreen extends StatefulWidget {
   final GlobalKey<DrawerUserControllerState> drawerKey;
-  final bool forceRefresh;
   final NotesRepository Function() repositoryFactory;
 
   const NotesScreen({
     super.key,
     required this.drawerKey,
     required this.repositoryFactory,
-    this.forceRefresh = false,
   });
 
   @override
@@ -40,6 +38,7 @@ class NotesScreenState extends State<NotesScreen>
 
   StreamSubscription<void>? _notesRefreshSub;
   bool _isVisibleInHomeStack = false;
+  bool _initialInboxLoadCompleted = false;
   AppLifecycleState? _lastLifecycleState;
 
   bool _isDialogOpen = false;
@@ -77,26 +76,17 @@ class NotesScreenState extends State<NotesScreen>
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
 
-    if (widget.forceRefresh) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        _notesController.resetAllPagination();
-        await _fetchInbox(page: 1, clearOld: false);
-        await _refreshSentIfVisibleOrMarkStale();
-      });
-    }
-
-    _notesController.initialize().then((_) {
-      _initInboxAndSent();
-    });
-
     _notesRefreshSub = _notesController.refreshStream.listen((_) {
+      if (!_initialInboxLoadCompleted) return;
       _refreshFromSignal();
     });
-    if (_notesController.takePendingRefresh()) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _refreshFromSignal();
-      });
-    }
+    _notesController.takePendingRefresh();
+
+    _notesController.initialize().then((_) async {
+      if (!mounted) return;
+      await _initInboxAndSent();
+      _initialInboxLoadCompleted = true;
+    });
   }
 
   void _refreshFromSignal() {
@@ -260,13 +250,17 @@ class NotesScreenState extends State<NotesScreen>
         if (!mounted || _isDialogOpen || !_isVisibleInHomeStack) return;
         _notesController.clearErrorsWithoutNotification();
         _notesController.resetAllPagination();
-        _fetchInbox(page: 1, clearOld: false);
+        _fetchInbox(
+          page: 1,
+          clearOld: false,
+          suppressNewUnreadNotifications: true,
+        );
         _refreshSentIfVisibleOrMarkStale();
       });
     }
   }
 
-  void _initInboxAndSent() {
+  Future<void> _initInboxAndSent() async {
     _inboxScrollController.addListener(() {
       if (_inboxScrollController.position.pixels ==
               _inboxScrollController.position.maxScrollExtent &&
@@ -285,7 +279,7 @@ class NotesScreenState extends State<NotesScreen>
       }
     });
 
-    _fetchInbox(page: 1);
+    await _fetchInbox(page: 1);
   }
 
   Future<void> _fetchInboxTwoPagesOnly() async {

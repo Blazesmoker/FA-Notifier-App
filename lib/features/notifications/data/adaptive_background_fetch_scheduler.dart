@@ -9,7 +9,7 @@ import 'package:workmanager/workmanager.dart';
 
 const String fetchBackgroundTask = "fetchBackgroundTask";
 const String iOSWorkInitTask = "com.blazesmoker.FANotifier.refresh";
-const int backgroundFetchFastIntervalMinutes = 15;
+const int backgroundFetchFastIntervalMinutes = 2;
 const int backgroundFetchSlowIntervalMinutes = 30;
 
 int _normalizedBackgroundFetchIntervalMinutes(int? minutes) {
@@ -38,6 +38,14 @@ class AdaptiveBackgroundFetchScheduler {
   final AppForegroundStatePreference _foregroundStatePreference;
   final MethodChannel _backgroundFetchChannel;
 
+  Future<int> loadCurrentBackgroundFetchIntervalMinutes() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    return _normalizedBackgroundFetchIntervalMinutes(
+      prefs.getInt(_intervalMinutesKey),
+    );
+  }
+
   Future<void> updateAdaptiveBackgroundFetchAfterTask({
     required bool didShowNotification,
     required bool completedNoNewContentCheck,
@@ -58,7 +66,7 @@ class AdaptiveBackgroundFetchScheduler {
         _intervalMinutesKey,
         backgroundFetchFastIntervalMinutes,
       );
-      await _applyBackgroundFetchIntervalIfNeeded(
+      await _resubmitBackgroundFetchInterval(
         backgroundFetchFastIntervalMinutes,
         previousIntervalMinutes: previousIntervalMinutes,
       );
@@ -78,7 +86,7 @@ class AdaptiveBackgroundFetchScheduler {
         : backgroundFetchFastIntervalMinutes;
     await prefs.setInt(_noNotificationStreakKey, streak);
     await prefs.setInt(_intervalMinutesKey, intervalMinutes);
-    await _applyBackgroundFetchIntervalIfNeeded(
+    await _resubmitBackgroundFetchInterval(
       intervalMinutes,
       previousIntervalMinutes: previousIntervalMinutes,
     );
@@ -98,17 +106,16 @@ class AdaptiveBackgroundFetchScheduler {
       _intervalMinutesKey,
       backgroundFetchFastIntervalMinutes,
     );
-    await _applyBackgroundFetchIntervalIfNeeded(
+    await _resubmitBackgroundFetchInterval(
       backgroundFetchFastIntervalMinutes,
       previousIntervalMinutes: previousIntervalMinutes,
     );
   }
 
-  Future<void> _applyBackgroundFetchIntervalIfNeeded(
+  Future<void> _resubmitBackgroundFetchInterval(
     int intervalMinutes, {
     required int previousIntervalMinutes,
   }) async {
-    if (Platform.isIOS && intervalMinutes == previousIntervalMinutes) return;
     await applyBackgroundFetchInterval(
       intervalMinutes,
       previousIntervalMinutes: previousIntervalMinutes,
