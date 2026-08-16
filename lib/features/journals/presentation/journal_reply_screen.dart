@@ -175,7 +175,7 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
                         fit: BoxFit.cover,
                       );
                     },
-                    errorBuilder: (_, __, ___) => Image.asset(
+                    errorBuilder: (_, _, _) => Image.asset(
                       'assets/images/defaultpic.gif',
                       width: 36,
                       height: 36,

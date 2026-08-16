@@ -4,12 +4,9 @@ import 'package:fanotifier/features/auth/domain/cloudflare_check_gateway.dart';
 
 class CloudflareCheckGatewayImpl implements CloudflareCheckGateway {
   const CloudflareCheckGatewayImpl({
-    CloudflareHttpAccessVerifier httpAccessVerifier =
-        const CloudflareHttpAccessVerifier(),
-    CloudflareWebViewCookieService webViewCookieService =
-        const CloudflareWebViewCookieService(),
-  })  : _httpAccessVerifier = httpAccessVerifier,
-        _webViewCookieService = webViewCookieService;
+    this._httpAccessVerifier = const CloudflareHttpAccessVerifier(),
+    this._webViewCookieService = const CloudflareWebViewCookieService(),
+  });
 
   final CloudflareHttpAccessVerifier _httpAccessVerifier;
   final CloudflareWebViewCookieService _webViewCookieService;

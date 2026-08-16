@@ -24,12 +24,10 @@ final AppNotificationNavigation appNotificationNavigation =
 
 class AppNotificationNavigation {
   AppNotificationNavigation({
-    required PendingNavigationRepository pendingNavigationRepository,
-    required NotesRefreshPort notesRefreshPort,
-    required NotificationRefreshPort notificationRefreshPort,
-  }) : _pendingNavigationRepository = pendingNavigationRepository,
-        _notesRefreshPort = notesRefreshPort,
-        _notificationRefreshPort = notificationRefreshPort;
+    required this._pendingNavigationRepository,
+    required this._notesRefreshPort,
+    required this._notificationRefreshPort,
+  });
 
   final PendingNavigationRepository _pendingNavigationRepository;
   final NotesRefreshPort _notesRefreshPort;

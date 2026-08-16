@@ -26,25 +26,17 @@ import 'package:fanotifier/features/submissions/domain/openpost_user_actions_loa
 
 class OpenPostRepositoryImpl implements OpenPostRepository {
   OpenPostRepositoryImpl({
-    OpenPostActionService actionService = const OpenPostActionService(),
-    OpenPostCookieService cookieService = const OpenPostCookieService(),
-    SfwModePreference sfwModePreference = const SfwModePreference(),
-    OpenPostDetailsLoader detailsLoader = const OpenPostDetailsLoader(),
-    OpenPostUserActionsLoader userActionsLoader =
-        const OpenPostUserActionsLoader(),
-    OpenPostMediaExportService mediaExportService =
-        const OpenPostMediaExportService(),
+    this._actionService = const OpenPostActionService(),
+    this._cookieService = const OpenPostCookieService(),
+    this._sfwModePreference = const SfwModePreference(),
+    this._detailsLoader = const OpenPostDetailsLoader(),
+    this._userActionsLoader = const OpenPostUserActionsLoader(),
+    this._mediaExportService = const OpenPostMediaExportService(),
     OpenPostFileDownloadService? fileDownloadService,
-    required SubmissionCommentRepository submissionCommentRepository,
-  })  : _actionService = actionService,
-        _cookieService = cookieService,
-        _sfwModePreference = sfwModePreference,
-        _detailsLoader = detailsLoader,
-        _userActionsLoader = userActionsLoader,
-        _mediaExportService = mediaExportService,
+    required this._submissionCommentRepository,
+  }) :
         _fileDownloadService = fileDownloadService ??
-            OpenPostFileDownloadService(cookieService: cookieService),
-        _submissionCommentRepository = submissionCommentRepository;
+            OpenPostFileDownloadService(cookieService: _cookieService);
 
   final OpenPostActionService _actionService;
   final OpenPostCookieService _cookieService;

@@ -10,8 +10,8 @@ import 'package:fanotifier/features/submissions/domain/openpost_submission_attac
 
 class OpenPostFileDownloadService {
   const OpenPostFileDownloadService({
-    required OpenPostCookieService cookieService,
-  }) : _cookieService = cookieService;
+    required this._cookieService,
+  });
 
   final OpenPostCookieService _cookieService;
 
@@ -73,12 +73,12 @@ class OpenPostFileDownloadService {
     }
   }
 
-  Future<String?> _saveFile({
+  Future<Uri?> _saveFile({
     required OpenPostSubmissionAttachment attachment,
     required Uint8List bytes,
-  }) {
+  }) async {
     if (Platform.isAndroid || Platform.isIOS) {
-      return _filePickerChannel.invokeMethod<String>(
+      final savedPath = await _filePickerChannel.invokeMethod<String>(
         'save',
         <String, Object?>{
           'fileName': attachment.fileName,
@@ -88,6 +88,8 @@ class OpenPostFileDownloadService {
           'bytes': bytes,
         },
       );
+      if (savedPath == null) return null;
+      return Uri.tryParse(savedPath) ?? Uri.file(savedPath);
     }
     return FilePicker.saveFile(
       dialogTitle: 'Save submission file',

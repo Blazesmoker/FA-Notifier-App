@@ -4,9 +4,8 @@ import 'package:flutter/foundation.dart';
 
 class NoteImagePreviewSettingsProvider with ChangeNotifier {
   NoteImagePreviewSettingsProvider({
-    NoteImagePreviewPreference preference =
-        const NoteImagePreviewPreference(),
-  }) : _preference = preference {
+    this._preference = const NoteImagePreviewPreference(),
+  }) {
     load();
   }
 

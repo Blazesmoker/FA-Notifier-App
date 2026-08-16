@@ -19,7 +19,7 @@ class CommentsSettingsScreen extends StatelessWidget {
             title: Text('Comments'),
           ),
           SwitchListTile(
-            activeColor: const Color(0xFFE09321),
+            activeThumbColor: const Color(0xFFE09321),
             value: settings.collapsibleCommentsEnabled,
             onChanged: settings.setCollapsibleComments,
             title: const Text('Collapsible Comments'),

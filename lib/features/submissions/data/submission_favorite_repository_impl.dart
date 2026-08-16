@@ -7,10 +7,8 @@ class SubmissionFavoriteRepositoryImpl
     implements SubmissionFavoriteRepository {
   SubmissionFavoriteRepositoryImpl({
     FavoriteService? favoriteService,
-    SubmissionFavoriteDetailsService favoriteDetailsService =
-        const SubmissionFavoriteDetailsService(),
-  })  : _favoriteService = favoriteService ?? FavoriteService(),
-        _favoriteDetailsService = favoriteDetailsService;
+    this._favoriteDetailsService = const SubmissionFavoriteDetailsService(),
+  }) : _favoriteService = favoriteService ?? FavoriteService();
 
   final FavoriteService _favoriteService;
   final SubmissionFavoriteDetailsService _favoriteDetailsService;

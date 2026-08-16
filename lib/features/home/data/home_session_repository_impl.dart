@@ -23,14 +23,11 @@ class HomeSessionRepositoryImpl implements HomeSessionRepository {
   }
 
   const HomeSessionRepositoryImpl({
-    required HomeAuthCookieService authCookieService,
-    required HomeSessionPreference sessionPreference,
-    required HomeProfileCache profileCache,
-    required HomeLogoutCleanupService logoutCleanupService,
-  })  : _authCookieService = authCookieService,
-        _sessionPreference = sessionPreference,
-        _profileCache = profileCache,
-        _logoutCleanupService = logoutCleanupService;
+    required this._authCookieService,
+    required this._sessionPreference,
+    required this._profileCache,
+    required this._logoutCleanupService,
+  });
 
   final HomeAuthCookieService _authCookieService;
   final HomeSessionPreference _sessionPreference;

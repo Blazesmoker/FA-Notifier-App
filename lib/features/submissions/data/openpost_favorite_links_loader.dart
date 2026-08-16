@@ -6,8 +6,8 @@ import 'package:fanotifier/features/submissions/domain/openpost_page_response.da
 
 class OpenPostFavoriteLinksLoader {
   const OpenPostFavoriteLinksLoader({
-    required OpenPostCookieService cookieService,
-  }) : _cookieService = cookieService;
+    required this._cookieService,
+  });
 
   final OpenPostCookieService _cookieService;
 

@@ -4,8 +4,8 @@ import 'package:fanotifier/core/fa/fa_webview_cookie_service.dart';
 class UploadWebViewSessionGatewayImpl
     implements UploadWebViewSessionGateway {
   const UploadWebViewSessionGatewayImpl({
-    FAWebViewCookieService cookieService = const FAWebViewCookieService(),
-  }) : _cookieService = cookieService;
+    this._cookieService = const FAWebViewCookieService(),
+  });
 
   final FAWebViewCookieService _cookieService;
 

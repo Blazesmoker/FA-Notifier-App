@@ -6,10 +6,9 @@ import 'package:flutter/foundation.dart';
 
 class JournalDeletionCoordinator {
   const JournalDeletionCoordinator({
-    required OpenJournalApiService api,
-    required JournalActionService actionService,
-  })  : _api = api,
-        _actionService = actionService;
+    required this._api,
+    required this._actionService,
+  });
 
   final OpenJournalApiService _api;
   final JournalActionService _actionService;

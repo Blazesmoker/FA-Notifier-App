@@ -5,10 +5,9 @@ import 'package:fanotifier/features/notifications/domain/notification_settings_r
 
 class NotificationSettingsProvider with ChangeNotifier {
   NotificationSettingsProvider({
-    required NotificationSettingsRepository repository,
-    required Future<void> Function() onSettingsChanged,
-  })  : _repository = repository,
-        _onSettingsChanged = onSettingsChanged {
+    required this._repository,
+    required this._onSettingsChanged,
+  }) {
     _loadSettings();
   }
 

@@ -101,7 +101,7 @@ class MessageStorage {
     final operation = _mutationQueue.then((_) => mutation());
     _mutationQueue = operation.then<void>(
       (_) {},
-      onError: (Object _, StackTrace __) {},
+      onError: (Object _, StackTrace _) {},
     );
     return operation;
   }
@@ -191,6 +191,24 @@ class MessageStorage {
       await prefs.reload();
       final pending = _readPendingUnreadRestores(prefs);
       if (pending.remove(cleaned) == null) return;
+      await _writePendingUnreadRestores(prefs, pending);
+    });
+  }
+
+  static Future<void> removePendingUnreadRestores(Iterable<String> noteIds) {
+    final cleaned = noteIds
+        .map((noteId) => noteId.trim())
+        .where((noteId) => noteId.isNotEmpty)
+        .toSet();
+    if (cleaned.isEmpty) return Future<void>.value();
+
+    return _enqueueMutation(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final pending = _readPendingUnreadRestores(prefs);
+      final previousLength = pending.length;
+      pending.removeWhere((noteId, _) => cleaned.contains(noteId));
+      if (pending.length == previousLength) return;
       await _writePendingUnreadRestores(prefs, pending);
     });
   }

@@ -9,10 +9,9 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 class GoogleImagesWebViewResolver implements NoteGoogleImageResolver {
   GoogleImagesWebViewResolver({
-    Duration timeout = const Duration(seconds: 12),
-    Duration pollInterval = const Duration(milliseconds: 150),
-  })  : _timeout = timeout,
-        _pollInterval = pollInterval;
+    this._timeout = const Duration(seconds: 12),
+    this._pollInterval = const Duration(milliseconds: 150),
+  });
 
   final Duration _timeout;
   final Duration _pollInterval;

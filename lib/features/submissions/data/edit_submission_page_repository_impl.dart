@@ -7,12 +7,9 @@ import 'package:fanotifier/features/submissions/domain/edit_submission_page_repo
 class EditSubmissionPageRepositoryImpl
     implements EditSubmissionPageRepository {
   const EditSubmissionPageRepositoryImpl({
-    EditSubmissionNavigationService navigationService =
-        const EditSubmissionNavigationService(),
-    FAWebViewCookieService webViewCookieService =
-        const FAWebViewCookieService(),
-  })  : _navigationService = navigationService,
-        _webViewCookieService = webViewCookieService;
+    this._navigationService = const EditSubmissionNavigationService(),
+    this._webViewCookieService = const FAWebViewCookieService(),
+  });
 
   final EditSubmissionNavigationService _navigationService;
   final FAWebViewCookieService _webViewCookieService;

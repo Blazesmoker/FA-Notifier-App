@@ -5,8 +5,8 @@ import 'package:fanotifier/features/upload/domain/submission_template.dart';
 
 class SubmissionTemplateSaveService {
   const SubmissionTemplateSaveService({
-    required SubmissionTemplateStore store,
-  }) : _store = store;
+    required this._store,
+  });
 
   final SubmissionTemplateStore _store;
 

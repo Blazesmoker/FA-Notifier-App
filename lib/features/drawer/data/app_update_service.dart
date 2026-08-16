@@ -10,7 +10,10 @@ AppUpdateInfo? _cachedUpdateInfo;
 Future<AppUpdateInfo?>? _inFlightUpdateInfoFuture;
 const Duration _githubRequestTimeout = Duration(seconds: 15);
 
-Future<AppUpdateInfo?> fetchLatestAppUpdateInfo({bool forceRefresh = false}) {
+Future<AppUpdateInfo?> fetchLatestAppUpdateInfo({
+  bool forceRefresh = false,
+  CancelToken? cancelToken,
+}) {
   if (!forceRefresh && _cachedUpdateInfo != null) {
     return Future.value(_cachedUpdateInfo);
   }
@@ -18,7 +21,9 @@ Future<AppUpdateInfo?> fetchLatestAppUpdateInfo({bool forceRefresh = false}) {
     return _inFlightUpdateInfoFuture!;
   }
 
-  _inFlightUpdateInfoFuture = _fetchLatestAppUpdateInfoImpl().then((value) {
+  _inFlightUpdateInfoFuture = _fetchLatestAppUpdateInfoImpl(
+    cancelToken: cancelToken,
+  ).then((value) {
     _cachedUpdateInfo = value;
     _inFlightUpdateInfoFuture = null;
     return value;
@@ -26,7 +31,9 @@ Future<AppUpdateInfo?> fetchLatestAppUpdateInfo({bool forceRefresh = false}) {
   return _inFlightUpdateInfoFuture!;
 }
 
-Future<AppUpdateInfo?> _fetchLatestAppUpdateInfoImpl() async {
+Future<AppUpdateInfo?> _fetchLatestAppUpdateInfoImpl({
+  CancelToken? cancelToken,
+}) async {
   try {
     final info = await PackageInfo.fromPlatform();
     final current = info.version.trim();
@@ -34,8 +41,14 @@ Future<AppUpdateInfo?> _fetchLatestAppUpdateInfoImpl() async {
 
     final dio = _createGitHubDio();
     final responses = await Future.wait([
-      dio.get<Map<String, dynamic>>('/releases/latest'),
-      dio.get<Map<String, dynamic>>('/git/ref/tags/v$current'),
+      dio.get<Map<String, dynamic>>(
+        '/releases/latest',
+        cancelToken: cancelToken,
+      ),
+      dio.get<Map<String, dynamic>>(
+        '/git/ref/tags/v$current',
+        cancelToken: cancelToken,
+      ),
     ]);
     final latestResponse = responses[0];
     final currentTagResponse = responses[1];

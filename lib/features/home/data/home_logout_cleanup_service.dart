@@ -7,12 +7,10 @@ import 'package:fanotifier/features/home/data/home_session_preference.dart';
 
 class HomeLogoutCleanupService {
   HomeLogoutCleanupService({
-    required HomeAuthCookieService authCookieService,
-    required HomeSessionPreference sessionPreference,
-    required HomeProfileCache profileCache,
-  })  : _authCookieService = authCookieService,
-        _sessionPreference = sessionPreference,
-        _profileCache = profileCache;
+    required this._authCookieService,
+    required this._sessionPreference,
+    required this._profileCache,
+  });
 
   final HomeAuthCookieService _authCookieService;
   final HomeSessionPreference _sessionPreference;

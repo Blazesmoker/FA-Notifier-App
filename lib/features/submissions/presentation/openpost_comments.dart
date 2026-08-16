@@ -129,7 +129,7 @@ class _CommentWidgetState extends State<CommentWidget> {
             child: _hasHtml
                 ? Html(
                   data: _normalizedCommentHtml,
-                  onLinkTap: (url, _, __) {
+                  onLinkTap: (url, _, _) {
                     if (url != null) {
                       widget.handleLink?.call(url);
                     }

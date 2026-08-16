@@ -13,12 +13,10 @@ import 'package:fanotifier/features/submissions/domain/submissions_repository.da
 
 class SubmissionsController extends ChangeNotifier {
   SubmissionsController({
-    required SubmissionsRepository repository,
-    required SubmissionFavoriteRepository favoriteRepository,
+    required this._repository,
+    required this._favoriteRepository,
     SfwModePreference? sfwModePreference,
-  })  : _repository = repository,
-        _favoriteRepository = favoriteRepository,
-        _sfwModePreference = sfwModePreference ?? SfwModePreference();
+  }) : _sfwModePreference = sfwModePreference ?? SfwModePreference();
 
   static const int _maxConcurrentFetches = 5;
 

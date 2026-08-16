@@ -6,8 +6,8 @@ import 'package:fanotifier/features/journals/domain/openjournal_load_result.dart
 
 class OpenJournalLoadCoordinator {
   const OpenJournalLoadCoordinator({
-    required OpenJournalApiService api,
-  }) : _api = api;
+    required this._api,
+  });
 
   final OpenJournalApiService _api;
 

@@ -12,10 +12,9 @@ typedef NotesScreenStateUpdater = void Function(VoidCallback update);
 
 class NotesScreenController {
   NotesScreenController({
-    required NotesRepository repository,
-    required NotesScreenStateUpdater updateState,
-  })  : _repository = repository,
-        _updateState = updateState;
+    required this._repository,
+    required this._updateState,
+  });
 
   final NotesRepository _repository;
   final NotesScreenStateUpdater _updateState;
@@ -408,7 +407,7 @@ class NotesScreenController {
     });
     _newUnreadHandlingQueue = operation.then<void>(
       (_) {},
-      onError: (Object _, StackTrace __) {},
+      onError: (Object _, StackTrace _) {},
     );
     return operation;
   }

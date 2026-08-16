@@ -126,7 +126,7 @@ class FAHttp {
   static Map<String, String> _mergeHeaders(Map<String, String>? headers) {
     final out = <String, String>{
       HttpHeaders.acceptEncodingHeader: 'gzip',
-      if (headers != null) ...headers,
+      ...?headers,
     };
     out.removeWhere((k, _) => k.toLowerCase() == 'user-agent');
     out['User-Agent'] = userAgent;
@@ -136,10 +136,12 @@ class FAHttp {
   static Future<R> _withOneRetry<R>(
     _Call<R> call, {
     bool recordRecoverableFailure = true,
+    bool Function()? isCancelled,
   }) async {
     try {
       return await call();
     } catch (e) {
+      if (isCancelled?.call() ?? false) rethrow;
       if (_isRecoverable(e)) {
         reset();
         if (recordRecoverableFailure) {
@@ -155,12 +157,17 @@ class FAHttp {
       Uri uri, {
         Map<String, String>? headers,
         Duration? timeout,
+        bool Function()? isCancelled,
       }) async {
     final t = timeout ?? defaultTimeout;
     return _withOneRetry(() async {
       await FaRequestCoordinator.instance.waitForTurn(
         label: 'GET $uri',
+        isCancelled: isCancelled,
       );
+      if (isCancelled?.call() ?? false) {
+        throw StateError('Background fetch cancelled');
+      }
       final c = _ensureClient(timeout: t);
       final response =
           await c.get(uri, headers: _mergeHeaders(headers)).timeout(t);
@@ -170,7 +177,7 @@ class FAHttp {
         responseBody: response.statusCode == 403 ? response.body : null,
       );
       return response;
-    });
+    }, isCancelled: isCancelled);
   }
 
   static Future<FAHttpResolvedResponse> getWithResolvedUri(

@@ -1,6 +1,6 @@
 import 'package:fanotifier/core/notifications/domain/local_notification_gateway.dart';
+import 'package:fanotifier/features/notes/data/background_note_unread_service.dart';
 import 'package:fanotifier/features/notes/data/message_storage.dart';
-import 'package:fanotifier/features/notes/data/note_unread_service.dart';
 import 'package:fanotifier/features/notes/data/notesscreen_api_service.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/features/notes/domain/notes_unread_notification_result.dart';
@@ -8,16 +8,41 @@ import 'package:fanotifier/features/notifications/domain/stable_notification_id.
 
 class NotesUnreadNotificationService {
   const NotesUnreadNotificationService({
-    required NotesApiService notesApi,
-    required NoteUnreadService noteUnreadService,
-    required LocalNotificationGateway notificationGateway,
-  })  : _notesApi = notesApi,
-        _noteUnreadService = noteUnreadService,
-        _notificationGateway = notificationGateway;
+    required this._notesApi,
+    required this._notificationGateway,
+  });
+
+  static const int _unreadRestoreMaxAttempts = 2;
+  static const Duration _unreadRestoreAfterReadDelay = Duration(seconds: 1);
+  static const Duration _unreadRestoreRetryDelay = Duration(seconds: 2);
 
   final NotesApiService _notesApi;
-  final NoteUnreadService _noteUnreadService;
   final LocalNotificationGateway _notificationGateway;
+
+  Future<bool> _restorePendingUnreadNote(
+    PendingNoteUnreadRestore pending,
+  ) async {
+    for (var attempt = 1; attempt <= _unreadRestoreMaxAttempts; attempt++) {
+      try {
+        final result = await restoreBackgroundNoteAsUnread(
+          noteId: pending.noteId,
+          link: pending.link,
+        );
+        if (result.success) {
+          await MessageStorage.removePendingUnreadRestore(pending.noteId);
+          return true;
+        }
+        if (!result.shouldRetryImmediately ||
+            attempt == _unreadRestoreMaxAttempts) {
+          return false;
+        }
+      } catch (_) {
+        return false;
+      }
+      await Future<void>.delayed(_unreadRestoreRetryDelay);
+    }
+    return false;
+  }
 
   Future<NotesUnreadNotificationResult> handle({
     required List<Message> fetchedInbox,
@@ -80,9 +105,20 @@ class NotesUnreadNotificationService {
 
       var shownCount = 0;
       for (final msg in newUnread) {
+        PendingNoteUnreadRestore? pendingRestore;
+        var restorationAttempted = false;
+        var claimed = false;
+        var notificationShown = false;
         try {
+          pendingRestore = await MessageStorage.addPendingUnreadRestore(
+            noteId: msg.id,
+            link: msg.link,
+          );
           final content = await _notesApi.fetchMessageContent(msg.link);
-          final claimed = await MessageStorage.claimUnshownNoteId(msg.id);
+          await Future<void>.delayed(_unreadRestoreAfterReadDelay);
+          restorationAttempted = true;
+          await _restorePendingUnreadNote(pendingRestore);
+          claimed = await MessageStorage.claimUnshownNoteId(msg.id);
           if (!claimed) continue;
           await _notificationGateway.showNotification(
             stableNotificationIdFromString(msg.id),
@@ -91,14 +127,22 @@ class NotesUnreadNotificationService {
             'note_${msg.id}',
             'notes',
           );
+          notificationShown = true;
           shownCount++;
-          await _noteUnreadService.markAsUnreadWithoutRefetch(msg);
-        } catch (_) {}
+        } catch (_) {
+          if (claimed && !notificationShown) {
+            try {
+              await MessageStorage.releaseClaimedNoteId(msg.id);
+            } catch (_) {}
+          }
+          final pending = pendingRestore;
+          if (pending != null && !restorationAttempted) {
+            await Future<void>.delayed(_unreadRestoreAfterReadDelay);
+            await _restorePendingUnreadNote(pending);
+          }
+        }
       }
 
-      await MessageStorage.addShownNoteIds(
-        unreadNotShown.map((m) => m.id).toList(),
-      );
       return NotesUnreadNotificationResult(
         latestTopId: latestTopId,
         shownCount: shownCount,

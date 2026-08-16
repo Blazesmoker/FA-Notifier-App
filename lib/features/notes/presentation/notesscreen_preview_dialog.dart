@@ -353,7 +353,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
                           textDecoration: TextDecoration.none,
                         ),
                       },
-                      onLinkTap: (url, _, __) {
+                      onLinkTap: (url, _, _) {
                         if (url != null) handleFALink(context, url);
                       },
                       extensions: [faHtmlImageExtension()],

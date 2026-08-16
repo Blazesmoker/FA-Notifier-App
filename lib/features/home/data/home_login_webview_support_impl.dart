@@ -7,12 +7,9 @@ import 'package:fanotifier/features/home/domain/home_login_webview_support.dart'
 
 class HomeLoginWebViewSupportImpl implements HomeLoginWebViewSupport {
   const HomeLoginWebViewSupportImpl({
-    HomeLoginWebViewLoadThrottle loadThrottle =
-        const HomeLoginWebViewLoadThrottle(),
-    HomeLoginWebViewNavigationPolicy navigationPolicy =
-        const HomeLoginWebViewNavigationPolicy(),
-  })  : _loadThrottle = loadThrottle,
-        _navigationPolicy = navigationPolicy;
+    this._loadThrottle = const HomeLoginWebViewLoadThrottle(),
+    this._navigationPolicy = const HomeLoginWebViewNavigationPolicy(),
+  });
 
   final HomeLoginWebViewLoadThrottle _loadThrottle;
   final HomeLoginWebViewNavigationPolicy _navigationPolicy;

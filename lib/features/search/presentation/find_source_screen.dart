@@ -516,7 +516,7 @@ class _FindSourceScreenState extends State<FindSourceScreen>
                         faPostLinks: _faPostLinks,
                         e621PostLinks: _e621PostLinks,
                       ),
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (_, _) =>
                       const Divider(color: Colors.white12),
                       itemBuilder: (context, index) {
                         final mapping = getFindSourceResultItem(

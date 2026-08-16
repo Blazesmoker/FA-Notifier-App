@@ -29,7 +29,10 @@ class BackgroundNoteContentService {
 
   final FlutterSecureStorage _secureStorage;
 
-  Future<String> fetchContent(String link) async {
+  Future<String> fetchContent(
+    String link, {
+    CancelToken? cancelToken,
+  }) async {
     final cookieA = await _secureStorage
         .read(key: 'fa_cookie_a')
         .timeout(_credentialTimeout);
@@ -56,12 +59,16 @@ class BackgroundNoteContentService {
     );
     final url = 'https://www.furaffinity.net$link';
     await FaRequestCoordinator.instance
-        .waitForTurn(label: 'GET note content')
+        .waitForTurn(
+          label: 'GET note content',
+          isCancelled: () => cancelToken?.isCancelled ?? false,
+        )
         .timeout(_requestGateTimeout);
     late final Response<dynamic> response;
     try {
       response = await dio.get<dynamic>(
         url,
+        cancelToken: cancelToken,
         options: Options(
           responseType: ResponseType.plain,
           headers: {
@@ -97,6 +104,12 @@ class BackgroundNoteContentService {
   }
 }
 
-Future<String> fetchBackgroundNoteContent(String link) {
-  return BackgroundNoteContentService().fetchContent(link);
+Future<String> fetchBackgroundNoteContent(
+  String link, {
+  CancelToken? cancelToken,
+}) {
+  return BackgroundNoteContentService().fetchContent(
+    link,
+    cancelToken: cancelToken,
+  );
 }

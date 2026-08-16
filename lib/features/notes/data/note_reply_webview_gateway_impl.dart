@@ -5,12 +5,9 @@ import 'package:fanotifier/features/notes/domain/note_reply_webview_gateway.dart
 
 class NoteReplyWebViewGatewayImpl implements NoteReplyWebViewGateway {
   const NoteReplyWebViewGatewayImpl({
-    NoteReplyWebViewCookieService cookieService =
-        const NoteReplyWebViewCookieService(),
-    NoteReplyWebViewNavigationService navigationService =
-        const NoteReplyWebViewNavigationService(),
-  })  : _cookieService = cookieService,
-        _navigationService = navigationService;
+    this._cookieService = const NoteReplyWebViewCookieService(),
+    this._navigationService = const NoteReplyWebViewNavigationService(),
+  });
 
   final NoteReplyWebViewCookieService _cookieService;
   final NoteReplyWebViewNavigationService _navigationService;

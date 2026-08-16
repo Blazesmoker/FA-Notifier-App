@@ -14,12 +14,10 @@ import 'package:flutter/foundation.dart';
 class NoteSubmissionPreviewRepositoryImpl
     implements NoteSubmissionPreviewRepository {
   NoteSubmissionPreviewRepositoryImpl({
-    required OpenPostRepository openPostRepository,
-    required NoteGoogleImageResolver googleImageResolver,
-    SfwModePreference sfwModePreference = const SfwModePreference(),
-  })  : _openPostRepository = openPostRepository,
-        _googleImageResolver = googleImageResolver,
-        _sfwModePreference = sfwModePreference;
+    required this._openPostRepository,
+    required this._googleImageResolver,
+    this._sfwModePreference = const SfwModePreference(),
+  });
 
   final OpenPostRepository _openPostRepository;
   final NoteGoogleImageResolver _googleImageResolver;
@@ -345,7 +343,7 @@ class NoteSubmissionPreviewRepositoryImpl
         : {
             'User-Agent': FAHttp.userAgent,
             'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-            if (referer != null) 'Referer': referer,
+            'Referer': ?referer,
           };
     final response = await FAHttp.get(
       Uri.parse(imageUrl),

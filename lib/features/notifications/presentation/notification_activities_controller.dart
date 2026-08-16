@@ -7,8 +7,8 @@ import 'package:fanotifier/features/notifications/presentation/notification_tab_
 class NotificationActivitiesController {
   NotificationActivitiesController(
     this._service, {
-    required FaActivitiesPollingPort pollingService,
-  }) : _pollingService = pollingService;
+    required this._pollingService,
+  });
 
   FANotificationService _service;
   final FaActivitiesPollingPort _pollingService;

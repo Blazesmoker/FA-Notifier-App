@@ -7,8 +7,8 @@ import 'package:fanotifier/shared/platform/image_export_service.dart';
 
 class OpenPostMediaExportService {
   const OpenPostMediaExportService({
-    ImageExportService imageExportService = const ImageExportService(),
-  }) : _imageExportService = imageExportService;
+    this._imageExportService = const ImageExportService(),
+  });
 
   final ImageExportService _imageExportService;
 

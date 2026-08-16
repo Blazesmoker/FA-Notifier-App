@@ -15,22 +15,15 @@ typedef SearchCloudflareCheck = Future<CloudflareCheckResult?> Function({
 
 class SearchImageController {
   SearchImageController({
-    required Map<String, String> selectedFilters,
-    required String searchQuery,
-    required bool Function() isMounted,
-    required VoidCallback notifyView,
-    required SearchCloudflareCheck showCloudflareCheck,
-    required SearchRepository repository,
-    required SubmissionFavoriteRepository favoriteRepository,
+    required this._selectedFilters,
+    required this._searchQuery,
+    required this._isMounted,
+    required this._notifyView,
+    required this._showCloudflareCheck,
+    required this._repository,
+    required this._favoriteRepository,
     SfwModePreference? sfwModePreference,
-  })  : _selectedFilters = selectedFilters,
-        _searchQuery = searchQuery,
-        _isMounted = isMounted,
-        _notifyView = notifyView,
-        _showCloudflareCheck = showCloudflareCheck,
-        _repository = repository,
-        _favoriteRepository = favoriteRepository,
-        _sfwModePreference = sfwModePreference ?? SfwModePreference();
+  }) : _sfwModePreference = sfwModePreference ?? SfwModePreference();
 
   static const double _nextPageLeadScreens = 2.5;
 

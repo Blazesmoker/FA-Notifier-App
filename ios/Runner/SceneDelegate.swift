@@ -19,11 +19,6 @@ class SceneDelegate: FlutterSceneDelegate {
     }
 
     override func sceneDidBecomeActive(_ scene: UIScene) {
-        if let appDelegate = UIApplication.shared.delegate as? AppDelegate {
-            appDelegate.handleExperimentalWillBecomeActive(
-                source: "sceneDelegate.preSuper"
-            )
-        }
         super.sceneDidBecomeActive(scene)
 
         if let appDelegate = UIApplication.shared.delegate as? AppDelegate {

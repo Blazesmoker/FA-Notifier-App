@@ -997,7 +997,7 @@ class _OpenJournalState extends State<OpenJournal>
                                                       html_pkg.Display.block,
                                                 ),
                                               },
-                                              onLinkTap: (url, _, __) =>
+                                              onLinkTap: (url, _, _) =>
                                                   handleFALink(context, url!,
                                                       htmlSource:
                                                           submissionDescription,

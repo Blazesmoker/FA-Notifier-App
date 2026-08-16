@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 
 class CommentSettingsProvider with ChangeNotifier {
   CommentSettingsProvider({
-    CommentSettingsPreference preference = const CommentSettingsPreference(),
-  }) : _preference = preference {
+    this._preference = const CommentSettingsPreference(),
+  }) {
     load();
   }
 

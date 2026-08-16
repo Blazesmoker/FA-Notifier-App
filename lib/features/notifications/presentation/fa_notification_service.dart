@@ -11,8 +11,8 @@ import 'package:fanotifier/features/notifications/domain/notification_shout_merg
 /// Centralized service for notifications.
 class FANotificationService with ChangeNotifier implements FaNotificationStatePort {
   FANotificationService({
-    required FaNotificationsRepository repository,
-  }) : _repository = repository;
+    required this._repository,
+  });
 
   final FaNotificationsRepository _repository;
 

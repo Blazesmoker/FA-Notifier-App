@@ -15,16 +15,12 @@ typedef BrowseCloudflareChallengeHandler = Future<CloudflareCheckResult?>
 
 class BrowseImageGridController extends ChangeNotifier {
   BrowseImageGridController({
-    required Map<String, String> selectedFilters,
-    required BrowseCloudflareChallengeHandler onCloudflareChallenge,
-    required BrowseRepository repository,
-    required SubmissionFavoriteRepository favoriteRepository,
+    required this._selectedFilters,
+    required this._onCloudflareChallenge,
+    required this._repository,
+    required this._favoriteRepository,
     SfwModePreference? sfwModePreference,
-  })  : _selectedFilters = selectedFilters,
-        _onCloudflareChallenge = onCloudflareChallenge,
-        _repository = repository,
-        _favoriteRepository = favoriteRepository,
-        _sfwModePreference = sfwModePreference ?? SfwModePreference();
+  }) : _sfwModePreference = sfwModePreference ?? SfwModePreference();
 
   static const double _nextPageLeadScreens = 2.5;
 

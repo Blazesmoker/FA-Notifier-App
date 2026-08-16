@@ -3,7 +3,7 @@ import 'package:fanotifier/features/profile/domain/user_profile_load_result.dart
 import 'package:flutter/foundation.dart';
 
 class UserProfileLoader {
-  const UserProfileLoader({required UserProfileApiService api}) : _api = api;
+  const UserProfileLoader({required this._api});
 
   final UserProfileApiService _api;
 

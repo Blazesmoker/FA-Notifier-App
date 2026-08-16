@@ -11,11 +11,9 @@ import 'package:fanotifier/core/network/fa_http.dart';
 
 class FaNotificationShoutRepository {
   FaNotificationShoutRepository({
-    required SimpleSemaphore semaphore,
-    FaNotificationCookieHeaderProvider cookieHeaderProvider =
-        const FaNotificationCookieHeaderProvider(),
-  })  : _semaphore = semaphore,
-        _cookieHeaderProvider = cookieHeaderProvider;
+    required this._semaphore,
+    this._cookieHeaderProvider = const FaNotificationCookieHeaderProvider(),
+  });
 
   final SimpleSemaphore _semaphore;
   final FaNotificationCookieHeaderProvider _cookieHeaderProvider;
@@ -42,7 +40,7 @@ class FaNotificationShoutRepository {
       final response = await FAHttp.get(
         Uri.parse(url),
         headers: {
-          if (cookieHeader != null) 'Cookie': cookieHeader,
+          'Cookie': ?cookieHeader,
         },
       );
       if (response.statusCode == 200) {
@@ -68,7 +66,7 @@ class FaNotificationShoutRepository {
       final response = await FAHttp.get(
         Uri.parse(url),
         headers: {
-          if (cookieHeader != null) 'Cookie': cookieHeader,
+          'Cookie': ?cookieHeader,
         },
       );
       if (response.statusCode != 200) return <Shout>[];
@@ -88,7 +86,7 @@ class FaNotificationShoutRepository {
       final response = await FAHttp.get(
         Uri.parse(url),
         headers: {
-          if (cookieHeader != null) 'Cookie': cookieHeader,
+          'Cookie': ?cookieHeader,
         },
       );
       if (response.statusCode != 200) return <Map<String, dynamic>>[];

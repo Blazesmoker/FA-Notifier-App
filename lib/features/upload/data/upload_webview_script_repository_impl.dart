@@ -14,8 +14,8 @@ import 'package:flutter/foundation.dart';
 class UploadWebViewScriptRepositoryImpl
     implements UploadWebViewScriptRepository {
   const UploadWebViewScriptRepositoryImpl({
-    UploadJsResultDecoder decoder = const UploadJsResultDecoder(),
-  }) : _decoder = decoder;
+    this._decoder = const UploadJsResultDecoder(),
+  });
 
   final UploadJsResultDecoder _decoder;
 

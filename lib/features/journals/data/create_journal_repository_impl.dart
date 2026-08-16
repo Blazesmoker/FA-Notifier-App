@@ -6,11 +6,9 @@ import 'package:fanotifier/features/journals/domain/create_journal_repository.da
 
 class CreateJournalRepositoryImpl implements CreateJournalRepository {
   const CreateJournalRepositoryImpl({
-    CreateJournalService service = const CreateJournalService(),
-    FAWebViewCookieService webViewCookieService =
-        const FAWebViewCookieService(),
-  })  : _service = service,
-        _webViewCookieService = webViewCookieService;
+    this._service = const CreateJournalService(),
+    this._webViewCookieService = const FAWebViewCookieService(),
+  });
 
   final CreateJournalService _service;
   final FAWebViewCookieService _webViewCookieService;

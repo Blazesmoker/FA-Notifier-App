@@ -7,11 +7,9 @@ import 'package:fanotifier/features/search/domain/find_source_repository.dart';
 
 class FindSourceRepositoryImpl implements FindSourceRepository {
   FindSourceRepositoryImpl({
-    FindSourceImageInputService imageInputService =
-        const FindSourceImageInputService(),
+    this._imageInputService = const FindSourceImageInputService(),
     FindSourceService? service,
-  })  : _imageInputService = imageInputService,
-        _service = service ?? FindSourceService();
+  }) : _service = service ?? FindSourceService();
 
   final FindSourceImageInputService _imageInputService;
   final FindSourceService _service;

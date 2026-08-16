@@ -335,7 +335,7 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
               data: userProfileTexts,
               style: userProfileHtmlStylesCompact(),
               extensions: buildUserProfileBBCodeExtensions(),
-              onLinkTap: (url, _, __) => onHandleFALink(context, url!),
+              onLinkTap: (url, _, _) => onHandleFALink(context, url!),
             ),
           ],
         ),

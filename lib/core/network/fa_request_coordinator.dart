@@ -42,6 +42,16 @@ class FaRequestCoordinator {
     const FaRequestSnapshot(state: FaRequestCoordinatorState.normal),
   );
 
+  Duration get timeUntilNextRequestSlot {
+    var allowedAt = _nextRequestAt;
+    final blockedUntil = _blockedUntil;
+    if (blockedUntil != null && blockedUntil.isAfter(allowedAt)) {
+      allowedAt = blockedUntil;
+    }
+    final remaining = allowedAt.difference(DateTime.now());
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+
   Future<void> _queue = Future<void>.value();
   DateTime _nextRequestAt = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime? _blockedUntil;
@@ -51,11 +61,17 @@ class FaRequestCoordinator {
   int _http503FailureCount = 0;
   int _requestSequence = 0;
 
-  Future<void> waitForTurn({String? label}) {
+  Future<void> waitForTurn({
+    String? label,
+    bool Function()? isCancelled,
+  }) {
     final id = ++_requestSequence;
     final requestedAt = DateTime.now();
     final requestLabel = label ?? 'FA request';
     final next = _queue.catchError((_) {}).then((_) async {
+      if (isCancelled?.call() ?? false) {
+        throw StateError('FA request cancelled');
+      }
       final now = DateTime.now();
       final queueDelay = now.difference(requestedAt);
       var allowedAt = _nextRequestAt;
@@ -77,7 +93,20 @@ class FaRequestCoordinator {
             message: _blockedMessage,
           ),
         );
-        await Future.delayed(allowedAt.difference(now));
+        while (allowedAt.isAfter(DateTime.now())) {
+          if (isCancelled?.call() ?? false) {
+            throw StateError('FA request cancelled');
+          }
+          final remaining = allowedAt.difference(DateTime.now());
+          await Future<void>.delayed(
+            remaining > const Duration(milliseconds: 250)
+                ? const Duration(milliseconds: 250)
+                : remaining,
+          );
+        }
+        if (isCancelled?.call() ?? false) {
+          throw StateError('FA request cancelled');
+        }
         if (kDebugMode) {
           debugPrint(
             '[FA request gate] #$id $requestLabel starting after ${DateTime.now().difference(requestedAt).inMilliseconds}ms total',
@@ -89,6 +118,9 @@ class FaRequestCoordinator {
             '[FA request gate] #$id $requestLabel starting immediately after ${queueDelay.inMilliseconds}ms queued',
           );
         }
+      }
+      if (isCancelled?.call() ?? false) {
+        throw StateError('FA request cancelled');
       }
       _nextRequestAt = DateTime.now().add(minRequestSpacing);
       if (_blockedUntil != null &&

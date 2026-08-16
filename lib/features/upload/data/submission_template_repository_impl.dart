@@ -16,10 +16,9 @@ class SubmissionTemplateRepositoryImpl
   }
 
   const SubmissionTemplateRepositoryImpl._({
-    required SubmissionTemplateStore store,
-    required SubmissionTemplateSaveService saveService,
-  })  : _store = store,
-        _saveService = saveService;
+    required this._store,
+    required this._saveService,
+  });
 
   final SubmissionTemplateStore _store;
   final SubmissionTemplateSaveService _saveService;

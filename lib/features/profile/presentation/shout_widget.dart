@@ -251,7 +251,7 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                         textAlign: TextAlign.left,
                       ),
                     },
-                    onLinkTap: (url, _, __) => handleFALink(context, url!),
+                    onLinkTap: (url, _, _) => handleFALink(context, url!),
                     extensions: [
                       html_pkg.TagExtension(
                         tagsToExtend: {"i"},

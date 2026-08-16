@@ -8,11 +8,9 @@ import 'package:fanotifier/core/network/fa_http.dart';
 
 class FaNotificationMediaRepository {
   FaNotificationMediaRepository({
-    required SimpleSemaphore semaphore,
-    FaNotificationCookieHeaderProvider cookieHeaderProvider =
-        const FaNotificationCookieHeaderProvider(),
-  })  : _semaphore = semaphore,
-        _cookieHeaderProvider = cookieHeaderProvider;
+    required this._semaphore,
+    this._cookieHeaderProvider = const FaNotificationCookieHeaderProvider(),
+  });
 
   final SimpleSemaphore _semaphore;
   final FaNotificationCookieHeaderProvider _cookieHeaderProvider;
@@ -43,7 +41,7 @@ class FaNotificationMediaRepository {
       final response = await FAHttp.get(
         Uri.parse(fullUrl),
         headers: {
-          if (cookieHeader != null) 'Cookie': cookieHeader,
+          'Cookie': ?cookieHeader,
         },
       );
       debugPrint('[fetchAvatarUrl] code=${response.statusCode}');
@@ -85,7 +83,7 @@ class FaNotificationMediaRepository {
         final response = await FAHttp.get(
           Uri.parse(url),
           headers: {
-            if (cookieHeader != null) 'Cookie': cookieHeader,
+            'Cookie': ?cookieHeader,
           },
         );
         debugPrint(

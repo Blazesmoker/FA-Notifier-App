@@ -62,12 +62,54 @@ class BackgroundNoteUnreadService {
   Future<BackgroundNoteUnreadResult> markAsUnread({
     required String noteId,
     required String link,
+    CancelToken? cancelToken,
+  }) {
+    final cleanedNoteId = noteId.trim();
+    var pageNumber = extractPageNumber(link);
+    var messageId = extractMessageId(link);
+    if (messageId.isEmpty && RegExp(r'^\d+$').hasMatch(cleanedNoteId)) {
+      messageId = cleanedNoteId;
+      pageNumber = 1;
+    }
+    final url = messageId.isEmpty
+        ? 'https://www.furaffinity.net/msg/pms/'
+        : 'https://www.furaffinity.net/msg/pms/$pageNumber/$messageId/';
+    return _submitUnread(
+      noteIds: <String>[messageId],
+      url: url,
+      requestLabel: 'POST note unread',
+      cancelToken: cancelToken,
+    );
+  }
+
+  Future<BackgroundNoteUnreadResult> markManyAsUnread({
+    required Iterable<String> noteIds,
+    CancelToken? cancelToken,
+  }) {
+    return _submitUnread(
+      noteIds: noteIds,
+      url: 'https://www.furaffinity.net/msg/pms/',
+      requestLabel: 'POST notes unread',
+      cancelToken: cancelToken,
+    );
+  }
+
+  Future<BackgroundNoteUnreadResult> _submitUnread({
+    required Iterable<String> noteIds,
+    required String url,
+    required String requestLabel,
+    CancelToken? cancelToken,
   }) async {
     final stopwatch = Stopwatch()..start();
     var stage = 'credentials';
     try {
-      final cleanedNoteId = noteId.trim();
-      if (cleanedNoteId.isEmpty) {
+      final cleanedNoteIds = noteIds
+          .map((noteId) => noteId.trim())
+          .where((noteId) => noteId.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
+      if (cleanedNoteIds.isEmpty ||
+          cleanedNoteIds.any((noteId) => !RegExp(r'^\d+$').hasMatch(noteId))) {
         return _result(
           stopwatch,
           outcome: BackgroundNoteUnreadOutcome.invalidNote,
@@ -87,19 +129,6 @@ class BackgroundNoteUnreadService {
         );
       }
 
-      var pageNumber = extractPageNumber(link);
-      var messageId = extractMessageId(link);
-      if (messageId.isEmpty && RegExp(r'^\d+$').hasMatch(cleanedNoteId)) {
-        messageId = cleanedNoteId;
-        pageNumber = 1;
-      }
-      if (messageId.isEmpty) {
-        return _result(
-          stopwatch,
-          outcome: BackgroundNoteUnreadOutcome.invalidNote,
-        );
-      }
-
       final dio = Dio(
         BaseOptions(
           connectTimeout: _connectTimeout,
@@ -116,21 +145,23 @@ class BackgroundNoteUnreadService {
         ).timeout(_credentialTimeout),
       );
 
-      final formData = <String, String>{
+      final formData = <String, dynamic>{
         'manage_notes': '1',
-        'items[]': messageId,
+        'items[]': cleanedNoteIds,
         'move_to': 'unread',
       };
-      final url =
-          'https://www.furaffinity.net/msg/pms/$pageNumber/$messageId/';
       stage = 'requestGate';
       await FaRequestCoordinator.instance
-          .waitForTurn(label: 'POST note unread')
+          .waitForTurn(
+            label: requestLabel,
+            isCancelled: () => cancelToken?.isCancelled ?? false,
+          )
           .timeout(_requestGateTimeout);
       stage = 'request';
       final response = await dio.post<dynamic>(
         url,
         data: formData,
+        cancelToken: cancelToken,
         options: Options(
           headers: <String, String>{
             'User-Agent': FAHttp.userAgent,
@@ -146,6 +177,7 @@ class BackgroundNoteUnreadService {
             'Upgrade-Insecure-Requests': '1',
           },
           followRedirects: false,
+          listFormat: ListFormat.multi,
           validateStatus: (status) =>
               status != null && status >= 100 && status < 600,
         ),
@@ -256,10 +288,22 @@ class BackgroundNoteUnreadService {
 Future<BackgroundNoteUnreadResult> restoreBackgroundNoteAsUnread({
   required String noteId,
   required String link,
+  CancelToken? cancelToken,
 }) {
   return BackgroundNoteUnreadService().markAsUnread(
     noteId: noteId,
     link: link,
+    cancelToken: cancelToken,
+  );
+}
+
+Future<BackgroundNoteUnreadResult> restoreBackgroundNotesAsUnread({
+  required Iterable<String> noteIds,
+  CancelToken? cancelToken,
+}) {
+  return BackgroundNoteUnreadService().markManyAsUnread(
+    noteIds: noteIds,
+    cancelToken: cancelToken,
   );
 }
 

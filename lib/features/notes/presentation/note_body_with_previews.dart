@@ -461,7 +461,7 @@ class _NoteBodyWithPreviewsState extends State<NoteBodyWithPreviews> {
               textDecoration: TextDecoration.none,
             ),
           },
-          onLinkTap: (url, _, __) {
+          onLinkTap: (url, _, _) {
             if (url != null) handleFALink(context, url);
           },
           extensions: [

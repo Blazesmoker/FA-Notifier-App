@@ -4,8 +4,7 @@ import 'package:fanotifier/core/timezone/domain/timezone_repository.dart';
 import 'package:fanotifier/core/timezone/domain/timezone_settings.dart';
 
 class TimezoneProvider with ChangeNotifier {
-  TimezoneProvider({required TimezoneRepository repository})
-      : _repository = repository;
+  TimezoneProvider({required this._repository});
 
   static const Duration _refreshInterval = Duration(days: 14);
   final TimezoneRepository _repository;

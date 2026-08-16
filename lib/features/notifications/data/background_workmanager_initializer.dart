@@ -2,8 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:workmanager/workmanager.dart';
 
 class BackgroundWorkmanagerInitializer {
-  BackgroundWorkmanagerInitializer({required void Function() callbackDispatcher})
-      : _callbackDispatcher = callbackDispatcher;
+  BackgroundWorkmanagerInitializer({required this._callbackDispatcher});
 
   final void Function() _callbackDispatcher;
   bool _initialized = false;

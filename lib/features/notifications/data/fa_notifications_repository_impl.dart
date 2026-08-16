@@ -35,12 +35,10 @@ class FaNotificationsRepositoryImpl implements FaNotificationsRepository {
   }
 
   const FaNotificationsRepositoryImpl._({
-    required FaNotificationsRemoteDataSource remoteDataSource,
-    required FaNotificationShoutRepository shoutRepository,
-    required FaNotificationMediaRepository mediaRepository,
-  })  : _remoteDataSource = remoteDataSource,
-        _shoutRepository = shoutRepository,
-        _mediaRepository = mediaRepository;
+    required this._remoteDataSource,
+    required this._shoutRepository,
+    required this._mediaRepository,
+  });
 
   final FaNotificationsRemoteDataSource _remoteDataSource;
   final FaNotificationShoutRepository _shoutRepository;

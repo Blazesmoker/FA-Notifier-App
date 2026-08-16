@@ -4,9 +4,8 @@ import 'package:fanotifier/features/upload/domain/upload_navigation_repository.d
 class UploadSubmissionNavigationService
     implements UploadNavigationRepository {
   const UploadSubmissionNavigationService({
-    UploadWebViewNavigationPolicy webViewNavigationPolicy =
-        const UploadWebViewNavigationPolicy(),
-  }) : _webViewNavigationPolicy = webViewNavigationPolicy;
+    this._webViewNavigationPolicy = const UploadWebViewNavigationPolicy(),
+  });
 
   final UploadWebViewNavigationPolicy _webViewNavigationPolicy;
 

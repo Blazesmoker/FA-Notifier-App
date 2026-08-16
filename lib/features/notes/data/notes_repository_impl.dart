@@ -27,7 +27,6 @@ class NotesRepositoryImpl implements NotesRepository {
       firstRunPreference: NotesFirstRunPreference(),
       unreadNotificationService: NotesUnreadNotificationService(
         notesApi: notesApi,
-        noteUnreadService: noteUnreadService,
         notificationGateway: notificationGateway,
       ),
       noteUnreadService: noteUnreadService,
@@ -37,18 +36,13 @@ class NotesRepositoryImpl implements NotesRepository {
   }
 
   const NotesRepositoryImpl({
-    required NotesApiService notesApi,
-    required NotesFirstRunPreference firstRunPreference,
-    required NotesUnreadNotificationService unreadNotificationService,
-    required NoteUnreadService noteUnreadService,
-    required NotesRefreshPort refreshPort,
-    required FaActivitiesPollingPort activitiesPollingPort,
-  })  : _notesApi = notesApi,
-        _firstRunPreference = firstRunPreference,
-        _unreadNotificationService = unreadNotificationService,
-        _noteUnreadService = noteUnreadService,
-        _refreshPort = refreshPort,
-        _activitiesPollingPort = activitiesPollingPort;
+    required this._notesApi,
+    required this._firstRunPreference,
+    required this._unreadNotificationService,
+    required this._noteUnreadService,
+    required this._refreshPort,
+    required this._activitiesPollingPort,
+  });
 
   final NotesApiService _notesApi;
   final NotesFirstRunPreference _firstRunPreference;

@@ -10,14 +10,11 @@ import 'package:fanotifier/features/journals/domain/openjournal_repository.dart'
 
 class OpenJournalRepositoryImpl implements OpenJournalRepository {
   const OpenJournalRepositoryImpl({
-    required OpenJournalLoadCoordinator loadCoordinator,
-    required JournalActionService actionService,
-    required JournalDeletionCoordinator deletionCoordinator,
-    required JournalCommentService commentService,
-  })  : _loadCoordinator = loadCoordinator,
-        _actionService = actionService,
-        _deletionCoordinator = deletionCoordinator,
-        _commentService = commentService;
+    required this._loadCoordinator,
+    required this._actionService,
+    required this._deletionCoordinator,
+    required this._commentService,
+  });
 
   final OpenJournalLoadCoordinator _loadCoordinator;
   final JournalActionService _actionService;

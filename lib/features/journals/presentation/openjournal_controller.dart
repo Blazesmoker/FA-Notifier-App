@@ -13,8 +13,8 @@ import 'package:fanotifier/features/journals/domain/openjournal_repository.dart'
 class OpenJournalController extends ChangeNotifier {
   OpenJournalController({
     required this.journalId,
-    required OpenJournalRepository repository,
-  }) : _repository = repository;
+    required this._repository,
+  });
 
   final String journalId;
   final OpenJournalRepository _repository;

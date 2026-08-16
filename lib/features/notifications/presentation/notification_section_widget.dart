@@ -583,7 +583,7 @@ class _FadeInNetworkImageState extends State<FadeInNetworkImage> {
               child: child,
             );
           },
-          errorBuilder: (_, __, ___) => widget.errorWidget,
+          errorBuilder: (_, _, _) => widget.errorWidget,
         ),
       ],
     );

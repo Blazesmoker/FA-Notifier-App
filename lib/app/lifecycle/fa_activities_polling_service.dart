@@ -11,6 +11,8 @@ import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 import 'package:fanotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
 import 'package:fanotifier/features/notifications/data/notification_refresh_service.dart';
+import 'package:fanotifier/features/notifications/data/notification_badge_state.dart'
+    as notification_badge;
 import 'package:fanotifier/features/notifications/data/notification_service.dart';
 
 class FaActivitiesPollingService
@@ -43,6 +45,7 @@ class FaActivitiesPollingService
   bool _pendingStartResetTimer = false;
   String? _pendingStartSource;
   bool _pendingResumeActivityNotification = false;
+  bool _pendingNotesEntryAcknowledgement = false;
 
   bool get _acknowledgingScreenVisible =>
       _submissionsScreenVisible ||
@@ -113,6 +116,7 @@ class FaActivitiesPollingService
     _pendingStartResetTimer = false;
     _pendingStartSource = null;
     _pendingResumeActivityNotification = false;
+    _pendingNotesEntryAcknowledgement = false;
     _foregroundEntryCheckPending = true;
     _notesScreenVisible = false;
     _submissionsScreenVisible = false;
@@ -134,6 +138,47 @@ class FaActivitiesPollingService
   void setNotesScreenVisible(bool visible) {
     if (_notesScreenVisible == visible) return;
     _notesScreenVisible = visible;
+    if (!visible) {
+      _pendingNotesEntryAcknowledgement = false;
+      return;
+    }
+    _beginNotesEntryAcknowledgement();
+  }
+
+  void _beginNotesEntryAcknowledgement() {
+    if (!_notesScreenVisible || !_isResumed) return;
+    final svc = _faNotificationService;
+    if (svc != null && svc.hasValidLatestCountsSnapshot) {
+      _pendingNotesEntryAcknowledgement = false;
+      unawaited(
+        ActivitiesNotificationStateStore().acknowledgeVisibleCounts(
+          currentCounts: svc.latestCounts,
+          acknowledgeNotes: true,
+        ),
+      );
+      return;
+    }
+
+    _pendingNotesEntryAcknowledgement = true;
+    final existing = _inFlight;
+    if (existing == null) {
+      unawaited(triggerNow(
+        resetTimer: true,
+        source: 'notes_entry_baseline',
+      ));
+      return;
+    }
+    unawaited(existing.whenComplete(() async {
+      if (!_pendingNotesEntryAcknowledgement ||
+          !_notesScreenVisible ||
+          !_isResumed) {
+        return;
+      }
+      await triggerNow(
+        resetTimer: true,
+        source: 'notes_entry_baseline',
+      );
+    }));
   }
 
   @override
@@ -415,6 +460,16 @@ class FaActivitiesPollingService
       final bool notesEnabled =
           prefs.getBool('drawer_notif_notes_enabled') ?? true;
 
+      if (_pendingNotesEntryAcknowledgement &&
+          _notesScreenVisible &&
+          _isResumed) {
+        await activitiesStateStore.acknowledgeVisibleCounts(
+          currentCounts: currentCounts,
+          acknowledgeNotes: true,
+        );
+        _pendingNotesEntryAcknowledgement = false;
+      }
+
       final acknowledgeVisible = !foregroundEntryCheck && _isResumed;
       if (acknowledgeVisible) {
         await _acknowledgeVisibleCounts(
@@ -452,7 +507,9 @@ class FaActivitiesPollingService
         await activitiesStateStore.acknowledgeCurrentCounts(
           currentCounts: currentCounts,
         );
-        await NotificationService().cancelActivityNotification();
+        await NotificationService().cancelActivityNotification(
+          source: 'foregroundAcknowledge',
+        );
         return;
       }
 
@@ -532,9 +589,6 @@ class FaActivitiesPollingService
         );
       }
       final notificationService = NotificationService();
-      if (Platform.isIOS) {
-        await notificationService.cancelActivityNotification();
-      }
       await notificationService.showNotification(
         NotificationService.activityNotificationId,
         'New FA Activity',
@@ -545,6 +599,9 @@ class FaActivitiesPollingService
       await activitiesStateStore.markActivityNotificationShown(
         currentCounts: currentCounts,
         body: messageBody,
+      );
+      await notification_badge.rememberActivityNotification(
+        NotificationService.activityNotificationId,
       );
       _pendingResumeActivityNotification = false;
       debugPrint(
@@ -575,6 +632,9 @@ class FaActivitiesPollingService
           prev == AppLifecycleState.detached;
       _ensureTimer();
       if (realResume || _pendingResumeActivityNotification) {
+        if (realResume && _notesScreenVisible) {
+          _beginNotesEntryAcknowledgement();
+        }
         _foregroundEntryCheckPending = true;
         _pendingResumeActivityNotification = false;
         final existing = _inFlight;

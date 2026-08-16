@@ -27,7 +27,11 @@ class BackgroundInboxService {
   Future<BackgroundInboxSnapshot> fetchSnapshot({
     required Set<String> shownNoteIds,
     required Set<String> seenNoteIds,
+    bool Function()? isCancelled,
   }) async {
+    if (isCancelled?.call() ?? false) {
+      throw StateError('Background fetch cancelled');
+    }
     final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     if (cookieA == null || cookieB == null) {
@@ -39,6 +43,7 @@ class BackgroundInboxService {
       page: 1,
       cookieA: cookieA,
       cookieB: cookieB,
+      isCancelled: isCancelled,
     );
     final result = <Message>[...page1.messages];
     var fetchedPage2 = false;
@@ -49,10 +54,14 @@ class BackgroundInboxService {
       seenNoteIds: seenNoteIds,
       topbarNotes: page1.topbarCounts?.notes,
     )) {
+      if (isCancelled?.call() ?? false) {
+        throw StateError('Background fetch cancelled');
+      }
       final page2 = await _fetchPage(
         page: 2,
         cookieA: cookieA,
         cookieB: cookieB,
+        isCancelled: isCancelled,
       );
       result.addAll(page2.messages);
       fetchedPage2 = true;
@@ -69,6 +78,7 @@ class BackgroundInboxService {
     required int page,
     required String cookieA,
     required String cookieB,
+    bool Function()? isCancelled,
   }) async {
     final url = Uri.parse('https://www.furaffinity.net/msg/pms/$page/');
     final response = await FAHttp.get(
@@ -79,6 +89,7 @@ class BackgroundInboxService {
         ),
         'User-Agent': FAHttp.userAgent,
       },
+      isCancelled: isCancelled,
     );
     if (response.statusCode != 200) {
       throw Exception('HTTP ${response.statusCode}');
@@ -96,9 +107,11 @@ class BackgroundInboxService {
 Future<BackgroundInboxSnapshot> fetchBackgroundInboxSnapshot({
   required Set<String> shownNoteIds,
   required Set<String> seenNoteIds,
+  bool Function()? isCancelled,
 }) {
   return BackgroundInboxService().fetchSnapshot(
     shownNoteIds: shownNoteIds,
     seenNoteIds: seenNoteIds,
+    isCancelled: isCancelled,
   );
 }

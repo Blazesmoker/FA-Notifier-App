@@ -67,28 +67,31 @@ class NotificationService implements LocalNotificationGateway {
     return allocatedId;
   }
 
-  Future<void> cancelActivityNotification() {
+  Future<void> cancelActivityNotification({
+    String source = 'unspecified',
+  }) {
+    appLog(
+      '[NOTIFICATION_CANCEL] id=$activityNotificationId '
+      'type=activity source=$source',
+    );
     return flutterLocalNotificationsPlugin.cancel(id: activityNotificationId);
   }
 
-  Future<void> cancelNotification(int id) {
+  Future<void> cancelNotification(
+    int id, {
+    String source = 'unspecified',
+  }) {
+    appLog('[NOTIFICATION_CANCEL] id=$id type=generic source=$source');
     return flutterLocalNotificationsPlugin.cancel(id: id);
   }
 
-  Future<List<Map<String, Object?>>> getActiveNotificationDiagnostics() async {
+  Future<Set<int>> getActiveNotificationIds() async {
     final notifications =
         await flutterLocalNotificationsPlugin.getActiveNotifications();
     return notifications
-        .map(
-          (notification) => <String, Object?>{
-            'id': notification.id,
-            'titleLength': notification.title?.length ?? 0,
-            'bodyLength': notification.body?.length ?? 0,
-            'payload': notification.payload ?? '',
-            'groupKey': notification.groupKey ?? '',
-          },
-        )
-        .toList(growable: false);
+        .map((notification) => notification.id)
+        .whereType<int>()
+        .toSet();
   }
 
   Future<void> init({
@@ -123,7 +126,6 @@ class NotificationService implements LocalNotificationGateway {
       onDidReceiveNotificationResponse: onDidReceiveNotificationResponse,
       onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
-
     final details =
         await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
     if ((details?.didNotificationLaunchApp ?? false) &&
@@ -304,9 +306,16 @@ class NotificationService implements LocalNotificationGateway {
     String type, {
     int? badgeNumber,
   }) async {
+    final normalizedTitle = title.trim();
+    final normalizedBody = body.trim();
+    if (normalizedTitle.isEmpty || normalizedBody.isEmpty) {
+      throw ArgumentError('Notification title and body must not be empty');
+    }
     appLog('NotificationService.showNotification type=$type');
     kDebugPrint(
-        'NotificationService.showNotification id=$id title=$title type=$type');
+      'NotificationService.showNotification '
+      'id=$id title=$normalizedTitle type=$type',
+    );
 
     final prefs = await SharedPreferences.getInstance();
     bool soundEnabled = true, vibrationEnabled = true;
@@ -341,8 +350,8 @@ class NotificationService implements LocalNotificationGateway {
       priority: Priority.high,
       icon: icon,
       styleInformation: BigTextStyleInformation(
-        body,
-        contentTitle: title,
+        normalizedBody,
+        contentTitle: normalizedTitle,
       ),
     );
 
@@ -358,8 +367,8 @@ class NotificationService implements LocalNotificationGateway {
 
     await flutterLocalNotificationsPlugin.show(
       id: id,
-      title: title,
-      body: body,
+      title: normalizedTitle,
+      body: normalizedBody,
       notificationDetails: details,
       payload: payload,
     );

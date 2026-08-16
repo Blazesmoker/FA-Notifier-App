@@ -67,7 +67,7 @@ class ActivitiesNotificationStateStore {
 
   static Future<T> _withMutex<T>(Future<T> Function() fn) {
     final operation = _mutex.catchError((_) {}).then((_) => fn());
-    _mutex = operation.then<void>((_) {}, onError: (_, __) {});
+    _mutex = operation.then<void>((_) {}, onError: (_, _) {});
     return operation;
   }
 

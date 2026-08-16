@@ -187,7 +187,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
                                 display: Display.block,
                               ),
                             },
-                            onLinkTap: (url, _, __) async {
+                            onLinkTap: (url, _, _) async {
                               await _openJournal(journal['uniqueNumber']);
                             },
                             extensions: [

@@ -79,7 +79,7 @@ class _StarBurstAnimationState extends State<StarBurstAnimation>
 
             return AnimatedBuilder(
               animation: _controller,
-              builder: (_, __) {
+              builder: (_, _) {
                 final offset = animation.value;
                 final scale = 1.0 - _controller.value;
                 final opacity = 1.0 - _controller.value;

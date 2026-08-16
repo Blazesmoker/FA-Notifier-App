@@ -7,12 +7,11 @@ import 'package:fanotifier/features/notifications/presentation/notification_shou
 
 class NotificationShoutsController extends ChangeNotifier {
   NotificationShoutsController(
-    FANotificationService service,
+    this._service,
     FaActivitiesPollingPort pollingService,
   )
-      : _service = service,
-        _coordinator = NotificationShoutsCoordinator(
-          service,
+      : _coordinator = NotificationShoutsCoordinator(
+          _service,
           pollingService,
         ) {
     final cached = _coordinator.currentShouts();

@@ -31,7 +31,7 @@ class ImageExportService {
       quality: quality,
       fileName: fileName,
       skipIfExists: skipIfExists,
-      androidRelativePath: androidRelativePath,
+      albumPath: androidRelativePath,
     );
     return result.isSuccess;
   }

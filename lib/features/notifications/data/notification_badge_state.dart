@@ -10,6 +10,28 @@ const String _currentActivityNotificationIdKey =
 const String _currentActivityNotificationBadgeCountedKey =
     'currentActivityNotificationBadgeCounted';
 const String _iosNoteBadgeCountKey = 'iosNoteBadgeCount';
+const String _iosActivityNotificationRestoredForCurrentKey =
+    'iosActivityNotificationRestoredForCurrent';
+
+class IOSActivityNotificationPresence {
+  const IOSActivityNotificationPresence({
+    required this.inspectionSucceeded,
+    required this.notificationId,
+    required this.delivered,
+    required this.restoredForCurrent,
+  });
+
+  final bool inspectionSucceeded;
+  final int? notificationId;
+  final bool delivered;
+  final bool restoredForCurrent;
+
+  bool get shouldRestore =>
+      inspectionSucceeded &&
+      notificationId != null &&
+      !delivered &&
+      !restoredForCurrent;
+}
 
 Future<int?> nextIOSNoteBadgeNumberForNotification() async {
   if (!Platform.isIOS) return null;
@@ -77,15 +99,20 @@ Future<void> removePreviousActivityNotification(
         previousActivityNotificationId != replacingWithId) {
       await notificationService.cancelNotification(
         previousActivityNotificationId,
+        source: 'iosActivityReplacement',
       );
     }
     return;
   }
   if (previousActivityNotificationId != null) {
-    await notificationService.cancelNotification(previousActivityNotificationId);
+    await notificationService.cancelNotification(
+      previousActivityNotificationId,
+      source: 'androidActivityReplacement',
+    );
   }
   await prefs.remove(_currentActivityNotificationIdKey);
   await prefs.remove(_currentActivityNotificationBadgeCountedKey);
+  await prefs.remove(_iosActivityNotificationRestoredForCurrentKey);
 }
 
 Future<void> rememberActivityNotification(
@@ -96,9 +123,75 @@ Future<void> rememberActivityNotification(
     _currentActivityNotificationIdKey,
     activityNotificationId,
   );
-  if (!Platform.isIOS) {
+  if (Platform.isIOS) {
+    await prefs.setBool(_iosActivityNotificationRestoredForCurrentKey, false);
+  } else {
     await prefs.setBool(_currentActivityNotificationBadgeCountedKey, false);
   }
+}
+
+Future<IOSActivityNotificationPresence> inspectIOSActivityNotificationPresence(
+  NotificationService notificationService,
+) async {
+  if (!Platform.isIOS) {
+    return const IOSActivityNotificationPresence(
+      inspectionSucceeded: false,
+      notificationId: null,
+      delivered: false,
+      restoredForCurrent: false,
+    );
+  }
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final notificationId = prefs.getInt(_currentActivityNotificationIdKey);
+  final restoredForCurrent =
+      prefs.getBool(_iosActivityNotificationRestoredForCurrentKey) ?? false;
+  if (notificationId == null) {
+    return IOSActivityNotificationPresence(
+      inspectionSucceeded: true,
+      notificationId: null,
+      delivered: false,
+      restoredForCurrent: restoredForCurrent,
+    );
+  }
+  try {
+    final activeIds = await notificationService.getActiveNotificationIds();
+    return IOSActivityNotificationPresence(
+      inspectionSucceeded: true,
+      notificationId: notificationId,
+      delivered: activeIds.contains(notificationId),
+      restoredForCurrent: restoredForCurrent,
+    );
+  } catch (error) {
+    appLog(
+      '[BADGE] Failed to inspect iOS activity notification presence: $error',
+    );
+    return IOSActivityNotificationPresence(
+      inspectionSucceeded: false,
+      notificationId: notificationId,
+      delivered: false,
+      restoredForCurrent: restoredForCurrent,
+    );
+  }
+}
+
+Future<void> markIOSActivityNotificationRestored(int? badgeNumber) async {
+  if (!Platform.isIOS) return;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  await prefs.setBool(_iosActivityNotificationRestoredForCurrentKey, true);
+  await prefs.setBool(_currentActivityNotificationBadgeCountedKey, true);
+  if (badgeNumber != null) {
+    await prefs.setInt('badgeCounter', badgeNumber);
+  }
+}
+
+Future<void> clearMissingIOSActivityNotificationBadge() async {
+  if (!Platform.isIOS) return;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  await prefs.setBool(_currentActivityNotificationBadgeCountedKey, false);
+  await syncIOSBadgeFromState(prefs: prefs);
 }
 
 Future<int?> syncIOSBadgeFromState({SharedPreferences? prefs}) async {

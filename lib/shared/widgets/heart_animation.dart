@@ -166,7 +166,7 @@ class _HeartAnimationWidgetState extends State<HeartAnimationWidget>
         Positioned.fill(
           child: AnimatedBuilder(
             animation: _controller,
-            builder: (_, __) {
+            builder: (_, _) {
               final scale = _scaleAnim.value;
               final opacity = _opacityAnim.value;
 

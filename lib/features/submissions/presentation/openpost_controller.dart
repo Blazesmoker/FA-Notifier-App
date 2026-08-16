@@ -14,8 +14,8 @@ import 'package:flutter/foundation.dart';
 class OpenPostController {
   OpenPostController({
     required this.submissionId,
-    required OpenPostRepository repository,
-  }) : _repository = repository;
+    required this._repository,
+  });
 
   final String submissionId;
   final OpenPostRepository _repository;

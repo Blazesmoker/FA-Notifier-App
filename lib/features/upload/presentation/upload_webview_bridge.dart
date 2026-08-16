@@ -8,8 +8,8 @@ import 'package:fanotifier/features/upload/domain/upload_webview_script_reposito
 
 class UploadWebViewBridge {
   UploadWebViewBridge({
-    required UploadWebViewScriptRepository scriptRepository,
-  }) : _scriptRepository = scriptRepository;
+    required this._scriptRepository,
+  });
 
   final UploadWebViewScriptRepository _scriptRepository;
   InAppWebViewController? _controller;

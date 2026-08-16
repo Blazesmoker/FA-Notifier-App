@@ -20,10 +20,9 @@ class FaNotificationMutationResponse {
 
 class FaNotificationsRemoteSession {
   const FaNotificationsRemoteSession._({
-    required String cookieA,
-    required String cookieB,
-  })  : _cookieA = cookieA,
-        _cookieB = cookieB;
+    required this._cookieA,
+    required this._cookieB,
+  });
 
   final String _cookieA;
   final String _cookieB;

@@ -10,13 +10,12 @@ import 'package:fanotifier/shared/fa/fa_username.dart';
 
 class UserProfileController {
   UserProfileController({
-    required UserProfileRepository repository,
+    required this._repository,
     SfwModePreference? sfwModePreference,
     required String nickname,
     String? initialFolderUrl,
     String? initialFolderName,
-  })  : _repository = repository,
-        _sfwModePreference = sfwModePreference ?? SfwModePreference(),
+  })  : _sfwModePreference = sfwModePreference ?? SfwModePreference(),
         sanitizedUsername = sanitizeFAUsername(nickname) {
     if (initialFolderUrl != null && initialFolderUrl.isNotEmpty) {
       selectedFolderUrl = initialFolderUrl;
