@@ -10,7 +10,7 @@ import 'package:fanotifier/features/profile/presentation/user_profile_screen.dar
 import 'package:fanotifier/features/submissions/presentation/openpost.dart';
 import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:provider/provider.dart';

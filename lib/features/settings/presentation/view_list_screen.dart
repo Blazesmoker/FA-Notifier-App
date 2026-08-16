@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:fanotifier/shared/fa/domain/user_link.dart';
 import 'package:fanotifier/features/settings/domain/watchlist_repository.dart';

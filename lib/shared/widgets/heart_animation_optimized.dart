@@ -1,6 +1,6 @@
 // heart_animation_optimized.dart
 import 'dart:math';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A widget that shows:
 /// - A small heart if [isFavorite] is true.

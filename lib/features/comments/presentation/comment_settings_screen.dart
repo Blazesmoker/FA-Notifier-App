@@ -1,5 +1,5 @@
 import 'package:fanotifier/features/comments/presentation/comment_settings_provider.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 class CommentsSettingsScreen extends StatelessWidget {

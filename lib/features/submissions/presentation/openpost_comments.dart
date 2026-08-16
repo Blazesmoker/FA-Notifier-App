@@ -1,6 +1,6 @@
 import 'package:extended_text/extended_text.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:fanotifier/shared/widgets/comment_tree_painter.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;

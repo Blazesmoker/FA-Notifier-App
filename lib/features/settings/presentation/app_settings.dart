@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/features/notifications/presentation/notifications_settings.dart';
 import 'package:fanotifier/features/browse/presentation/thumbnail_display_settings_screen.dart';
 import 'package:fanotifier/features/settings/presentation/app_icon_settings_screen.dart';

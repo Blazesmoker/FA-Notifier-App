@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math';
 import 'package:fanotifier/features/profile/presentation/user_description_webview.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';

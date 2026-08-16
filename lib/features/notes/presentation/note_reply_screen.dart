@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:fanotifier/features/notes/domain/note_reply_repository.dart';
 import 'package:fanotifier/features/notes/domain/note_reply_webview_gateway.dart';

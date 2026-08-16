@@ -1,6 +1,6 @@
 import 'package:extended_text/extended_text.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 const Map<String, String> kSmilieEmojiAssets = {
   '[smilie-tongue]': 'assets/emojis/tongue.png',

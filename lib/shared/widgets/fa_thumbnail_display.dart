@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:fanotifier/shared/theme/app_theme.dart';
 import 'package:fanotifier/core/preferences/thumbnail_display_settings_provider.dart';

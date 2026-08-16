@@ -6,7 +6,7 @@ import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
 import 'package:fanotifier/shared/translation/translation_service.dart';
 import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';

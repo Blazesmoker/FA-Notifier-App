@@ -1,7 +1,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/features/search/presentation/fasearchimage.dart';
 import 'package:fanotifier/features/search/presentation/search_filters_screen.dart';
 

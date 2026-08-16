@@ -2,7 +2,7 @@
 
 import 'dart:async';
 import 'dart:math';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A reusable widget that shows an animated heart or broken-heart
 /// when [isFavorite] changes.

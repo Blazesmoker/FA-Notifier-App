@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Reusable dialog shown when user tries to leave a screen with unsaved text
 /// (comments, notes, replies, shouts, etc.). Returns true if user chose to close.

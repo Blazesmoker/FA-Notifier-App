@@ -14,7 +14,7 @@ import 'package:fanotifier/features/notifications/presentation/fa_notification_s
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';

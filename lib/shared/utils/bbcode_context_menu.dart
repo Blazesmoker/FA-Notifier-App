@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'dart:io' show Platform;
 import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 /// Cross-platform BBCode-aware context menu

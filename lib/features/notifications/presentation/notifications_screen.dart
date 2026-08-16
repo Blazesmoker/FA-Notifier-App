@@ -9,7 +9,7 @@ import 'package:fanotifier/features/notifications/presentation/notification_sect
 import 'package:fanotifier/features/notifications/presentation/notification_settings_provider.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_shouts_section.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 

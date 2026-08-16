@@ -10,7 +10,7 @@ import 'package:fanotifier/features/profile/presentation/image_inspect_screen.da
 import 'package:fanotifier/shared/fa/user_submitted_html_linkifier.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;

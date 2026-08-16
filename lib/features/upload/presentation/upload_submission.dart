@@ -3,7 +3,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:fanotifier/shared/widgets/tags_and_codes_webview_widget.dart';
 import 'package:fanotifier/features/submissions/presentation/openpost.dart';

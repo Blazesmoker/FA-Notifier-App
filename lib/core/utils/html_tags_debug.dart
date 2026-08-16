@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:html/dom.dart' as dom;
 
 dom.Element? logQuery(dom.Document document, String selector) {

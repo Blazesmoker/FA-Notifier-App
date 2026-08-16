@@ -1,7 +1,7 @@
 //edit_submission_screen.dart
 
 import 'dart:async';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 import 'package:fanotifier/features/submissions/domain/edit_submission_page_repository.dart';

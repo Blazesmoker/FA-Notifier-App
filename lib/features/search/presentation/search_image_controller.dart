@@ -7,7 +7,7 @@ import 'package:fanotifier/features/search/domain/search_repository.dart';
 import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:fanotifier/shared/fa/fa_thumbnail_processing.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 typedef SearchCloudflareCheck = Future<CloudflareCheckResult?> Function({
   String? initialUrl,

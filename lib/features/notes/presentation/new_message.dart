@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'package:fanotifier/features/notes/domain/new_message_repository.dart';
 import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';

@@ -1,5 +1,5 @@
 // lib/fasearchimage.dart
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';

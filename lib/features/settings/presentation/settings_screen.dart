@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/theme/app_theme.dart';
 import 'package:fanotifier/core/links/app_external_links.dart';
 import 'package:fanotifier/features/settings/domain/settings_app_info_repository.dart';

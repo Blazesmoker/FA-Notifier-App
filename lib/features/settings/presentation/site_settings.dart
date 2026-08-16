@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/features/settings/presentation/tag_blocklist_screen.dart';
 
 class SiteSettingsScreen extends StatelessWidget {

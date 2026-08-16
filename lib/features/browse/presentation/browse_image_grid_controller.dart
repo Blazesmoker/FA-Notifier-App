@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'package:fanotifier/core/logging/app_logging.dart';
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';

@@ -2,7 +2,7 @@
 
 import 'dart:ui';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'package:fanotifier/features/upload/domain/submission_template.dart';
 import 'package:fanotifier/features/upload/domain/submission_template_repository.dart';

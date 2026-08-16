@@ -2,7 +2,7 @@
 
 import 'dart:async';
 import 'dart:collection';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';

@@ -7,7 +7,7 @@ import 'package:fanotifier/shared/utils/special_text_span_builder.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:extended_text/extended_text.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A widget that toggles between relative and absolute date formats when tapped.
 class ToggleableDate extends StatefulWidget {

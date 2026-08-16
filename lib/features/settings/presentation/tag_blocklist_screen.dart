@@ -1,6 +1,6 @@
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/features/settings/domain/tag_blocklist_repository.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';

@@ -12,7 +12,7 @@ import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart'
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
 import 'package:fanotifier/shared/fa/fa_username.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 UserProfileParsed parseUserProfileHtml(String htmlBody) {
   return UserProfileApiService.parseUserProfile(htmlBody);

@@ -1,5 +1,5 @@
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/features/search/domain/search_filter_date_range.dart';
 import 'package:fanotifier/features/search/domain/search_filter_options.dart';
 import 'package:fanotifier/shared/utils/content_rating_filters.dart';

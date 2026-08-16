@@ -5,7 +5,7 @@ import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter/scheduler.dart';
 import 'package:fanotifier/features/comments/presentation/reply_screen.dart';
 import 'package:fanotifier/features/comments/presentation/inline_comment_composer.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';

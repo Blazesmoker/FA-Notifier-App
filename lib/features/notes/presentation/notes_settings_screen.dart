@@ -1,6 +1,6 @@
 import 'package:fanotifier/features/notes/domain/note_image_preview_mode.dart';
 import 'package:fanotifier/features/notes/presentation/note_image_preview_settings_provider.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 class NotesSettingsScreen extends StatelessWidget {

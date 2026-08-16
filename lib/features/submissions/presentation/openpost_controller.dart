@@ -427,7 +427,7 @@ class OpenPostController {
       );
       if (result.status == OpenPostActionStatus.missingAuth) return false;
       if (result.status == OpenPostActionStatus.success) {
-        return loadFavoriteLinks(
+        return await loadFavoriteLinks(
           confirmNsfw: confirmNsfw,
           onNsfwAllowed: onNsfwAllowed,
         );
