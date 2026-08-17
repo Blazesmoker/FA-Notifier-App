@@ -527,7 +527,10 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
             WorkmanagerPlugin.handlePeriodicTask(
                 identifier: backgroundTaskIdentifier,
                 task: refreshTask,
-                earliestBeginInSeconds: iOSBackgroundFetchIntervalSeconds
+                earliestBeginInSeconds: NSNumber(
+                    value: iOSBackgroundFetchIntervalSeconds
+                ),
+                inputData: nil
             )
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 self.scheduleBackgroundFetch(
