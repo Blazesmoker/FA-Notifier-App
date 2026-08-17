@@ -59,6 +59,7 @@ import 'package:fanotifier/features/search/domain/find_source_repository.dart';
 import 'package:fanotifier/features/search/domain/search_repository.dart';
 import 'package:fanotifier/features/search/search_feature.dart';
 import 'package:fanotifier/features/settings/domain/app_icon_repository.dart';
+import 'package:fanotifier/features/settings/domain/fur_affinity_settings_repository.dart';
 import 'package:fanotifier/features/settings/domain/settings_app_info_repository.dart';
 import 'package:fanotifier/features/settings/domain/tag_blocklist_repository.dart';
 import 'package:fanotifier/features/settings/domain/watchlist_repository.dart';
@@ -119,6 +120,10 @@ class AppProviders extends StatelessWidget {
         ),
         Provider<SettingsAppInfoRepository>(
           create: (_) => SettingsFeature.createAppInfoRepository(),
+        ),
+        Provider<FurAffinitySettingsRepository>(
+          create: (_) =>
+              SettingsFeature.createFurAffinitySettingsRepository(),
         ),
         Provider<TagBlocklistRepository>(
           create: (_) => SettingsFeature.createTagBlocklistRepository(),

@@ -11,6 +11,7 @@ import 'package:fanotifier/app/analytics_privacy.dart';
 import 'package:fanotifier/app/navigation/app_notification_navigation.dart';
 import 'package:fanotifier/core/cache/cache_monitor_service.dart';
 import 'package:fanotifier/core/cache/custom_cache_manager.dart';
+import 'package:fanotifier/core/crash_reporting/app_crash_reporter.dart';
 import 'package:fanotifier/core/logging/app_logging.dart';
 import 'package:fanotifier/core/network/fresh_http_overrides.dart';
 import 'package:fanotifier/core/timezone/presentation/timezone_provider.dart';
@@ -52,6 +53,9 @@ Future<void> initializeAppInfrastructure({
   configureBackgroundWorkmanager(callbackDispatcher);
   WidgetsFlutterBinding.ensureInitialized();
   configureAppLogging();
+  await Firebase.initializeApp();
+  await appCrashReporter.initializeMainIsolate();
+  await setupAnalyticsPrivacy();
   try {
     await NotificationService().init(
       onNotificationTap: appNotificationNavigation.handleTap,
@@ -59,9 +63,13 @@ Future<void> initializeAppInfrastructure({
   } catch (error, stackTrace) {
     debugPrint('[BOOT] early notification tap init failed: $error');
     debugPrint(stackTrace.toString());
+    await appCrashReporter.recordNonFatal(
+      error,
+      stackTrace,
+      reason: 'notification_service_initialization_failed',
+      executionContext: 'foreground_boot',
+    );
   }
-  await Firebase.initializeApp();
-  await setupAnalyticsPrivacy();
   await FAHttp.init();
   AppLifecycleNetworkReset.attach();
   HttpOverrides.global = FreshHttpOverrides();
@@ -70,6 +78,12 @@ Future<void> initializeAppInfrastructure({
   } catch (error, stackTrace) {
     debugPrint('[BOOT] early Workmanager init failed: $error');
     debugPrint(stackTrace.toString());
+    await appCrashReporter.recordNonFatal(
+      error,
+      stackTrace,
+      reason: 'workmanager_initialization_failed',
+      executionContext: 'foreground_boot',
+    );
   }
 }
 
@@ -101,6 +115,12 @@ Future<void> afterFirstFrameBoot(TimezoneProvider timezoneProvider) async {
   } catch (error, stackTrace) {
     debugPrint('[BOOT] afterFirstFrame error: $error');
     debugPrint(stackTrace.toString());
+    await appCrashReporter.recordNonFatal(
+      error,
+      stackTrace,
+      reason: 'after_first_frame_boot_failed',
+      executionContext: 'foreground_boot',
+    );
   }
 }
 

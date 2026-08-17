@@ -47,6 +47,7 @@ import 'package:fanotifier/shared/translation/translation_source_text_builder.da
 import 'package:fanotifier/shared/platform/fa_share_service.dart';
 import 'package:fanotifier/shared/navigation/transparent_slide_page_route.dart';
 import 'package:provider/provider.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 
 import '../../../shared/utils/bbcode_context_menu.dart';
 
@@ -78,12 +79,17 @@ class OpenPost extends StatefulWidget {
 
     if (Platform.isAndroid || Platform.isIOS) {
       return TransparentSlidePageRoute<T>(
-        settings: settings,
+        settings: settings ??
+            const AnalyticsRouteSettings(AppScreens.submissionDetails),
         builder: builder,
       );
     }
 
-    return MaterialPageRoute<T>(settings: settings, builder: builder);
+    return MaterialPageRoute<T>(
+      settings: settings ??
+          const AnalyticsRouteSettings(AppScreens.submissionDetails),
+      builder: builder,
+    );
   }
 
   @override
@@ -839,6 +845,7 @@ class _OpenPostState extends State<OpenPost>
     Navigator.push(
       context,
       MaterialPageRoute(
+        settings: const AnalyticsRouteSettings(AppScreens.keywordSearch),
         builder: (context) =>
             KeywordSearchScreen(initialKeyword: formattedKeyword),
       ),
@@ -1712,6 +1719,8 @@ class _OpenPostState extends State<OpenPost>
         Navigator.push(
           context,
           MaterialPageRoute(
+            settings:
+                const AnalyticsRouteSettings(AppScreens.journalDetails),
             builder: (context) => OpenJournal(uniqueNumber: target.journalId!),
           ),
         );
@@ -1776,6 +1785,7 @@ class _OpenPostState extends State<OpenPost>
     Navigator.push(
       context,
       MaterialPageRoute(
+        settings: const AnalyticsRouteSettings(AppScreens.editSubmission),
         builder: (context) => EditSubmissionScreen(initialUrl: editUrl),
       ),
     ).then((_) {
@@ -2867,6 +2877,10 @@ class _OpenPostState extends State<OpenPost>
                                                 Navigator.push(
                                                   context,
                                                   MaterialPageRoute(
+                                                    settings:
+                                                        const AnalyticsRouteSettings(
+                                                      AppScreens.documentViewer,
+                                                    ),
                                                     builder: (context) =>
                                                         SubmissionDescriptionWebViewScreen(
                                                       submissionId:
@@ -2963,6 +2977,9 @@ class _OpenPostState extends State<OpenPost>
                                     await Navigator.push(
                                       context,
                                       MaterialPageRoute(
+                                        settings: const AnalyticsRouteSettings(
+                                          AppScreens.addComment,
+                                        ),
                                         builder: (context) => AddCommentScreen(
                                           submissionTitle: submissionTitle ?? '',
                                           onSendComment: _addComment,
@@ -2993,6 +3010,11 @@ class _OpenPostState extends State<OpenPost>
                                                           Navigator.push(
                                                             context,
                                                             MaterialPageRoute(
+                                                              settings:
+                                                                  const AnalyticsRouteSettings(
+                                                                AppScreens
+                                                                    .newNote,
+                                                              ),
                                                               builder: (context) =>
                                                                   NewMessageScreen(
                                                                 recipient:
@@ -3400,6 +3422,8 @@ class _OpenPostState extends State<OpenPost>
                     Navigator.push(
                       context,
                       MaterialPageRoute(
+                        settings:
+                            const AnalyticsRouteSettings(AppScreens.editComment),
                         builder: (context) => EditCommentScreen(
                           comment: comment,
                           editLink: comment['editLink'],
@@ -3415,6 +3439,9 @@ class _OpenPostState extends State<OpenPost>
                   final result = await Navigator.push<bool>(
                     context,
                     MaterialPageRoute(
+                      settings: const AnalyticsRouteSettings(
+                        AppScreens.replyToComment,
+                      ),
                       builder: (context) => ReplyScreen(
                         comment: {
                           ...comment,

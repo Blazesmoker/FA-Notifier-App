@@ -14,6 +14,7 @@ import 'package:fanotifier/features/notifications/data/notification_refresh_serv
 import 'package:fanotifier/features/notifications/data/notification_badge_state.dart'
     as notification_badge;
 import 'package:fanotifier/features/notifications/data/notification_service.dart';
+import 'package:fanotifier/core/analytics/app_analytics.dart';
 
 class FaActivitiesPollingService
     with WidgetsBindingObserver
@@ -46,6 +47,7 @@ class FaActivitiesPollingService
   String? _pendingStartSource;
   bool _pendingResumeActivityNotification = false;
   bool _pendingNotesEntryAcknowledgement = false;
+  bool _notificationShownInCurrentRun = false;
 
   bool get _acknowledgingScreenVisible =>
       _submissionsScreenVisible ||
@@ -340,9 +342,8 @@ class FaActivitiesPollingService
 
     _faNotificationService?.applyTopbarCounts(currentCounts);
 
-    final future = _maybeSendActivitiesNotification(
-      currentCounts,
-      triggerNotesRefreshOnNotesIncrease: false,
+    final future = _runExternalCountsCheck(
+      currentCounts: currentCounts,
       source: source,
     ).whenComplete(() {
       _inFlight = null;
@@ -351,15 +352,64 @@ class FaActivitiesPollingService
     return future;
   }
 
+  Future<void> _runExternalCountsCheck({
+    required NotificationCounts currentCounts,
+    required String source,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    _notificationShownInCurrentRun = false;
+    await _maybeSendActivitiesNotification(
+      currentCounts,
+      triggerNotesRefreshOnNotesIncrease: false,
+      source: source,
+    );
+    await appAnalytics.logNotificationCheckCompleted(
+      executionContext: appAnalytics.foregroundContext(source),
+      triggerSource: source,
+      outcome: _notificationShownInCurrentRun
+          ? NotificationCheckOutcome.contentFound
+          : NotificationCheckOutcome.empty,
+      notificationShown: _notificationShownInCurrentRun,
+      durationMilliseconds: stopwatch.elapsedMilliseconds,
+    );
+  }
+
   Future<void> _runOnce(FaNotificationStatePort svc,
       {required String source}) async {
+    final stopwatch = Stopwatch()..start();
+    _notificationShownInCurrentRun = false;
     try {
       await svc.fetchNotifications();
     } catch (_) {
+      await appAnalytics.logNotificationCheckCompleted(
+        executionContext: appAnalytics.foregroundContext(source),
+        triggerSource: source,
+        outcome: NotificationCheckOutcome.failed,
+        notificationShown: false,
+        durationMilliseconds: stopwatch.elapsedMilliseconds,
+      );
       return;
     }
-    if (svc.errorMessage != null || !svc.hasValidLatestCountsSnapshot) return;
+    if (svc.errorMessage != null || !svc.hasValidLatestCountsSnapshot) {
+      await appAnalytics.logNotificationCheckCompleted(
+        executionContext: appAnalytics.foregroundContext(source),
+        triggerSource: source,
+        outcome: NotificationCheckOutcome.failed,
+        notificationShown: false,
+        durationMilliseconds: stopwatch.elapsedMilliseconds,
+      );
+      return;
+    }
     await _maybeSendActivitiesNotification(svc.latestCounts, source: source);
+    await appAnalytics.logNotificationCheckCompleted(
+      executionContext: appAnalytics.foregroundContext(source),
+      triggerSource: source,
+      outcome: _notificationShownInCurrentRun
+          ? NotificationCheckOutcome.contentFound
+          : NotificationCheckOutcome.empty,
+      notificationShown: _notificationShownInCurrentRun,
+      durationMilliseconds: stopwatch.elapsedMilliseconds,
+    );
   }
 
   void _ensureTimer() {
@@ -595,6 +645,11 @@ class FaActivitiesPollingService
         messageBody,
         'activity_fa_activity',
         'activities',
+      );
+      _notificationShownInCurrentRun = true;
+      await appAnalytics.logNotificationDisplayed(
+        executionContext: appAnalytics.foregroundContext(source),
+        notificationType: 'activity',
       );
       await activitiesStateStore.markActivityNotificationShown(
         currentCounts: currentCounts,

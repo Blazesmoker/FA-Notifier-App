@@ -8,6 +8,7 @@ import 'package:fanotifier/features/settings/presentation/set_home_screen_screen
 import 'package:fanotifier/features/settings/presentation/translator_settings_screen.dart';
 import 'package:fanotifier/features/notes/presentation/notes_settings_screen.dart';
 import 'package:fanotifier/features/comments/presentation/comment_settings_screen.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 
 class AppSettingsScreen extends StatefulWidget {
   const AppSettingsScreen({super.key});
@@ -48,6 +49,8 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
+                    settings:
+                        const AnalyticsRouteSettings(AppScreens.appIconSettings),
                     builder: (_) => const AppIconSettingsScreen(),
                   ),
                 );
@@ -69,6 +72,9 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
+                  settings: const AnalyticsRouteSettings(
+                    AppScreens.thumbnailSettings,
+                  ),
                   builder: (_) => const ThumbnailDisplaySettingsScreen(),
                 ),
               );
@@ -86,6 +92,9 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
+                  settings: const AnalyticsRouteSettings(
+                    AppScreens.notificationSettings,
+                  ),
                   builder: (context) => const NotificationsSettingsScreen(),
                 ),
               );
@@ -106,6 +115,8 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
+                  settings:
+                      const AnalyticsRouteSettings(AppScreens.noteSettings),
                   builder: (context) => const NotesSettingsScreen(),
                 ),
               );
@@ -126,6 +137,9 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
+                  settings: const AnalyticsRouteSettings(
+                    AppScreens.commentSettings,
+                  ),
                   builder: (context) => const CommentsSettingsScreen(),
                 ),
               );
@@ -146,6 +160,9 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
+                  settings: const AnalyticsRouteSettings(
+                    AppScreens.translatorSettings,
+                  ),
                   builder: (context) => const TranslatorSettingsScreen(),
                 ),
               );
@@ -166,6 +183,9 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
+                  settings: const AnalyticsRouteSettings(
+                    AppScreens.homeScreenSettings,
+                  ),
                   builder: (_) => const SetHomeScreenScreen(),
                 ),
               );

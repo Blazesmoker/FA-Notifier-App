@@ -1,5 +1,6 @@
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/features/journals/presentation/openjournal.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
 import 'package:fanotifier/features/notifications/domain/notification_message_formatter.dart';
 import 'package:fanotifier/features/notifications/domain/notification_section_kind.dart';
@@ -193,6 +194,10 @@ class NotificationSectionWidget extends StatelessWidget {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
+                                            settings:
+                                                const AnalyticsRouteSettings(
+                                              AppScreens.journalDetails,
+                                            ),
                                             builder: (context) => OpenJournal(
                                                 uniqueNumber: item.journalId!),
                                           ),
@@ -217,6 +222,10 @@ class NotificationSectionWidget extends StatelessWidget {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
+                                            settings:
+                                                const AnalyticsRouteSettings(
+                                              AppScreens.journalDetails,
+                                            ),
                                             builder: (context) => OpenJournal(
                                                 uniqueNumber: item.journalId!),
                                           ),
@@ -352,6 +361,11 @@ class NotificationSectionWidget extends StatelessWidget {
                                                     Navigator.push(
                                                       context,
                                                       MaterialPageRoute(
+                                                        settings:
+                                                            const AnalyticsRouteSettings(
+                                                          AppScreens
+                                                              .journalDetails,
+                                                        ),
                                                         builder: (context) =>
                                                             OpenJournal(
                                                           uniqueNumber:

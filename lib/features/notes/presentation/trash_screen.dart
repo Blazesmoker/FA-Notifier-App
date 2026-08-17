@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/features/notes/presentation/message_detail_screen.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/features/notes/domain/notes_trash_repository.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
@@ -138,6 +139,7 @@ class TrashScreenState extends State<TrashScreen> {
     } else {
       Navigator.of(context)
           .push(MaterialPageRoute(
+            settings: const AnalyticsRouteSettings(AppScreens.noteDetails),
             builder: (_) => MessageDetailScreen(
               messageLink: msg.link,
               folder: 'sent',

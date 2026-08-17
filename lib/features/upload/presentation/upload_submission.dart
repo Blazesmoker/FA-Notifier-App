@@ -18,6 +18,8 @@ import 'package:fanotifier/features/upload/domain/upload_webview_session_gateway
 import 'package:fanotifier/features/upload/presentation/submission_templates_screen.dart';
 import 'package:fanotifier/features/upload/presentation/upload_webview_bridge.dart';
 import 'package:provider/provider.dart';
+import 'package:fanotifier/core/analytics/app_analytics.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 
 class UploadSubmissionScreen extends StatefulWidget {
   const UploadSubmissionScreen({super.key});
@@ -87,6 +89,9 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     if (!mounted) return;
     if (_isFinalizeReady == value) return;
     setState(() => _isFinalizeReady = value);
+    appAnalytics.logScreen(
+      value ? AppScreens.finalizeSubmission : AppScreens.uploadSubmission,
+    );
     if (!value) {
       _closeToolsMenu();
     }
@@ -348,6 +353,8 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     final selected = await Navigator.push<SubmissionTemplate?>(
       context,
       MaterialPageRoute(
+        settings:
+            const AnalyticsRouteSettings(AppScreens.submissionTemplates),
         builder: (context) => SubmissionTemplatesScreen(
           repository: _templateRepository,
         ),

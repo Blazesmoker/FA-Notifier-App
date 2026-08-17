@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/journals/domain/openjournal_repository.dart';
 import 'package:fanotifier/features/journals/presentation/create_journal.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/journals/presentation/editjournalcommentscreen.dart';
 import 'package:fanotifier/features/journals/presentation/journal_reply_screen.dart';
 import 'package:fanotifier/features/journals/presentation/openjournal_controller.dart';
@@ -416,7 +417,10 @@ class _OpenJournalState extends State<OpenJournal>
               child: const Text('Cancel')),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Delete')),
+              child: const Text(
+                'Delete',
+                style: TextStyle(color: Colors.red),
+              )),
         ],
       ),
     );
@@ -719,6 +723,8 @@ class _OpenJournalState extends State<OpenJournal>
                     Navigator.push(
                       context,
                       MaterialPageRoute(
+                        settings:
+                            const AnalyticsRouteSettings(AppScreens.editJournal),
                         builder: (context) => CreateJournalScreen(
                           uniqueNumber: widget.uniqueNumber,
                           onJournalSubmitted: widget.onJournalMutated,
@@ -751,9 +757,12 @@ class _OpenJournalState extends State<OpenJournal>
                     child: Text('Edit'),
                   ),
                 if (isOwner)
-                  const PopupMenuItem<String>(
+                  PopupMenuItem<String>(
                     value: 'delete',
-                    child: Text('Delete'),
+                    child: const Text(
+                      'Delete',
+                      style: TextStyle(color: Colors.red),
+                    ),
                   ),
                 const PopupMenuItem<String>(
                   value: 'translate',
@@ -1340,6 +1349,11 @@ class _OpenJournalState extends State<OpenJournal>
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
+                                                  settings:
+                                                      const AnalyticsRouteSettings(
+                                                    AppScreens
+                                                        .editJournalComment,
+                                                  ),
                                                   builder: (context) =>
                                                       EditJournalCommentScreen(
                                                     comment: comment,
@@ -1357,6 +1371,10 @@ class _OpenJournalState extends State<OpenJournal>
                                         await Navigator.push(
                                           context,
                                           MaterialPageRoute(
+                                            settings:
+                                                const AnalyticsRouteSettings(
+                                              AppScreens.journalReply,
+                                            ),
                                             builder: (context) =>
                                                 JournalReplyScreen(
                                               submissionId: widget.uniqueNumber,

@@ -9,6 +9,7 @@ import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
 import 'package:fanotifier/app/navigation/app_navigation.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/notes/presentation/note_reply_screen.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/notes/domain/note_image_preview_mode.dart';
 import 'package:fanotifier/features/notes/domain/note_submission_preview_repository.dart';
 import 'package:fanotifier/features/notes/presentation/note_body_with_previews.dart';
@@ -718,6 +719,10 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
+                                                  settings:
+                                                      const AnalyticsRouteSettings(
+                                                    AppScreens.noteReply,
+                                                  ),
                                                   builder: (context) =>
                                                       NoteReplyScreen(
                                                     subject: subject,

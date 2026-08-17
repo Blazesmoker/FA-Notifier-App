@@ -4,6 +4,7 @@ import 'package:fanotifier/features/profile/presentation/user_profile_screen.dar
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/fa/domain/user_link.dart';
 import 'package:fanotifier/features/settings/presentation/view_list_screen.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 
 class UserGridSection extends StatelessWidget {
   final String title;
@@ -102,6 +103,8 @@ class UserGridSection extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
+                      settings:
+                          const AnalyticsRouteSettings(AppScreens.viewList),
                       builder: (context) => ViewListScreen(
                         title: title,
                         sanitizedUsername: sanitizedUsername,

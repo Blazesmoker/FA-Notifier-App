@@ -67,3 +67,5 @@ app.*.map.json
 *.xcworkspace
 *.xcodeproj/project.xcworkspace/xcuserdata
 *.xcodeproj/xcuserdata
+# Widget Preview related
+.widget_preview/

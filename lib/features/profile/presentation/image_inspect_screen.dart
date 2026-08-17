@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:fanotifier/features/profile/domain/avatar_image_data.dart';
 import 'package:fanotifier/features/profile/domain/profile_media_export_repository.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 
 class ImageInspectScreen extends StatefulWidget {
   final String imageUrl;
@@ -25,6 +26,7 @@ class ImageInspectScreen extends StatefulWidget {
     AvatarImageData? imageData,
   }) {
     return PageRouteBuilder<void>(
+      settings: const AnalyticsRouteSettings(AppScreens.imageViewer),
       opaque: false,
       barrierColor: Colors.transparent,
       reverseTransitionDuration: Duration.zero,

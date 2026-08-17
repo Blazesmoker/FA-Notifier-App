@@ -4,6 +4,7 @@ import 'package:fanotifier/features/search/presentation/fasearchimage.dart';
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/shared/utils/content_rating_filters.dart';
 import 'package:fanotifier/features/search/presentation/search_filters_screen.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 
 class KeywordSearchScreen extends StatefulWidget {
   final String initialKeyword;
@@ -69,6 +70,7 @@ class _KeywordSearchScreenState extends State<KeywordSearchScreen> {
     final updatedFilters = await Navigator.push<Map<String, String>>(
       context,
       MaterialPageRoute(
+        settings: const AnalyticsRouteSettings(AppScreens.searchFilters),
         builder: (context) => SearchFiltersScreen(
           selectedSearchFilters: _currentSearchFilters,
           sfwEnabled: _sfwEnabled,

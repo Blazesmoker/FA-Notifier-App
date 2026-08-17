@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import 'package:fanotifier/features/journals/presentation/openjournal.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/features/submissions/presentation/openpost.dart';
@@ -65,6 +66,8 @@ class AppFaLinkNavigator extends FaLinkNavigator {
         Navigator.push(
           context,
           MaterialPageRoute(
+            settings:
+                const AnalyticsRouteSettings(AppScreens.journalDetails),
             builder: (context) => OpenJournal(
               uniqueNumber: target.journalId!,
             ),

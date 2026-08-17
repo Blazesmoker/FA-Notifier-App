@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:fanotifier/features/journals/domain/create_journal_repository.dart';
 import 'package:fanotifier/shared/widgets/tags_and_codes_webview_widget.dart';
 import 'package:fanotifier/features/journals/presentation/openjournal.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 
 class CreateJournalScreen extends StatefulWidget {
   final String? uniqueNumber;
@@ -83,6 +84,8 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
           Navigator.push(
             context,
             MaterialPageRoute(
+              settings:
+                  const AnalyticsRouteSettings(AppScreens.journalDetails),
               builder: (context) => OpenJournal(
                 uniqueNumber: _journalId!,
                 onJournalMutated: widget.onJournalSubmitted,

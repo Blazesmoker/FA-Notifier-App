@@ -6,6 +6,7 @@ import 'package:fanotifier/features/profile/domain/profile_journals_repository.d
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:fanotifier/features/journals/presentation/openjournal.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 
 class ProfileJournals extends StatefulWidget {
   final String username;
@@ -66,6 +67,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
     await Navigator.push(
       context,
       MaterialPageRoute(
+        settings: const AnalyticsRouteSettings(AppScreens.journalDetails),
         builder: (context) => OpenJournal(
           uniqueNumber: uniqueNumber,
           onJournalMutated: _handleJournalMutated,

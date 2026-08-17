@@ -7,6 +7,7 @@ import 'package:fanotifier/shared/theme/app_theme.dart';
 import 'package:fanotifier/app/bootstrap/app_bootstrap.dart';
 import 'package:fanotifier/app/composition/app_providers.dart';
 import 'package:fanotifier/app/navigation/app_navigation.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/app/navigation/app_notification_navigation.dart';
 import 'package:fanotifier/core/preferences/app_foreground_state_preference.dart';
 import 'package:fanotifier/features/drawer/data/app_update_service.dart';
@@ -106,6 +107,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (!mounted) return;
       navigatorKey.currentState?.push(
         MaterialPageRoute<void>(
+          settings: const AnalyticsRouteSettings(AppScreens.update),
           builder: (_) => UpdateScreen(
             canDismiss: canDismiss,
           ),
@@ -220,7 +222,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       navigatorKey: navigatorKey,
-      navigatorObservers: [routeObserver],
+      navigatorObservers: [routeObserver, analyticsRouteObserver],
       home: Builder(
         builder: (context) {
           final mediaQuery = MediaQuery.of(context);

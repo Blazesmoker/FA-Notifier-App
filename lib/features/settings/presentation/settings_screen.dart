@@ -6,6 +6,7 @@ import 'package:fanotifier/shared/utils/external_link_launcher.dart';
 import 'package:provider/provider.dart';
 
 import 'package:fanotifier/features/settings/presentation/site_settings.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/settings/presentation/app_settings.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -81,6 +82,9 @@ class SettingsScreen extends StatelessWidget {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
+                          settings: const AnalyticsRouteSettings(
+                            AppScreens.appSettings,
+                          ),
                           builder: (context) => const AppSettingsScreen(),
                         ),
                       );
@@ -93,12 +97,19 @@ class SettingsScreen extends StatelessWidget {
                   ),
                   ListTile(
                     leading: const Icon(Icons.public, color: Color(0xFFE09321)),
-                    title: const Text('Site Settings'),
+                    title: const Text('FurAffinity Settings'),
                     onTap: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const SiteSettingsScreen(),
+                          settings: const AnalyticsRouteSettings(
+                            AppScreens.furAffinitySettings,
+                          ),
+                          builder: (context) => FurAffinitySettingsScreen(
+                            onLogout: () {
+                              onLogout();
+                            },
+                          ),
                         ),
                       );
                     },

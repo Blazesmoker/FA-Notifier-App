@@ -12,6 +12,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'package:fanotifier/features/submissions/domain/openpost_file_download_result.dart';
 import 'package:fanotifier/features/submissions/domain/openpost_submission_attachment.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 
 const Color _attachmentSurfaceColor = Color(0xFF151515);
@@ -402,6 +403,7 @@ class _OpenPostDocumentInspectScreen extends StatelessWidget {
 
   static Route<void> route(OpenPostSubmissionAttachment attachment) {
     return PageRouteBuilder<void>(
+      settings: const AnalyticsRouteSettings(AppScreens.documentViewer),
       opaque: true,
       barrierColor: Colors.black,
       reverseTransitionDuration: Duration.zero,

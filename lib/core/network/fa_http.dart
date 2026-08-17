@@ -236,9 +236,10 @@ class FAHttp {
         Object? body,
         Encoding? encoding,
         Duration? timeout,
+        bool retryRecoverable = true,
       }) async {
     final t = timeout ?? defaultTimeout;
-    return _withOneRetry(() async {
+    Future<http.Response> send() async {
       await FaRequestCoordinator.instance.waitForTurn(
         label: 'POST $uri',
       );
@@ -252,6 +253,19 @@ class FAHttp {
         responseBody: response.statusCode == 403 ? response.body : null,
       );
       return response;
-    });
+    }
+
+    if (!retryRecoverable) {
+      try {
+        return await send();
+      } catch (error) {
+        if (_isRecoverable(error)) {
+          reset();
+          FaRequestCoordinator.instance.recordRecoverableFailure();
+        }
+        rethrow;
+      }
+    }
+    return _withOneRetry(send);
   }
 }

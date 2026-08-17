@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:fanotifier/app/navigation/app_navigation.dart';
+import 'package:fanotifier/core/analytics/app_analytics.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/notes/presentation/message_detail_screen.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
@@ -105,6 +107,9 @@ class NotesScreenState extends State<NotesScreen>
         _tabController.index != _prevTabIndex) {
       _prevTabIndex = _tabController.index;
       _notesController.clearSelection();
+      appAnalytics.logScreen(
+        _tabController.index == 0 ? AppScreens.notesInbox : AppScreens.notesSent,
+      );
     }
   }
 
@@ -133,6 +138,7 @@ class NotesScreenState extends State<NotesScreen>
       if (_tabController.index == 0) {
         Navigator.of(context)
             .push(MaterialPageRoute(
+          settings: const AnalyticsRouteSettings(AppScreens.noteDetails),
           builder: (_) => MessageDetailScreen(
             messageLink: msg.link,
             folder: 'inbox',
@@ -146,6 +152,7 @@ class NotesScreenState extends State<NotesScreen>
       } else {
         Navigator.of(context)
             .push(MaterialPageRoute(
+          settings: const AnalyticsRouteSettings(AppScreens.noteDetails),
           builder: (_) => MessageDetailScreen(
             messageLink: msg.link,
             folder: 'sent',
@@ -316,7 +323,10 @@ class NotesScreenState extends State<NotesScreen>
 
   void _openNewMessage() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => NewMessageScreen()),
+      MaterialPageRoute(
+        settings: const AnalyticsRouteSettings(AppScreens.newNote),
+        builder: (_) => NewMessageScreen(),
+      ),
     );
   }
 
@@ -443,7 +453,11 @@ class NotesScreenState extends State<NotesScreen>
                 InkResponse(
                   onTap: () {
                     Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const TrashScreen()),
+                      MaterialPageRoute(
+                        settings:
+                            const AnalyticsRouteSettings(AppScreens.notesTrash),
+                        builder: (_) => const TrashScreen(),
+                      ),
                     );
                   },
                   radius: 18,
@@ -493,6 +507,9 @@ class NotesScreenState extends State<NotesScreen>
                       } else if (!_selectionMode) {
                         Navigator.of(context).push(
                           MaterialPageRoute(
+                              settings: const AnalyticsRouteSettings(
+                                AppScreens.notesTrash,
+                              ),
                               builder: (_) => const TrashScreen()),
                         );
                       }
@@ -564,6 +581,8 @@ class NotesScreenState extends State<NotesScreen>
                     onOpenMessage: (msg) {
                       Navigator.of(context)
                           .push(MaterialPageRoute(
+                        settings:
+                            const AnalyticsRouteSettings(AppScreens.noteDetails),
                         builder: (_) => MessageDetailScreen(
                           messageLink: msg.link,
                           folder: 'inbox',
@@ -601,6 +620,8 @@ class NotesScreenState extends State<NotesScreen>
                     onOpenMessage: (msg) {
                       Navigator.of(context)
                           .push(MaterialPageRoute(
+                        settings:
+                            const AnalyticsRouteSettings(AppScreens.noteDetails),
                         builder: (_) => MessageDetailScreen(
                           messageLink: msg.link,
                           folder: 'sent',

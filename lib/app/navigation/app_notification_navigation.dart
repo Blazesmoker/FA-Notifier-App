@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import 'package:fanotifier/app/navigation/app_navigation.dart';
+import 'package:fanotifier/core/analytics/app_analytics.dart';
 import 'package:fanotifier/core/logging/app_logging.dart';
 import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
 import 'package:fanotifier/features/notes/notes_feature.dart';
@@ -55,6 +56,11 @@ class AppNotificationNavigation {
       return;
     }
     if (payload == appUpdateNotificationPayload) {
+      await appAnalytics.logNotificationOpened(
+        notificationType: 'update',
+        executionContext: NotificationExecutionContext.backgroundPeriodic,
+        openContext: from,
+      );
       await _pendingNavigationRepository.clearPayload();
       return;
     }
@@ -93,8 +99,17 @@ class AppNotificationNavigation {
       return;
     }
 
-    navigator.popUntil((route) => route.isFirst);
     final isNotes = isNoteNotificationPayload(payload);
+    final isBackgroundActivity = payload.startsWith('fa_activity_');
+    await appAnalytics.logNotificationOpened(
+      notificationType: isNotes ? 'note' : 'activity',
+      executionContext: isNotes || isBackgroundActivity
+          ? NotificationExecutionContext.backgroundPeriodic
+          : NotificationExecutionContext.foregroundImmediate,
+      openContext: from,
+    );
+
+    navigator.popUntil((route) => route.isFirst);
     navigationProvider.setTargetIndex(isNotes ? 4 : 3);
     await _waitForNavigationFrame();
 

@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/features/search/presentation/fasearchimage.dart';
 import 'package:fanotifier/features/search/presentation/search_filters_screen.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   final Map<String, String> searchFilters;
@@ -122,6 +123,8 @@ class SearchScreenState extends State<SearchScreen> {
                     await Navigator.push<Map<String, String>>(
                   context,
                   MaterialPageRoute(
+                    settings:
+                        const AnalyticsRouteSettings(AppScreens.searchFilters),
                     builder: (context) => SearchFiltersScreen(
                       selectedSearchFilters: widget.searchFilters,
                       sfwEnabled: widget.sfwEnabled,

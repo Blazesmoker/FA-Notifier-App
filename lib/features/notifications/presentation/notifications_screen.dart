@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:fanotifier/features/drawer/presentation/drawer_user_controller.dart';
 import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/core/analytics/app_analytics.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/features/notifications/domain/notification_section_kind.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_activities_controller.dart';
@@ -160,12 +162,22 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         length: sectionCount, vsync: this, initialIndex: _initialTabIndex);
     _lastTabIndex = _tabController!.index;
     _syncActiveNotificationSection();
+    appAnalytics.logScreen(
+      AppScreens.notificationSection(
+        _activitiesController.sections[_lastTabIndex].title,
+      ),
+    );
     _tabController!.addListener(() {
       if (!mounted) return;
       final idx = _tabController!.index;
       if (idx != _lastTabIndex) {
         _lastTabIndex = idx;
         _syncActiveNotificationSection();
+        appAnalytics.logScreen(
+          AppScreens.notificationSection(
+            _activitiesController.sections[idx].title,
+          ),
+        );
         setState(() {});
       }
     });

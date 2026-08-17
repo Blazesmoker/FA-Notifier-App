@@ -44,28 +44,84 @@ import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
 import 'package:fanotifier/shared/translation/translation_service.dart';
 import 'package:fanotifier/shared/navigation/transparent_slide_page_route.dart';
 import 'package:provider/provider.dart';
+import 'package:fanotifier/core/analytics/app_analytics.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 
-class _ProfileTabKeepAlive extends StatefulWidget {
-  const _ProfileTabKeepAlive({
+class _ProfileTabScrollScope extends StatefulWidget {
+  const _ProfileTabScrollScope({
     super.key,
+    required this.tabController,
+    required this.tabIndex,
+    required this.recoveryKey,
     required this.child,
   });
 
+  final TabController tabController;
+  final int tabIndex;
+  final int recoveryKey;
   final Widget child;
 
   @override
-  State<_ProfileTabKeepAlive> createState() => _ProfileTabKeepAliveState();
+  State<_ProfileTabScrollScope> createState() =>
+      _ProfileTabScrollScopeState();
 }
 
-class _ProfileTabKeepAliveState extends State<_ProfileTabKeepAlive>
-    with AutomaticKeepAliveClientMixin<_ProfileTabKeepAlive> {
+class _ProfileTabScrollScopeState extends State<_ProfileTabScrollScope>
+    with AutomaticKeepAliveClientMixin<_ProfileTabScrollScope> {
+  late final ScrollController _inactiveScrollController;
+  late bool _isActive;
+
   @override
   bool get wantKeepAlive => true;
 
   @override
+  void initState() {
+    super.initState();
+    _inactiveScrollController = ScrollController();
+    _isActive = widget.tabController.index == widget.tabIndex;
+    widget.tabController.addListener(_handleTabChanged);
+  }
+
+  @override
+  void didUpdateWidget(_ProfileTabScrollScope oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tabController != widget.tabController) {
+      oldWidget.tabController.removeListener(_handleTabChanged);
+      widget.tabController.addListener(_handleTabChanged);
+    }
+    _handleTabChanged();
+  }
+
+  void _handleTabChanged() {
+    final isActive = widget.tabController.index == widget.tabIndex;
+    if (!mounted || _isActive == isActive) return;
+    setState(() {
+      _isActive = isActive;
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.tabController.removeListener(_handleTabChanged);
+    _inactiveScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     super.build(context);
-    return widget.child;
+    final nestedScrollController = PrimaryScrollController.of(context);
+    final scrollController =
+        _isActive ? nestedScrollController : _inactiveScrollController;
+    return PrimaryScrollController(
+      controller: scrollController,
+      child: KeyedSubtree(
+        key: ValueKey<(ScrollController, int)>(
+          (scrollController, widget.recoveryKey),
+        ),
+        child: widget.child,
+      ),
+    );
   }
 }
 
@@ -98,13 +154,23 @@ class UserProfileScreen extends StatefulWidget {
         );
 
     return TransparentSlidePageRoute<T>(
-      settings: settings,
+      settings: settings ?? AnalyticsRouteSettings(_screenFor(initialSection)),
       builder: builder,
       routeTransitionDuration:
           instant ? Duration.zero : const Duration(milliseconds: 280),
       routeReverseTransitionDuration:
           instant ? Duration.zero : const Duration(milliseconds: 280),
     );
+  }
+
+  static AppScreen _screenFor(ProfileSection section) {
+    return switch (section) {
+      ProfileSection.home => AppScreens.profileHome,
+      ProfileSection.gallery => AppScreens.profileGallery,
+      ProfileSection.scraps => AppScreens.profileScraps,
+      ProfileSection.favs => AppScreens.profileFavorites,
+      ProfileSection.journals => AppScreens.profileJournals,
+    };
   }
 
   @override
@@ -203,6 +269,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
       await Navigator.push(
         context,
         MaterialPageRoute(
+          settings:
+              const AnalyticsRouteSettings(AppScreens.documentViewer),
           builder: (context) => UserDescriptionWebViewScreen(
             sanitizedUsername: _profileController.sanitizedUsername,
             initialHtml: _profileController.userDescription,
@@ -333,6 +401,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
       vsync: this,
       initialIndex: widget.initialSection.index,
     );
+    appAnalytics.logScreen(
+      UserProfileScreen._screenFor(
+        ProfileSection.values[_tabController.index],
+      ),
+    );
     _backSwipeAnimationController = AnimationController(vsync: this)
       ..addListener(_onBackSwipeAnimationTick)
       ..addStatusListener(_onBackSwipeAnimationStatusChanged);
@@ -351,6 +424,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
       _scheduleLazyLoadForIndex(_tabController.index);
 
       if (_previousIndex != _tabController.index) {
+        appAnalytics.logScreen(
+          UserProfileScreen._screenFor(
+            ProfileSection.values[_tabController.index],
+          ),
+        );
         final double appBarHeight =
             sliverAppBarExpandedHeight - sliverAppBarMinHeight;
         final double targetOffset =
@@ -1247,6 +1325,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
         Navigator.push(
           context,
           MaterialPageRoute(
+            settings:
+                const AnalyticsRouteSettings(AppScreens.journalDetails),
             builder: (context) => OpenJournal(uniqueNumber: target.journalId!),
           ),
         );
@@ -2251,6 +2331,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                                 Navigator.push(
                                                                   context,
                                                                   MaterialPageRoute(
+                                                                    settings:
+                                                                        const AnalyticsRouteSettings(
+                                                                      AppScreens
+                                                                          .newNote,
+                                                                    ),
                                                                     builder:
                                                                         (context) =>
                                                                             NewMessageScreen(
@@ -2395,8 +2480,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
                               body: TabBarView(
                                 controller: _tabController,
                                 children: ProfileSection.values.map((section) {
-                                  return _ProfileTabKeepAlive(
+                                  return _ProfileTabScrollScope(
                                     key: ValueKey(section),
+                                    tabController: _tabController,
+                                    tabIndex: section.index,
+                                    recoveryKey: _iosScrollRecoveryKey,
                                     child: _buildLazySection(section),
                                   );
                                 }).toList(),
@@ -2717,6 +2805,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         final result = await Navigator.push(
           context,
           MaterialPageRoute(
+            settings: const AnalyticsRouteSettings(AppScreens.postShout),
             builder: (context) => PostShoutScreen(
               username: _profileController.sanitizedUsername,
             ),
@@ -2775,6 +2864,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
         Navigator.push(
           context,
           MaterialPageRoute(
+            settings:
+                const AnalyticsRouteSettings(AppScreens.createJournal),
             builder: (context) => CreateJournalScreen(
               onJournalSubmitted: _refreshJournalsList,
             ),

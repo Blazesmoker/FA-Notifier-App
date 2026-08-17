@@ -10,6 +10,7 @@ import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/shared/fa/domain/user_profile.dart';
 import 'package:fanotifier/shared/fa/domain/notifications.dart';
 import 'package:fanotifier/features/search/presentation/find_source_screen.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/settings/presentation/settings_screen.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
@@ -223,7 +224,10 @@ class _HomeDrawerState extends State<HomeDrawer> {
           } else if (listData.labelName == 'Find Source') {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const FindSourceScreen()),
+              MaterialPageRoute(
+                settings: const AnalyticsRouteSettings(AppScreens.findSource),
+                builder: (context) => const FindSourceScreen(),
+              ),
             );
           } else {
             navigationtoScreen(listData.index!);
@@ -542,6 +546,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
       Navigator.push(
         context,
         MaterialPageRoute(
+          settings: const AnalyticsRouteSettings(AppScreens.settings),
           builder: (context) => SettingsScreen(
             onLogout: widget.onLogout, // Pass the logout callback to Settings
           ),

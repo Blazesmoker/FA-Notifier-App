@@ -36,6 +36,8 @@ import 'package:fanotifier/features/auth/presentation/cloudflare_check_screen.da
 import 'package:fanotifier/features/drawer/domain/drawer_index.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_settings_provider.dart';
 import 'package:fanotifier/features/notifications/domain/enabled_notification_items_count.dart';
+import 'package:fanotifier/core/analytics/app_analytics.dart';
+import 'package:fanotifier/core/analytics/app_screen.dart';
 
 import '../../auth/domain/cloudflare_check_result.dart';
 
@@ -134,6 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _initializeAndLoadLoginState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _logSelectedHomeScreen();
       if (widget.initialSearchQuery != null &&
           widget.initialSearchQuery!.isNotEmpty) {
         _triggerSearch(widget.initialSearchQuery!);
@@ -169,6 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectedIndex = next;
       _loadedHomeIndexes.add(next);
     });
+    _logSelectedHomeScreen();
   }
 
   Future<void> _loadHomeStartScreenPreference() async {
@@ -188,6 +192,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     _maybeOpenStartupProfile();
+    _logSelectedHomeScreen();
   }
 
   Future<void> _initializeAndLoadLoginState() async {
@@ -247,6 +252,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final result = await Navigator.of(context).push<CloudflareCheckResult>(
       MaterialPageRoute<CloudflareCheckResult>(
+        settings:
+            const AnalyticsRouteSettings(AppScreens.cloudflareCheck),
         builder: (_) => const CloudflareCheckScreen(),
       ),
     );
@@ -334,6 +341,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _loadedHomeIndexes.add(3);
       _notificationsInitialSection = section;
     });
+    appAnalytics.logScreen(AppScreens.notificationSection(section));
   }
 
   int _getNotificationsEnabledSum(
@@ -369,6 +377,19 @@ class _HomeScreenState extends State<HomeScreen> {
         _notificationsInitialSection = null;
       }
     });
+    _logSelectedHomeScreen();
+  }
+
+  void _logSelectedHomeScreen() {
+    final screen = switch (_selectedIndex) {
+      0 => isLoggedIn ? AppScreens.browse : AppScreens.login,
+      1 => AppScreens.search,
+      2 => AppScreens.submissions,
+      3 => AppScreens.notifications,
+      4 => AppScreens.notesInbox,
+      _ => AppScreens.browse,
+    };
+    appAnalytics.logScreen(screen);
   }
 
   Future<void> _scrollToTopForIndex(int index) async {
@@ -395,6 +416,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectedIndex = 1;
       _loadedHomeIndexes.add(1);
     });
+    _logSelectedHomeScreen();
   }
 
   void _onNoteCounterTap() {
@@ -752,6 +774,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           await Navigator.push<Map<String, String>>(
                         context,
                         MaterialPageRoute(
+                          settings: const AnalyticsRouteSettings(
+                            AppScreens.browseFilters,
+                          ),
                           builder: (context) => FiltersScreen(
                             selectedFilters: browseFilters,
                             sfwEnabled: _sfwEnabled,
@@ -825,7 +850,11 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => const UploadSubmissionScreen()),
+        MaterialPageRoute(
+          settings:
+              const AnalyticsRouteSettings(AppScreens.uploadSubmission),
+          builder: (context) => const UploadSubmissionScreen(),
+        ),
       ).then((_) {
         if (!mounted) return;
         setState(() {
@@ -833,6 +862,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _selectedIndex = 0;
           _loadedHomeIndexes.add(0);
         });
+        _logSelectedHomeScreen();
       });
     } else {
       setState(() {
@@ -862,6 +892,7 @@ class _HomeScreenState extends State<HomeScreen> {
             break;
         }
       });
+      _logSelectedHomeScreen();
       if (drawerIndex != DrawerIndex.home) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           setState(() {
