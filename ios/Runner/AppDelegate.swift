@@ -462,17 +462,12 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
             }
         }
 
-        BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: backgroundTaskIdentifier,
-            using: nil
-        ) { [weak self] task in
-            guard let self = self else { return }
-            self.fLog("===============================================")
-            self.fLog("BACKGROUND TASK TRIGGERED BY iOS (\(task.identifier))")
-            self.fLog("Time: \(Date())")
-            self.fLog("===============================================")
-            self.handleBackgroundFetch(task: task)
-        }
+        WorkmanagerPlugin.registerPeriodicTask(
+            withIdentifier: backgroundTaskIdentifier,
+            earliestBeginInSeconds: NSNumber(
+                value: iOSBackgroundFetchIntervalSeconds
+            )
+        )
 
         scheduleBackgroundFetch(source: "didFinishLaunching")
         getPendingBackgroundTasks()
@@ -517,30 +512,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         scheduleBackgroundFetch(source: "didBecomeActive:\(source)")
         getPendingBackgroundTasks()
         logApproxNextFetch("didBecomeActive:\(source)")
-    }
-
-    private func handleBackgroundFetch(task: BGTask) {
-        fLog("handleBackgroundFetch started")
-        if let refreshTask = task as? BGAppRefreshTask {
-            self.fLog("Task is BGAppRefreshTask, passing to WorkmanagerPlugin")
-            self.fLog("Workmanager will request next BGTask at >=15m")
-            WorkmanagerPlugin.handlePeriodicTask(
-                identifier: backgroundTaskIdentifier,
-                task: refreshTask,
-                earliestBeginInSeconds: NSNumber(
-                    value: iOSBackgroundFetchIntervalSeconds
-                ),
-                inputData: nil
-            )
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                self.scheduleBackgroundFetch(
-                    source: "afterWorkmanagerHandlePeriodicTask"
-                )
-            }
-        } else {
-            fLog("Task is not BGAppRefreshTask type")
-            task.setTaskCompleted(success: false)
-        }
     }
 
     private func scheduleBackgroundFetch(source: String) {
