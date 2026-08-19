@@ -99,6 +99,10 @@ abstract final class AppScreens {
   static const tagBlocklist =
       AppScreen('Tag Blocklist', 'TagBlocklistScreen');
   static const viewList = AppScreen('User List', 'UserListScreen');
+  static const privacySettings =
+      AppScreen('Privacy Settings', 'PrivacySettingsScreen');
+  static const privacyConsent =
+      AppScreen('Privacy Consent', 'PrivacyConsentScreen');
   static const update = AppScreen('App Update', 'AppUpdateScreen');
   static const cloudflareCheck =
       AppScreen('Security Check', 'SecurityCheckScreen');

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:fanotifier/app/navigation/app_fa_link_navigator.dart';
 import 'package:fanotifier/app/lifecycle/fa_activities_polling_service.dart';
 import 'package:fanotifier/core/preferences/thumbnail_display_settings_provider.dart';
+import 'package:fanotifier/core/preferences/privacy_settings_provider.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
 import 'package:fanotifier/core/notifications/domain/local_notification_gateway.dart';
 import 'package:fanotifier/core/timezone/data/fa_timezone_repository.dart';
@@ -292,6 +293,9 @@ class AppProviders extends StatelessWidget {
         ),
         ChangeNotifierProvider<TranslatorSettingsProvider>(
           create: (_) => TranslatorSettingsProvider(),
+        ),
+        ChangeNotifierProvider<PrivacySettingsProvider>(
+          create: (_) => PrivacySettingsProvider(),
         ),
         ChangeNotifierProvider<NoteImagePreviewSettingsProvider>(
           create: (_) => NoteImagePreviewSettingsProvider(),

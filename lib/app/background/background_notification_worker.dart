@@ -13,6 +13,7 @@ import 'package:fanotifier/core/crash_reporting/app_crash_reporter.dart';
 import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 import 'package:fanotifier/core/network/fresh_http_overrides.dart';
 import 'package:fanotifier/core/preferences/app_foreground_state_preference.dart';
+import 'package:fanotifier/core/preferences/privacy_settings_preference.dart';
 import 'package:fanotifier/features/drawer/data/app_update_service.dart';
 import 'package:fanotifier/features/notes/data/background_inbox_service.dart';
 import 'package:fanotifier/features/notes/data/background_note_content_service.dart';
@@ -567,7 +568,14 @@ class BackgroundNotificationWorker {
       if (Firebase.apps.isEmpty) {
         await Firebase.initializeApp();
       }
-      await appCrashReporter.initializeBackgroundIsolate();
+      final crashlyticsEnabled =
+          (await SharedPreferences.getInstance()).getBool(
+        PrivacySettingsPreference.crashlyticsEnabledKey,
+      ) ??
+              false;
+      await appCrashReporter.initializeBackgroundIsolate(
+        collectionEnabled: crashlyticsEnabled,
+      );
     } catch (error, stackTrace) {
       try {
         await appCrashReporter.recordNonFatal(

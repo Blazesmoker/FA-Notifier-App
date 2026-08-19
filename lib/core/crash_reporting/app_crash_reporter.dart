@@ -7,9 +7,11 @@ class AppCrashReporter {
 
   final FirebaseCrashlytics _crashlytics;
 
-  Future<void> initializeMainIsolate() async {
+  Future<void> initializeMainIsolate({
+    required bool collectionEnabled,
+  }) async {
     try {
-      await _crashlytics.setCrashlyticsCollectionEnabled(!kDebugMode);
+      await _crashlytics.setCrashlyticsCollectionEnabled(collectionEnabled);
       await _crashlytics.setUserIdentifier('');
     } catch (_) {}
     FlutterError.onError = (details) {
@@ -32,9 +34,11 @@ class AppCrashReporter {
     };
   }
 
-  Future<void> initializeBackgroundIsolate() async {
+  Future<void> initializeBackgroundIsolate({
+    required bool collectionEnabled,
+  }) async {
     try {
-      await _crashlytics.setCrashlyticsCollectionEnabled(!kDebugMode);
+      await _crashlytics.setCrashlyticsCollectionEnabled(collectionEnabled);
       await _crashlytics.setUserIdentifier('');
     } catch (_) {}
     PlatformDispatcher.instance.onError = (error, stackTrace) {
@@ -84,6 +88,12 @@ class AppCrashReporter {
         reason: reason,
         fatal: false,
       );
+    } catch (_) {}
+  }
+
+  Future<void> setCollectionEnabled(bool enabled) async {
+    try {
+      await _crashlytics.setCrashlyticsCollectionEnabled(enabled);
     } catch (_) {}
   }
 

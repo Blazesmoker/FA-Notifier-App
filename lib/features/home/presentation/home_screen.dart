@@ -38,6 +38,8 @@ import 'package:fanotifier/features/notifications/presentation/notification_sett
 import 'package:fanotifier/features/notifications/domain/enabled_notification_items_count.dart';
 import 'package:fanotifier/core/analytics/app_analytics.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
+import 'package:fanotifier/core/preferences/privacy_settings_provider.dart';
+import 'package:fanotifier/features/settings/presentation/privacy_consent_screen.dart';
 
 import '../../auth/domain/cloudflare_check_result.dart';
 
@@ -70,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _homeStartScreenPreferenceRepository;
   late final StartupCloudflareChecker _startupCloudflareChecker;
   late final FaActivitiesPollingPort _activitiesPolling;
+  late final PrivacySettingsProvider _privacySettings;
   HomeStartScreenPreference _homeStartScreenPreference =
       HomeStartScreenPreference.browse;
   Future<void>? _homeStartPreferenceFuture;
@@ -117,6 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Gate login SnackBar to only show once per real login
   bool _loginSnackShownThisRun = false;
+  bool _pendingLoginSnack = false;
 
   @override
   void initState() {
@@ -128,6 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
         context.read<HomeStartScreenPreferenceRepository>();
     _startupCloudflareChecker = context.read<StartupCloudflareChecker>();
     _activitiesPolling = context.read<FaActivitiesPollingPort>();
+    _privacySettings = context.read<PrivacySettingsProvider>();
     _navProvider =
         Provider.of<NotificationNavigationProvider>(context, listen: false);
     _navProvider.addListener(_handleNavProviderChange);
@@ -196,6 +201,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _initializeAndLoadLoginState() async {
+    await _privacySettings.load();
     await _loadSfwEnabled();
     await _loadLoginState();
     await (_homeStartPreferenceFuture ?? Future<void>.value());
@@ -442,6 +448,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted ||
         _isOpeningStartupProfile ||
         _didOpenStartupProfile ||
+        !_privacySettings.consentShown ||
         _homeStartScreenPreference != HomeStartScreenPreference.profile ||
         _selectedIndex != 0) {
       return;
@@ -547,13 +554,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
             if (!wasLoggedIn && !_loginSnackShownThisRun && mounted) {
               _loginSnackShownThisRun = true;
-              ScaffoldMessenger.of(context).clearSnackBars();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Logged in successfully!'),
-                  backgroundColor: Colors.green,
-                ),
-              );
+              if (_privacySettings.loaded && !_privacySettings.consentShown) {
+                _pendingLoginSnack = true;
+              } else {
+                _showLoginSuccessSnackBar();
+              }
             }
           } else {
             if (!isLoggedIn) {
@@ -647,13 +652,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
             if (!wasLoggedIn && !_loginSnackShownThisRun && mounted) {
               _loginSnackShownThisRun = true;
-              ScaffoldMessenger.of(context).clearSnackBars();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Logged in successfully!'),
-                  backgroundColor: Colors.green,
-                ),
-              );
+              if (_privacySettings.loaded && !_privacySettings.consentShown) {
+                _pendingLoginSnack = true;
+              } else {
+                _showLoginSuccessSnackBar();
+              }
             }
           }
         }
@@ -667,6 +670,26 @@ class _HomeScreenState extends State<HomeScreen> {
     _elementCheckTimer?.cancel();
     _elementCheckTimer = null;
     _firstTimeElementFound = null;
+  }
+
+  void _showLoginSuccessSnackBar() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Logged in successfully!'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  void _flushPendingLoginSnack() {
+    if (!mounted || !_pendingLoginSnack) return;
+    _pendingLoginSnack = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showLoginSuccessSnackBar();
+    });
   }
 
   void _scheduleStartupWarmup() {
@@ -709,7 +732,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMainAppScreen(BuildContext context) {
-    if (!_homeStartPreferenceLoaded || _shouldHoldForStartupProfile) {
+    if (!_homeStartPreferenceLoaded || !_privacySettings.loaded) {
+      return const Center(
+          child: PulsatingLoadingIndicator(
+              size: 108.0, assetPath: 'assets/icons/fathemed.png'));
+    }
+    if (!_privacySettings.consentShown) {
+      return PrivacyConsentScreen(
+        onCompleted: () {
+          if (!mounted) return;
+          setState(() {});
+          _flushPendingLoginSnack();
+        },
+      );
+    }
+    if (_shouldHoldForStartupProfile) {
       return const Center(
           child: PulsatingLoadingIndicator(
               size: 108.0, assetPath: 'assets/icons/fathemed.png'));
@@ -1003,9 +1040,10 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           child: Scaffold(
             body: isLoggedIn ? _buildMainAppScreen(context) : _buildWebView(),
-            bottomNavigationBar: _shouldHoldForStartupProfile
-                ? null
-                : Column(
+            bottomNavigationBar:
+                _shouldHoldForStartupProfile || !_privacySettings.consentShown
+                    ? null
+                    : Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Divider(

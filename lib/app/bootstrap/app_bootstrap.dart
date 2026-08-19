@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:workmanager/workmanager.dart';
 
@@ -14,6 +15,7 @@ import 'package:fanotifier/core/cache/custom_cache_manager.dart';
 import 'package:fanotifier/core/crash_reporting/app_crash_reporter.dart';
 import 'package:fanotifier/core/logging/app_logging.dart';
 import 'package:fanotifier/core/network/fresh_http_overrides.dart';
+import 'package:fanotifier/core/preferences/privacy_settings_preference.dart';
 import 'package:fanotifier/core/timezone/presentation/timezone_provider.dart';
 import 'package:fanotifier/features/notifications/data/adaptive_background_fetch_scheduler.dart'
     as background_scheduler;
@@ -54,8 +56,15 @@ Future<void> initializeAppInfrastructure({
   WidgetsFlutterBinding.ensureInitialized();
   configureAppLogging();
   await Firebase.initializeApp();
-  await appCrashReporter.initializeMainIsolate();
-  await setupAnalyticsPrivacy();
+  final prefs = await SharedPreferences.getInstance();
+  final analyticsEnabled =
+      prefs.getBool(PrivacySettingsPreference.analyticsEnabledKey) ?? false;
+  final crashlyticsEnabled =
+      prefs.getBool(PrivacySettingsPreference.crashlyticsEnabledKey) ?? false;
+  await appCrashReporter.initializeMainIsolate(
+    collectionEnabled: crashlyticsEnabled,
+  );
+  await setupAnalyticsPrivacy(analyticsEnabled: analyticsEnabled);
   try {
     await NotificationService().init(
       onNotificationTap: appNotificationNavigation.handleTap,

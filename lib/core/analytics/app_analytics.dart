@@ -39,6 +39,21 @@ class AppAnalytics {
   AppScreen? _currentScreen;
   bool _devicePropertiesConfigured = false;
 
+  Future<void> applyPrivacyConsent(bool analyticsEnabled) async {
+    try {
+      await _analytics.setConsent(
+        adStorageConsentGranted: false,
+        analyticsStorageConsentGranted: analyticsEnabled,
+        adPersonalizationSignalsConsentGranted: false,
+        adUserDataConsentGranted: false,
+        functionalityStorageConsentGranted: true,
+        personalizationStorageConsentGranted: false,
+        securityStorageConsentGranted: true,
+      );
+      await _analytics.setAnalyticsCollectionEnabled(analyticsEnabled);
+    } catch (_) {}
+  }
+
   Future<void> configureAnonymousDeviceProperties() async {
     if (_devicePropertiesConfigured) return;
     _devicePropertiesConfigured = true;
