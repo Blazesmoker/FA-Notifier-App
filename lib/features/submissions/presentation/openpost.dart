@@ -51,6 +51,8 @@ import 'package:fanotifier/core/analytics/app_screen.dart';
 
 import '../../../shared/utils/bbcode_context_menu.dart';
 
+enum _WatchOutcome { missingAuth, success, failed, error }
+
 class OpenPost extends StatefulWidget {
   final String imageUrl;
   final String uniqueNumber;
@@ -185,6 +187,7 @@ class _OpenPostState extends State<OpenPost>
   String? get unblockLink => _controller.unblockLink;
   bool get isWatching => _controller.isWatching;
   bool get _watchLinksLoading => _controller.watchLinksLoading;
+  bool get _watchRequestInFlight => _controller.watchRequestInFlight;
   bool get isBlocked => _controller.isBlocked;
   String? get category => _controller.category;
   String? get type => _controller.type;
@@ -611,9 +614,11 @@ class _OpenPostState extends State<OpenPost>
   Future<void> _fetchUserPageLinks() async {
     final updated = await _controller.loadUserActions(
       confirmNsfw: _showNSFWConfirmationDialog,
-      onNsfwAllowed: () => setState(() {}),
+      onNsfwAllowed: () {
+        if (mounted) setState(() {});
+      },
     );
-    if (updated) setState(() {});
+    if (updated && mounted) setState(() {});
   }
 
   Widget _buildTagsPanel() {
@@ -956,53 +961,70 @@ class _OpenPostState extends State<OpenPost>
     }
   }
 
-  Future<void> _sendWatchUnwatchRequest(String urlPath,
+  Future<_WatchOutcome> _sendWatchUnwatchRequest(String urlPath,
       {required bool shouldWatch}) async {
     try {
       final result = await _controller.performWatchUnwatch(urlPath);
-      if (!mounted) return;
       if (result.status == OpenPostActionStatus.missingAuth) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        return _WatchOutcome.missingAuth;
+      }
+      if (result.status == OpenPostActionStatus.success) {
+        await _fetchUserPageLinks();
+        return _WatchOutcome.success;
+      }
+      debugPrint(
+          'Failed to ${shouldWatch ? 'watch' : 'unwatch'} user. Status code: ${result.statusCode}');
+      return _WatchOutcome.failed;
+    } catch (e) {
+      debugPrint('Error during ${shouldWatch ? 'watch' : 'unwatch'}: $e');
+      return _WatchOutcome.error;
+    }
+  }
+
+  void _showWatchOutcomeSnackBar(_WatchOutcome outcome,
+      {required bool shouldWatch}) {
+    final messenger = rootMessengerKey.currentState;
+    if (messenger == null) return;
+    switch (outcome) {
+      case _WatchOutcome.missingAuth:
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('Please log in to perform this action.'),
             backgroundColor: Colors.red,
           ),
         );
-        return;
-      }
-      if (result.status == OpenPostActionStatus.success) {
-        await _fetchUserPageLinks();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+      case _WatchOutcome.success:
+        messenger.showSnackBar(
           SnackBar(
             content: Text(
-              shouldWatch ? 'Now watching $username' : 'Stopped watching $username',
+              shouldWatch
+                  ? 'Now watching $username'
+                  : 'Stopped watching $username',
             ),
             backgroundColor: Colors.green,
           ),
         );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+      case _WatchOutcome.failed:
+        messenger.showSnackBar(
           SnackBar(
             content:
                 Text('Failed to ${shouldWatch ? 'watch' : 'unwatch'} user.'),
             backgroundColor: Colors.red,
           ),
         );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'An error occurred while trying to ${shouldWatch ? 'watch' : 'unwatch'} user.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      case _WatchOutcome.error:
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+                'An error occurred while trying to ${shouldWatch ? 'watch' : 'unwatch'} user.'),
+            backgroundColor: Colors.red,
+          ),
+        );
     }
   }
 
   Future<void> _handleWatchButtonPressed() async {
+    if (_watchRequestInFlight) return;
     // When we skipped initial fetch (Browse/Search), fetch links on first tap
     if (watchLink == null && unwatchLink == null && username != null) {
       if (_watchLinksLoading) return;
@@ -1012,13 +1034,25 @@ class _OpenPostState extends State<OpenPost>
       setState(() => _controller.setWatchLinksLoading(false));
       // After fetch: if already watching, button will show -Watch; else send watch request below
     }
-    if (isWatching) {
-      if (unwatchLink == null) return;
-      await _sendWatchUnwatchRequest(unwatchLink!, shouldWatch: false);
-    } else {
-      if (watchLink == null) return;
-      await _sendWatchUnwatchRequest(watchLink!, shouldWatch: true);
+    setState(() => _controller.setWatchRequestInFlight(true));
+    final shouldWatch = !isWatching;
+    var outcome = _WatchOutcome.failed;
+    try {
+      if (isWatching) {
+        if (unwatchLink == null) return;
+        outcome =
+            await _sendWatchUnwatchRequest(unwatchLink!, shouldWatch: false);
+      } else {
+        if (watchLink == null) return;
+        outcome =
+            await _sendWatchUnwatchRequest(watchLink!, shouldWatch: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _controller.setWatchRequestInFlight(false));
+      }
     }
+    _showWatchOutcomeSnackBar(outcome, shouldWatch: shouldWatch);
   }
 
   Future<void> hideComment(String hideLink, String commentId) async {
@@ -2512,58 +2546,60 @@ class _OpenPostState extends State<OpenPost>
                                                 SizedBox(
                                                   width: 94,
                                                   height: 24,
-                                                  child: ElevatedButton(
-                                                    onPressed: _watchLinksLoading
-                                                        ? null
-                                                        : () =>
-                                                            _handleWatchButtonPressed(),
-                                                    style: ElevatedButton
-                                                        .styleFrom(
-                                                      backgroundColor:
-                                                          isWatching
-                                                              ? Colors.black
-                                                              : const Color(
-                                                                  0xFFE09321),
-                                                      shape:
-                                                          RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(2),
-                                                      ),
-                                                      side: const BorderSide(
-                                                          color: Color(
-                                                              0xFFE09321)),
-                                                    ),
-                                                    child: FittedBox(
-                                                      fit: BoxFit.scaleDown,
-                                                      child: _watchLinksLoading
-                                                          ? const SizedBox(
-                                                              width: 14,
-                                                              height: 14,
-                                                              child:
-                                                                  CircularProgressIndicator(
-                                                                strokeWidth: 2,
-                                                                color: Colors
-                                                                    .white,
+                                                  child:
+                                                      (_watchLinksLoading ||
+                                                              _watchRequestInFlight)
+                                                          ? const Center(
+                                                              child: SizedBox(
+                                                                width: 14,
+                                                                height: 14,
+                                                                child:
+                                                                    CircularProgressIndicator(
+                                                                  strokeWidth: 2,
+                                                                  color: Color(
+                                                                      0xFFE09321),
+                                                                ),
                                                               ),
                                                             )
-                                                          : Text(
-                                                              isWatching
-                                                                  ? "-Watch"
-                                                                  : "+Watch",
-                                                              style: TextStyle(
-                                                                color: isWatching
-                                                                    ? Colors
-                                                                        .white
-                                                                    : Colors
+                                                          : ElevatedButton(
+                                                              onPressed: () =>
+                                                                  _handleWatchButtonPressed(),
+                                                              style: ElevatedButton
+                                                                  .styleFrom(
+                                                                backgroundColor:
+                                                                    isWatching
+                                                                        ? Colors
+                                                                            .black
+                                                                        : const Color(
+                                                                            0xFFE09321),
+                                                                shape:
+                                                                    RoundedRectangleBorder(
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              2),
+                                                                ),
+                                                                side: const BorderSide(
+                                                                    color: Color(
+                                                                        0xFFE09321)),
+                                                              ),
+                                                              child: FittedBox(
+                                                                fit: BoxFit
+                                                                    .scaleDown,
+                                                                child: Text(
+                                                                  isWatching
+                                                                      ? "-Watch"
+                                                                      : "+Watch",
+                                                                  style: const TextStyle(
+                                                                    color: Colors
                                                                         .white,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold,
+                                                                  ),
+                                                                ),
                                                               ),
                                                             ),
-                                                    ),
-                                                  ),
                                                 ),
                                             ],
                                           ),

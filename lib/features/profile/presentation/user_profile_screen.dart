@@ -14,6 +14,7 @@ import 'package:fanotifier/app/navigation/app_navigation.dart';
 import 'package:fanotifier/features/profile/domain/fa_folder.dart';
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_shout_deletion_result.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_repository.dart';
 import 'package:fanotifier/shared/utils/external_link_launcher.dart';
@@ -351,6 +352,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   bool isLoadingMoreShouts = false;
   bool _isShoutSelectionMode = false;
   bool _isDeletingSelectedShouts = false;
+  bool _isWatchRequestInFlight = false;
   bool _isDraggingBackFromEdge = false;
   bool _isProfileWebViewDetached = false;
   bool _suppressNextRouteDetach = false;
@@ -891,7 +893,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     }
   }
 
-  Future<void> _sendWatchUnwatchRequest(String urlPath,
+  Future<WatchUnwatchResult> _sendWatchUnwatchRequest(String urlPath,
       {required bool shouldWatch}) async {
     final result = await _profileRepository.updateWatchState(
       urlPath: urlPath,
@@ -899,69 +901,101 @@ class UserProfileScreenState extends State<UserProfileScreen>
       sfwEnabled: _profileController.sfwEnabled,
     );
 
-    if (!mounted) return;
-    if (result.missingCookies) {
-      debugPrint('No cookies found. User might not be logged in.');
-      showAppSnackBar(context, 'Please log in to perform this action.',
-          backgroundColor: Colors.red);
-      return;
-    }
-
     if (result.success) {
       debugPrint('${shouldWatch ? 'Watch' : 'Unwatch'} action successful.');
 
-      setState(() {
-        _profileController.setWatching(shouldWatch);
-      });
-
-      showAppSnackBar(
-        context,
-        shouldWatch
-            ? 'Now watching ${_profileController.username}'
-            : 'Stopped watching ${_profileController.username}',
-        backgroundColor: Colors.green,
-      );
+      if (mounted) {
+        setState(() {
+          _profileController.setWatching(shouldWatch);
+        });
+      }
     } else if (result.error != null) {
       debugPrint(
           'Error during ${shouldWatch ? 'watch' : 'unwatch'}: ${result.error}');
-      showAppSnackBar(
-        context,
-        'An error occurred while trying to ${shouldWatch ? 'watch' : 'unwatch'} user.',
-        backgroundColor: Colors.red,
-      );
     } else {
       debugPrint(
           'Failed to ${shouldWatch ? 'watch' : 'unwatch'}. Status code: ${result.statusCode}');
-      showAppSnackBar(
-        context,
-        'Failed to ${shouldWatch ? 'watch' : 'unwatch'} user.',
-        backgroundColor: Colors.red,
+    }
+    return result;
+  }
+
+  void _showWatchOutcomeSnackBar(WatchUnwatchResult result,
+      {required bool shouldWatch}) {
+    final messenger = rootMessengerKey.currentState;
+    if (messenger == null) return;
+    if (result.missingCookies) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Please log in to perform this action.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else if (result.success) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            shouldWatch
+                ? 'Now watching ${_profileController.username}'
+                : 'Stopped watching ${_profileController.username}',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else if (result.error != null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+              'An error occurred while trying to ${shouldWatch ? 'watch' : 'unwatch'} user.'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to ${shouldWatch ? 'watch' : 'unwatch'} user.'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
       );
     }
   }
 
   Future<void> _handleWatchButtonPressed() async {
-    if (_profileController.isWatching) {
-      if (_profileController.unwatchLink == null) {
-        debugPrint('Unwatch link not available.');
-        return;
+    if (_isWatchRequestInFlight) return;
+    setState(() => _isWatchRequestInFlight = true);
+    WatchUnwatchResult? result;
+    final shouldWatch = !_profileController.isWatching;
+    try {
+      if (_profileController.isWatching) {
+        if (_profileController.unwatchLink == null) {
+          debugPrint('Unwatch link not available.');
+          return;
+        }
+        result = await _sendWatchUnwatchRequest(
+          _profileController.unwatchLink!,
+          shouldWatch: false,
+        );
+        await _fetchUserProfile();
+      } else {
+        if (_profileController.watchLink == null) {
+          debugPrint('Watch link not available.');
+          return;
+        }
+        result = await _sendWatchUnwatchRequest(
+          _profileController.watchLink!,
+          shouldWatch: true,
+        );
+        await _fetchUserProfile();
       }
-      await _sendWatchUnwatchRequest(
-        _profileController.unwatchLink!,
-        shouldWatch: false,
-      );
-      _fetchUserProfile();
-    } else {
-      if (_profileController.watchLink == null) {
-        debugPrint('Watch link not available.');
-        return;
+    } finally {
+      if (mounted) {
+        setState(() => _isWatchRequestInFlight = false);
       }
-      await _sendWatchUnwatchRequest(
-        _profileController.watchLink!,
-        shouldWatch: true,
-      );
-      _fetchUserProfile();
     }
+    _showWatchOutcomeSnackBar(result, shouldWatch: shouldWatch);
   }
 
   int get _selectedShoutCount =>
@@ -1350,6 +1384,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   Future<void> _fetchUserProfile() async {
     try {
       final result = await _profileController.loadProfile(widget.nickname);
+      if (!mounted) return;
 
       setState(() {
         _webViewLoaded =
@@ -1363,10 +1398,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
           "Watch/Unwatch Link: ${_profileController.watchLink} / ${_profileController.unwatchLink}");
       debugPrint("isBlocked: ${_profileController.isBlocked}");
     } on StateError catch (e) {
-      setState(() {});
+      if (mounted) setState(() {});
       debugPrint(e.toString());
     } catch (e) {
-      setState(() {});
+      if (mounted) setState(() {});
       debugPrint("An error occurred while fetching profile: $e");
     }
   }
@@ -2272,53 +2307,76 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                           ),
                                                         ),
                                                       )
-                                                    else
-                                                      Column(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
-                                                        children: [
+                                                      else
+                                                      Transform.translate(
+                                                      offset: const Offset(0, 4),
+                                                  child: Column(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
                                                           SizedBox(
                                                             width: 100,
                                                             height: 38,
                                                             child:
-                                                                ElevatedButton(
-                                                              onPressed:
-                                                                  _handleWatchButtonPressed,
-                                                              style:
-                                                                  ElevatedButton
-                                                                      .styleFrom(
-                                                                backgroundColor:
-                                                                    Colors
-                                                                        .black,
-                                                                shape:
-                                                                    RoundedRectangleBorder(
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              2),
-                                                                ),
-                                                                side:
-                                                                    const BorderSide(
-                                                                  color: Color(
-                                                                      0xFFE09321),
-                                                                ),
-                                                              ),
-                                                              child: FittedBox(
-                                                                fit: BoxFit
-                                                                    .scaleDown,
-                                                                child: Text(
-                                                                  _profileController
-                                                                          .isWatching
-                                                                      ? "-Watch"
-                                                                      : "+Watch",
-                                                                  style:
-                                                                      const TextStyle(
-                                                                    color: Colors
-                                                                        .white,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ),
+                                                                _isWatchRequestInFlight
+                                                                    ? const Center(
+                                                                        child:
+                                                                            SizedBox(
+                                                                          width:
+                                                                              18,
+                                                                          height:
+                                                                              18,
+                                                                          child:
+                                                                              CircularProgressIndicator(
+                                                                            strokeWidth:
+                                                                                2,
+                                                                            color:
+                                                                                Color(
+                                                                                    0xFFE09321),
+                                                                          ),
+                                                                        ),
+                                                                      )
+                                                                    : ElevatedButton(
+                                                                        onPressed:
+                                                                            _handleWatchButtonPressed,
+                                                                        style:
+                                                                            ElevatedButton
+                                                                                .styleFrom(
+                                                                          backgroundColor:
+                                                                              Colors
+                                                                                  .black,
+                                                                          shape:
+                                                                              RoundedRectangleBorder(
+                                                                            borderRadius:
+                                                                                BorderRadius
+                                                                                    .circular(
+                                                                                        2),
+                                                                          ),
+                                                                          side:
+                                                                              const BorderSide(
+                                                                            color:
+                                                                                Color(
+                                                                                    0xFFE09321),
+                                                                          ),
+                                                                        ),
+                                                                        child:
+                                                                            FittedBox(
+                                                                          fit: BoxFit
+                                                                              .scaleDown,
+                                                                          child:
+                                                                              Text(
+                                                                            _profileController
+                                                                                    .isWatching
+                                                                                ? "-Watch"
+                                                                                : "+Watch",
+                                                                            style:
+                                                                                const TextStyle(
+                                                                              color:
+                                                                                  Colors
+                                                                                      .white,
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                      ),
                                                           ),
                                                           const SizedBox(
                                                               height: 5),
@@ -2376,7 +2434,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                             ),
                                                           ),
                                                         ],
-                                                      ),
+                                                      ),),
                                                   ],
                                                 ),
                                               ),

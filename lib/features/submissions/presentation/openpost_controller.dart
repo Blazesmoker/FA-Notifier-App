@@ -44,6 +44,7 @@ class OpenPostController {
   String? unblockLink;
   bool isWatching = false;
   bool watchLinksLoading = false;
+  bool watchRequestInFlight = false;
   bool isBlocked = false;
   String? category;
   String? type;
@@ -391,6 +392,10 @@ class OpenPostController {
 
   void setWatchLinksLoading(bool value) {
     watchLinksLoading = value;
+  }
+
+  void setWatchRequestInFlight(bool value) {
+    watchRequestInFlight = value;
   }
 
   void addComment(String commentText) {
