@@ -280,9 +280,9 @@ class IosSettingsSwitchRow extends StatelessWidget {
       enabled: enabled,
       verticalPadding: compact ? 4 : 12,
       onTap: enabled ? () => onChanged(!value) : null,
-      trailing: Switch.adaptive(
+      trailing: Switch(
         value: value,
-        activeTrackColor: furAffinitySettingsAccent,
+        activeThumbColor: furAffinitySettingsAccent,
         onChanged: enabled ? onChanged : null,
       ),
     );
