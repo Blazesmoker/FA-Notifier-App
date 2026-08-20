@@ -63,10 +63,29 @@ class ContactInformationSection extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: contacts.map((contact) {
+                final iconUrl = contact['iconUrl'];
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4.0),
                   child: Row(
                     children: [
+                      if (iconUrl != null && iconUrl.isNotEmpty) ...[
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: FaNetworkImage(
+                            iconUrl,
+                            width: 24,
+                            height: 24,
+                            fit: BoxFit.contain,
+                            cacheWidth: 72,
+                            cacheHeight: 72,
+                            excludeFromSemantics: true,
+                            errorBuilder: (_, _, _) =>
+                                const SizedBox.shrink(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
                       Text(
                         '${contact['label']}: ',
                         style: const TextStyle(

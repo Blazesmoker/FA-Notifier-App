@@ -468,8 +468,14 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
           value = valueElement.children.first.text.trim();
         }
         if (value.isNotEmpty && value != 'N/A') {
-          contactInformationLinks
-              .add({'label': label, 'value': value, 'href': href});
+          final contact = <String, String>{
+            'label': label,
+            'value': value,
+            'href': href,
+          };
+          final iconUrl = _contactIconUrl(item);
+          if (iconUrl != null) contact['iconUrl'] = iconUrl;
+          contactInformationLinks.add(contact);
         }
       }
     }
@@ -870,4 +876,28 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
     isBlocked: computedUnblockLink != null,
     isOwnProfile: isOwnProfile,
   );
+}
+
+String? _contactIconUrl(dom.Element item) {
+  final source = item.querySelector('picture source')?.attributes['srcset'];
+  final image = item.querySelector('picture img')?.attributes['src'];
+  final sourceParts = (source?.split(RegExp(r'[\s,]')) ?? const <String>[])
+      .where((part) => part.trim().isNotEmpty)
+      .toList(growable: false);
+  final raw = (sourceParts.isEmpty ? image ?? '' : sourceParts.first).trim();
+  if (raw.isEmpty) return null;
+
+  final normalized = raw.startsWith('//')
+      ? 'https:$raw'
+      : raw.startsWith('/')
+          ? 'https://www.furaffinity.net$raw'
+          : raw;
+  final uri = Uri.tryParse(normalized);
+  final host = uri?.host.toLowerCase() ?? '';
+  if (uri == null ||
+      uri.scheme != 'https' ||
+      (host != 'furaffinity.net' && !host.endsWith('.furaffinity.net'))) {
+    return null;
+  }
+  return uri.toString();
 }

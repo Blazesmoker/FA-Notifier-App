@@ -1,5 +1,7 @@
+import 'package:fanotifier/features/settings/data/fur_affinity_contacts_parser.dart';
 import 'package:fanotifier/features/settings/data/fur_affinity_settings_parser.dart';
 import 'package:fanotifier/features/settings/data/fur_affinity_settings_remote_data_source.dart';
+import 'package:fanotifier/features/settings/domain/fur_affinity_contacts_models.dart';
 import 'package:fanotifier/features/settings/domain/fur_affinity_settings_models.dart';
 import 'package:fanotifier/features/settings/domain/fur_affinity_settings_repository.dart';
 
@@ -18,6 +20,8 @@ class FurAffinitySettingsRepositoryImpl
       Uri.parse('https://www.furaffinity.net$faUserSettingsPath');
   static final Uri _passwordResetUri =
       Uri.parse('https://www.furaffinity.net$faPasswordResetPath');
+  static final Uri _contactsUri =
+      Uri.parse('https://www.furaffinity.net$faContactsPath');
 
   final FurAffinitySettingsRemoteDataSource _remoteDataSource;
 
@@ -34,6 +38,25 @@ class FurAffinitySettingsRepositoryImpl
   @override
   Future<FaSettingsFormSnapshot> loadUserSettings() {
     return _load(_userUri, faUserSettingsPath);
+  }
+
+  @override
+  Future<FaContactsFormSnapshot> loadContacts() async {
+    final response = await _remoteDataSource.getAuthenticated(_contactsUri);
+    if (response.statusCode != 200) {
+      throw FaSettingsRequestException(
+        'Fur Affinity returned HTTP ${response.statusCode}.',
+        statusCode: response.statusCode,
+      );
+    }
+    try {
+      return parseFaContactsForm(response.body);
+    } on FaSettingsRequestException catch (error) {
+      throw FaSettingsRequestException(
+        error.message,
+        statusCode: response.statusCode,
+      );
+    }
   }
 
   @override
@@ -89,6 +112,21 @@ class FurAffinitySettingsRepositoryImpl
       uri: form.actionUri,
       referer: _userUri,
       expectedPath: faUserSettingsPath,
+      payload: payload,
+      submittedValues: values,
+    );
+  }
+
+  @override
+  Future<FaSettingsMutationResult> saveContacts({
+    required FaContactsFormSnapshot form,
+    required Map<String, String?> values,
+  }) {
+    final payload = form.form.buildPayload(values)..['do'] = 'update';
+    return _saveSettings(
+      uri: form.form.actionUri,
+      referer: _contactsUri,
+      expectedPath: faContactsPath,
       payload: payload,
       submittedValues: values,
     );

@@ -27,6 +27,7 @@ import 'package:fanotifier/features/journals/presentation/openjournal.dart';
 import 'package:fanotifier/features/submissions/presentation/openpost.dart';
 import 'package:fanotifier/features/profile/presentation/post_shout.dart';
 import 'package:fanotifier/features/profile/presentation/profilejournals.dart';
+import 'package:fanotifier/features/settings/presentation/contacts_and_media_screen.dart';
 import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
 import 'package:fanotifier/shared/utils/utils.dart';
 import 'package:fanotifier/shared/navigation/detachable_webview_route_registry.dart';
@@ -2692,9 +2693,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
     }
   }
 
-  void _showEditProfileDialog() {
+  Future<void> _showEditProfileDialog() async {
     _suppressNextRouteDetach = true;
-    showDialog(
+    final selected = await showDialog<String>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
@@ -2753,9 +2754,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pop(context);
-                    _launchURL(
-                        'https://www.furaffinity.net/controls/contacts/');
+                    Navigator.pop(context, 'contacts');
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black,
@@ -2809,6 +2808,17 @@ class UserProfileScreenState extends State<UserProfileScreen>
     ).whenComplete(() {
       _suppressNextRouteDetach = false;
     });
+    if (!mounted || selected != 'contacts') return;
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        settings: const AnalyticsRouteSettings(
+          AppScreens.furAffinityContactsAndMedia,
+        ),
+        builder: (_) => const ContactsAndMediaScreen(),
+      ),
+    );
+    if (!mounted || changed != true) return;
+    await _fetchUserProfile();
   }
 
   Widget _buildHomeSection() {
