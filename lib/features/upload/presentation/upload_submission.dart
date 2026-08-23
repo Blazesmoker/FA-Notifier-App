@@ -10,6 +10,8 @@ import 'package:fanotifier/features/submissions/presentation/openpost.dart';
 import 'package:fanotifier/features/upload/domain/submission_template.dart';
 import 'package:fanotifier/features/upload/domain/submission_template_repository.dart';
 import 'package:fanotifier/features/upload/domain/upload_file_picker_gateway.dart';
+import 'package:fanotifier/features/image_tools/domain/image_optimizer_models.dart';
+import 'package:fanotifier/features/image_tools/presentation/image_optimizer_launcher.dart';
 import 'package:fanotifier/features/upload/domain/upload_navigation_repository.dart';
 import 'package:fanotifier/features/upload/domain/upload_permission_gateway.dart';
 import 'package:fanotifier/features/upload/domain/upload_webview_results.dart';
@@ -644,6 +646,71 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     }
   }
 
+  Future<void> _optimizeAndInjectImage() async {
+    final inputName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Optimize which image?'),
+        content: const Text('Choose the upload field that should receive the saved changed copy.'),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: _accent),
+            onPressed: () => Navigator.of(context).pop('submission'),
+            child: const Text('Main Artwork'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: _accent),
+            onPressed: () => Navigator.of(context).pop('thumbnail'),
+            child: const Text('Custom Thumbnail'),
+          ),
+        ],
+      ),
+    );
+    if (inputName == null || !mounted) return;
+    final constraints = inputName == 'submission'
+        ? const ImageOptimizationConstraints(
+            title: 'Optimize Main Artwork',
+            allowedFormats: {
+              ImageOutputFormat.jpeg,
+              ImageOutputFormat.png,
+              ImageOutputFormat.gif,
+            },
+            maxBytes: 10 * 1024 * 1024,
+            maxMegapixels: 3.7,
+            maxMegapixelEquivalentWidth: 2560,
+            maxMegapixelEquivalentHeight: 1440,
+          )
+        : const ImageOptimizationConstraints(
+            title: 'Optimize Custom Thumbnail',
+            allowedFormats: {
+              ImageOutputFormat.jpeg,
+              ImageOutputFormat.png,
+              ImageOutputFormat.gif,
+            },
+            maxBytes: 10 * 1024 * 1024,
+          );
+    final selected = await pickAndOptimizeImage(
+      context,
+      _filePickerGateway,
+      constraints,
+    );
+    if (selected == null || !mounted) return;
+    final injected = await _webViewBridge.injectFile(
+      selected,
+      inputName: inputName,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          injected
+              ? '${selected.fileName} was added to ${inputName == 'submission' ? 'Main Artwork' : 'Custom Thumbnail'}.'
+              : 'That upload field is not available on the current page.',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final menuVisible = _isFinalizeReady && (_toolsMenuOpen || _toolsMenuController.value > 0);
@@ -684,6 +751,14 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                IconButton(
+                  tooltip: 'Resize or compress an image',
+                  onPressed: _optimizeAndInjectImage,
+                  icon: const Icon(
+                    Icons.photo_size_select_small,
+                    color: _accent,
+                  ),
+                ),
                 Transform.translate(
                   offset: _isFinalizeReady
                       ? const Offset(14.0, 0)

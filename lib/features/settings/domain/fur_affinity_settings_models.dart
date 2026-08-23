@@ -18,6 +18,7 @@ class FaFormFieldSnapshot {
     this.options = const <FaFormOption>[],
     this.min,
     this.max,
+    this.maxLength,
   });
 
   final String name;
@@ -28,6 +29,7 @@ class FaFormFieldSnapshot {
   final List<FaFormOption> options;
   final String? min;
   final String? max;
+  final int? maxLength;
 
   FaFormFieldSnapshot copyWith({
     String? value,
@@ -42,6 +44,7 @@ class FaFormFieldSnapshot {
       options: options,
       min: min,
       max: max,
+      maxLength: maxLength,
     );
   }
 }

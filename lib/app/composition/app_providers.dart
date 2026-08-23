@@ -19,6 +19,8 @@ import 'package:fanotifier/features/home/domain/home_profile_repository.dart';
 import 'package:fanotifier/features/home/domain/home_session_repository.dart';
 import 'package:fanotifier/features/home/domain/home_start_screen_preference_repository.dart';
 import 'package:fanotifier/features/home/home_feature.dart';
+import 'package:fanotifier/features/image_tools/domain/image_optimizer_repository.dart';
+import 'package:fanotifier/features/image_tools/image_tools_feature.dart';
 import 'package:fanotifier/features/notifications/notifications_feature.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/features/notifications/domain/notification_refresh_port.dart';
@@ -125,6 +127,9 @@ class AppProviders extends StatelessWidget {
         Provider<FurAffinitySettingsRepository>(
           create: (_) =>
               SettingsFeature.createFurAffinitySettingsRepository(),
+        ),
+        Provider<ImageOptimizerRepository>(
+          create: (_) => ImageToolsFeature.createRepository(),
         ),
         Provider<TagBlocklistRepository>(
           create: (_) => SettingsFeature.createTagBlocklistRepository(),

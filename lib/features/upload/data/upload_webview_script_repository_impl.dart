@@ -55,12 +55,15 @@ class UploadWebViewScriptRepositoryImpl
   }
 
   @override
-  String buildFileInputScript(UploadSelectedFile selectedFile) {
+  String buildFileInputScript(
+    UploadSelectedFile selectedFile, {
+    required String inputName,
+  }) {
     return file_scripts.buildUploadFileInputScript(
       base64Data: selectedFile.base64Data,
       fileName: selectedFile.fileName,
       extension: selectedFile.extension,
-      returnResult: false,
+      inputName: inputName,
     );
   }
 

@@ -28,6 +28,10 @@ import 'package:fanotifier/features/submissions/presentation/openpost.dart';
 import 'package:fanotifier/features/profile/presentation/post_shout.dart';
 import 'package:fanotifier/features/profile/presentation/profilejournals.dart';
 import 'package:fanotifier/features/settings/presentation/contacts_and_media_screen.dart';
+import 'package:fanotifier/features/settings/presentation/profile_info_screen.dart';
+import 'package:fanotifier/features/settings/presentation/profile_banner_screen.dart';
+import 'package:fanotifier/features/settings/presentation/avatar_management_screen.dart';
+import 'package:fanotifier/features/settings/presentation/fur_affinity_settings_widgets.dart';
 import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
 import 'package:fanotifier/shared/utils/utils.dart';
 import 'package:fanotifier/shared/navigation/detachable_webview_route_registry.dart';
@@ -127,17 +131,79 @@ class _ProfileTabScrollScopeState extends State<_ProfileTabScrollScope>
   }
 }
 
+class _EditProfileOption extends StatelessWidget {
+  const _EditProfileOption({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: furAffinitySettingsGroup,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: furAffinitySettingsDivider),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: furAffinitySettingsAccent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: furAffinitySettingsAccent, size: 23),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFF8A8A8A),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class UserProfileScreen extends StatefulWidget {
   final String nickname;
   final ProfileSection initialSection;
   final String? initialFolderUrl;
   final String? initialFolderName;
+  final VoidCallback? onProfileChanged;
   const UserProfileScreen({
     super.key,
     required this.nickname,
     this.initialSection = ProfileSection.home,
     this.initialFolderUrl,
     this.initialFolderName,
+    this.onProfileChanged,
   });
 
   static Route<T> route<T>({
@@ -145,6 +211,7 @@ class UserProfileScreen extends StatefulWidget {
     ProfileSection initialSection = ProfileSection.home,
     String? initialFolderUrl,
     String? initialFolderName,
+    VoidCallback? onProfileChanged,
     RouteSettings? settings,
     bool instant = false,
   }) {
@@ -153,6 +220,7 @@ class UserProfileScreen extends StatefulWidget {
           initialSection: initialSection,
           initialFolderUrl: initialFolderUrl,
           initialFolderName: initialFolderName,
+          onProfileChanged: onProfileChanged,
         );
 
     return TransparentSlidePageRoute<T>(
@@ -218,8 +286,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   final GlobalKey<ProfileJournalsState> _journalsKey =
       GlobalKey<ProfileJournalsState>();
-  final GlobalKey<UserDescriptionWebViewState> _webViewKey =
+  GlobalKey<UserDescriptionWebViewState> _webViewKey =
       GlobalKey<UserDescriptionWebViewState>();
+  int _profileMediaRevision = 0;
 
   late final UserProfileRepository _profileRepository;
   late final UserProfileController _profileController;
@@ -1382,14 +1451,33 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   /// Fetches the user's profile data from FurAffinity.
-  Future<void> _fetchUserProfile() async {
+  Future<void> _fetchUserProfile({bool afterEdit = false}) async {
     try {
+      final previousDescription = _profileController.userDescription;
+      final previousMediaUrls = <String?>[
+        _profileController.profileImageUrl,
+        _profileController.profileBannerUrl,
+      ];
+      if (afterEdit) await _evictProfileMedia(previousMediaUrls);
       final result = await _profileController.loadProfile(widget.nickname);
+      if (afterEdit) {
+        await _evictProfileMedia([
+          result.parsed.profileImageUrl,
+          result.parsed.profileBannerUrl,
+        ]);
+      }
       if (!mounted) return;
 
+      final rebuildDescription =
+          afterEdit || previousDescription != result.parsed.userDescription;
       setState(() {
-        _webViewLoaded =
-            result.shouldShowDescription ? _webViewLoaded : true;
+        if (rebuildDescription) {
+          _webViewKey = GlobalKey<UserDescriptionWebViewState>();
+        }
+        if (afterEdit) _profileMediaRevision++;
+        _webViewLoaded = result.shouldShowDescription
+            ? (rebuildDescription ? false : _webViewLoaded)
+            : true;
       });
       _updateProfileAvatarTransparency(result.parsed.profileImageUrl);
 
@@ -1404,6 +1492,16 @@ class UserProfileScreenState extends State<UserProfileScreen>
     } catch (e) {
       if (mounted) setState(() {});
       debugPrint("An error occurred while fetching profile: $e");
+    }
+  }
+
+  Future<void> _evictProfileMedia(Iterable<String?> urls) async {
+    for (final url in urls) {
+      if (url == null || url.trim().isEmpty) continue;
+      try {
+        final provider = await faNetworkImageProvider(url);
+        await provider.evict();
+      } catch (_) {}
     }
   }
 
@@ -1470,6 +1568,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
       child: FaNetworkImage(
         _profileController.profileBannerUrl ??
             'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg',
+        key: ValueKey(
+          'profile-banner-${_profileController.profileBannerUrl}-$_profileMediaRevision',
+        ),
         fit: BoxFit.cover,
         alignment: Alignment(alignmentX, 0),
         gaplessPlayback: true,
@@ -1591,6 +1692,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
               )
             : FaNetworkImage(
                 profileImageUrl,
+                key: ValueKey(
+                  'profile-avatar-$profileImageUrl-$_profileMediaRevision',
+                ),
                 width: _profileAvatarSize,
                 height: _profileAvatarSize,
                 fit: BoxFit.cover,
@@ -2697,109 +2801,64 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _suppressNextRouteDetach = true;
     final selected = await showDialog<String>(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.74),
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: Colors.grey[850],
+          backgroundColor: const Color(0xFF191919),
+          surfaceTintColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+          actionsPadding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: const BorderSide(color: Color(0xFF3D3D3D)),
+          ),
           title: const Text(
             'Edit Profile',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _launchURL('https://www.furaffinity.net/controls/profile/');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    side: const BorderSide(color: Color(0xFFE09321), width: 0.5),
-                  ),
-                  child: const Text(
-                    "Profile Info",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
+              _EditProfileOption(
+                icon: Icons.person_outline_rounded,
+                title: 'Profile Info',
+                onTap: () => Navigator.pop(context, 'profile_info'),
               ),
               const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _launchURL(
-                        'https://www.furaffinity.net/controls/profilebanner/');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    side: const BorderSide(color: Color(0xFFE09321), width: 0.5),
-                  ),
-                  child: const Text(
-                    "Profile Banner",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
+              _EditProfileOption(
+                icon: Icons.panorama_outlined,
+                title: 'Profile Banner',
+                onTap: () => Navigator.pop(context, 'profile_banner'),
               ),
               const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context, 'contacts');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    side: const BorderSide(color: Color(0xFFE09321), width: 0.5),
-                  ),
-                  child: const Text(
-                    "Contacts & Social Media",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
+              _EditProfileOption(
+                icon: Icons.alternate_email_rounded,
+                title: 'Contacts & Social Media',
+                onTap: () => Navigator.pop(context, 'contacts'),
               ),
               const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _launchURL('https://www.furaffinity.net/controls/avatar/');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    side: const BorderSide(color: Color(0xFFE09321), width: 0.5),
-                  ),
-                  child: const Text(
-                    "Avatar Management",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
+              _EditProfileOption(
+                icon: Icons.account_circle_outlined,
+                title: 'Avatar Management',
+                onTap: () => Navigator.pop(context, 'avatar'),
               ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(context),
               child: const Text(
                 'Close',
-                style: TextStyle(color: Colors.white),
+                style: TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -2808,17 +2867,38 @@ class UserProfileScreenState extends State<UserProfileScreen>
     ).whenComplete(() {
       _suppressNextRouteDetach = false;
     });
-    if (!mounted || selected != 'contacts') return;
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        settings: const AnalyticsRouteSettings(
+    if (!mounted || selected == null) return;
+    var changedByScreen = false;
+    void markChanged() {
+      changedByScreen = true;
+    }
+    final (screen, analyticsScreen) = switch (selected) {
+      'profile_info' => (
+          ProfileInfoScreen(onChanged: markChanged),
+          AppScreens.furAffinityProfileInfo,
+        ),
+      'profile_banner' => (
+          ProfileBannerScreen(onChanged: markChanged),
+          AppScreens.furAffinityProfileBanner,
+        ),
+      'avatar' => (
+          AvatarManagementScreen(onChanged: markChanged),
+          AppScreens.furAffinityAvatarManagement,
+        ),
+      _ => (
+          ContactsAndMediaScreen(onChanged: markChanged),
           AppScreens.furAffinityContactsAndMedia,
         ),
-        builder: (_) => const ContactsAndMediaScreen(),
+    };
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        settings: AnalyticsRouteSettings(analyticsScreen),
+        builder: (_) => screen,
       ),
     );
-    if (!mounted || changed != true) return;
-    await _fetchUserProfile();
+    if (!mounted || (changed != true && !changedByScreen)) return;
+    await _fetchUserProfile(afterEdit: true);
+    widget.onProfileChanged?.call();
   }
 
   Widget _buildHomeSection() {

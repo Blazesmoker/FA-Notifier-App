@@ -109,9 +109,18 @@ class UploadWebViewBridge {
     );
   }
 
-  Future<void> injectFile(UploadSelectedFile selectedFile) async {
-    await _controller!.evaluateJavascript(
-      source: _scriptRepository.buildFileInputScript(selectedFile),
+  Future<bool> injectFile(
+    UploadSelectedFile selectedFile, {
+    String inputName = 'submission',
+  }) async {
+    final controller = _controller;
+    if (controller == null) return false;
+    final result = await controller.evaluateJavascript(
+      source: _scriptRepository.buildFileInputScript(
+        selectedFile,
+        inputName: inputName,
+      ),
     );
+    return result == true || result?.toString() == 'true';
   }
 }

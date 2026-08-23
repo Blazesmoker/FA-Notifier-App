@@ -8,6 +8,7 @@ const String faAccountSettingsPath = '/controls/settings/';
 const String faGlobalSiteSettingsPath = '/controls/site-settings/';
 const String faUserSettingsPath = '/controls/user-settings/';
 const String faPasswordResetPath = '/lostpw/';
+const String faProfileInfoPath = '/controls/profile/';
 
 FaSettingsFormSnapshot parseFaSettingsForm(
   String html, {
@@ -75,6 +76,7 @@ FaSettingsFormSnapshot parseFaSettingsForm(
       checked: checked,
       min: input.attributes['min'],
       max: input.attributes['max'],
+      maxLength: int.tryParse(input.attributes['maxlength'] ?? ''),
     );
     if (!enabled) continue;
     if (type == 'checkbox') {
@@ -130,6 +132,7 @@ FaSettingsFormSnapshot parseFaSettingsForm(
       value: value,
       enabled: enabled,
       checked: false,
+      maxLength: int.tryParse(textarea.attributes['maxlength'] ?? ''),
     );
     if (enabled) payload[name] = value;
   }

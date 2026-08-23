@@ -37,6 +37,7 @@ class HomeDrawer extends StatefulWidget {
     required this.onNotesCountChanged,
     required this.onNotificationsUpdated,
     required this.onBadgeTap,
+    required this.onUserProfileChanged,
     this.isUserProfileLoading = false,
   });
 
@@ -49,6 +50,7 @@ class HomeDrawer extends StatefulWidget {
   final Function(int) onNotesCountChanged;
   final Function(Notifications) onNotificationsUpdated;
   final Function(String) onBadgeTap;
+  final VoidCallback onUserProfileChanged;
   final bool isUserProfileLoading;
 
   @override
@@ -57,6 +59,7 @@ class HomeDrawer extends StatefulWidget {
 
 class _HomeDrawerState extends State<HomeDrawer> {
   List<DrawerList>? drawerList;
+  int _avatarRevision = 0;
 
   Notifications _notifications = Notifications(
     submissions: '0',
@@ -98,6 +101,14 @@ class _HomeDrawerState extends State<HomeDrawer> {
       _onFaNotificationServiceChanged();
     });
     _checkForUpdate();
+  }
+
+  @override
+  void didUpdateWidget(HomeDrawer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.userProfile, widget.userProfile)) {
+      _avatarRevision++;
+    }
   }
 
   @override
@@ -724,6 +735,8 @@ class _HomeDrawerState extends State<HomeDrawer> {
                                   context,
                                   UserProfileScreen.route(
                                     nickname: lowercaseNickname,
+                                    onProfileChanged:
+                                        widget.onUserProfileChanged,
                                   ),
                                 );
                               } else {
@@ -785,6 +798,9 @@ class _HomeDrawerState extends State<HomeDrawer> {
                                             child: FaNetworkImage(
                                               widget
                                                   .userProfile!.profileImageUrl,
+                                              key: ValueKey(
+                                                'drawer-avatar-${widget.userProfile!.profileImageUrl}-$_avatarRevision',
+                                              ),
                                               fit: BoxFit.cover,
                                               loadingBuilder: (context, child,
                                                   loadingProgress) {

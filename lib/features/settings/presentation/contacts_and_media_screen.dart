@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:provider/provider.dart';
 
 import 'package:fanotifier/features/settings/domain/fur_affinity_contacts_models.dart';
@@ -11,7 +12,9 @@ import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 
 class ContactsAndMediaScreen extends StatefulWidget {
-  const ContactsAndMediaScreen({super.key});
+  const ContactsAndMediaScreen({super.key, this.onChanged});
+
+  final VoidCallback? onChanged;
 
   @override
   State<ContactsAndMediaScreen> createState() =>
@@ -26,7 +29,7 @@ class _ContactsAndMediaScreenState extends State<ContactsAndMediaScreen> {
   void initState() {
     super.initState();
     _controller = ContactsAndMediaController(
-      repository: context.read<FurAffinitySettingsRepository>(),
+      context.read<FurAffinitySettingsRepository>(),
     );
     _controller.load();
   }
@@ -40,6 +43,7 @@ class _ContactsAndMediaScreenState extends State<ContactsAndMediaScreen> {
   Future<void> _save() async {
     final result = await _controller.save();
     if (!mounted || result == null) return;
+    if (result.success) widget.onChanged?.call();
     showSettingsMutationSnackBar(
       context,
       section: 'Contacts & Social Media',
@@ -85,7 +89,8 @@ class _ContactsAndMediaScreenState extends State<ContactsAndMediaScreen> {
       animation: _controller,
       builder: (context, _) {
         return PopScope(
-          canPop: _allowPop,
+          canPop: _allowPop ||
+              (!_controller.dirty && !_controller.saving),
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) _requestClose();
           },
@@ -103,6 +108,8 @@ class _ContactsAndMediaScreenState extends State<ContactsAndMediaScreen> {
             ),
             body: SafeArea(
               top: false,
+              minimum: const EdgeInsets.only(bottom: 12),
+              maintainBottomViewPadding: true,
               child: _buildBody(),
             ),
           ),
@@ -136,6 +143,10 @@ class _ContactsAndMediaScreenState extends State<ContactsAndMediaScreen> {
               ),
               const SizedBox(height: 14),
               ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: furAffinitySettingsAccent,
+                  foregroundColor: Colors.black,
+                ),
                 onPressed: _controller.load,
                 child: const Text('Retry'),
               ),
@@ -218,8 +229,8 @@ class _ContactsAndMediaScreenState extends State<ContactsAndMediaScreen> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, bottom: 24),
-      cacheExtent: 500,
+      padding: const EdgeInsets.only(top: 8, bottom: 36),
+      scrollCacheExtent: const ScrollCacheExtent.pixels(500),
       itemCount: itemBuilders.length,
       itemBuilder: (context, index) => itemBuilders[index](context),
     );

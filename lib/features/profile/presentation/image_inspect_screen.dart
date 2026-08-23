@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -11,14 +12,30 @@ import 'package:fanotifier/features/profile/domain/profile_media_export_reposito
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
 
+class ImageInspectItem {
+  const ImageInspectItem({
+    required this.label,
+    required this.imageUrl,
+    this.imageData,
+  });
+
+  final String label;
+  final String imageUrl;
+  final AvatarImageData? imageData;
+}
+
 class ImageInspectScreen extends StatefulWidget {
   final String imageUrl;
   final AvatarImageData? imageData;
+  final List<ImageInspectItem>? items;
+  final int initialIndex;
 
   const ImageInspectScreen({
     super.key,
     required this.imageUrl,
     this.imageData,
+    this.items,
+    this.initialIndex = 0,
   });
 
   static Route<void> route({
@@ -42,16 +59,51 @@ class ImageInspectScreen extends StatefulWidget {
     );
   }
 
+  static Route<void> comparisonRoute({
+    required AvatarImageData original,
+    required AvatarImageData changed,
+    int initialIndex = 0,
+  }) {
+    return PageRouteBuilder<void>(
+      settings: const AnalyticsRouteSettings(AppScreens.imageViewer),
+      opaque: false,
+      barrierColor: Colors.transparent,
+      reverseTransitionDuration: Duration.zero,
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return FadeTransition(
+          opacity: animation,
+          child: ImageInspectScreen(
+            imageUrl: '',
+            initialIndex: initialIndex,
+            items: [
+              ImageInspectItem(
+                label: 'Original',
+                imageUrl: '',
+                imageData: original,
+              ),
+              ImageInspectItem(
+                label: 'Changed',
+                imageUrl: '',
+                imageData: changed,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   State<ImageInspectScreen> createState() => _ImageInspectScreenState();
 }
 
 class _ImageInspectScreenState extends State<ImageInspectScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final TransformationController _transformationController =
       TransformationController();
   late final ProfileMediaExportRepository _mediaExportRepository;
   late final AnimationController _doubleTapZoomAnimationController;
+  late final AnimationController _pageSlideAnimationController;
   Matrix4 _zoomAnimationStart = Matrix4.identity();
   Matrix4 _zoomAnimationEnd = Matrix4.identity();
   Offset? _tapDownPosition;
@@ -71,6 +123,15 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
   bool _isDismissing = false;
   bool _isDoubleTapCandidate = false;
   bool _chromeVisible = true;
+  late final List<ImageInspectItem> _items;
+  late int _currentIndex;
+  final ValueNotifier<double> _pageOffsetListenable = ValueNotifier(0);
+  double _pageViewportWidth = 0;
+  double _pageAnimationStart = 0;
+  double _pageAnimationEnd = 0;
+  double _pageDragStartOffset = 0;
+  int? _pageAnimationTargetIndex;
+  Axis? _lockedDragAxis;
 
   static const double _dismissDistance = 250;
   static const double _dismissVelocity = 900;
@@ -86,17 +147,37 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
   @override
   void initState() {
     super.initState();
+    _items = widget.items ??
+        [
+          ImageInspectItem(
+            label: 'Image',
+            imageUrl: widget.imageUrl,
+            imageData: widget.imageData,
+          ),
+        ];
+    _currentIndex = widget.initialIndex.clamp(0, _items.length - 1).toInt();
     _mediaExportRepository = context.read<ProfileMediaExportRepository>();
     _doubleTapZoomAnimationController = AnimationController(
       vsync: this,
       duration: _doubleTapZoomDuration,
     )..addListener(_updateDoubleTapZoomAnimation);
+    _pageSlideAnimationController = AnimationController(
+      vsync: this,
+      duration: _settleDuration,
+    )
+      ..addListener(_updatePageSlideAnimation)
+      ..addStatusListener(_handlePageSlideAnimationStatus);
   }
+
+  ImageInspectItem get _currentItem => _items[_currentIndex];
+  bool get _comparisonEnabled => _items.length > 1;
 
   @override
   void dispose() {
     _tapToggleTimer?.cancel();
     _doubleTapZoomAnimationController.dispose();
+    _pageSlideAnimationController.dispose();
+    _pageOffsetListenable.dispose();
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
       overlays: SystemUiOverlay.values,
@@ -133,8 +214,9 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
         return;
       }
 
-      final imageData = widget.imageData ??
-          await _mediaExportRepository.fetchImageData(widget.imageUrl);
+      final item = _currentItem;
+      final imageData = item.imageData ??
+          await _mediaExportRepository.fetchImageData(item.imageUrl);
       if (!context.mounted) return;
       final isSaved =
           await _mediaExportRepository.saveImageToGallery(imageData);
@@ -170,8 +252,9 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
         return;
       }
 
-      final imageData = widget.imageData ??
-          await _mediaExportRepository.fetchImageData(widget.imageUrl);
+      final item = _currentItem;
+      final imageData = item.imageData ??
+          await _mediaExportRepository.fetchImageData(item.imageUrl);
       if (!context.mounted) return;
       await _mediaExportRepository.shareImage(imageData);
     } catch (e) {
@@ -210,6 +293,12 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
       return;
     }
     _doubleTapZoomAnimationController.stop();
+    if (_activePointerCount == 0) {
+      _pageSlideAnimationController.stop();
+      _pageAnimationTargetIndex = null;
+      _pageDragStartOffset = _pageOffsetListenable.value;
+      _lockedDragAxis = null;
+    }
     final now = DateTime.now();
     final lastTapUpPosition = _lastTapUpPosition;
     final lastTapUpTime = _lastTapUpTime;
@@ -228,6 +317,9 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
     if (_activePointerCount > 1) {
       _hadMultiplePointers = true;
       _suppressDismissUntilPointersReleased = true;
+      _lockedDragAxis = null;
+      _pageAnimationTargetIndex = null;
+      _pageOffsetListenable.value = 0;
       _verticalSwipeDistance = 0;
       _canDismissWithSwipe = false;
       _setDoubleTapCandidate(null);
@@ -239,10 +331,43 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
       }
       _clearPendingTapToggle();
     }
-    _tapDownPosition = event.position;
+    if (_activePointerCount == 1) _tapDownPosition = event.position;
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
+    final swipeStart = _tapDownPosition;
+    if (_comparisonEnabled &&
+        swipeStart != null &&
+        _activePointerCount == 1 &&
+        !_suppressDismissUntilPointersReleased &&
+        _transformationController.value.getMaxScaleOnAxis() <= 1.05) {
+      final drag = event.position - swipeStart;
+      if (_lockedDragAxis == null &&
+          math.max(drag.dx.abs(), drag.dy.abs()) >= _tapSlop) {
+        if (drag.dx.abs() >= drag.dy.abs() * 0.9) {
+          _lockedDragAxis = Axis.horizontal;
+        } else if (drag.dy.abs() >= _tapSlop * 1.5 &&
+            drag.dy.abs() > drag.dx.abs() * 1.4) {
+          _lockedDragAxis = Axis.vertical;
+        }
+      }
+      if (_lockedDragAxis == Axis.horizontal) {
+        _canDismissWithSwipe = false;
+        _verticalSwipeDistance = 0;
+        _transformationController.value = Matrix4.identity();
+        final atFirst = _currentIndex == 0 && drag.dx > 0;
+        final atLast =
+            _currentIndex == _items.length - 1 && drag.dx < 0;
+        final resistance = atFirst || atLast ? 0.24 : 1.0;
+        _pageOffsetListenable.value =
+            _pageDragStartOffset + drag.dx * resistance;
+      } else if (_lockedDragAxis == Axis.vertical) {
+        _canDismissWithSwipe = true;
+        if (_pageOffsetListenable.value != 0) {
+          _pageOffsetListenable.value = 0;
+        }
+      }
+    }
     if (!_isDoubleTapCandidate) {
       return;
     }
@@ -267,6 +392,9 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
       _setDoubleTapCandidate(null);
       return;
     }
+    final dragAxis = _lockedDragAxis;
+    final pageOffset = _pageOffsetListenable.value;
+
     final hadMultiplePointers =
         _hadMultiplePointers || _activePointerCount > 1;
     if (_activePointerCount > 0) {
@@ -279,9 +407,21 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
 
     final tapDownPosition = _tapDownPosition;
     _tapDownPosition = null;
+    _lockedDragAxis = null;
     if (hadMultiplePointers) {
+      _animatePageOffset(0);
       _setDoubleTapCandidate(null);
       return;
+    }
+    if (dragAxis == Axis.horizontal) {
+      _transformationController.value = Matrix4.identity();
+      _setDoubleTapCandidate(null);
+      _clearPendingTapToggle();
+      _settlePageDrag(pageOffset);
+      return;
+    }
+    if (pageOffset != 0) {
+      _animatePageOffset(0);
     }
     if (tapDownPosition == null) {
       _setDoubleTapCandidate(null);
@@ -329,6 +469,8 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
 
   void _handlePointerCancel(PointerCancelEvent event) {
     _tapDownPosition = null;
+    _lockedDragAxis = null;
+    _animatePageOffset(0);
     _setDoubleTapCandidate(null);
     if (_activePointerCount > 0) {
       _activePointerCount -= 1;
@@ -337,6 +479,73 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
       _hadMultiplePointers = false;
       _suppressDismissUntilPointersReleased = false;
     }
+  }
+
+  void _showItem(int index) {
+    if (index < 0 || index >= _items.length || index == _currentIndex) return;
+    _doubleTapZoomAnimationController.stop();
+    _transformationController.value = Matrix4.identity();
+    final width = _pageViewportWidth > 0
+        ? _pageViewportWidth
+        : MediaQuery.of(context).size.width;
+    _animatePageOffset(
+      index > _currentIndex ? -width : width,
+      targetIndex: index,
+    );
+  }
+
+  void _settlePageDrag(double offset) {
+    final width = _pageViewportWidth > 0
+        ? _pageViewportWidth
+        : MediaQuery.of(context).size.width;
+    final threshold = math.min(72.0, width * 0.18);
+    if (offset <= -threshold && _currentIndex < _items.length - 1) {
+      _animatePageOffset(-width, targetIndex: _currentIndex + 1);
+      return;
+    }
+    if (offset >= threshold && _currentIndex > 0) {
+      _animatePageOffset(width, targetIndex: _currentIndex - 1);
+      return;
+    }
+    _animatePageOffset(0);
+  }
+
+  void _animatePageOffset(double target, {int? targetIndex}) {
+    _pageSlideAnimationController.stop();
+    _pageAnimationStart = _pageOffsetListenable.value;
+    _pageAnimationEnd = target;
+    _pageAnimationTargetIndex = targetIndex;
+    if ((_pageAnimationStart - target).abs() < 0.5) {
+      _handlePageSlideAnimationStatus(AnimationStatus.completed);
+      return;
+    }
+    _pageSlideAnimationController.forward(from: 0);
+  }
+
+  void _updatePageSlideAnimation() {
+    final progress = Curves.easeOutCubic.transform(
+      _pageSlideAnimationController.value,
+    );
+    _pageOffsetListenable.value = _pageAnimationStart +
+        (_pageAnimationEnd - _pageAnimationStart) * progress;
+  }
+
+  void _handlePageSlideAnimationStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    final targetIndex = _pageAnimationTargetIndex;
+    _pageAnimationTargetIndex = null;
+    if (targetIndex == null) {
+      _pageOffsetListenable.value = 0;
+      return;
+    }
+    _transformationController.value = Matrix4.identity();
+    setState(() {
+      _currentIndex = targetIndex;
+      _dragOffset = Offset.zero;
+      _verticalSwipeDistance = 0;
+      _isDraggingToDismiss = false;
+      _pageOffsetListenable.value = 0;
+    });
   }
 
   void _toggleZoomAt(Offset globalPosition) {
@@ -410,6 +619,35 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
     }
   }
 
+  Widget _buildInspectableImage(ImageInspectItem item) {
+    return Container(
+      alignment: Alignment.center,
+      child: item.imageData != null
+          ? Image.memory(
+              item.imageData!.bytes,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+              gaplessPlayback: true,
+            )
+          : FaNetworkImage(
+              item.imageUrl,
+              fit: BoxFit.contain,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return const Center(
+                  child: PulsatingLoadingIndicator(
+                    size: 108.0,
+                    assetPath: 'assets/icons/fathemed.png',
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Image.asset('assets/images/defaultpic.gif');
+              },
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final dragProgress =
@@ -430,6 +668,23 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
             child: AppBar(
               backgroundColor: Colors.transparent,
               elevation: 0,
+              centerTitle: true,
+              titleSpacing: 0,
+              title: _comparisonEnabled
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var index = 0; index < _items.length; index++) ...[
+                          if (index > 0) const SizedBox(width: 8),
+                          _InspectorChoiceButton(
+                            label: _items[index].label,
+                            selected: index == _currentIndex,
+                            onTap: () => _showItem(index),
+                          ),
+                        ],
+                      ],
+                    )
+                  : null,
               actions: [
                 PopupMenuButton<String>(
                   onSelected: (value) {
@@ -491,6 +746,8 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
                 _canDismissWithSwipe =
                     !_hasMultiTouchInteraction &&
                     !_suppressDismissUntilPointersReleased &&
+                    (!_comparisonEnabled ||
+                        _lockedDragAxis == Axis.vertical) &&
                     _transformationController.value.getMaxScaleOnAxis() <=
                         1.05;
               },
@@ -508,6 +765,14 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
                 if (details.pointerCount != 1) {
                   _hasMultiTouchInteraction = true;
                   _canDismissWithSwipe = false;
+                  return;
+                }
+                if (_comparisonEnabled &&
+                    _lockedDragAxis != Axis.vertical) {
+                  if (_transformationController.value.getMaxScaleOnAxis() <=
+                      1.05) {
+                    _transformationController.value = Matrix4.identity();
+                  }
                   return;
                 }
                 if (!_canDismissWithSwipe) {
@@ -564,36 +829,59 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
                   0,
                 ),
                 child: SizedBox.expand(
-                  child: Container(
-                    alignment: Alignment.center,
-                    child: widget.imageData != null
-                        ? Image.memory(
-                            widget.imageData!.bytes,
-                            fit: BoxFit.contain,
-                            filterQuality: FilterQuality.high,
-                            gaplessPlayback: true,
-                          )
-                        : FaNetworkImage(
-                            widget.imageUrl,
-                            fit: BoxFit.contain,
-                            loadingBuilder:
-                                (context, child, loadingProgress) {
-                              if (loadingProgress == null) {
-                                return child;
-                              }
-                              return const Center(
-                                child: PulsatingLoadingIndicator(
-                                  size: 108.0,
-                                  assetPath: 'assets/icons/fathemed.png',
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      _pageViewportWidth = constraints.maxWidth;
+                      final currentImage = RepaintBoundary(
+                        child: _buildInspectableImage(_currentItem),
+                      );
+                      final previousImage = _currentIndex > 0
+                          ? RepaintBoundary(
+                              child: _buildInspectableImage(
+                                _items[_currentIndex - 1],
+                              ),
+                            )
+                          : null;
+                      final nextImage = _currentIndex < _items.length - 1
+                          ? RepaintBoundary(
+                              child: _buildInspectableImage(
+                                _items[_currentIndex + 1],
+                              ),
+                            )
+                          : null;
+                      return ClipRect(
+                        child: ValueListenableBuilder<double>(
+                          valueListenable: _pageOffsetListenable,
+                          builder: (context, pageOffset, child) {
+                            return Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (previousImage != null)
+                                  Transform.translate(
+                                    offset: Offset(
+                                      pageOffset - constraints.maxWidth,
+                                      0,
+                                    ),
+                                    child: previousImage,
+                                  ),
+                                Transform.translate(
+                                  offset: Offset(pageOffset, 0),
+                                  child: currentImage,
                                 ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              return Image.asset(
-                                'assets/images/defaultpic.gif',
-                              );
-                            },
-                          ),
+                                if (nextImage != null)
+                                  Transform.translate(
+                                    offset: Offset(
+                                      pageOffset + constraints.maxWidth,
+                                      0,
+                                    ),
+                                    child: nextImage,
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -618,6 +906,47 @@ class _ImageInspectScreenState extends State<ImageInspectScreen>
         systemStatusBarContrastEnforced: false,
       ),
       child: content,
+    );
+  }
+}
+
+class _InspectorChoiceButton extends StatelessWidget {
+  const _InspectorChoiceButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const orange = Color(0xFFE09321);
+    return Material(
+      color: selected ? orange : orange.withValues(alpha: 0.35),
+      borderRadius: BorderRadius.circular(9),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(9),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 36),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Center(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: selected ? Colors.black : Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

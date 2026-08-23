@@ -83,6 +83,18 @@ abstract final class AppScreens {
     'Profile / Contacts & Social Media',
     'ContactsAndMediaScreen',
   );
+  static const furAffinityProfileInfo = AppScreen(
+    'Profile / Profile Info',
+    'ProfileInfoScreen',
+  );
+  static const furAffinityProfileBanner = AppScreen(
+    'Profile / Profile Banner',
+    'ProfileBannerScreen',
+  );
+  static const furAffinityAvatarManagement = AppScreen(
+    'Profile / Avatar Management',
+    'AvatarManagementScreen',
+  );
   static const furAffinityPasswordReset = AppScreen(
     'FurAffinity Settings / Password Reset',
     'FurAffinityPasswordResetScreen',

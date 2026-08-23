@@ -1,7 +1,6 @@
 // android/build.gradle
 
 buildscript {
-
     ext.kotlin_version = '2.3.21'
 
     repositories {
@@ -12,8 +11,6 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:9.2.1'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-
-
     }
 }
 
@@ -32,19 +29,6 @@ subprojects {
 
 subprojects {
     project.evaluationDependsOn(":app")
-}
-
-subprojects {
-    if (project.name == "firebase_analytics") {
-        plugins.withId("com.android.library") {
-            plugins.apply("kotlin-android")
-            tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                kotlinOptions {
-                    jvmTarget = "17"
-                }
-            }
-        }
-    }
 }
 
 tasks.register("clean", Delete) {

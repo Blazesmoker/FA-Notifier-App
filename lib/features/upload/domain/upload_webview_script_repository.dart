@@ -17,7 +17,10 @@ abstract interface class UploadWebViewScriptRepository {
 
   String buildFilePickerHandlerScript();
 
-  String buildFileInputScript(UploadSelectedFile selectedFile);
+  String buildFileInputScript(
+    UploadSelectedFile selectedFile, {
+    required String inputName,
+  });
 
   UploadClearFormResult decodeClearFormResult(Object? result);
 

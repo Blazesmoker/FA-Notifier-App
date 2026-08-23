@@ -1,8 +1,10 @@
 import 'package:fanotifier/features/settings/data/fur_affinity_contacts_parser.dart';
 import 'package:fanotifier/features/settings/data/fur_affinity_settings_parser.dart';
+import 'package:fanotifier/features/settings/data/fur_affinity_profile_management_parser.dart';
 import 'package:fanotifier/features/settings/data/fur_affinity_settings_remote_data_source.dart';
 import 'package:fanotifier/features/settings/domain/fur_affinity_contacts_models.dart';
 import 'package:fanotifier/features/settings/domain/fur_affinity_settings_models.dart';
+import 'package:fanotifier/features/settings/domain/fur_affinity_profile_management_models.dart';
 import 'package:fanotifier/features/settings/domain/fur_affinity_settings_repository.dart';
 
 class FurAffinitySettingsRepositoryImpl
@@ -22,6 +24,12 @@ class FurAffinitySettingsRepositoryImpl
       Uri.parse('https://www.furaffinity.net$faPasswordResetPath');
   static final Uri _contactsUri =
       Uri.parse('https://www.furaffinity.net$faContactsPath');
+  static final Uri _profileInfoUri =
+      Uri.parse('https://www.furaffinity.net$faProfileInfoPath');
+  static final Uri _profileBannerUri =
+      Uri.parse('https://www.furaffinity.net$faProfileBannerPath');
+  static final Uri _avatarUri =
+      Uri.parse('https://www.furaffinity.net$faAvatarManagementPath');
 
   final FurAffinitySettingsRemoteDataSource _remoteDataSource;
 
@@ -57,6 +65,27 @@ class FurAffinitySettingsRepositoryImpl
         statusCode: response.statusCode,
       );
     }
+  }
+
+  @override
+  Future<FaProfileInfoSnapshot> loadProfileInfo() async {
+    return FaProfileInfoSnapshot(
+      await _load(_profileInfoUri, faProfileInfoPath),
+    );
+  }
+
+  @override
+  Future<FaProfileBannerSnapshot> loadProfileBanner() async {
+    final response = await _remoteDataSource.getAuthenticated(_profileBannerUri);
+    _requireOk(response);
+    return parseFaProfileBanner(response.body);
+  }
+
+  @override
+  Future<FaAvatarManagementSnapshot> loadAvatarManagement() async {
+    final response = await _remoteDataSource.getAuthenticated(_avatarUri);
+    _requireOk(response);
+    return parseFaAvatarManagement(response.body);
   }
 
   @override
@@ -133,6 +162,121 @@ class FurAffinitySettingsRepositoryImpl
   }
 
   @override
+  Future<FaSettingsMutationResult> saveProfileInfo({
+    required FaProfileInfoSnapshot form,
+    required Map<String, String?> values,
+  }) {
+    final payload = form.form.buildPayload(values)..['do'] = 'update';
+    return _saveSettings(
+      uri: form.form.actionUri,
+      referer: _profileInfoUri,
+      expectedPath: faProfileInfoPath,
+      payload: payload,
+      submittedValues: values,
+      acceptOkWithoutConfirmation: true,
+    );
+  }
+
+  @override
+  Future<FaSettingsMutationResult> uploadProfileBanner({
+    required FaProfileBannerSnapshot form,
+    required FaUploadFile file,
+  }) async {
+    try {
+      final response = await _remoteDataSource.postMultipartAuthenticated(
+        form.actionUri,
+        referer: _profileBannerUri,
+        fields: form.payload,
+        fileField: 'profile_banner',
+        file: file,
+      );
+      return _mutationResult(response);
+    } catch (error) {
+      return FaSettingsMutationResult(success: false, message: '$error');
+    }
+  }
+
+  @override
+  Future<FaSettingsMutationResult> removeProfileBanner(
+    FaProfileBannerSnapshot form,
+  ) async {
+    final actionUri = form.removeActionUri;
+    final host = actionUri?.host.toLowerCase();
+    final path = actionUri == null
+        ? ''
+        : actionUri.path.endsWith('/')
+            ? actionUri.path
+            : '${actionUri.path}/';
+    if (actionUri == null ||
+        actionUri.scheme != 'https' ||
+        (host != 'www.furaffinity.net' && host != 'furaffinity.net') ||
+        path != faProfileBannerPath ||
+        !form.removePayload.containsKey('action-remove')) {
+      return const FaSettingsMutationResult(
+        success: false,
+        message: 'Fur Affinity did not provide a valid banner removal action.',
+      );
+    }
+    try {
+      final response = await _remoteDataSource.postAuthenticated(
+        actionUri,
+        referer: _profileBannerUri,
+        body: form.removePayload,
+      );
+      return _mutationResult(response);
+    } catch (error) {
+      return FaSettingsMutationResult(success: false, message: '$error');
+    }
+  }
+
+  @override
+  Future<FaSettingsMutationResult> uploadAvatar({
+    required FaAvatarManagementSnapshot form,
+    required FaUploadFile file,
+  }) async {
+    try {
+      final response = await _remoteDataSource.postMultipartAuthenticated(
+        form.actionUri,
+        referer: _avatarUri,
+        fields: form.payload,
+        fileField: 'avatarfile',
+        file: file,
+      );
+      return _mutationResult(response);
+    } catch (error) {
+      return FaSettingsMutationResult(success: false, message: '$error');
+    }
+  }
+
+  @override
+  Future<FaSettingsMutationResult> chooseAvatar(Uri uri) {
+    return _avatarAction(uri);
+  }
+
+  @override
+  Future<FaSettingsMutationResult> removeAvatar(Uri uri) {
+    return _avatarAction(uri);
+  }
+
+  Future<FaSettingsMutationResult> _avatarAction(Uri uri) async {
+    if (!_isSafeAvatarAction(uri)) {
+      return const FaSettingsMutationResult(
+        success: false,
+        message: 'Fur Affinity returned an unsafe avatar action.',
+      );
+    }
+    try {
+      final response = await _remoteDataSource.sendAuthenticatedWithoutRedirect(
+        uri,
+        referer: _avatarUri,
+      );
+      return _mutationResult(response);
+    } catch (error) {
+      return FaSettingsMutationResult(success: false, message: '$error');
+    }
+  }
+
+  @override
   Future<FaSettingsMutationResult> sendPasswordRecoveryCode({
     required String username,
     required String email,
@@ -185,6 +329,44 @@ class FurAffinitySettingsRepositoryImpl
     }
   }
 
+  void _requireOk(FaSettingsHttpResponse response) {
+    if (response.statusCode != 200) {
+      throw FaSettingsRequestException(
+        'Fur Affinity returned HTTP ${response.statusCode}.',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  FaSettingsMutationResult _mutationResult(FaSettingsHttpResponse response) {
+    if (response.statusCode == 302) {
+      return const FaSettingsMutationResult(success: true, statusCode: 302);
+    }
+    final message = extractFaSettingsResponseMessage(response.body);
+    final statusSuccess = response.statusCode >= 200 && response.statusCode < 300;
+    return FaSettingsMutationResult(
+      success: statusSuccess &&
+          !isFaSettingsFailureMessage(message) &&
+          isFaSettingsSuccessMessage(message),
+      statusCode: response.statusCode,
+      message: message ??
+          (statusSuccess
+              ? 'Fur Affinity did not confirm that the action succeeded.'
+              : 'Fur Affinity returned HTTP ${response.statusCode}.'),
+    );
+  }
+
+  bool _isSafeAvatarAction(Uri uri) {
+    final host = uri.host.toLowerCase();
+    if (uri.scheme != 'https' ||
+        (host != 'www.furaffinity.net' && host != 'furaffinity.net') ||
+        (uri.hasPort && uri.port != 443)) {
+      return false;
+    }
+    return uri.path.startsWith('/avatar/chooseuseravatar/') ||
+        uri.path.startsWith('/avatar/deleteavatar/');
+  }
+
   Future<FaSettingsMutationResult> _saveSettings({
     required Uri uri,
     required Uri referer,
@@ -192,6 +374,7 @@ class FurAffinitySettingsRepositoryImpl
     required Map<String, String> payload,
     required Map<String, String?> submittedValues,
     Set<String> ignoredConfirmationFields = const <String>{},
+    bool acceptOkWithoutConfirmation = false,
   }) async {
     try {
       final response = await _remoteDataSource.postAuthenticated(
@@ -199,15 +382,25 @@ class FurAffinitySettingsRepositoryImpl
         referer: referer,
         body: payload,
       );
+      if (response.statusCode == 302) {
+        return const FaSettingsMutationResult(
+          success: true,
+          statusCode: 302,
+        );
+      }
+      if (acceptOkWithoutConfirmation && response.statusCode == 200) {
+        return const FaSettingsMutationResult(
+          success: true,
+          statusCode: 200,
+        );
+      }
       final message = extractFaSettingsResponseMessage(response.body);
       final returnedForm = tryParseFaSettingsForm(
         response.body,
         expectedPath: expectedPath,
       );
-      final redirectSuccess = response.statusCode == 302;
       final statusSuccess =
-          (response.statusCode >= 200 && response.statusCode < 300) ||
-              redirectSuccess;
+          response.statusCode >= 200 && response.statusCode < 300;
       final messageFailure = isFaSettingsFailureMessage(message);
       final messageSuccess = isFaSettingsSuccessMessage(message);
       final valuesConfirmed = returnedForm == null ||
@@ -217,7 +410,7 @@ class FurAffinitySettingsRepositoryImpl
             ignoredConfirmationFields,
           );
       final responseConfirmed =
-          redirectSuccess || returnedForm != null || messageSuccess;
+          returnedForm != null || messageSuccess;
       return FaSettingsMutationResult(
         success: statusSuccess &&
             !messageFailure &&

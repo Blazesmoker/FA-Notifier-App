@@ -1,44 +1,61 @@
+import 'dart:convert';
+
 import 'package:fanotifier/shared/fa/fa_bbcode_webview_scripts.dart';
 
 String buildUploadFileInputScript({
   required String base64Data,
   required String fileName,
   required String extension,
-  required bool returnResult,
+  String inputName = 'submission',
 }) {
-  final returnSuccess = returnResult ? 'return true;' : '';
-  final returnFailure = returnResult ? 'return false;' : '';
+  const returnSuccess = 'return true;';
+  const returnFailure = 'return false;';
+
+  final mimeType = switch (extension.toLowerCase()) {
+    'jpg' || 'jpeg' => 'image/jpeg',
+    'png' => 'image/png',
+    'gif' => 'image/gif',
+    _ => 'application/octet-stream',
+  };
+  final encodedBase64 = jsonEncode(base64Data);
+  final encodedFileName = jsonEncode(fileName);
+  final encodedMimeType = jsonEncode(mimeType);
+  final encodedInputName = jsonEncode(inputName);
 
   return '''
       (function() {
         try {
-          var base64 = "$base64Data";
+          var base64 = $encodedBase64;
           var binary = atob(base64);
           var array = new Uint8Array(binary.length);
           for (var i = 0; i < binary.length; i++) {
             array[i] = binary.charCodeAt(i);
           }
           
-          var blob = new Blob([array], { type: 'image/$extension' });
-          var file = new File([blob], "$fileName", { 
-            type: 'image/$extension',
+          var blob = new Blob([array], { type: $encodedMimeType });
+          var file = new File([blob], $encodedFileName, {
+            type: $encodedMimeType,
             lastModified: Date.now()
           });
           
           var dt = new DataTransfer();
           dt.items.add(file);
           
-          var input = document.querySelector('input[name="submission"]');
+          var inputName = $encodedInputName;
+          if (inputName !== 'submission' && inputName !== 'thumbnail') {
+            return false;
+          }
+          var input = document.querySelector('input[name="' + inputName + '"]');
           if (input) {
             input.files = dt.files;
             input.dispatchEvent(new Event('change', { bubbles: true }));
             
-            if (window.submissionUploader && window.submissionUploader.updateFileInfo) {
+            if (inputName === 'submission' && window.submissionUploader && window.submissionUploader.updateFileInfo) {
               window.submissionUploader.updateFileInfo();
             }
+            $returnSuccess
           }
-          
-          $returnSuccess
+          $returnFailure
         } catch(e) {
           console.error('Error setting file:', e);
           $returnFailure

@@ -11,9 +11,7 @@ enum FaContactValidationStatus {
 }
 
 class ContactsAndMediaController extends ChangeNotifier {
-  ContactsAndMediaController({
-    required FurAffinitySettingsRepository repository,
-  }) : _repository = repository;
+  ContactsAndMediaController(this._repository);
 
   final FurAffinitySettingsRepository _repository;
   final Map<String, TextEditingController> _controllers =
