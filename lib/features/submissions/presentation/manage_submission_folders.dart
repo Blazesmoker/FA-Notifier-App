@@ -341,6 +341,7 @@ class _ManageSubmissionFoldersScreenState
                   onDelete: () => _confirmDeleteGroup(group),
                   onAddFolder: () => _openFolderEditor(
                     navigationAction: group.addFolderAction,
+                    appBarTitle: 'Create Folder',
                   ),
                   onFolderMoveUp: (folder) =>
                       _applyAction(folder.moveUpAction),
@@ -797,6 +798,7 @@ class _SubmissionFolderEditorScreenState
     return TextField(
       controller: _controllers[field.name],
       enabled: !_saving && !_saveOutcomeUnknown,
+      style: const TextStyle(color: Colors.white),
       keyboardType:
           multiline ? TextInputType.multiline : TextInputType.text,
       textCapitalization: TextCapitalization.sentences,
@@ -1138,6 +1140,7 @@ class _GroupCreateCard extends StatelessWidget {
           TextField(
             controller: controller,
             enabled: enabled,
+            style: const TextStyle(color: Colors.white),
             decoration: const InputDecoration(
               label: SubmissionManagementShrinkableText(
                 'Folder Group name',
@@ -1218,6 +1221,7 @@ class _GroupRenameCard extends StatelessWidget {
           TextField(
             controller: controller,
             enabled: enabled,
+            style: const TextStyle(color: Colors.white),
             decoration: const InputDecoration(
               label: SubmissionManagementShrinkableText('New group name'),
             ),
@@ -1275,117 +1279,298 @@ class _GroupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _ManagementCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.folder_copy_outlined, color: _managementAccent),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Material(
-                        color: _managementAccent.withValues(alpha: 0.16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
-                          side: const BorderSide(color: _managementAccent),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: enabled ? onEdit : null,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 7,
-                            ),
-                            child: SubmissionManagementShrinkableText(
-                              group.name,
-                              maxLines: 1,
-                              minFontSize: 6,
-                              style: const TextStyle(
-                                color: _managementAccent,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
+    final header = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.folder_copy_outlined, color: _managementAccent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Material(
+                      color: _managementAccent.withValues(alpha: 0.16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                        side: const BorderSide(color: _managementAccent),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: enabled ? onEdit : null,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 7,
+                          ),
+                          child: SubmissionManagementShrinkableText(
+                            group.name,
+                            maxLines: 1,
+                            minFontSize: 6,
+                            style: const TextStyle(
+                              color: _managementAccent,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      '(Group)',
-                      style: TextStyle(color: Colors.white60, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              _MoveButtons(
-                enabled: enabled,
-                onUp: onMoveUp,
-                onDown: onMoveDown,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: enabled ? onEdit : null,
-                  style: _compactActionStyle(),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit'),
-                ),
-                const SizedBox(width: 4),
-                OutlinedButton.icon(
-                  onPressed: enabled ? onAddFolder : null,
-                  style: _compactActionStyle(),
-                  icon: const Icon(Icons.create_new_folder_outlined),
-                  label: const Text('Add Sub-Folder'),
-                ),
-                const SizedBox(width: 4),
-                OutlinedButton.icon(
-                  onPressed: enabled ? onDelete : null,
-                  style: _compactActionStyle(
-                    foregroundColor: Colors.red,
-                    borderColor: Colors.red.withValues(alpha: 0.65),
                   ),
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Delete'),
-                ),
-              ],
-            ),
-          ),
-          if (folders.isNotEmpty) ...[
-            const Divider(height: 24),
-            for (var index = 0; index < folders.length; index++) ...[
-              _FolderCard(
-                folder: folders[index],
-                color: folderColors[folders[index].name] ??
-                    _fallbackFolderColor,
-                enabled: enabled,
-                nested: true,
-                onMoveUp: () => onFolderMoveUp(folders[index]),
-                onMoveDown: () => onFolderMoveDown(folders[index]),
-                onEdit: () => onFolderEdit(folders[index]),
-                onEditColor: () => onFolderEditColor(folders[index]),
-                onDelete: () => onFolderDelete(folders[index]),
-                onAddSubmissions: () => onAddSubmissions(folders[index]),
-                onOpenGallery: () => onOpenGallery(folders[index]),
+                  const SizedBox(width: 6),
+                  const Text(
+                    '(Group)',
+                    style: TextStyle(color: Colors.white60, fontSize: 12),
+                  ),
+                ],
               ),
-              if (index != folders.length - 1) const Divider(height: 18),
+            ),
+            _MoveButtons(
+              enabled: enabled,
+              onUp: onMoveUp,
+              onDown: onMoveDown,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton.icon(
+                onPressed: enabled ? onEdit : null,
+                style: _compactActionStyle(),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Edit'),
+              ),
+              const SizedBox(width: 4),
+              OutlinedButton.icon(
+                onPressed: enabled ? onAddFolder : null,
+                style: _compactActionStyle(),
+                icon: const Icon(Icons.create_new_folder_outlined),
+                label: const Text('Add Sub-Folder'),
+              ),
+              const SizedBox(width: 4),
+              OutlinedButton.icon(
+                onPressed: enabled ? onDelete : null,
+                style: _compactActionStyle(
+                  foregroundColor: Colors.red,
+                  borderColor: Colors.red.withValues(alpha: 0.65),
+                ),
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Delete'),
+              ),
             ],
+          ),
+        ),
+      ],
+    );
+    if (folders.isEmpty) return _ManagementCard(child: header);
+    return _RoundedGroupSection(
+      key: ValueKey('folder-group-${group.id}'),
+      header: header,
+      nested: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var index = 0; index < folders.length; index++) ...[
+            _FolderCard(
+              folder: folders[index],
+              color:
+                  folderColors[folders[index].name] ?? _fallbackFolderColor,
+              enabled: enabled,
+              nested: true,
+              onMoveUp: () => onFolderMoveUp(folders[index]),
+              onMoveDown: () => onFolderMoveDown(folders[index]),
+              onEdit: () => onFolderEdit(folders[index]),
+              onEditColor: () => onFolderEditColor(folders[index]),
+              onDelete: () => onFolderDelete(folders[index]),
+              onAddSubmissions: () => onAddSubmissions(folders[index]),
+              onOpenGallery: () => onOpenGallery(folders[index]),
+            ),
+            if (index != folders.length - 1) const Divider(height: 18),
           ],
         ],
       ),
     );
+  }
+}
+
+class _RoundedGroupSection extends StatefulWidget {
+  const _RoundedGroupSection({
+    super.key,
+    required this.header,
+    required this.nested,
+  });
+
+  final Widget header;
+  final Widget nested;
+
+  @override
+  State<_RoundedGroupSection> createState() => _RoundedGroupSectionState();
+}
+
+class _RoundedGroupSectionState extends State<_RoundedGroupSection> {
+  final GlobalKey _headerKey = GlobalKey();
+  double _headerHeight = 0;
+
+  void _measureHeader() {
+    final renderObject =
+        _headerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (!mounted || renderObject == null || !renderObject.hasSize) return;
+    final height = renderObject.size.height;
+    if ((_headerHeight - height).abs() < 0.5) return;
+    setState(() => _headerHeight = height);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measureHeader());
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final nestedIndent = (constraints.maxWidth * 0.075)
+            .clamp(16.0, 24.0)
+            .toDouble();
+        return CustomPaint(
+          painter: _RoundedGroupSectionPainter(
+            headerHeight: _headerHeight,
+            nestedIndent: nestedIndent,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                key: _headerKey,
+                padding: const EdgeInsets.all(16),
+                child: widget.header,
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  nestedIndent + 16,
+                  16,
+                  16,
+                  16,
+                ),
+                child: widget.nested,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RoundedGroupSectionPainter extends CustomPainter {
+  const _RoundedGroupSectionPainter({
+    required this.headerHeight,
+    required this.nestedIndent,
+  });
+
+  final double headerHeight;
+  final double nestedIndent;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const borderWidth = 1.0;
+    const cornerRadius = 16.0;
+    const notchRadius = 8.0;
+    final bounds = Rect.fromLTWH(
+      borderWidth / 2,
+      borderWidth / 2,
+      size.width - borderWidth,
+      size.height - borderWidth,
+    );
+    final hasMeasuredSplit = headerHeight > cornerRadius + notchRadius &&
+        headerHeight < size.height - cornerRadius - notchRadius;
+    final path = hasMeasuredSplit
+        ? _buildIndentedPath(
+            bounds,
+            headerHeight,
+            nestedIndent,
+            cornerRadius,
+            notchRadius,
+          )
+        : (Path()
+          ..addRRect(
+            RRect.fromRectAndRadius(
+              bounds,
+              const Radius.circular(cornerRadius),
+            ),
+          ));
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = _managementCard
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = const Color(0xFF303030)
+        ..strokeWidth = borderWidth
+        ..style = PaintingStyle.stroke,
+    );
+    if (!hasMeasuredSplit) return;
+    final lineStart = headerHeight + notchRadius + 4;
+    final lineEnd = size.height - cornerRadius;
+    if (lineEnd <= lineStart) return;
+    canvas.drawLine(
+      Offset(nestedIndent / 2, lineStart),
+      Offset(nestedIndent / 2, lineEnd),
+      Paint()
+        ..color = const Color(0xFF191818)
+        ..strokeWidth = 3
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.butt,
+    );
+  }
+
+  Path _buildIndentedPath(
+    Rect bounds,
+    double splitY,
+    double indent,
+    double radius,
+    double stepRadius,
+  ) {
+    final left = bounds.left;
+    final top = bounds.top;
+    final right = bounds.right;
+    final bottom = bounds.bottom;
+    final nestedLeft = left + indent;
+    return Path()
+      ..moveTo(left + radius, top)
+      ..lineTo(right - radius, top)
+      ..quadraticBezierTo(right, top, right, top + radius)
+      ..lineTo(right, bottom - radius)
+      ..quadraticBezierTo(right, bottom, right - radius, bottom)
+      ..lineTo(nestedLeft + radius, bottom)
+      ..quadraticBezierTo(
+        nestedLeft,
+        bottom,
+        nestedLeft,
+        bottom - radius,
+      )
+      ..lineTo(nestedLeft, splitY + stepRadius)
+      ..quadraticBezierTo(
+        nestedLeft,
+        splitY,
+        nestedLeft - stepRadius,
+        splitY,
+      )
+      ..lineTo(left + stepRadius, splitY)
+      ..quadraticBezierTo(left, splitY, left, splitY - stepRadius)
+      ..lineTo(left, top + radius)
+      ..quadraticBezierTo(left, top, left + radius, top)
+      ..close();
+  }
+
+  @override
+  bool shouldRepaint(covariant _RoundedGroupSectionPainter oldDelegate) {
+    return oldDelegate.headerHeight != headerHeight ||
+        oldDelegate.nestedIndent != nestedIndent;
   }
 }
 
@@ -1879,6 +2064,7 @@ class _FolderColorDialogState extends State<_FolderColorDialog> {
                         autocorrect: false,
                         enableSuggestions: false,
                         textCapitalization: TextCapitalization.characters,
+                        style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
                           labelText: 'Paste or enter a color',
                           hintText: '#E09321',
