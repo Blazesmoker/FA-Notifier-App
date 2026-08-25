@@ -54,7 +54,11 @@ ProfilePostsParseResult parseProfileFavoritePostsHtml(
   String html,
   String currentUrl,
 ) {
-  return _parseProfileGridPostsHtml(html, currentUrl);
+  return _parseProfileGridPostsHtml(
+    html,
+    currentUrl,
+    includeFavoriteId: true,
+  );
 }
 
 ProfilePostsParseResult parseProfileScrapsPostsHtml(
@@ -66,8 +70,9 @@ ProfilePostsParseResult parseProfileScrapsPostsHtml(
 
 ProfilePostsParseResult _parseProfileGridPostsHtml(
   String html,
-  String currentUrl,
-) {
+  String currentUrl, {
+  bool includeFavoriteId = false,
+}) {
   final document = html_parser.parse(html);
   final figures = FaThumbnailParser.selectThumbnailFigures(document);
   final posts = <Map<String, dynamic>>[];
@@ -75,6 +80,7 @@ ProfilePostsParseResult _parseProfileGridPostsHtml(
   for (final fig in figures) {
     final data = FaThumbnailParser.extract(fig);
     if (data == null) continue;
+    final favoriteId = fig.attributes['data-fav-id']?.trim();
     posts.add({
       'url': data['thumbnailUrl'],
       'width': data['width'],
@@ -85,6 +91,10 @@ ProfilePostsParseResult _parseProfileGridPostsHtml(
       'title': data['title'],
       'author': data['author'],
       'authorProfileUrl': data['authorProfileUrl'],
+      if (includeFavoriteId &&
+          favoriteId != null &&
+          RegExp(r'^\d+$').hasMatch(favoriteId))
+        'favoriteId': favoriteId,
     });
   }
 

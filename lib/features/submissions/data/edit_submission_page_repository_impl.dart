@@ -25,6 +25,11 @@ class EditSubmissionPageRepositoryImpl
   }
 
   @override
+  String? updateFileInputName(String url) {
+    return _navigationService.updateFileInputName(url);
+  }
+
+  @override
   bool isSubmissionViewUrl(String url) {
     return _navigationService.isSubmissionViewUrl(url);
   }

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:fanotifier/features/profile/domain/fa_folder.dart';
 import 'package:fanotifier/features/profile/domain/profile_gallery_repository.dart';
 import 'package:fanotifier/features/profile/presentation/profilegallery.dart';
+import 'package:fanotifier/features/submissions/presentation/manage_submissions.dart';
 
 class UserProfileGallerySection extends StatefulWidget {
   const UserProfileGallerySection({
@@ -15,6 +16,7 @@ class UserProfileGallerySection extends StatefulWidget {
     required this.allFolders,
     required this.onFolderSelected,
     required this.onFoldersParsed,
+    required this.isOwnProfile,
   });
 
   final String nickname;
@@ -24,6 +26,7 @@ class UserProfileGallerySection extends StatefulWidget {
   final List<FaFolder> allFolders;
   final void Function(FaFolder folder) onFolderSelected;
   final void Function(List<FaFolder> folders) onFoldersParsed;
+  final bool isOwnProfile;
 
   @override
   State<UserProfileGallerySection> createState() =>
@@ -42,6 +45,12 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
     final galleryState = _galleryKey.currentState;
     if (galleryState == null) return;
     await galleryState.refresh();
+  }
+
+  Future<void> _openManageSubmissions() async {
+    await Navigator.of(context).push(ManageSubmissionsScreen.route());
+    if (!mounted) return;
+    await _refresh();
   }
 
   @override
@@ -71,37 +80,55 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Gallery',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  PopupMenuButton<FaFolder>(
-                    position: PopupMenuPosition.under,
-                    offset: const Offset(0, 0),
-                    onSelected: widget.onFolderSelected,
-                    itemBuilder: (context) {
-                      return widget.allFolders.map((folder) {
-                        return PopupMenuItem<FaFolder>(
-                          value: folder,
-                          child: Text(folder.name),
-                        );
-                      }).toList();
-                    },
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE09321),
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: const Color(0xFFE09321),
-                        disabledForegroundColor: Colors.white,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Gallery',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
-                      onPressed: null,
-                      child: Text(
-                        'Folder: ${widget.selectedFolderName}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      if (widget.isOwnProfile)
+                        IconButton(
+                          tooltip: 'Manage submissions',
+                          onPressed: _openManageSubmissions,
+                          icon: const Icon(
+                            Icons.settings_outlined,
+                            color: Color(0xFFE09321),
+                          ),
+                        ),
+                    ],
+                  ),
+                  Flexible(
+                    child: PopupMenuButton<FaFolder>(
+                      position: PopupMenuPosition.under,
+                      offset: const Offset(0, 0),
+                      onSelected: widget.onFolderSelected,
+                      itemBuilder: (context) {
+                        return widget.allFolders.map((folder) {
+                          return PopupMenuItem<FaFolder>(
+                            value: folder,
+                            child: Text(folder.name),
+                          );
+                        }).toList();
+                      },
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFE09321),
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: const Color(0xFFE09321),
+                          disabledForegroundColor: Colors.white,
+                        ),
+                        onPressed: null,
+                        child: Text(
+                          'Folder: ${widget.selectedFolderName}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                   ),

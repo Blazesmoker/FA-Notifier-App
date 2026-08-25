@@ -6,11 +6,12 @@ class ConfirmCloseDialog {
   static const String _defaultTitle = 'Confirm closing';
   static const String _defaultMessage = 'Are you sure you want to close?';
 
-  /// Shows the dialog. Returns [true] if user tapped "Close", [false] if "Cancel".
+  /// Shows the dialog. Returns [true] if user confirmed, [false] if canceled.
   static Future<bool> show(
     BuildContext context, {
     String title = _defaultTitle,
     String message = _defaultMessage,
+    String confirmLabel = 'Close',
   }) async {
     final result = await showDialog<bool>(
       context: context,
@@ -27,7 +28,7 @@ class ConfirmCloseDialog {
             style: TextButton.styleFrom(
               foregroundColor: Colors.red,
             ),
-            child: const Text('Close'),
+            child: Text(confirmLabel),
           ),
         ],
       ),

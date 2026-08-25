@@ -3,10 +3,14 @@ import 'package:fanotifier/shared/fa/fa_bbcode_webview_scripts.dart';
 String buildEditSubmissionBaseScript() {
   return '''
 (function() {
-  if (window.__faInjected) return;
-  window.__faInjected = true;
+  if (document.getElementById('fa-edit-submission-style')) return;
+  if (!document.querySelector('#submission-edit, #form-submission-change-info, form[name="uploadform"]')) return;
+
+  var styleParent = document.head || document.documentElement;
+  if (!styleParent) return;
 
   var style = document.createElement('style');
+  style.id = 'fa-edit-submission-style';
   style.innerHTML = `
     .mobile-navigation,
     #header,
@@ -25,15 +29,27 @@ String buildEditSubmissionBaseScript() {
     .dropdown,
     .submenu-trigger,
     .footerAds__column,
-    .newsBlock { display:none!important; }
+    .newsBlock,
+    #columnpage > .sidebar,
+    .sidebarAds,
+    .rectangleAd,
+    #controlpanelnav { display:none!important; }
 
     .return-links, .return-links * { display:none!important; }
 
-    html, body, #main-window, .content, #site-content {
+    html, body, #main-window, .content, #site-content, #submission-edit {
       background:#000!important;
       color:#fff!important;
       margin:0!important;
       padding:0!important;
+    }
+
+    #columnpage { display:block!important; }
+    #columnpage > .content {
+      box-sizing:border-box!important;
+      float:none!important;
+      max-width:none!important;
+      width:100%!important;
     }
 
     a { color:#1e90ff!important; }
@@ -41,7 +57,7 @@ String buildEditSubmissionBaseScript() {
     .table { display:flex!important; flex-direction:column!important; }
     .table-cell { display:block!important; width:auto!important; margin-bottom:16px!important; }
   `;
-  document.head.appendChild(style);
+  styleParent.appendChild(style);
 })();
 ''';
 }

@@ -13,6 +13,8 @@ dependencies:
   flutter:
     sdk: flutter
 
+  material_symbols_icons: ^4.2960.0
+
   material_ui: ^1.0.0
   cupertino_ui: ^1.0.0
 

@@ -101,6 +101,8 @@ abstract interface class OpenPostRepository {
 
   String buildChangeInfoUrl(String submissionId);
 
+  String buildChangeThumbnailUrl(String submissionId);
+
   String buildChangeSubmissionUrl(String submissionId);
 
   String buildSubmissionViewUrl(String submissionId);

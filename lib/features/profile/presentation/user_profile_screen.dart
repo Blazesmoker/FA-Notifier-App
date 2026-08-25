@@ -270,6 +270,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _scrollController.dispose();
     _backSwipeOffsetNotifier.dispose();
     _showMoveUpFab.dispose();
+    _moveUpFabLift.dispose();
     DetachableWebViewRouteRegistry.unregister(this);
     routeObserver.unsubscribe(this);
     super.dispose();
@@ -399,10 +400,14 @@ class UserProfileScreenState extends State<UserProfileScreen>
   static const double _edgeBackSwipeTriggerWidth = 62.0;
   static const double _edgeBackSwipeMinDistance = 72.0;
   static const double _edgeBackSwipeMinVelocity = 700.0;
+  static const double _bulkSelectionMoveUpGap = 8.0;
+  static const double _moveUpFabDefaultBottomSpacing = 16.0;
   static const bool _webViewScrollOptimizationEnabled = false;
 
   late ScrollController _scrollController;
   late final ValueNotifier<bool> _showMoveUpFab = ValueNotifier<bool>(false);
+  late final ValueNotifier<double> _moveUpFabLift =
+      ValueNotifier<double>(0.0);
   late final ValueNotifier<double> _backSwipeOffsetNotifier =
       ValueNotifier<double>(0.0);
   late final AnimationController _backSwipeAnimationController;
@@ -416,6 +421,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
   Timer? _tabSettleTimer;
   Timer? _scrollWebViewResumeTimer;
   final Set<ProfileSection> _lazyLoadedSections = <ProfileSection>{};
+  final Set<ProfileSection> _bulkSelectionActiveSections = <ProfileSection>{};
+  final Map<ProfileSection, double> _bulkSelectionBarHeights =
+      <ProfileSection, double>{};
 
   int _previousIndex = 0;
 
@@ -494,6 +502,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
       // Tab finished changing; schedule lazy-load for the final tab.
       _scheduleLazyLoadForIndex(_tabController.index);
+      _updateMoveUpFabLift();
 
       if (_previousIndex != _tabController.index) {
         appAnalytics.logScreen(
@@ -649,6 +658,40 @@ class UserProfileScreenState extends State<UserProfileScreen>
         _scrollController.hasClients && _scrollController.offset > 140.0;
     if (_showMoveUpFab.value != shouldShow) {
       _showMoveUpFab.value = shouldShow;
+    }
+  }
+
+  void _onBulkSelectionLayoutChanged(
+    ProfileSection section,
+    bool active,
+    double barHeight,
+  ) {
+    if (active) {
+      _bulkSelectionActiveSections.add(section);
+      if (barHeight > 0) {
+        _bulkSelectionBarHeights[section] = barHeight;
+      }
+    } else {
+      _bulkSelectionActiveSections.remove(section);
+      _bulkSelectionBarHeights.remove(section);
+    }
+    _updateMoveUpFabLift();
+  }
+
+  void _updateMoveUpFabLift() {
+    final section = ProfileSection.values[_tabController.index];
+    final active = _bulkSelectionActiveSections.contains(section);
+    final barHeight = _bulkSelectionBarHeights[section] ?? 0.0;
+    final lift = active && barHeight > 0
+        ? max(
+            0.0,
+            barHeight +
+                _bulkSelectionMoveUpGap -
+                _moveUpFabDefaultBottomSpacing,
+          )
+        : 0.0;
+    if ((_moveUpFabLift.value - lift).abs() > 0.1) {
+      _moveUpFabLift.value = lift;
     }
   }
 
@@ -2711,39 +2754,53 @@ class UserProfileScreenState extends State<UserProfileScreen>
                     ),
                   ),
                   floatingActionButton: !_profileController.isLoading
-                      ? ValueListenableBuilder<bool>(
-                          valueListenable: _showMoveUpFab,
-                          builder: (context, showFab, child) {
-                            return IgnorePointer(
-                              ignoring: !showFab,
-                              child: ExcludeSemantics(
-                                excluding: !showFab,
-                                child: AnimatedOpacity(
-                                  opacity: showFab ? 1.0 : 0.0,
-                                  duration: const Duration(milliseconds: 210),
-                                  curve: Curves.easeInOut,
-                                  child: AnimatedScale(
-                                    scale: showFab ? 1.0 : 0.92,
-                                    duration: const Duration(milliseconds: 210),
-                                    curve: Curves.easeInOut,
-                                    child: child,
-                                  ),
-                                ),
-                              ),
+                      ? ValueListenableBuilder<double>(
+                          valueListenable: _moveUpFabLift,
+                          builder: (context, lift, child) {
+                            return AnimatedPadding(
+                              padding: EdgeInsets.only(bottom: lift),
+                              duration: const Duration(milliseconds: 210),
+                              curve: Curves.easeInOut,
+                              child: child,
                             );
                           },
-                          child: FloatingActionButton(
-                            onPressed: () {
-                              _scrollController.animateTo(
-                                0.0,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOut,
+                          child: ValueListenableBuilder<bool>(
+                            valueListenable: _showMoveUpFab,
+                            builder: (context, showFab, child) {
+                              return IgnorePointer(
+                                ignoring: !showFab,
+                                child: ExcludeSemantics(
+                                  excluding: !showFab,
+                                  child: AnimatedOpacity(
+                                    opacity: showFab ? 1.0 : 0.0,
+                                    duration: const Duration(milliseconds: 210),
+                                    curve: Curves.easeInOut,
+                                    child: AnimatedScale(
+                                      scale: showFab ? 1.0 : 0.92,
+                                      duration:
+                                          const Duration(milliseconds: 210),
+                                      curve: Curves.easeInOut,
+                                      child: child,
+                                    ),
+                                  ),
+                                ),
                               );
                             },
-                            backgroundColor: const Color(0xFFE09321),
-                            tooltip: 'Scroll to Top',
-                            child: const Icon(Icons.arrow_upward,
-                                color: Colors.white),
+                            child: FloatingActionButton(
+                              onPressed: () {
+                                _scrollController.animateTo(
+                                  0.0,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeOut,
+                                );
+                              },
+                              backgroundColor: const Color(0xFFE09321),
+                              tooltip: 'Scroll to Top',
+                              child: const Icon(
+                                Icons.arrow_upward,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         )
                       : null,
@@ -2980,6 +3037,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       allFolders: _profileController.allFolders,
       onFolderSelected: _onFolderSelected,
       onFoldersParsed: _onFoldersParsed,
+      isOwnProfile: _profileController.isOwnProfile,
     );
   }
 
@@ -2987,12 +3045,28 @@ class UserProfileScreenState extends State<UserProfileScreen>
   Widget _buildScrapsSection() {
     return UserProfileScrapsSection(
       sanitizedUsername: _profileController.sanitizedUsername,
+      isOwnProfile: _profileController.isOwnProfile,
+      onSelectionLayoutChanged: (active, barHeight) {
+        _onBulkSelectionLayoutChanged(
+          ProfileSection.scraps,
+          active,
+          barHeight,
+        );
+      },
     );
   }
 
   Widget _buildFavoritesSection() {
     return UserProfileFavoritesSection(
       sanitizedUsername: _profileController.sanitizedUsername,
+      isOwnProfile: _profileController.isOwnProfile,
+      onSelectionLayoutChanged: (active, barHeight) {
+        _onBulkSelectionLayoutChanged(
+          ProfileSection.favs,
+          active,
+          barHeight,
+        );
+      },
     );
   }
 

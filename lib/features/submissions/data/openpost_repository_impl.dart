@@ -276,6 +276,11 @@ class OpenPostRepositoryImpl implements OpenPostRepository {
   }
 
   @override
+  String buildChangeThumbnailUrl(String submissionId) {
+    return openpost_urls.buildOpenPostChangeThumbnailUrl(submissionId);
+  }
+
+  @override
   String buildChangeSubmissionUrl(String submissionId) {
     return openpost_urls.buildOpenPostChangeSubmissionUrl(submissionId);
   }

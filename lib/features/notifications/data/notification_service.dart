@@ -1,7 +1,6 @@
 // lib/services/notification_service.dart
 import 'dart:io';
 import 'dart:ui';
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,13 +38,9 @@ class NotificationService implements LocalNotificationGateway {
   static const int activityNotificationId = _kActivityNotificationIdBase;
   static const int appUpdateNotificationId = 1400000000;
   static const String appUpdatePayload = appUpdateNotificationPayload;
-  static const MethodChannel _iosNotificationChannel =
-      MethodChannel('app.notifications');
   NotificationTapHandler? _notificationTapHandler;
-  bool _tapHandlingInitialized = false;
+  bool _pluginInitialized = false;
   bool _platformConfigured = false;
-  bool _iosNotificationHandlerInstalled = false;
-  bool _iosNotificationBridgeReady = false;
 
   Future<int> allocateActivityNotificationId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -100,11 +95,33 @@ class NotificationService implements LocalNotificationGateway {
     if (onNotificationTap != null) {
       _notificationTapHandler = onNotificationTap;
     }
-    if (_notificationTapHandler != null) {
-      await _initializeIOSNotificationBridge();
-    }
-    if (_tapHandlingInitialized) return;
+    if (_pluginInitialized) return;
 
+    await _initializePlugin(handlesTaps: true);
+    final details =
+        await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
+    if ((details?.didNotificationLaunchApp ?? false) &&
+        details?.notificationResponse != null) {
+      final payload = details!.notificationResponse!.payload;
+      if (payload != null && payload.isNotEmpty) {
+        await _markTappedNoteAsShown(payload);
+        await const PendingNavigationStore().savePayload(payload);
+      }
+    }
+    _pluginInitialized = true;
+  }
+
+  Future<void> initForBackgroundDisplay() async {
+    if (!Platform.isIOS) {
+      await init();
+      return;
+    }
+    if (_pluginInitialized) return;
+    await _initializePlugin(handlesTaps: false);
+    _pluginInitialized = true;
+  }
+
+  Future<void> _initializePlugin({required bool handlesTaps}) async {
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/fathemednotif');
 
@@ -123,44 +140,11 @@ class NotificationService implements LocalNotificationGateway {
 
     await flutterLocalNotificationsPlugin.initialize(
       settings: initializationSettings,
-      onDidReceiveNotificationResponse: onDidReceiveNotificationResponse,
-      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
+      onDidReceiveNotificationResponse:
+          handlesTaps ? onDidReceiveNotificationResponse : null,
+      onDidReceiveBackgroundNotificationResponse:
+          handlesTaps ? notificationTapBackground : null,
     );
-    final details =
-        await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
-    if ((details?.didNotificationLaunchApp ?? false) &&
-        details?.notificationResponse != null) {
-      final payload = details!.notificationResponse!.payload;
-      if (payload != null && payload.isNotEmpty) {
-        await _markTappedNoteAsShown(payload);
-        await const PendingNavigationStore().savePayload(payload);
-      }
-    }
-    _tapHandlingInitialized = true;
-  }
-
-  Future<void> _initializeIOSNotificationBridge() async {
-    if (!Platform.isIOS) return;
-
-    if (!_iosNotificationHandlerInstalled) {
-      _iosNotificationHandlerInstalled = true;
-      _iosNotificationChannel.setMethodCallHandler((call) async {
-        if (call.method != 'notificationTapped') return false;
-        final payload = call.arguments;
-        if (payload is! String || payload.isEmpty) return false;
-        await _handleTapPayload(payload, source: 'iosChannel');
-        return true;
-      });
-    }
-
-    if (_iosNotificationBridgeReady) return;
-    try {
-      _iosNotificationBridgeReady =
-          await _iosNotificationChannel.invokeMethod<bool>(
-                'notifications.ready',
-              ) ??
-              false;
-    } catch (_) {}
   }
 
   Future<void> configurePlatform() async {

@@ -44,6 +44,16 @@ abstract final class AppScreens {
       AppScreen('Finalize Submission', 'FinalizeSubmissionScreen');
   static const editSubmission =
       AppScreen('Edit Submission', 'EditSubmissionScreen');
+  static const manageSubmissions =
+      AppScreen('Manage Submissions', 'ManageSubmissionsScreen');
+  static const manageSubmissionFolders = AppScreen(
+    'Manage Submissions / Folders',
+    'ManageSubmissionFoldersScreen',
+  );
+  static const editSubmissionFolder = AppScreen(
+    'Manage Submissions / Folder Editor',
+    'SubmissionFolderEditorScreen',
+  );
   static const createJournal =
       AppScreen('Create Journal', 'CreateJournalScreen');
   static const editJournal = AppScreen('Edit Journal', 'EditJournalScreen');

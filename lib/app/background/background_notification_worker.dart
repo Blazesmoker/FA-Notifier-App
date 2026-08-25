@@ -721,7 +721,7 @@ class BackgroundNotificationWorker {
     try {
       cancellation.throwIfCancelled();
       final notificationService = NotificationService();
-      await notificationService.init();
+      await notificationService.initForBackgroundDisplay();
       cancellation.throwIfCancelled();
       appLog("[BG] NotificationService initialized");
       SharedPreferences prefs;

@@ -3,6 +3,8 @@ abstract interface class EditSubmissionPageRepository {
 
   bool isUpdateSubmissionUrl(String url);
 
+  String? updateFileInputName(String url);
+
   bool isSubmissionViewUrl(String url);
 
   String buildBaseScript();

@@ -12,6 +12,11 @@ enum FaRequestCoordinatorState {
   maintenanceOrUnavailable,
 }
 
+typedef FaExclusiveRequestTurn = Future<void> Function({
+  String? label,
+  bool Function()? isCancelled,
+});
+
 class FaRequestSnapshot {
   const FaRequestSnapshot({
     required this.state,
@@ -68,74 +73,111 @@ class FaRequestCoordinator {
     final id = ++_requestSequence;
     final requestedAt = DateTime.now();
     final requestLabel = label ?? 'FA request';
-    final next = _queue.catchError((_) {}).then((_) async {
-      if (isCancelled?.call() ?? false) {
-        throw StateError('FA request cancelled');
-      }
-      final now = DateTime.now();
-      final queueDelay = now.difference(requestedAt);
-      var allowedAt = _nextRequestAt;
-      final blockedUntil = _blockedUntil;
-      if (blockedUntil != null && blockedUntil.isAfter(allowedAt)) {
-        allowedAt = blockedUntil;
-      }
-      if (allowedAt.isAfter(now)) {
-        final wait = allowedAt.difference(now);
-        if (kDebugMode) {
-          debugPrint(
-            '[FA request gate] #$id $requestLabel queued ${queueDelay.inMilliseconds}ms, waiting ${wait.inMilliseconds}ms',
-          );
-        }
-        _setStatus(
-          FaRequestSnapshot(
-            state: FaRequestCoordinatorState.waitingToRetry,
-            allowedAt: allowedAt,
-            message: _blockedMessage,
+    final next = _queue.catchError((_) {}).then(
+          (_) => _waitForRequestTurn(
+            id: id,
+            requestedAt: requestedAt,
+            requestLabel: requestLabel,
+            isCancelled: isCancelled,
           ),
         );
-        while (allowedAt.isAfter(DateTime.now())) {
-          if (isCancelled?.call() ?? false) {
-            throw StateError('FA request cancelled');
-          }
-          final remaining = allowedAt.difference(DateTime.now());
-          await Future<void>.delayed(
-            remaining > const Duration(milliseconds: 250)
-                ? const Duration(milliseconds: 250)
-                : remaining,
+    _queue = next;
+    return next;
+  }
+
+  Future<T> runExclusive<T>(
+    Future<T> Function(FaExclusiveRequestTurn waitForTurn) operation,
+  ) {
+    final result = Completer<T>();
+    final next = _queue.catchError((_) {}).then((_) async {
+      try {
+        final value = await operation(({
+          String? label,
+          bool Function()? isCancelled,
+        }) {
+          return _waitForRequestTurn(
+            id: ++_requestSequence,
+            requestedAt: DateTime.now(),
+            requestLabel: label ?? 'FA request',
+            isCancelled: isCancelled,
           );
-        }
-        if (isCancelled?.call() ?? false) {
-          throw StateError('FA request cancelled');
-        }
-        if (kDebugMode) {
-          debugPrint(
-            '[FA request gate] #$id $requestLabel starting after ${DateTime.now().difference(requestedAt).inMilliseconds}ms total',
-          );
-        }
-      } else {
-        if (kDebugMode) {
-          debugPrint(
-            '[FA request gate] #$id $requestLabel starting immediately after ${queueDelay.inMilliseconds}ms queued',
-          );
-        }
-      }
-      if (isCancelled?.call() ?? false) {
-        throw StateError('FA request cancelled');
-      }
-      _nextRequestAt = DateTime.now().add(minRequestSpacing);
-      if (_blockedUntil != null &&
-          !_blockedUntil!.isAfter(DateTime.now())) {
-        _blockedUntil = null;
-        _blockedMessage = null;
-        if (_recoverableFailureCount == 0) {
-          _setStatus(
-            const FaRequestSnapshot(state: FaRequestCoordinatorState.normal),
-          );
-        }
+        });
+        result.complete(value);
+      } catch (error, stackTrace) {
+        result.completeError(error, stackTrace);
       }
     });
     _queue = next;
-    return next;
+    return result.future;
+  }
+
+  Future<void> _waitForRequestTurn({
+    required int id,
+    required DateTime requestedAt,
+    required String requestLabel,
+    required bool Function()? isCancelled,
+  }) async {
+    if (isCancelled?.call() ?? false) {
+      throw StateError('FA request cancelled');
+    }
+    final now = DateTime.now();
+    final queueDelay = now.difference(requestedAt);
+    var allowedAt = _nextRequestAt;
+    final blockedUntil = _blockedUntil;
+    if (blockedUntil != null && blockedUntil.isAfter(allowedAt)) {
+      allowedAt = blockedUntil;
+    }
+    if (allowedAt.isAfter(now)) {
+      final wait = allowedAt.difference(now);
+      if (kDebugMode) {
+        debugPrint(
+          '[FA request gate] #$id $requestLabel queued ${queueDelay.inMilliseconds}ms, waiting ${wait.inMilliseconds}ms',
+        );
+      }
+      _setStatus(
+        FaRequestSnapshot(
+          state: FaRequestCoordinatorState.waitingToRetry,
+          allowedAt: allowedAt,
+          message: _blockedMessage,
+        ),
+      );
+      while (allowedAt.isAfter(DateTime.now())) {
+        if (isCancelled?.call() ?? false) {
+          throw StateError('FA request cancelled');
+        }
+        final remaining = allowedAt.difference(DateTime.now());
+        await Future<void>.delayed(
+          remaining > const Duration(milliseconds: 250)
+              ? const Duration(milliseconds: 250)
+              : remaining,
+        );
+      }
+      if (isCancelled?.call() ?? false) {
+        throw StateError('FA request cancelled');
+      }
+      if (kDebugMode) {
+        debugPrint(
+          '[FA request gate] #$id $requestLabel starting after ${DateTime.now().difference(requestedAt).inMilliseconds}ms total',
+        );
+      }
+    } else if (kDebugMode) {
+      debugPrint(
+        '[FA request gate] #$id $requestLabel starting immediately after ${queueDelay.inMilliseconds}ms queued',
+      );
+    }
+    if (isCancelled?.call() ?? false) {
+      throw StateError('FA request cancelled');
+    }
+    _nextRequestAt = DateTime.now().add(minRequestSpacing);
+    if (_blockedUntil != null && !_blockedUntil!.isAfter(DateTime.now())) {
+      _blockedUntil = null;
+      _blockedMessage = null;
+      if (_recoverableFailureCount == 0) {
+        _setStatus(
+          const FaRequestSnapshot(state: FaRequestCoordinatorState.normal),
+        );
+      }
+    }
   }
 
   void recordSuccess() {

@@ -27,6 +27,7 @@ import 'package:fanotifier/features/submissions/domain/openpost_delete_models.da
 import 'package:fanotifier/features/submissions/domain/openpost_submission_attachment.dart';
 import 'package:fanotifier/features/submissions/presentation/openpost_controller.dart';
 import 'package:fanotifier/features/submissions/presentation/edit_submission_screen.dart';
+import 'package:fanotifier/features/submissions/presentation/manage_submissions.dart';
 import 'package:fanotifier/features/comments/presentation/editcommentscreen.dart';
 import 'package:fanotifier/features/comments/presentation/threaded_comments.dart';
 import 'package:fanotifier/features/comments/presentation/comment_settings_provider.dart';
@@ -1774,57 +1775,94 @@ class _OpenPostState extends State<OpenPost>
     }
   }
 
-  void _showEditDialog() {
+  Future<void> _showEditDialog() async {
     _dismissCommentComposerFocus();
     _suppressNextRouteDetach = true;
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Edit Submission'),
-          content: const Text('What do you want to do?'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _suppressNextRouteDetach = false;
-                _openSubmissionEdit('info');
-              },
-              child: const Text('Edit Submission Info'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _suppressNextRouteDetach = false;
-                _openSubmissionEdit('file');
-              },
-              child: const Text('Update Source File'),
-            ),
-          ],
-        );
-      },
-    ).whenComplete(() {
+    String? type;
+    try {
+      type = await showDialog<String>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Edit Submission'),
+            content: const Text('What do you want to do?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('info'),
+                child: const Text(
+                  'Edit Submission Info',
+                  style: TextStyle(color: Color(0xFFE09321)),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('thumbnail'),
+                child: const Text(
+                  'Update Thumbnail',
+                  style: TextStyle(color: Color(0xFFE09321)),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('file'),
+                child: const Text(
+                  'Update Source File',
+                  style: TextStyle(color: Color(0xFFE09321)),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
       _suppressNextRouteDetach = false;
-    });
-  }
-
-  void _openSubmissionEdit(String type) {
-    String editUrl;
-    if (type == 'info') {
-      editUrl = _controller.buildChangeInfoUrl();
-    } else {
-      editUrl = _controller.buildChangeSubmissionUrl();
     }
 
-    Navigator.push(
+    if (!mounted || type == null) return;
+    await _openSubmissionEdit(type);
+  }
+
+  Future<void> _openSubmissionEdit(String type) async {
+    late final String editUrl;
+    late final String title;
+    switch (type) {
+      case 'info':
+        editUrl = _controller.buildChangeInfoUrl();
+        title = 'Edit Submission Info';
+        break;
+      case 'thumbnail':
+        editUrl = _controller.buildChangeThumbnailUrl();
+        title = 'Update Thumbnail';
+        break;
+      case 'file':
+        editUrl = _controller.buildChangeSubmissionUrl();
+        title = 'Update Source File';
+        break;
+      default:
+        return;
+    }
+
+    await _prepareForInternalWebViewNavigation();
+    if (!mounted) return;
+
+    await Navigator.push(
       context,
       MaterialPageRoute(
         settings: const AnalyticsRouteSettings(AppScreens.editSubmission),
-        builder: (context) => EditSubmissionScreen(initialUrl: editUrl),
+        builder: (context) => EditSubmissionScreen(
+          initialUrl: editUrl,
+          title: title,
+        ),
       ),
-    ).then((_) {
-      _fetchPostDetails();
-    });
+    );
+    if (!mounted) return;
+    _fetchPostDetails();
+  }
+
+  Future<void> _openManageSubmissions() async {
+    await _prepareForInternalWebViewNavigation();
+    if (!mounted) return;
+    await Navigator.of(context).push(ManageSubmissionsScreen.route());
+    if (!mounted) return;
+    await _fetchPostDetails();
   }
 
   Future<bool> _confirmClosePostIfNeeded() async {
@@ -2256,6 +2294,12 @@ class _OpenPostState extends State<OpenPost>
                             currentUsername == username) {
                           menuItems.add(
                             const PopupMenuItem<String>(
+                              value: 'manage',
+                              child: Text('Manage'),
+                            ),
+                          );
+                          menuItems.add(
+                            const PopupMenuItem<String>(
                               value: 'edit',
                               child: Text('Edit'),
                             ),
@@ -2322,7 +2366,10 @@ class _OpenPostState extends State<OpenPost>
                                 _showInfoDialog();
                                 break;
                               case 'edit':
-                                _showEditDialog();
+                                await _showEditDialog();
+                                break;
+                              case 'manage':
+                                await _openManageSubmissions();
                                 break;
                               case 'delete':
                                 _handleDeletePost();

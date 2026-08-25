@@ -7,13 +7,23 @@ import 'package:fanotifier/features/profile/presentation/profile_image_row_layou
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/submissions/presentation/openpost.dart';
 import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
 import 'package:fanotifier/shared/widgets/heart_animation.dart';
 import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
 
+const double _profileSelectionBorderWidth = 2.0;
+
 class ProfileFavsSliver extends StatefulWidget {
   final String username;
+  final bool selectionMode;
+  final ValueChanged<int> onSelectionCountChanged;
 
-  const ProfileFavsSliver({required this.username, super.key});
+  const ProfileFavsSliver({
+    required this.username,
+    required this.selectionMode,
+    required this.onSelectionCountChanged,
+    super.key,
+  });
 
   @override
   ProfileFavsSliverState createState() => ProfileFavsSliverState();
@@ -38,7 +48,10 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
   final Set<String> _favoritedImages = {};
   final Map<String, String> _favUrls = {};
   final Map<String, String> _unfavUrls = {};
+  final Set<String> _selectedFavoriteIds = {};
   late final SubmissionFavoriteRepository _favoriteRepository;
+
+  int get selectedCount => _selectedFavoriteIds.length;
 
   @override
   void initState() {
@@ -56,14 +69,64 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
   @override
   void didUpdateWidget(ProfileFavsSliver oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectionMode && !widget.selectionMode) {
+      _selectedFavoriteIds.clear();
+    }
     if (oldWidget.username != widget.username) {
       unawaited(refresh());
     }
   }
 
+  void clearSelection() {
+    if (_selectedFavoriteIds.isEmpty) return;
+    setState(_selectedFavoriteIds.clear);
+    widget.onSelectionCountChanged(0);
+  }
+
+  void toggleAllDisplayedSelection() {
+    final displayedIds = _images
+        .map((image) => image['favoriteId'])
+        .whereType<String>()
+        .where((id) => RegExp(r'^\d+$').hasMatch(id))
+        .toSet();
+    if (displayedIds.isEmpty) return;
+    setState(() {
+      if (_selectedFavoriteIds.containsAll(displayedIds)) {
+        _selectedFavoriteIds.removeAll(displayedIds);
+      } else {
+        _selectedFavoriteIds.addAll(displayedIds);
+      }
+    });
+    widget.onSelectionCountChanged(_selectedFavoriteIds.length);
+  }
+
+  Future<FaContentManagementResult> removeSelectedFavorites() {
+    return _favoriteRepository.removeFavorites(
+      Set<String>.unmodifiable(_selectedFavoriteIds),
+    );
+  }
+
+  void _toggleSelection(String? favoriteId) {
+    if (favoriteId == null || !RegExp(r'^\d+$').hasMatch(favoriteId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This favorite cannot be selected. Refresh and try again.'),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      if (!_selectedFavoriteIds.add(favoriteId)) {
+        _selectedFavoriteIds.remove(favoriteId);
+      }
+    });
+    widget.onSelectionCountChanged(_selectedFavoriteIds.length);
+  }
+
   Future<void> refresh() async {
     if (!mounted) return;
     _fetchGeneration++;
+    final selectionChanged = _selectedFavoriteIds.isNotEmpty;
     setState(() {
       _nextPageUrl = _profileFavoritesRepository.buildInitialFavoritesPageUrl(
         widget.username,
@@ -76,7 +139,9 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
       _favoritedImages.clear();
       _favUrls.clear();
       _unfavUrls.clear();
+      _selectedFavoriteIds.clear();
     });
+    if (selectionChanged) widget.onSelectionCountChanged(0);
     await _fetchImages();
   }
 
@@ -253,7 +318,11 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
     final imageUrl = im['url'] as String;
     final uniqueNumber = im['uniqueNumber'] as String;
     final isFav = _favoritedImages.contains(uniqueNumber);
+    final favoriteId = im['favoriteId'] as String?;
     return _FavImageTileFavs(
+      key: ValueKey<String>(
+        'profile-favorite-${favoriteId ?? uniqueNumber}',
+      ),
       width: width,
       height: height,
       imageUrl: imageUrl,
@@ -261,6 +330,10 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
       rating: im['rating'] as String?,
       title: im['title'] as String?,
       author: im['author'] as String?,
+      selectionMode: widget.selectionMode,
+      isSelected: favoriteId != null &&
+          _selectedFavoriteIds.contains(favoriteId),
+      onSelectionToggle: () => _toggleSelection(favoriteId),
       onToggle: (val) => _toggleFavorite(uniqueNumber, val),
       onTap: () {
         Navigator.push(
@@ -337,8 +410,12 @@ class _FavImageTileFavs extends StatefulWidget {
   final String? author;
   final ValueChanged<bool> onToggle;
   final VoidCallback onTap;
+  final bool selectionMode;
+  final bool isSelected;
+  final VoidCallback onSelectionToggle;
 
   const _FavImageTileFavs({
+    super.key,
     required this.width,
     required this.height,
     required this.imageUrl,
@@ -348,6 +425,9 @@ class _FavImageTileFavs extends StatefulWidget {
     required this.author,
     required this.onToggle,
     required this.onTap,
+    required this.selectionMode,
+    required this.isSelected,
+    required this.onSelectionToggle,
   });
 
   @override
@@ -383,62 +463,104 @@ class _FavImageTileFavsState extends State<_FavImageTileFavs> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap,
-      onLongPress: () => setState(() {
-        _localFav = !_localFav;
-      }),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          HeartAnimationWidget(
+    final thumbnail = FaThumbnailOutline(
+      rating: widget.rating,
+      borderRadius: 8,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: widget.width,
+          height: widget.height,
+          color: const Color(0xFF2C2C2C),
+          child: FaNetworkImage(
+            widget.imageUrl,
+            width: widget.width,
+            height: widget.height,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return _buildPlaceholder(widget.width, widget.height);
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                width: widget.width,
+                height: widget.height,
+                color: Colors.grey,
+                alignment: Alignment.center,
+                child: const Icon(Icons.error, color: Colors.red),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    final image = widget.selectionMode
+        ? Stack(
+            children: [
+              thumbnail,
+              Positioned.fill(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(
+                      alpha: widget.isSelected ? 0.38 : 0.08,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: widget.isSelected
+                          ? const Color(0xFFE09321)
+                          : Colors.transparent,
+                      width: _profileSelectionBorderWidth,
+                    ),
+                  ),
+                ),
+              ),
+              if (widget.isSelected)
+                const Positioned.fill(
+                  child: Center(
+                    child: Icon(
+                      Icons.check_circle,
+                      color: Color(0xFFE09321),
+                      size: 28,
+                    ),
+                  ),
+                ),
+            ],
+          )
+        : HeartAnimationWidget(
             isFavorite: _localFav,
             containerWidth: widget.width,
             containerHeight: widget.height,
             onDebounceComplete: (finalVal) => widget.onToggle(finalVal),
             debounceDuration: const Duration(seconds: 3),
-            child: FaThumbnailOutline(
-              rating: widget.rating,
-              borderRadius: 8,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  width: widget.width,
-                  height: widget.height,
-                  color: const Color(0xFF2C2C2C),
-                  child: FaNetworkImage(
-                    widget.imageUrl,
-                    width: widget.width,
-                    height: widget.height,
-                    fit: BoxFit.cover,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) {
-                        return child;
-                      }
-                      return _buildPlaceholder(widget.width, widget.height);
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        width: widget.width,
-                        height: widget.height,
-                        color: Colors.grey,
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.error, color: Colors.red),
-                      );
-                    },
-                  ),
-                ),
-
-              ),
+            child: thumbnail,
+          );
+    return Semantics(
+      button: true,
+      selected: widget.selectionMode ? widget.isSelected : null,
+      label: widget.selectionMode
+          ? '${widget.title ?? 'Favorite'}, ${widget.isSelected ? 'selected' : 'not selected'}'
+          : widget.title,
+      child: GestureDetector(
+        onTap:
+            widget.selectionMode ? widget.onSelectionToggle : widget.onTap,
+        onLongPress: widget.selectionMode
+            ? widget.onSelectionToggle
+            : () => setState(() {
+                  _localFav = !_localFav;
+                }),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            image,
+            FaThumbnailCaption(
+              maxWidth: widget.width,
+              title: widget.title,
+              author: widget.author,
             ),
-          ),
-          FaThumbnailCaption(
-            maxWidth: widget.width,
-            title: widget.title,
-            author: widget.author,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

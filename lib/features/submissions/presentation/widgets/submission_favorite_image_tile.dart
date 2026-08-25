@@ -121,7 +121,9 @@ class SubmissionFavoriteImageTile extends StatelessWidget {
                                   isSelected
                                       ? Icons.check_circle
                                       : Icons.radio_button_unchecked,
-                                  color: Colors.white,
+                                  color: isSelected
+                                      ? const Color(0xFFE09321)
+                                      : Colors.white,
                                   size: 30,
                                 ),
                               ),

@@ -1,7 +1,12 @@
 import 'package:fanotifier/shared/fa/domain/submission_favorite_links.dart';
+import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
 
 abstract interface class SubmissionFavoriteRepository {
   Future<bool> executePostWithRetry(String url);
+
+  Future<FaContentManagementResult> removeFavorites(
+    Set<String> favoriteIds,
+  );
 
   Future<SubmissionFavoriteLinks?> fetchLinksForSubmissionId({
     required String submissionId,

@@ -144,143 +144,11 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     private var translationChannel: FlutterMethodChannel?
     private var translationHostWindow: UIWindow?
     private weak var translationPreviousKeyWindow: UIWindow?
-    private var activityNotificationChannel: FlutterMethodChannel?
-    private var activityNotificationsReady = false
-    private var notificationSceneActive = false
-    private var pendingActivityNotificationTap: (key: String, payload: String)?
-    private var deliveredActivityNotificationTapKey: String?
-    private var activityNotificationTapInFlight = false
 
     private func configurePluginRegistrantCallbacks() {
         FlutterLocalNotificationsPlugin.setPluginRegistrantCallback { registry in
             GeneratedPluginRegistrant.register(with: registry)
         }
-    }
-
-    private func setupActivityNotificationChannelIfNeeded(
-        binaryMessenger: FlutterBinaryMessenger
-    ) {
-        guard activityNotificationChannel == nil else { return }
-
-        let channel = FlutterMethodChannel(
-            name: "app.notifications",
-            binaryMessenger: binaryMessenger
-        )
-        activityNotificationChannel = channel
-        channel.setMethodCallHandler { [weak self] call, result in
-            guard let self = self else {
-                result(false)
-                return
-            }
-            guard call.method == "notifications.ready" else {
-                result(FlutterMethodNotImplemented)
-                return
-            }
-            self.activityNotificationsReady = true
-            result(true)
-            self.flushPendingActivityNotificationTapIfReady()
-        }
-    }
-
-    private func activityNotificationPayload(
-        from response: UNNotificationResponse
-    ) -> String? {
-        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
-              let payload = response.notification.request.content.userInfo["payload"] as? String
-        else {
-            return nil
-        }
-
-        let isActivityPayload = payload.hasPrefix("fa_activity_") ||
-            payload.hasPrefix("activity_") ||
-            payload.contains("DrawerIndex.Notifications") ||
-            payload == "activity_native"
-        let isNotePayload = payload.hasPrefix("note_") ||
-            payload.contains("DrawerIndex.Notes") ||
-            payload == "note_native"
-        return isActivityPayload || isNotePayload ||
-            payload == "app_update_available"
-            ? payload
-            : nil
-    }
-
-    private func activityNotificationTapKey(
-        for response: UNNotificationResponse,
-        payload: String
-    ) -> String {
-        let notification = response.notification
-        return [
-            notification.request.identifier,
-            String(notification.date.timeIntervalSince1970),
-            response.actionIdentifier,
-            payload
-        ].joined(separator: "|")
-    }
-
-    @discardableResult
-    private func queueActivityNotificationTap(
-        _ response: UNNotificationResponse
-    ) -> Bool {
-        guard let payload = activityNotificationPayload(from: response) else {
-            return false
-        }
-
-        let key = activityNotificationTapKey(for: response, payload: payload)
-        if pendingActivityNotificationTap?.key == key ||
-            deliveredActivityNotificationTapKey == key {
-            return true
-        }
-
-        pendingActivityNotificationTap = (key: key, payload: payload)
-        flushPendingActivityNotificationTapIfReady()
-        return true
-    }
-
-    private func flushPendingActivityNotificationTapIfReady() {
-        guard notificationSceneActive,
-              activityNotificationsReady,
-              !activityNotificationTapInFlight,
-              let channel = activityNotificationChannel,
-              let pendingTap = pendingActivityNotificationTap
-        else {
-            return
-        }
-
-        activityNotificationTapInFlight = true
-        channel.invokeMethod(
-            "notificationTapped",
-            arguments: pendingTap.payload
-        ) { [weak self] result in
-            guard let self = self else { return }
-            self.activityNotificationTapInFlight = false
-            guard result as? Bool == true,
-                  self.pendingActivityNotificationTap?.key == pendingTap.key
-            else {
-                return
-            }
-            self.pendingActivityNotificationTap = nil
-            self.deliveredActivityNotificationTapKey = pendingTap.key
-        }
-    }
-
-    func handleNotificationSceneConnection(
-        _ connectionOptions: UIScene.ConnectionOptions
-    ) {
-        guard let response = connectionOptions.notificationResponse else { return }
-        _ = queueActivityNotificationTap(response)
-    }
-
-    func handleNotificationSceneDidBecomeActive() {
-        notificationSceneActive = true
-        flushPendingActivityNotificationTapIfReady()
-    }
-
-    func handleNotificationSceneWillResignActive() {
-        notificationSceneActive = false
-    }
-
-    func handleNotificationSceneDidEnterBackground() {
-        notificationSceneActive = false
     }
 
     private func setupTranslationChannelIfNeeded(
@@ -488,9 +356,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
         setupTranslationChannelIfNeeded(
             binaryMessenger: engineBridge.applicationRegistrar.messenger()
         )
-        setupActivityNotificationChannelIfNeeded(
-            binaryMessenger: engineBridge.applicationRegistrar.messenger()
-        )
     }
 
     func handleDidEnterBackground(source: String) {
@@ -598,10 +463,6 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 
         let content = response.notification.request.content
         fLog("Notification tapped: \(content.title) (action=\(response.actionIdentifier))")
-        if queueActivityNotificationTap(response) {
-            completionHandler()
-            return
-        }
         super.userNotificationCenter(
             center,
             didReceive: response,

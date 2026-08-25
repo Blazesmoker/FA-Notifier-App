@@ -21,6 +21,10 @@ String buildOpenPostChangeInfoUrl(String submissionId) {
   return '$openPostFaOrigin/controls/submissions/changeinfo/$submissionId/';
 }
 
+String buildOpenPostChangeThumbnailUrl(String submissionId) {
+  return '$openPostFaOrigin/controls/submissions/changethumbnail/$submissionId/';
+}
+
 String buildOpenPostChangeSubmissionUrl(String submissionId) {
   return '$openPostFaOrigin/controls/submissions/changesubmission/$submissionId/';
 }

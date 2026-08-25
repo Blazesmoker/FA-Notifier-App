@@ -484,6 +484,10 @@ class OpenPostController {
     return _repository.buildChangeInfoUrl(submissionId);
   }
 
+  String buildChangeThumbnailUrl() {
+    return _repository.buildChangeThumbnailUrl(submissionId);
+  }
+
   String buildChangeSubmissionUrl() {
     return _repository.buildChangeSubmissionUrl(submissionId);
   }

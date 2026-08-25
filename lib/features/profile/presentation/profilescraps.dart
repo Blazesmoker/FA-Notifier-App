@@ -7,13 +7,24 @@ import 'package:fanotifier/features/profile/domain/profile_scraps_repository.dar
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/submissions/presentation/openpost.dart';
 import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
+import 'package:fanotifier/features/submissions/domain/submission_management_repository.dart';
 import 'package:fanotifier/shared/widgets/heart_animation.dart';
 import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
 
+const double _profileSelectionBorderWidth = 2.0;
+
 class ProfileScrapsSliver extends StatefulWidget {
   final String username;
+  final bool selectionMode;
+  final ValueChanged<int> onSelectionCountChanged;
 
-  const ProfileScrapsSliver({required this.username, super.key});
+  const ProfileScrapsSliver({
+    required this.username,
+    required this.selectionMode,
+    required this.onSelectionCountChanged,
+    super.key,
+  });
 
   @override
   ProfileScrapsSliverState createState() => ProfileScrapsSliverState();
@@ -37,13 +48,18 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   final Set<String> _favoritedImages = {};
   final Map<String, String> _favUrls = {};
   final Map<String, String> _unfavUrls = {};
+  final Set<String> _selectedSubmissionIds = {};
   late final SubmissionFavoriteRepository _favoriteRepository;
+  late final SubmissionManagementRepository _managementRepository;
+
+  int get selectedCount => _selectedSubmissionIds.length;
 
   @override
   void initState() {
     super.initState();
     _profileScrapsRepository = context.read<ProfileScrapsRepository>();
     _favoriteRepository = context.read<SubmissionFavoriteRepository>();
+    _managementRepository = context.read<SubmissionManagementRepository>();
     _nextPageUrl =
         _profileScrapsRepository.buildInitialScrapsPageUrl(widget.username);
     unawaited(_fetchImages());
@@ -52,14 +68,64 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   @override
   void didUpdateWidget(ProfileScrapsSliver oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectionMode && !widget.selectionMode) {
+      _selectedSubmissionIds.clear();
+    }
     if (oldWidget.username != widget.username) {
       unawaited(refresh());
     }
   }
 
+  void clearSelection() {
+    if (_selectedSubmissionIds.isEmpty) return;
+    setState(_selectedSubmissionIds.clear);
+    widget.onSelectionCountChanged(0);
+  }
+
+  void toggleAllDisplayedSelection() {
+    final displayedIds = _images
+        .map((image) => image['uniqueNumber'])
+        .whereType<String>()
+        .where((id) => RegExp(r'^\d+$').hasMatch(id))
+        .toSet();
+    if (displayedIds.isEmpty) return;
+    setState(() {
+      if (_selectedSubmissionIds.containsAll(displayedIds)) {
+        _selectedSubmissionIds.removeAll(displayedIds);
+      } else {
+        _selectedSubmissionIds.addAll(displayedIds);
+      }
+    });
+    widget.onSelectionCountChanged(_selectedSubmissionIds.length);
+  }
+
+  Future<FaContentManagementResult> moveSelectedToGallery() {
+    return _managementRepository.moveProfileScrapsToGallery(
+      Set<String>.unmodifiable(_selectedSubmissionIds),
+    );
+  }
+
+  void _toggleSelection(String submissionId) {
+    if (!RegExp(r'^\d+$').hasMatch(submissionId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This scrap cannot be selected. Refresh and try again.'),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      if (!_selectedSubmissionIds.add(submissionId)) {
+        _selectedSubmissionIds.remove(submissionId);
+      }
+    });
+    widget.onSelectionCountChanged(_selectedSubmissionIds.length);
+  }
+
   Future<void> refresh() async {
     if (!mounted) return;
     _fetchGeneration++;
+    final selectionChanged = _selectedSubmissionIds.isNotEmpty;
     setState(() {
       _nextPageUrl =
           _profileScrapsRepository.buildInitialScrapsPageUrl(widget.username);
@@ -71,7 +137,9 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
       _favoritedImages.clear();
       _favUrls.clear();
       _unfavUrls.clear();
+      _selectedSubmissionIds.clear();
     });
+    if (selectionChanged) widget.onSelectionCountChanged(0);
     await _fetchImages();
   }
 
@@ -261,6 +329,7 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     final String? author = null;
 
     return _FavImageTileScrapsSliver(
+      key: ValueKey<String>('profile-scrap-$uniqueNumber'),
       width: width,
       height: height,
       imageUrl: imageUrl,
@@ -268,6 +337,9 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
       rating: rating,
       title: title,
       author: author,
+      selectionMode: widget.selectionMode,
+      isSelected: _selectedSubmissionIds.contains(uniqueNumber),
+      onSelectionToggle: () => _toggleSelection(uniqueNumber),
       onToggle: (val) => _toggleFavorite(uniqueNumber, val),
       onTap: () {
         Navigator.push(
@@ -343,8 +415,12 @@ class _FavImageTileScrapsSliver extends StatefulWidget {
   final String? author;
   final ValueChanged<bool> onToggle;
   final VoidCallback onTap;
+  final bool selectionMode;
+  final bool isSelected;
+  final VoidCallback onSelectionToggle;
 
   const _FavImageTileScrapsSliver({
+    super.key,
     required this.width,
     required this.height,
     required this.imageUrl,
@@ -354,6 +430,9 @@ class _FavImageTileScrapsSliver extends StatefulWidget {
     required this.author,
     required this.onToggle,
     required this.onTap,
+    required this.selectionMode,
+    required this.isSelected,
+    required this.onSelectionToggle,
   });
 
   @override
@@ -387,60 +466,102 @@ class _FavImageTileScrapsSliverState extends State<_FavImageTileScrapsSliver> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap,
-      onLongPress: () => setState(() => _localFav = !_localFav),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          HeartAnimationWidget(
+    final thumbnail = FaThumbnailOutline(
+      rating: widget.rating,
+      borderRadius: 8,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: widget.width,
+          height: widget.height,
+          color: const Color(0xFF2C2C2C),
+          child: FaNetworkImage(
+            widget.imageUrl,
+            width: widget.width,
+            height: widget.height,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return _buildPlaceholder(widget.width, widget.height);
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                width: widget.width,
+                height: widget.height,
+                color: Colors.grey,
+                alignment: Alignment.center,
+                child: const Icon(Icons.error, color: Colors.red),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    final image = widget.selectionMode
+        ? Stack(
+            children: [
+              thumbnail,
+              Positioned.fill(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(
+                      alpha: widget.isSelected ? 0.38 : 0.08,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: widget.isSelected
+                          ? const Color(0xFFE09321)
+                          : Colors.transparent,
+                      width: _profileSelectionBorderWidth,
+                    ),
+                  ),
+                ),
+              ),
+              if (widget.isSelected)
+                const Positioned.fill(
+                  child: Center(
+                    child: Icon(
+                      Icons.check_circle,
+                      color: Color(0xFFE09321),
+                      size: 28,
+                    ),
+                  ),
+                ),
+            ],
+          )
+        : HeartAnimationWidget(
             isFavorite: _localFav,
             containerWidth: widget.width,
             containerHeight: widget.height,
             onDebounceComplete: (finalVal) => widget.onToggle(finalVal),
             debounceDuration: const Duration(seconds: 2),
-            child: FaThumbnailOutline(
-              rating: widget.rating,
-              borderRadius: 8,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  width: widget.width,
-                  height: widget.height,
-                  color: const Color(0xFF2C2C2C),
-                  child: FaNetworkImage(
-                    widget.imageUrl,
-                    width: widget.width,
-                    height: widget.height,
-                    fit: BoxFit.cover,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) {
-                        return child;
-                      }
-                      return _buildPlaceholder(widget.width, widget.height);
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        width: widget.width,
-                        height: widget.height,
-                        color: Colors.grey,
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.error, color: Colors.red),
-                      );
-                    },
-                  ),
-                ),
-
-              ),
+            child: thumbnail,
+          );
+    return Semantics(
+      button: true,
+      selected: widget.selectionMode ? widget.isSelected : null,
+      label: widget.selectionMode
+          ? '${widget.title ?? 'Scrap'}, ${widget.isSelected ? 'selected' : 'not selected'}'
+          : widget.title,
+      child: GestureDetector(
+        onTap:
+            widget.selectionMode ? widget.onSelectionToggle : widget.onTap,
+        onLongPress: widget.selectionMode
+            ? widget.onSelectionToggle
+            : () => setState(() => _localFav = !_localFav),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            image,
+            FaThumbnailCaption(
+              maxWidth: widget.width,
+              title: widget.title,
+              author: widget.author,
             ),
-          ),
-          FaThumbnailCaption(
-            maxWidth: widget.width,
-            title: widget.title,
-            author: widget.author,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

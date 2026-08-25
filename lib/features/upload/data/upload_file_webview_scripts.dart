@@ -42,7 +42,13 @@ String buildUploadFileInputScript({
           dt.items.add(file);
           
           var inputName = $encodedInputName;
-          if (inputName !== 'submission' && inputName !== 'thumbnail') {
+          var supportedInputNames = [
+            'submission',
+            'thumbnail',
+            'newsubmission',
+            'newthumbnail'
+          ];
+          if (supportedInputNames.indexOf(inputName) === -1) {
             return false;
           }
           var input = document.querySelector('input[name="' + inputName + '"]');

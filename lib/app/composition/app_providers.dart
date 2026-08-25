@@ -72,6 +72,8 @@ import 'package:fanotifier/features/submissions/domain/finalize_submission_repos
 import 'package:fanotifier/features/submissions/domain/openpost_repository.dart';
 import 'package:fanotifier/features/submissions/domain/submission_description_repository.dart';
 import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/features/submissions/domain/submission_folder_color_repository.dart';
+import 'package:fanotifier/features/submissions/domain/submission_management_repository.dart';
 import 'package:fanotifier/features/submissions/domain/submissions_repository.dart';
 import 'package:fanotifier/features/submissions/submissions_feature.dart';
 import 'package:fanotifier/features/upload/domain/submission_template_repository.dart';
@@ -208,6 +210,12 @@ class AppProviders extends StatelessWidget {
         ),
         Provider<SubmissionsRepository>(
           create: (_) => SubmissionsFeature.createSubmissionsRepository(),
+        ),
+        Provider<SubmissionManagementRepository>(
+          create: (_) => SubmissionsFeature.createManagementRepository(),
+        ),
+        Provider<SubmissionFolderColorRepository>(
+          create: (_) => SubmissionsFeature.createFolderColorRepository(),
         ),
         Provider<SubmissionDescriptionRepository>(
           create: (_) => SubmissionsFeature.createDescriptionRepository(),
