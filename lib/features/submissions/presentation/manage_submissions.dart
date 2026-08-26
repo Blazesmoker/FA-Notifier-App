@@ -637,12 +637,29 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
     if (_mutating || _openingFolder) return;
     setState(() => _openingFolder = true);
     try {
+      final page = _page;
+      final normalizedName = folderName.trim().toLowerCase();
+      if (normalizedName == 'main gallery') {
+        final galleryUri = page?.mainGalleryUri;
+        if (galleryUri == null) {
+          _showMessage('Could not open the $folderName folder.', error: true);
+          return;
+        }
+        await handleFALink(context, galleryUri.toString());
+        return;
+      }
       final foldersPage = await _repository.loadFolders();
       if (!mounted) return;
-      final normalizedName = folderName.trim().toLowerCase();
-      final matches = foldersPage.folders.where(
-        (folder) => folder.name.trim().toLowerCase() == normalizedName,
-      );
+      final groupNames = <String, String>{
+        for (final group in foldersPage.groups) group.id: group.name,
+      };
+      final matches = foldersPage.folders.where((folder) {
+        if (folder.name.trim().toLowerCase() == normalizedName) return true;
+        final groupName = groupNames[folder.groupId];
+        if (groupName == null) return false;
+        return '$groupName -- ${folder.name}'.trim().toLowerCase() ==
+            normalizedName;
+      });
       final galleryUri = matches.isEmpty ? null : matches.first.galleryUri;
       if (galleryUri == null) {
         _showMessage('Could not open the $folderName folder.', error: true);

@@ -160,7 +160,7 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
   Widget build(BuildContext context) {
     final settings = InAppWebViewSettings(
       javaScriptEnabled: true,
-      useShouldOverrideUrlLoading: true,
+      useShouldOverrideUrlLoading: false,
       verticalScrollBarEnabled: true,
       horizontalScrollBarEnabled: false,
       allowFileAccess: true,

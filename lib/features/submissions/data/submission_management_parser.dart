@@ -130,6 +130,7 @@ FaSubmissionManagementPage parseSubmissionManagementPage(
     selectedFolderId: selectedFolderId,
     newerUri: newerUri,
     olderUri: olderUri,
+    mainGalleryUri: _mainGalleryUri(descriptionData, sourceUri),
     currentPage: _paginationPageNumber(sourceUri, newerUri, olderUri),
   );
 }
@@ -591,6 +592,19 @@ Map<String, dynamic> _submissionDescriptions(dom.Document document) {
   } catch (_) {
     return const <String, dynamic>{};
   }
+}
+
+Uri? _mainGalleryUri(Map<String, dynamic> descriptions, Uri sourceUri) {
+  for (final data in descriptions.values) {
+    if (data is! Map) continue;
+    final username = data['lower'];
+    if (username is! String || username.trim().isEmpty) continue;
+    return _resolveUri(
+      sourceUri,
+      '/gallery/${Uri.encodeComponent(username.trim())}/',
+    );
+  }
+  return null;
 }
 
 List<String> _assignedFolders(dynamic data) {
