@@ -219,10 +219,12 @@ class _UserProfileFavoritesSectionState
                             onPressed: _isApplying
                                 ? null
                                 : _toggleAllDisplayedSelection,
-                            icon: const Icon(
-                              Icons.library_add_check,
+                            icon: Icon(
+                              _selectedCount == 0
+                                  ? Icons.library_add_check_outlined
+                                  : Icons.library_add_check,
                               size: 22,
-                              color: Color(0xFFE09321),
+                              color: const Color(0xFFE09321),
                             ),
                           ),
                       ],
@@ -253,6 +255,7 @@ class _UserProfileFavoritesSectionState
               actionIcon: Icons.heart_broken_outlined,
               destructive: true,
               isApplying: _isApplying,
+              onToggleAll: _toggleAllDisplayedSelection,
               onCancel: _toggleSelectionMode,
               onApply: _confirmAndRemove,
             ),

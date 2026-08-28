@@ -130,7 +130,16 @@ FaSubmissionManagementPage parseSubmissionManagementPage(
     selectedFolderId: selectedFolderId,
     newerUri: newerUri,
     olderUri: olderUri,
-    mainGalleryUri: _mainGalleryUri(descriptionData, sourceUri),
+    mainGalleryUri: _profileCollectionUri(
+      descriptionData,
+      sourceUri,
+      'gallery',
+    ),
+    scrapsUri: _profileCollectionUri(
+      descriptionData,
+      sourceUri,
+      'scraps',
+    ),
     currentPage: _paginationPageNumber(sourceUri, newerUri, olderUri),
   );
 }
@@ -594,14 +603,18 @@ Map<String, dynamic> _submissionDescriptions(dom.Document document) {
   }
 }
 
-Uri? _mainGalleryUri(Map<String, dynamic> descriptions, Uri sourceUri) {
+Uri? _profileCollectionUri(
+  Map<String, dynamic> descriptions,
+  Uri sourceUri,
+  String collection,
+) {
   for (final data in descriptions.values) {
     if (data is! Map) continue;
     final username = data['lower'];
     if (username is! String || username.trim().isEmpty) continue;
     return _resolveUri(
       sourceUri,
-      '/gallery/${Uri.encodeComponent(username.trim())}/',
+      '/$collection/${Uri.encodeComponent(username.trim())}/',
     );
   }
   return null;

@@ -104,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Timer? _dataRefreshTimer;
 
-  int _unreadCount = 0;
+  final ValueNotifier<int> _unreadCount = ValueNotifier<int>(0);
   Timer? _foregroundFetchTimer;
 
   /// Initial section for NotificationsScreen.
@@ -162,6 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _elementCheckTimer?.cancel();
     _webViewController = null;
     filterOptionsNotifier.dispose();
+    _unreadCount.dispose();
     _navProvider.removeListener(_handleNavProviderChange);
     super.dispose();
   }
@@ -769,9 +770,8 @@ class _HomeScreenState extends State<HomeScreen> {
       userProfile: userProfile,
       onNoteCounterTap: _onNoteCounterTap,
       onNotesCountChanged: (int count) {
-        setState(() {
-          _unreadCount = count;
-        });
+        if (!mounted) return;
+        _unreadCount.value = count;
       },
       onNotificationsUpdated: _onNotificationsUpdated,
       onBadgeTap: openNotificationsWithSection,
@@ -960,11 +960,11 @@ class _HomeScreenState extends State<HomeScreen> {
       final faNotificationService =
           Provider.of<FANotificationService>(context, listen: false);
       faNotificationService.clearAllNotifications();
+      _unreadCount.value = 0;
 
       setState(() {
         isLoggedIn = false;
         _userProfile = null;
-        _unreadCount = 0;
         isLoadingProfile = false;
         drawerIndex = DrawerIndex.home;
         _selectedIndex = 0;
@@ -1026,6 +1026,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Consumer2<NotificationSettingsProvider, FANotificationService>(
+      child: isLoggedIn ? _buildMainAppScreen(context) : _buildWebView(),
       builder: (context, settings, faNotificationService, child) {
         return PopScope(
           canPop: false,
@@ -1042,11 +1043,13 @@ class _HomeScreenState extends State<HomeScreen> {
             _onRequestCloseApp();
           },
           child: Scaffold(
-            body: isLoggedIn ? _buildMainAppScreen(context) : _buildWebView(),
+            body: child,
             bottomNavigationBar:
                 _shouldHoldForStartupProfile || !_privacySettings.consentShown
                     ? null
-                    : Column(
+                    : ValueListenableBuilder<int>(
+                        valueListenable: _unreadCount,
+                        builder: (context, unreadCount, _) => Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Divider(
@@ -1128,14 +1131,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Center(
                                     child: FittedBox(
                                       child: Text(
-                                        _unreadCount.toString(),
+                                        unreadCount.toString(),
                                         style: const TextStyle(
                                             color: Colors.white),
                                       ),
                                     ),
                                   ),
                                 ),
-                                showBadge: _unreadCount > 0,
+                                showBadge: unreadCount > 0,
                                 position: badges.BadgePosition.topEnd(
                                     top: -5, end: -7),
                                 badgeStyle: const badges.BadgeStyle(
@@ -1157,7 +1160,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ],
-                  ),
+                        ),
+                      ),
           ),
         );
       },

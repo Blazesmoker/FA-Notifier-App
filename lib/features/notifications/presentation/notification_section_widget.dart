@@ -335,6 +335,18 @@ class NotificationSectionWidget extends StatelessWidget {
                                                       ),
                                                     );
                                                     return;
+                                                  case FALinkTargetType.scraps:
+                                                    Navigator.push(
+                                                      context,
+                                                      UserProfileScreen.route(
+                                                        nickname:
+                                                            target.username!,
+                                                        initialSection:
+                                                            ProfileSection
+                                                                .scraps,
+                                                      ),
+                                                    );
+                                                    return;
                                                   case FALinkTargetType.user:
                                                     Navigator.push(
                                                       context,

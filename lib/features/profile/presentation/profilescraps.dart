@@ -497,47 +497,51 @@ class _FavImageTileScrapsSliverState extends State<_FavImageTileScrapsSliver> {
         ),
       ),
     );
-    final image = widget.selectionMode
-        ? Stack(
-            children: [
-              thumbnail,
-              Positioned.fill(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 140),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(
-                      alpha: widget.isSelected ? 0.38 : 0.08,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: widget.isSelected
-                          ? const Color(0xFFE09321)
-                          : Colors.transparent,
-                      width: _profileSelectionBorderWidth,
-                    ),
-                  ),
-                ),
+    final image = Stack(
+      children: [
+        HeartAnimationWidget(
+          isFavorite: _localFav,
+          containerWidth: widget.width,
+          containerHeight: widget.height,
+          onDebounceComplete: (finalVal) => widget.onToggle(finalVal),
+          debounceDuration: const Duration(seconds: 2),
+          child: thumbnail,
+        ),
+        Positioned.fill(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            decoration: BoxDecoration(
+              color: widget.selectionMode
+                  ? widget.isSelected
+                      ? Colors.black54
+                      : Colors.black26
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: widget.selectionMode && widget.isSelected
+                    ? const Color(0xFFE09321)
+                    : Colors.transparent,
+                width: _profileSelectionBorderWidth,
               ),
-              if (widget.isSelected)
-                const Positioned.fill(
-                  child: Center(
-                    child: Icon(
-                      Icons.check_circle,
-                      color: Color(0xFFE09321),
-                      size: 28,
-                    ),
-                  ),
-                ),
-            ],
-          )
-        : HeartAnimationWidget(
-            isFavorite: _localFav,
-            containerWidth: widget.width,
-            containerHeight: widget.height,
-            onDebounceComplete: (finalVal) => widget.onToggle(finalVal),
-            debounceDuration: const Duration(seconds: 2),
-            child: thumbnail,
-          );
+            ),
+          ),
+        ),
+        if (widget.selectionMode)
+          Positioned.fill(
+            child: Center(
+              child: Icon(
+                widget.isSelected
+                    ? Icons.check_circle
+                    : Icons.radio_button_unchecked,
+                color: widget.isSelected
+                    ? const Color(0xFFE09321)
+                    : Colors.white,
+                size: 30,
+              ),
+            ),
+          ),
+      ],
+    );
     return Semantics(
       button: true,
       selected: widget.selectionMode ? widget.isSelected : null,

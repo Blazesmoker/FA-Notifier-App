@@ -1,6 +1,7 @@
 enum FALinkTargetType {
   gallery,
   galleryFolder,
+  scraps,
   user,
   journalUser,
   journal,
@@ -55,6 +56,18 @@ FALinkTarget matchFALink(String url) {
       username: galleryMatch.group(1),
       folderNumber: folderNumber,
       folderName: folderName,
+    );
+  }
+
+  final scrapsRegex = RegExp(
+    r'^https?://(?:www\.)?furaffinity\.net/scraps/([a-zA-Z0-9\-_.~]+)(?:/.*)?$',
+  );
+  final scrapsMatch = scrapsRegex.firstMatch(urlToMatch);
+  if (scrapsMatch != null) {
+    return FALinkTarget(
+      type: FALinkTargetType.scraps,
+      url: url,
+      username: scrapsMatch.group(1),
     );
   }
 

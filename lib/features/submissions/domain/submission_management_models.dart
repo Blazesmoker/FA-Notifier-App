@@ -98,6 +98,7 @@ class FaSubmissionManagementPage {
     this.newerUri,
     this.olderUri,
     this.mainGalleryUri,
+    this.scrapsUri,
     this.currentPage = 1,
   })  : folders = List<FaSubmissionFolderOption>.unmodifiable(folders),
         submissions = List<FaManagedSubmission>.unmodifiable(submissions),
@@ -112,6 +113,7 @@ class FaSubmissionManagementPage {
   final Uri? newerUri;
   final Uri? olderUri;
   final Uri? mainGalleryUri;
+  final Uri? scrapsUri;
   final int currentPage;
 }
 

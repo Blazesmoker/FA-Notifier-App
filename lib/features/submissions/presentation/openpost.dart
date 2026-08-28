@@ -1735,6 +1735,15 @@ class _OpenPostState extends State<OpenPost>
           ),
         );
         return;
+      case FALinkTargetType.scraps:
+        Navigator.push(
+          context,
+          UserProfileScreen.route(
+            nickname: target.username!,
+            initialSection: ProfileSection.scraps,
+          ),
+        );
+        return;
       case FALinkTargetType.user:
         Navigator.push(
           context,

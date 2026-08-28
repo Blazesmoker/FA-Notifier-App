@@ -1451,6 +1451,16 @@ class UserProfileScreenState extends State<UserProfileScreen>
           ),
         );
         return;
+      case FALinkTargetType.scraps:
+        exitShoutSelectionMode();
+        Navigator.push(
+          context,
+          UserProfileScreen.route(
+            nickname: target.username!,
+            initialSection: ProfileSection.scraps,
+          ),
+        );
+        return;
       case FALinkTargetType.user:
         exitShoutSelectionMode();
         Navigator.push(
