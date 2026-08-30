@@ -4,8 +4,8 @@ import 'dart:ui' as ui;
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/material.dart';
 
-class ExperimentalFullProfileBanner extends StatefulWidget {
-  const ExperimentalFullProfileBanner({
+class ProfileBannerHeader extends StatefulWidget {
+  const ProfileBannerHeader({
     super.key,
     required this.imageUrl,
     required this.mediaRevision,
@@ -17,12 +17,10 @@ class ExperimentalFullProfileBanner extends StatefulWidget {
   final double expandedHeight;
 
   @override
-  State<ExperimentalFullProfileBanner> createState() =>
-      _ExperimentalFullProfileBannerState();
+  State<ProfileBannerHeader> createState() => _ProfileBannerHeaderState();
 }
 
-class _ExperimentalFullProfileBannerState
-    extends State<ExperimentalFullProfileBanner> {
+class _ProfileBannerHeaderState extends State<ProfileBannerHeader> {
   static const Size _bannerSize = Size(1850.0, 300.0);
   static const double _blurSigma = 20.0;
   static const double _seamOverlap = 2.0;
@@ -36,7 +34,7 @@ class _ExperimentalFullProfileBannerState
   }
 
   @override
-  void didUpdateWidget(covariant ExperimentalFullProfileBanner oldWidget) {
+  void didUpdateWidget(covariant ProfileBannerHeader oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.imageUrl != widget.imageUrl ||
         oldWidget.mediaRevision != widget.mediaRevision) {

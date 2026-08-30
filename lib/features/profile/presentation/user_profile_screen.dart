@@ -36,7 +36,7 @@ import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
 import 'package:fanotifier/shared/utils/utils.dart';
 import 'package:fanotifier/shared/navigation/detachable_webview_route_registry.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_action_key.dart';
-import 'package:fanotifier/features/profile/presentation/experimental_full_profile_banner.dart';
+import 'package:fanotifier/features/profile/presentation/profile_banner_header.dart';
 import 'package:fanotifier/features/profile/presentation/profile_avatar_transparency_detector.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_controller.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_sliver_helpers.dart';
@@ -404,7 +404,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
   static const double _bulkSelectionMoveUpGap = 8.0;
   static const double _moveUpFabDefaultBottomSpacing = 16.0;
   static const bool _webViewScrollOptimizationEnabled = false;
-  static const bool _experimentalFullProfileBannerEnabled = true;
 
   late ScrollController _scrollController;
   late final ValueNotifier<bool> _showMoveUpFab = ValueNotifier<bool>(false);
@@ -1687,39 +1686,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
     }
   }
 
-  // Animated banner/avatar helpers
-  Widget buildAnimatedBanner(BoxConstraints constraints) {
-    double alignmentX = -1.0;
-    if (_profileController.profileBannerUrl?.contains('fa-banner') ?? false) {
-      double shiftFraction = 30.0 / constraints.maxWidth * 2;
-      alignmentX += shiftFraction;
-    }
-
-    return RepaintBoundary(
-      child: FaNetworkImage(
-        _profileController.profileBannerUrl ??
-            'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg',
-        key: ValueKey(
-          'profile-banner-${_profileController.profileBannerUrl}-$_profileMediaRevision',
-        ),
-        fit: BoxFit.cover,
-        alignment: Alignment(alignmentX, 0),
-        gaplessPlayback: true,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) {
-            return child;
-          }
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) {
-          return Container(color: Colors.grey);
-        },
-      ),
-    );
-  }
-
   Widget buildAnimatedAvatar(double offset, Widget avatarChild) {
     final double scaleProgress =
         (offset / _profileAvatarScrollDownEnd).clamp(0.0, 1.0).toDouble();
@@ -2313,7 +2279,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                     ),
                                   ],
                                   flexibleSpace: LayoutBuilder(
-                                    builder: (context, constraints) {
+                                    builder: (context, _) {
                                       final Widget staticBannerLayers =
                                           Positioned.fill(
                                         key: const ValueKey<String>(
@@ -2321,19 +2287,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                         child: Stack(
                                           fit: StackFit.expand,
                                           children: [
-                                            _experimentalFullProfileBannerEnabled
-                                                ? ExperimentalFullProfileBanner(
-                                                    imageUrl: _profileController
-                                                            .profileBannerUrl ??
-                                                        'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg',
-                                                    mediaRevision:
-                                                        _profileMediaRevision,
-                                                    expandedHeight:
-                                                        sliverAppBarExpandedHeight,
-                                                  )
-                                                : buildAnimatedBanner(
-                                                    constraints,
-                                                  ),
+                                            ProfileBannerHeader(
+                                              imageUrl: _profileController
+                                                      .profileBannerUrl ??
+                                                  'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg',
+                                              mediaRevision:
+                                                  _profileMediaRevision,
+                                              expandedHeight:
+                                                  sliverAppBarExpandedHeight,
+                                            ),
                                             ColoredBox(
                                               color: Colors.black
                                                   .withValues(alpha: 0.15),
