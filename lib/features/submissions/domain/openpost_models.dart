@@ -23,6 +23,7 @@ class OpenPostParseResult {
     required this.gender,
     required this.size,
     required this.fileSize,
+    required this.folders,
     required this.keywords,
     required this.keywordTags,
     required this.metaKeywordTags,
@@ -53,6 +54,7 @@ class OpenPostParseResult {
   final String? gender;
   final String? size;
   final String? fileSize;
+  final List<OpenPostFolderLink> folders;
   final List<String> keywords;
   final List<FaPostTag> keywordTags;
   final List<FaPostTag> metaKeywordTags;
@@ -60,6 +62,16 @@ class OpenPostParseResult {
   final double? imageWidth;
   final double? imageHeight;
   final OpenPostSubmissionAttachment? submissionAttachment;
+}
+
+class OpenPostFolderLink {
+  const OpenPostFolderLink({
+    required this.name,
+    required this.url,
+  });
+
+  final String name;
+  final String url;
 }
 
 class FaPostTag {

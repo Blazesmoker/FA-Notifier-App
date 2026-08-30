@@ -10,6 +10,7 @@ class Shout {
   final List<String> iconBeforeUrls;
   final List<String> iconAfterUrls;
   final String? symbol;
+  final String? ownShoutDeleteUrl;
   final int sourcePage;
   bool selected;
 
@@ -25,6 +26,7 @@ class Shout {
     this.iconBeforeUrls = const [],
     this.iconAfterUrls = const [],
     this.symbol,
+    this.ownShoutDeleteUrl,
     this.sourcePage = 1,
     this.selected = false,
   });

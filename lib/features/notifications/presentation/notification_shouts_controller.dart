@@ -4,6 +4,7 @@ import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
 import 'package:fanotifier/features/notifications/domain/notification_shout_mapper.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_shouts_coordinator.dart';
+import 'package:fanotifier/features/notifications/domain/notification_removal_outcome.dart';
 
 class NotificationShoutsController extends ChangeNotifier {
   NotificationShoutsController(
@@ -28,6 +29,8 @@ class NotificationShoutsController extends ChangeNotifier {
   bool _isEnriching = false;
   bool _serviceListenerAttached = false;
   bool _disposed = false;
+  Future<List<Shout>>? _refreshInFlight;
+  Future<NotificationRemovalOutcome>? _notificationMutationInFlight;
   String? _enrichRequestedForSignature;
   String? _autoEnrichScheduledForSignature;
 
@@ -75,7 +78,27 @@ class NotificationShoutsController extends ChangeNotifier {
     return unique;
   }
 
-  Future<List<Shout>> refresh() async {
+  Future<List<Shout>> refresh() {
+    final activeRemoval = _notificationMutationInFlight;
+    if (activeRemoval != null) {
+      return activeRemoval.then<List<Shout>>(
+        (_) => _coordinator.currentShouts(),
+      );
+    }
+    final activeRefresh = _refreshInFlight;
+    if (activeRefresh != null) return activeRefresh;
+
+    late final Future<List<Shout>> refresh;
+    refresh = _refreshNow().whenComplete(() {
+      if (identical(_refreshInFlight, refresh)) {
+        _refreshInFlight = null;
+      }
+    });
+    _refreshInFlight = refresh;
+    return refresh;
+  }
+
+  Future<List<Shout>> _refreshNow() async {
     final uniqueShouts = await _coordinator.refresh();
     _shouts = uniqueShouts;
     _shoutsFuture = Future.value(uniqueShouts);
@@ -93,14 +116,56 @@ class NotificationShoutsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> removeSelected() async {
-    if (!await _coordinator.removeSelected()) return;
-    await refresh();
+  Future<NotificationRemovalOutcome> removeSelected() {
+    final activeRemoval = _notificationMutationInFlight;
+    if (activeRemoval != null) return activeRemoval;
+
+    late final Future<NotificationRemovalOutcome> removal;
+    removal = _removeSelectedAfterRefresh().whenComplete(() {
+      if (identical(_notificationMutationInFlight, removal)) {
+        _notificationMutationInFlight = null;
+      }
+    });
+    _notificationMutationInFlight = removal;
+    return removal;
   }
 
-  Future<void> nukeSection() async {
-    if (!await _coordinator.nukeSection()) return;
-    await refresh();
+  Future<NotificationRemovalOutcome> _removeSelectedAfterRefresh() async {
+    final activeRefresh = _refreshInFlight;
+    if (activeRefresh != null) {
+      await activeRefresh;
+    }
+    if (_isEnriching) {
+      try {
+        await _shoutsFuture;
+      } catch (_) {}
+    }
+    return _coordinator.removeSelected();
+  }
+
+  Future<NotificationRemovalOutcome> nukeSection() {
+    final activeMutation = _notificationMutationInFlight;
+    if (activeMutation != null) return activeMutation;
+
+    late final Future<NotificationRemovalOutcome> mutation;
+    mutation = _nukeSectionAfterRefresh().whenComplete(() {
+      if (identical(_notificationMutationInFlight, mutation)) {
+        _notificationMutationInFlight = null;
+      }
+    });
+    _notificationMutationInFlight = mutation;
+    return mutation;
+  }
+
+  Future<NotificationRemovalOutcome> _nukeSectionAfterRefresh() async {
+    final activeRefresh = _refreshInFlight;
+    if (activeRefresh != null) await activeRefresh;
+    if (_isEnriching) {
+      try {
+        await _shoutsFuture;
+      } catch (_) {}
+    }
+    return _coordinator.nukeSection();
   }
 
   void setChecked(Shout shout, bool isChecked) {
@@ -137,7 +202,6 @@ class NotificationShoutsController extends ChangeNotifier {
   void _onServiceChanged() {
     if (_disposed) return;
     final latest = _coordinator.currentShouts();
-    if (latest.isEmpty) return;
     final previous = _shouts;
     if (!_coordinator.hasShoutListChanged(previous, latest)) return;
     if (_isActive &&

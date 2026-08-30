@@ -3,6 +3,7 @@ import 'package:fanotifier/features/notifications/presentation/fa_notification_s
 import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
 import 'package:fanotifier/features/notifications/domain/notification_section_kind.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_tab_badge_value.dart';
+import 'package:fanotifier/features/notifications/domain/notification_removal_outcome.dart';
 
 class NotificationActivitiesController {
   NotificationActivitiesController(
@@ -93,16 +94,15 @@ class NotificationActivitiesController {
     _service.toggleSelectAll(sectionIndex);
   }
 
-  Future<void> removeSelected(int sectionIndex) {
+  Future<NotificationRemovalOutcome> removeSelected(int sectionIndex) {
     return _service.removeSelected(sectionIndex);
   }
 
-  Future<void> nukeSection(int sectionIndex) async {
-    await _service.nukeSection(sectionIndex);
-    await _service.fetchNotifications();
+  Future<NotificationRemovalOutcome> nukeSection(int sectionIndex) {
+    return _service.nukeSection(sectionIndex);
   }
 
-  Future<void> removeAll() {
+  Future<NotificationRemovalOutcome> removeAll() {
     return _service.removeAllNotifications();
   }
 }

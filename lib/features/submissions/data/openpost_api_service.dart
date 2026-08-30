@@ -1,6 +1,7 @@
 import 'package:html/dom.dart' as dom;
 import 'package:fanotifier/core/utils/html_tags_debug.dart';
 import 'package:fanotifier/features/submissions/data/openpost_comments_parser.dart';
+import 'package:fanotifier/features/submissions/data/openpost_folder_parser.dart';
 import 'package:fanotifier/features/submissions/data/openpost_html_link_normalizer.dart';
 import 'package:fanotifier/features/submissions/data/openpost_submission_metadata_parser.dart';
 import 'package:fanotifier/features/submissions/data/openpost_submission_stats_parser.dart';
@@ -136,6 +137,7 @@ class OpenPostApiService {
       gender: metadata.gender,
       size: metadata.size,
       fileSize: metadata.fileSize,
+      folders: parseOpenPostFolderLinks(document),
       keywords: metadata.keywords,
       keywordTags: metadata.keywordTags,
       metaKeywordTags: metadata.metaKeywordTags,

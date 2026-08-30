@@ -8,6 +8,7 @@ import 'package:fanotifier/features/profile/data/user_profile_html_parser.dart';
 import 'package:fanotifier/features/profile/data/user_profile_shouts_parser.dart';
 import 'package:fanotifier/features/profile/data/user_profile_controls_shout_matcher.dart';
 import 'package:fanotifier/features/profile/data/user_profile_controls_shouts_parser.dart';
+import 'package:fanotifier/features/profile/data/user_profile_shout_delete_url.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
@@ -289,6 +290,71 @@ class UserProfileApiService {
       shoutIds: [shoutId],
       sfwEnabled: sfwEnabled,
     );
+  }
+
+  Future<DeleteShoutResult> deleteOwnShoutFromProfile({
+    required Shout shout,
+    required String sanitizedProfileUsername,
+    required bool sfwEnabled,
+  }) async {
+    final rawDeleteUrl = shout.ownShoutDeleteUrl;
+    if (rawDeleteUrl == null ||
+        !isOwnShoutDeleteUrl(rawDeleteUrl, shout.id)) {
+      return const DeleteShoutResult(
+        success: false,
+        missingCookies: false,
+      );
+    }
+
+    final profileUri = Uri.https(
+      'www.furaffinity.net',
+      '/user/$sanitizedProfileUsername/',
+    );
+    final deleteUri = profileUri.resolve(rawDeleteUrl);
+    if (deleteUri.scheme != 'https' ||
+        deleteUri.host != 'www.furaffinity.net' ||
+        deleteUri.path != profileUri.path) {
+      return const DeleteShoutResult(
+        success: false,
+        missingCookies: false,
+      );
+    }
+
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    if (cookieA == null || cookieB == null) {
+      return const DeleteShoutResult(
+        success: false,
+        missingCookies: true,
+      );
+    }
+
+    final sfwValue = sfwEnabled ? '1' : '0';
+    try {
+      final response = await FAHttp.get(
+        deleteUri,
+        headers: {
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB; sfw=$sfwValue',
+          ),
+          'User-Agent': FAHttp.userAgent,
+          'Referer': profileUri.toString(),
+        },
+        retryRecoverable: false,
+        coordinatorLabel: 'GET profile shout deletion',
+      );
+      return DeleteShoutResult(
+        success: response.statusCode == 200 || response.statusCode == 302,
+        missingCookies: false,
+        statusCode: response.statusCode,
+      );
+    } catch (error) {
+      return DeleteShoutResult(
+        success: false,
+        missingCookies: false,
+        error: error,
+      );
+    }
   }
 
   Future<DeleteShoutResult> deleteShouts({

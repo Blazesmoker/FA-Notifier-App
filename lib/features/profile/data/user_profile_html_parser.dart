@@ -2,6 +2,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/features/profile/data/user_profile_shout_delete_url.dart';
 import 'package:fanotifier/shared/fa/domain/user_link.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
 import 'package:fanotifier/shared/fa/parsing_utils.dart';
@@ -733,6 +734,8 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
         iconBeforeUrls: shoutIconBeforeUrls,
         iconAfterUrls: shoutIconAfterUrls,
         symbol: symbolShout,
+        ownShoutDeleteUrl:
+            findOwnShoutDeleteUrlInElement(container, shoutId),
         sourcePage: currentShoutPage,
       ));
     }

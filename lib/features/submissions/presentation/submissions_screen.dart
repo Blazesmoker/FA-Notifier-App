@@ -12,6 +12,13 @@ import 'package:fanotifier/features/submissions/presentation/submissions_control
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_favorite_image_tile.dart';
 import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:fanotifier/shared/widgets/fa_unavailable_screen.dart';
+import 'package:fanotifier/shared/widgets/dashed_loading_indicator.dart';
+
+enum _SubmissionsAppBarAction {
+  none,
+  deleteSelected,
+  nukeAll,
+}
 
 class SubmissionsScreen extends StatefulWidget {
   const SubmissionsScreen({super.key});
@@ -25,6 +32,8 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   late final SubmissionsController _controller;
   late final FaActivitiesPollingPort _activitiesPollingPort;
   final ScrollController _scrollController = ScrollController();
+  _SubmissionsAppBarAction _processingAppBarAction =
+      _SubmissionsAppBarAction.none;
 
   List<Map<String, dynamic>> get _flatSubmissionsList =>
       _controller.flatSubmissionsList;
@@ -37,6 +46,8 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   String? get _errorMessage => _controller.errorMessage;
   bool get _selectionMode => _controller.selectionMode;
   bool get _sfwEnabled => _controller.sfwEnabled;
+  bool get _isAppBarActionProcessing =>
+      _processingAppBarAction != _SubmissionsAppBarAction.none;
   @override
   bool get wantKeepAlive => true;
 
@@ -125,6 +136,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   }
 
   Future<void> _onNukePressed() async {
+    if (_isAppBarActionProcessing) return;
     final confirmNuke = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -159,12 +171,24 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
         ],
       ),
     );
-    if (confirmNuke != true) return;
+    if (confirmNuke != true || !mounted) return;
 
-    await _controller.nukeSubmissions();
+    setState(() {
+      _processingAppBarAction = _SubmissionsAppBarAction.nukeAll;
+    });
+    try {
+      await _controller.nukeSubmissions();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingAppBarAction = _SubmissionsAppBarAction.none;
+        });
+      }
+    }
   }
 
   Future<void> _onTrashIconPressed() async {
+    if (_isAppBarActionProcessing) return;
     if (!_selectionMode) {
       _controller.enterSelectionMode();
       return;
@@ -193,9 +217,49 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       ),
     );
     if (confirmDelete == true) {
-      await _controller.deleteSelectedSubmissions();
+      if (!mounted) return;
+      setState(() {
+        _processingAppBarAction =
+            _SubmissionsAppBarAction.deleteSelected;
+      });
+      try {
+        await _controller.deleteSelectedSubmissions();
+      } finally {
+        if (mounted) {
+          setState(() {
+            _processingAppBarAction = _SubmissionsAppBarAction.none;
+          });
+        }
+      }
     }
     _controller.exitSelectionMode();
+  }
+
+  Widget _buildAppBarActionIcon({
+    required Widget idleIcon,
+    required bool isProcessing,
+  }) {
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        Opacity(
+          opacity: isProcessing ? 0 : 1,
+          child: idleIcon,
+        ),
+        if (isProcessing)
+          const Positioned.fill(
+            child: OverflowBox(
+              alignment: Alignment.center,
+              minWidth: 17,
+              maxWidth: 17,
+              minHeight: 17,
+              maxHeight: 17,
+              child: DashedLoadingIndicator(size: 17),
+            ),
+          ),
+      ],
+    );
   }
 
   void onTileVisibilityChanged(int flatListIndex, bool isVisible) {
@@ -305,17 +369,33 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
                 IconButton(
                   icon: const Icon(Icons.library_add_check, size: 22),
                   tooltip: 'Select All',
-                  onPressed: _toggleAllSelection,
+                  onPressed:
+                      _isAppBarActionProcessing ? null : _toggleAllSelection,
                 ),
               IconButton(
-                icon: Icon(_selectionMode ? Icons.delete_forever : Icons.delete),
+                icon: _buildAppBarActionIcon(
+                  idleIcon: Icon(
+                    _selectionMode ? Icons.delete_forever : Icons.delete,
+                  ),
+                  isProcessing: _processingAppBarAction ==
+                      _SubmissionsAppBarAction.deleteSelected,
+                ),
                 tooltip: 'Delete Selected',
-                onPressed: _onTrashIconPressed,
+                onPressed:
+                    _isAppBarActionProcessing ? null : _onTrashIconPressed,
               ),
               IconButton(
-                icon: const Icon(Icons.block, color: Color(0xFFE09321)),
+                icon: _buildAppBarActionIcon(
+                  idleIcon: const Icon(
+                    Icons.block,
+                    color: Color(0xFFE09321),
+                  ),
+                  isProcessing: _processingAppBarAction ==
+                      _SubmissionsAppBarAction.nukeAll,
+                ),
                 tooltip: 'Nuke All',
-                onPressed: _onNukePressed,
+                onPressed:
+                    _isAppBarActionProcessing ? null : _onNukePressed,
               ),
             ],
           ),

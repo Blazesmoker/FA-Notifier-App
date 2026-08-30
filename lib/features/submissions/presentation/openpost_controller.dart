@@ -52,6 +52,7 @@ class OpenPostController {
   String? gender;
   String? size;
   String? fileSize;
+  List<OpenPostFolderLink> folders = <OpenPostFolderLink>[];
   List<String> keywords = <String>[];
   List<FaPostTag> keywordTags = <FaPostTag>[];
   List<FaPostTag> metaKeywordTags = <FaPostTag>[];
@@ -245,6 +246,7 @@ class OpenPostController {
     gender = parsedPost.gender;
     size = parsedPost.size;
     fileSize = parsedPost.fileSize;
+    folders = parsedPost.folders;
     keywords = parsedPost.keywords;
     keywordTags = parsedPost.keywordTags;
     metaKeywordTags = parsedPost.metaKeywordTags;

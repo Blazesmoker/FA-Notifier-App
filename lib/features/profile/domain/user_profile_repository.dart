@@ -36,4 +36,10 @@ abstract class UserProfileRepository {
     required List<Shout> shouts,
     required bool sfwEnabled,
   });
+
+  Future<DeleteShoutResult> deleteOwnShoutFromProfile({
+    required Shout shout,
+    required String sanitizedProfileUsername,
+    required bool sfwEnabled,
+  });
 }

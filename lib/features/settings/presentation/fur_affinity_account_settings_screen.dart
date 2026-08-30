@@ -66,6 +66,8 @@ class _FurAffinityAccountSettingsScreenState
   bool _saving = false;
   bool _allowPop = false;
   bool _settingControllers = false;
+  bool _obscureNewPassword = true;
+  bool _obscureVerifyNewPassword = true;
 
   bool get _dirty {
     for (final name in _nativeFields) {
@@ -650,7 +652,10 @@ class _FurAffinityAccountSettingsScreenState
               subtitle: 'Must be at least 6 characters.',
               controller: _controller('newpassword'),
               enabled: _enabled('newpassword'),
-              obscureText: true,
+              obscureText: _obscureNewPassword,
+              onToggleObscureText: () {
+                setState(() => _obscureNewPassword = !_obscureNewPassword);
+              },
               maxLength: 72,
               autofillHints: const [AutofillHints.newPassword],
             ),
@@ -658,11 +663,17 @@ class _FurAffinityAccountSettingsScreenState
               title: 'Verify New Password',
               controller: _controller('newpassword2'),
               enabled: _enabled('newpassword2'),
-              obscureText: true,
+              obscureText: _obscureVerifyNewPassword,
+              onToggleObscureText: () {
+                setState(
+                  () => _obscureVerifyNewPassword =
+                      !_obscureVerifyNewPassword,
+                );
+              },
               maxLength: 72,
               autofillHints: const [AutofillHints.newPassword],
             ),
-            IosSettingsLinkRow(
+            IosSettingsRow(
               title: 'Reset Password',
               subtitle: 'Use a verification code to create a new password.',
               onTap: _openPasswordReset,

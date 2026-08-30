@@ -158,11 +158,13 @@ class FAHttp {
         Map<String, String>? headers,
         Duration? timeout,
         bool Function()? isCancelled,
+        bool retryRecoverable = true,
+        String? coordinatorLabel,
       }) async {
     final t = timeout ?? defaultTimeout;
-    return _withOneRetry(() async {
+    Future<http.Response> send() async {
       await FaRequestCoordinator.instance.waitForTurn(
-        label: 'GET $uri',
+        label: coordinatorLabel ?? 'GET $uri',
         isCancelled: isCancelled,
       );
       if (isCancelled?.call() ?? false) {
@@ -177,7 +179,20 @@ class FAHttp {
         responseBody: response.statusCode == 403 ? response.body : null,
       );
       return response;
-    }, isCancelled: isCancelled);
+    }
+
+    if (!retryRecoverable) {
+      try {
+        return await send();
+      } catch (error) {
+        if (_isRecoverable(error)) {
+          reset();
+          FaRequestCoordinator.instance.recordRecoverableFailure();
+        }
+        rethrow;
+      }
+    }
+    return _withOneRetry(send, isCancelled: isCancelled);
   }
 
   static Future<FAHttpResolvedResponse> getWithResolvedUri(

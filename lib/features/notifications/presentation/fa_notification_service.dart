@@ -7,6 +7,7 @@ import 'package:fanotifier/features/notifications/domain/fa_notifications_page_p
 import 'package:fanotifier/features/notifications/domain/fa_notifications_repository.dart';
 import 'package:fanotifier/shared/fa/domain/fa_notification_state_port.dart';
 import 'package:fanotifier/features/notifications/domain/notification_shout_merge_policy.dart';
+import 'package:fanotifier/features/notifications/domain/notification_removal_outcome.dart';
 
 /// Centralized service for notifications.
 class FANotificationService with ChangeNotifier implements FaNotificationStatePort {
@@ -15,6 +16,8 @@ class FANotificationService with ChangeNotifier implements FaNotificationStatePo
   });
 
   final FaNotificationsRepository _repository;
+  Future<void>? _fetchNotificationsInFlight;
+  Future<NotificationRemovalOutcome>? _notificationMutationInFlight;
 
   FaNotificationsRepository get _notificationsRepository => _repository;
 
@@ -112,7 +115,25 @@ class FANotificationService with ChangeNotifier implements FaNotificationStatePo
 
   /// Fetch and parse notifications from /msg/others/.
   @override
-  Future<void> fetchNotifications() async {
+  Future<void> fetchNotifications() {
+    final activeRemoval = _notificationMutationInFlight;
+    if (activeRemoval != null) {
+      return activeRemoval.then<void>((_) => fetchNotifications());
+    }
+    final activeFetch = _fetchNotificationsInFlight;
+    if (activeFetch != null) return activeFetch;
+
+    late final Future<void> fetch;
+    fetch = _fetchNotificationsNow().whenComplete(() {
+      if (identical(_fetchNotificationsInFlight, fetch)) {
+        _fetchNotificationsInFlight = null;
+      }
+    });
+    _fetchNotificationsInFlight = fetch;
+    return fetch;
+  }
+
+  Future<void> _fetchNotificationsNow() async {
     isLoading = true;
     errorMessage = null;
     hasValidLatestCountsSnapshot = false;
@@ -215,75 +236,211 @@ class FANotificationService with ChangeNotifier implements FaNotificationStatePo
     return _notificationsRepository.fetchMsgOthersShouts();
   }
 
-  Future<void> removeSelected(int sectionIndex) async {
-    if (sectionIndex < 0 || sectionIndex >= sections.length) return;
-    List<NotificationItem> selectedItems = sections[sectionIndex].items.where((item) => item.isChecked).toList();
-    if (selectedItems.isEmpty) return;
+  Future<NotificationRemovalOutcome> removeSelected(int sectionIndex) {
+    final activeRemoval = _notificationMutationInFlight;
+    if (activeRemoval != null) return activeRemoval;
+    if (sectionIndex < 0 || sectionIndex >= sections.length) {
+      return Future.value(NotificationRemovalOutcome.failed);
+    }
+
+    final section = sections[sectionIndex];
+    final selectedItems =
+        section.items.where((item) => item.isChecked).toList();
+    if (selectedItems.isEmpty) {
+      return Future.value(NotificationRemovalOutcome.nothingSelected);
+    }
+    final itemIds = selectedItems
+        .map((item) => item.id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    if (itemIds.length != selectedItems.length) {
+      return Future.value(NotificationRemovalOutcome.failed);
+    }
+
+    final selection = _NotificationRemovalSelection(
+      sectionTitle: section.title,
+      formAction: section.formAction,
+      itemIds: itemIds,
+    );
+    late final Future<NotificationRemovalOutcome> removal;
+    removal = _performSelectedRemoval(selection).whenComplete(() {
+      if (identical(_notificationMutationInFlight, removal)) {
+        _notificationMutationInFlight = null;
+      }
+    });
+    _notificationMutationInFlight = removal;
+    return removal;
+  }
+
+  Future<NotificationRemovalOutcome> _performSelectedRemoval(
+    _NotificationRemovalSelection originalSelection,
+  ) async {
     isLoading = true;
+    errorMessage = null;
     notifyListeners();
     try {
+      final activeFetch = _fetchNotificationsInFlight;
+      if (activeFetch != null) {
+        await activeFetch;
+      }
+      errorMessage = null;
+
+      final selection = _currentSelection(originalSelection);
+      if (selection.itemIds.isEmpty) {
+        return NotificationRemovalOutcome.success;
+      }
+
       final mutationSession =
           await _notificationsRepository.createMutationSession();
-      String tLower = sections[sectionIndex].title.toLowerCase();
-      final statusCode = await _notificationsRepository.removeSelected(
+      final requestOutcome = await _notificationsRepository.removeSelected(
         mutationSession,
-        sectionTitle: sections[sectionIndex].title,
-        formAction: sections[sectionIndex].formAction,
-        itemIds: selectedItems.map((item) => item.id),
+        sectionTitle: selection.sectionTitle,
+        formAction: selection.formAction,
+        itemIds: selection.itemIds,
       );
-      if (tLower.contains('shouts')) {
-        if (statusCode == 200 || statusCode == 302) {
-          sections[sectionIndex].items.removeWhere((x) => x.isChecked);
-          if (sections[sectionIndex].items.isEmpty) {
-            sections.removeAt(sectionIndex);
-          }
-          notifyListeners();
-        } else {
-          throw Exception('Failed to remove selected shouts.');
-        }
-      } else {
-        if (statusCode == 302) {
-          sections[sectionIndex].items.removeWhere((x) => x.isChecked);
-          if (sections[sectionIndex].items.isEmpty) {
-            sections.removeAt(sectionIndex);
-          }
-          notifyListeners();
-        } else {
-          throw Exception('Failed to remove selected items.');
-        }
+      switch (requestOutcome) {
+        case NotificationRemovalRequestOutcome.accepted:
+          _applySelectedRemoval(selection);
+          return NotificationRemovalOutcome.success;
+        case NotificationRemovalRequestOutcome.rejected:
+          errorMessage = 'Fur Affinity rejected the notification removal.';
+          return NotificationRemovalOutcome.failed;
+        case NotificationRemovalRequestOutcome.indeterminate:
+          return await _reconcileSelectedRemoval(selection);
       }
-    } catch (e, st) {
-      errorMessage = e.toString();
-      debugPrint("[removeSelected] $e\n$st");
+    } catch (error, stackTrace) {
+      errorMessage = error.toString();
+      debugPrint('[removeSelected] $error\n$stackTrace');
+      return NotificationRemovalOutcome.failed;
     } finally {
       isLoading = false;
       notifyListeners();
     }
   }
 
+  Future<NotificationRemovalOutcome> _reconcileSelectedRemoval(
+    _NotificationRemovalSelection selection,
+  ) async {
+    await _fetchNotificationsNow();
+    if (errorMessage != null ||
+        !hasValidLatestCountsSnapshot ||
+        (currentUsername ?? '').trim().isEmpty) {
+      errorMessage = 'Notification removal could not be confirmed.';
+      return NotificationRemovalOutcome.indeterminate;
+    }
+    if (_currentSelection(selection).itemIds.isEmpty) {
+      return NotificationRemovalOutcome.success;
+    }
+    errorMessage = 'Notification removal could not be confirmed.';
+    return NotificationRemovalOutcome.indeterminate;
+  }
+
+  _NotificationRemovalSelection _currentSelection(
+    _NotificationRemovalSelection selection,
+  ) {
+    final sectionIndex = sections.indexWhere(
+      (section) =>
+          section.title.trim().toLowerCase() ==
+          selection.sectionTitle.trim().toLowerCase(),
+    );
+    if (sectionIndex == -1) {
+      return selection.copyWith(itemIds: const <String>{});
+    }
+    final section = sections[sectionIndex];
+    final currentIds = section.items.map((item) => item.id).toSet();
+    return selection.copyWith(
+      formAction: section.formAction,
+      itemIds: selection.itemIds.intersection(currentIds),
+    );
+  }
+
+  void _applySelectedRemoval(_NotificationRemovalSelection selection) {
+    final sectionIndex = sections.indexWhere(
+      (section) =>
+          section.title.trim().toLowerCase() ==
+          selection.sectionTitle.trim().toLowerCase(),
+    );
+    if (sectionIndex == -1) return;
+    sections[sectionIndex]
+        .items
+        .removeWhere((item) => selection.itemIds.contains(item.id));
+    if (sections[sectionIndex].items.isEmpty) {
+      sections.removeAt(sectionIndex);
+    }
+    if (selection.sectionTitle.toLowerCase().contains('shouts')) {
+      final signature = _shoutMergePolicy.signatureFromSections(sections);
+      _shoutsLightSignature = signature;
+      if (signature.isEmpty) {
+        _shoutsEnrichedSignature = null;
+        shoutsEnriched = false;
+      } else if (_shoutsEnrichedSignature != null) {
+        _shoutsEnrichedSignature = signature;
+      }
+    }
+    notifyListeners();
+  }
+
   /// Nuke an entire section.
-  Future<void> nukeSection(int sectionIndex) async {
-    if (sectionIndex < 0 || sectionIndex >= sections.length) return;
+  Future<NotificationRemovalOutcome> nukeSection(int sectionIndex) {
+    final activeMutation = _notificationMutationInFlight;
+    if (activeMutation != null) return activeMutation;
+    if (sectionIndex < 0 || sectionIndex >= sections.length) {
+      return Future.value(NotificationRemovalOutcome.failed);
+    }
+    final section = sections[sectionIndex];
+    final itemIds = section.items.map((item) => item.id.trim()).toSet();
+    if (itemIds.isEmpty || itemIds.contains('')) {
+      return Future.value(NotificationRemovalOutcome.nothingSelected);
+    }
+    final selection = _NotificationRemovalSelection(
+      sectionTitle: section.title,
+      formAction: section.formAction,
+      itemIds: itemIds,
+    );
+    late final Future<NotificationRemovalOutcome> mutation;
+    mutation = _performSectionNuke(selection).whenComplete(() {
+      if (identical(_notificationMutationInFlight, mutation)) {
+        _notificationMutationInFlight = null;
+      }
+    });
+    _notificationMutationInFlight = mutation;
+    return mutation;
+  }
+
+  Future<NotificationRemovalOutcome> _performSectionNuke(
+    _NotificationRemovalSelection originalSelection,
+  ) async {
     isLoading = true;
+    errorMessage = null;
     notifyListeners();
     try {
+      final activeFetch = _fetchNotificationsInFlight;
+      if (activeFetch != null) await activeFetch;
+      final selection = _currentSelection(originalSelection);
+      if (selection.itemIds.isEmpty) {
+        return NotificationRemovalOutcome.success;
+      }
       final mutationSession =
           await _notificationsRepository.createMutationSession();
-      final statusCode = await _notificationsRepository.nukeSection(
+      final requestOutcome = await _notificationsRepository.nukeSection(
         mutationSession,
-        sectionTitle: sections[sectionIndex].title,
-        formAction: sections[sectionIndex].formAction,
+        sectionTitle: selection.sectionTitle,
+        formAction: selection.formAction,
       );
-      if (statusCode == 302) {
-        sections[sectionIndex].items.clear();
-        sections.removeAt(sectionIndex);
-        notifyListeners();
-      } else {
-        throw Exception('Failed to nuke items.');
+      switch (requestOutcome) {
+        case NotificationRemovalRequestOutcome.accepted:
+          _applySelectedRemoval(selection);
+          return NotificationRemovalOutcome.success;
+        case NotificationRemovalRequestOutcome.rejected:
+          errorMessage = 'Fur Affinity rejected the section removal.';
+          return NotificationRemovalOutcome.failed;
+        case NotificationRemovalRequestOutcome.indeterminate:
+          return await _reconcileSelectedRemoval(selection);
       }
     } catch (e, st) {
       errorMessage = e.toString();
       debugPrint("[nukeSection] $e\n$st");
+      return NotificationRemovalOutcome.failed;
     } finally {
       isLoading = false;
       notifyListeners();
@@ -293,42 +450,100 @@ class FANotificationService with ChangeNotifier implements FaNotificationStatePo
 
 
   /// Remove all notifications in all sections.
-  Future<void> removeAllNotifications() async {
+  Future<NotificationRemovalOutcome> removeAllNotifications() {
+    final activeMutation = _notificationMutationInFlight;
+    if (activeMutation != null) return activeMutation;
+    final selections = sections
+        .where((section) =>
+            section.items.isNotEmpty &&
+            _notificationsRepository.canRemoveAllFromSection(section.title))
+        .map(
+          (section) => _NotificationRemovalSelection(
+            sectionTitle: section.title,
+            formAction: section.formAction,
+            itemIds: section.items.map((item) => item.id.trim()).toSet(),
+          ),
+        )
+        .where((selection) =>
+            selection.itemIds.isNotEmpty && !selection.itemIds.contains(''))
+        .toList();
+    if (selections.isEmpty) {
+      return Future.value(NotificationRemovalOutcome.nothingSelected);
+    }
+    late final Future<NotificationRemovalOutcome> mutation;
+    mutation = _performRemoveAll(selections).whenComplete(() {
+      if (identical(_notificationMutationInFlight, mutation)) {
+        _notificationMutationInFlight = null;
+      }
+    });
+    _notificationMutationInFlight = mutation;
+    return mutation;
+  }
+
+  Future<NotificationRemovalOutcome> _performRemoveAll(
+    List<_NotificationRemovalSelection> originalSelections,
+  ) async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
     try {
+      final activeFetch = _fetchNotificationsInFlight;
+      if (activeFetch != null) await activeFetch;
+      final selections = originalSelections
+          .map(_currentSelection)
+          .where((selection) => selection.itemIds.isNotEmpty)
+          .toList();
+      if (selections.isEmpty) {
+        return NotificationRemovalOutcome.success;
+      }
       final mutationSession =
           await _notificationsRepository.createMutationSession();
-      for (int i = sections.length - 1; i >= 0; i--) {
-        List<NotificationItem> items = sections[i].items;
-        if (items.isEmpty) continue;
-        if (!_notificationsRepository.canRemoveAllFromSection(
-          sections[i].title,
-        )) {
-          continue;
-        }
-        final statusCode =
+      for (final selection in selections) {
+        final requestOutcome =
             await _notificationsRepository.removeAllFromSection(
           mutationSession,
-          sectionTitle: sections[i].title,
-          formAction: sections[i].formAction,
-          itemIds: items.map((item) => item.id),
+          sectionTitle: selection.sectionTitle,
+          formAction: selection.formAction,
+          itemIds: selection.itemIds,
         );
-        if (statusCode == 302) {
-          sections[i].items.clear();
-          sections.removeAt(i);
-        } else {
-          throw Exception('Failed to remove all from section: ${sections[i].title}');
+        if (requestOutcome == NotificationRemovalRequestOutcome.accepted) {
+          _applySelectedRemoval(selection);
+          continue;
         }
+        if (requestOutcome == NotificationRemovalRequestOutcome.rejected) {
+          errorMessage = 'Fur Affinity rejected removing all notifications.';
+          return NotificationRemovalOutcome.failed;
+        }
+        return await _reconcileAllRemovals(selections);
       }
+      return NotificationRemovalOutcome.success;
     } catch (e, st) {
       errorMessage = e.toString();
       debugPrint("[removeAllNotifications] $e\n$st");
+      return NotificationRemovalOutcome.failed;
     } finally {
       isLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<NotificationRemovalOutcome> _reconcileAllRemovals(
+    List<_NotificationRemovalSelection> selections,
+  ) async {
+    await _fetchNotificationsNow();
+    if (errorMessage != null ||
+        !hasValidLatestCountsSnapshot ||
+        (currentUsername ?? '').trim().isEmpty) {
+      errorMessage = 'Removing all notifications could not be confirmed.';
+      return NotificationRemovalOutcome.indeterminate;
+    }
+    if (selections.every(
+      (selection) => _currentSelection(selection).itemIds.isEmpty,
+    )) {
+      return NotificationRemovalOutcome.success;
+    }
+    errorMessage = 'Removing all notifications could not be confirmed.';
+    return NotificationRemovalOutcome.indeterminate;
   }
 
   /// Update the shouts section with new data.
@@ -401,6 +616,29 @@ class FANotificationService with ChangeNotifier implements FaNotificationStatePo
   Future<String?> fetchSubmissionPreview(String submissionId) {
     return _notificationsRepository.fetchSubmissionPreview(
       submissionId,
+    );
+  }
+}
+
+class _NotificationRemovalSelection {
+  const _NotificationRemovalSelection({
+    required this.sectionTitle,
+    required this.formAction,
+    required this.itemIds,
+  });
+
+  final String sectionTitle;
+  final String formAction;
+  final Set<String> itemIds;
+
+  _NotificationRemovalSelection copyWith({
+    String? formAction,
+    Set<String>? itemIds,
+  }) {
+    return _NotificationRemovalSelection(
+      sectionTitle: sectionTitle,
+      formAction: formAction ?? this.formAction,
+      itemIds: itemIds ?? this.itemIds,
     );
   }
 }

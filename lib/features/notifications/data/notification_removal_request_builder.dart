@@ -81,3 +81,16 @@ FormData buildNotificationFormData(Map<String, dynamic> fields) {
   });
   return formData;
 }
+
+String buildNotificationUrlEncodedBody(Map<String, dynamic> fields) {
+  final queryParameters = <String, dynamic>{};
+  fields.forEach((key, value) {
+    if (value is List) {
+      queryParameters['$key[]'] =
+          value.map((item) => item.toString()).toList();
+    } else {
+      queryParameters[key] = value.toString();
+    }
+  });
+  return Uri(queryParameters: queryParameters).query;
+}

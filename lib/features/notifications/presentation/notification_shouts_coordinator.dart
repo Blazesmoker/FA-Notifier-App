@@ -3,6 +3,7 @@ import 'package:fanotifier/features/notifications/domain/fa_notification_models.
 import 'package:fanotifier/features/notifications/domain/notification_section_kind.dart';
 import 'package:fanotifier/features/notifications/domain/notification_shout_mapper.dart';
 import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/features/notifications/domain/notification_removal_outcome.dart';
 
 class NotificationShoutsCoordinator {
   const NotificationShoutsCoordinator(
@@ -51,18 +52,20 @@ class NotificationShoutsCoordinator {
     return true;
   }
 
-  Future<bool> removeSelected() async {
+  Future<NotificationRemovalOutcome> removeSelected() {
     final index = _shoutsSectionIndex();
-    if (index == -1) return false;
-    await _service.removeSelected(index);
-    return true;
+    if (index == -1) {
+      return Future.value(NotificationRemovalOutcome.nothingSelected);
+    }
+    return _service.removeSelected(index);
   }
 
-  Future<bool> nukeSection() async {
+  Future<NotificationRemovalOutcome> nukeSection() {
     final index = _shoutsSectionIndex();
-    if (index == -1) return false;
-    await _service.nukeSection(index);
-    return true;
+    if (index == -1) {
+      return Future.value(NotificationRemovalOutcome.nothingSelected);
+    }
+    return _service.nukeSection(index);
   }
 
   void setChecked(String id, bool isChecked) {

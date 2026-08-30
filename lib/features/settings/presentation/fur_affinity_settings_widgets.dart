@@ -528,6 +528,7 @@ class IosSettingsTextFieldRow extends StatelessWidget {
     required this.controller,
     this.enabled = true,
     this.obscureText = false,
+    this.onToggleObscureText,
     this.keyboardType,
     this.maxLength,
     this.autofillHints,
@@ -538,6 +539,7 @@ class IosSettingsTextFieldRow extends StatelessWidget {
   final TextEditingController controller;
   final bool enabled;
   final bool obscureText;
+  final VoidCallback? onToggleObscureText;
   final TextInputType? keyboardType;
   final int? maxLength;
   final Iterable<String>? autofillHints;
@@ -587,6 +589,18 @@ class IosSettingsTextFieldRow extends StatelessWidget {
               counterText: '',
               filled: true,
               fillColor: furAffinitySettingsField,
+              suffixIcon: onToggleObscureText == null
+                  ? null
+                  : IconButton(
+                      onPressed: enabled ? onToggleObscureText : null,
+                      tooltip: obscureText ? 'Show password' : 'Hide password',
+                      icon: Icon(
+                        obscureText ? Icons.visibility_off : Icons.visibility,
+                        color: enabled
+                            ? furAffinitySettingsSecondary
+                            : Colors.white30,
+                      ),
+                    ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 11,

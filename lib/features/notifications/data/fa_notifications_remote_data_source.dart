@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -13,9 +15,13 @@ class FaNotificationsFetchResponse {
 }
 
 class FaNotificationMutationResponse {
-  const FaNotificationMutationResponse({required this.statusCode});
+  const FaNotificationMutationResponse({
+    required this.statusCode,
+    this.redirectLocation,
+  });
 
   final int? statusCode;
+  final String? redirectLocation;
 }
 
 class FaNotificationsRemoteSession {
@@ -48,6 +54,9 @@ class FaNotificationsRemoteDataSource {
     _dio.options.headers['Accept-Encoding'] = 'gzip, deflate, br, zstd';
     _dio.options.headers['Accept-Language'] = 'en-US,en;q=0.9,ru;q=0.8';
     _dio.options.followRedirects = false;
+    _dio.options.connectTimeout = FAHttp.defaultTimeout;
+    _dio.options.sendTimeout = FAHttp.defaultTimeout;
+    _dio.options.receiveTimeout = FAHttp.defaultTimeout;
     _dio.options.validateStatus =
         (status) => status != null && status >= 200 && status < 600;
   }
@@ -69,25 +78,35 @@ class FaNotificationsRemoteDataSource {
   ) async {
     const url = 'https://www.furaffinity.net/msg/others/';
     await FaRequestCoordinator.instance.waitForTurn(label: 'GET $url');
-    final response = await _dio.get(
-      url,
-      options: Options(
-        headers: {
-          'Cookie': await _cookieHeader(session),
-          'Referer': 'https://www.furaffinity.net/msg/others/',
-        },
-      ),
-    );
-    FaRequestCoordinator.instance.recordHttpStatus(
-      statusCode: response.statusCode,
-      responseBody: response.statusCode == 403 ? response.data : null,
-    );
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load notifications.');
+    try {
+      final response = await _dio.get(
+        url,
+        options: Options(
+          headers: {
+            'Cookie': await _cookieHeader(session),
+            'Referer': 'https://www.furaffinity.net/msg/others/',
+          },
+        ),
+      );
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: response.statusCode,
+        headers: response.headers.map.map(
+          (key, values) => MapEntry(key, values.join(',')),
+        ),
+        responseBody: response.statusCode == 403 ? response.data : null,
+      );
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load notifications.');
+      }
+      return FaNotificationsFetchResponse(
+        htmlBody: response.data.toString(),
+      );
+    } on DioException catch (error) {
+      if (_isRecoverableDioFailure(error)) {
+        FaRequestCoordinator.instance.recordRecoverableFailure();
+      }
+      rethrow;
     }
-    return FaNotificationsFetchResponse(
-      htmlBody: response.data.toString(),
-    );
   }
 
   Future<FaNotificationMutationResponse> removeSelected(
@@ -100,6 +119,7 @@ class FaNotificationsRemoteDataSource {
       formAction: formAction,
       fields: fields,
       contentType: 'application/x-www-form-urlencoded',
+      encodeUrlEncodedBody: true,
     );
   }
 
@@ -134,28 +154,42 @@ class FaNotificationsRemoteDataSource {
     required String formAction,
     required Map<String, dynamic> fields,
     required String contentType,
+    bool encodeUrlEncodedBody = false,
   }) async {
-    final dioFormData = buildNotificationFormData(fields);
+    final data = encodeUrlEncodedBody
+        ? buildNotificationUrlEncodedBody(fields)
+        : buildNotificationFormData(fields);
     final url = 'https://www.furaffinity.net$formAction';
     await FaRequestCoordinator.instance.waitForTurn(label: 'POST $url');
-    final response = await _dio.post(
-      url,
-      data: dioFormData,
-      options: Options(
-        headers: {
-          'Referer': 'https://www.furaffinity.net/msg/others/',
-          'Content-Type': contentType,
-          'Cookie': await _cookieHeader(session),
-        },
-      ),
-    );
-    FaRequestCoordinator.instance.recordHttpStatus(
-      statusCode: response.statusCode,
-      responseBody: response.statusCode == 403 ? response.data : null,
-    );
-    return FaNotificationMutationResponse(
-      statusCode: response.statusCode,
-    );
+    try {
+      final response = await _dio.post(
+        url,
+        data: data,
+        options: Options(
+          headers: {
+            'Referer': 'https://www.furaffinity.net/msg/others/',
+            'Content-Type': contentType,
+            'Cookie': await _cookieHeader(session),
+          },
+        ),
+      );
+      FaRequestCoordinator.instance.recordHttpStatus(
+        statusCode: response.statusCode,
+        headers: response.headers.map.map(
+          (key, values) => MapEntry(key, values.join(',')),
+        ),
+        responseBody: response.statusCode == 403 ? response.data : null,
+      );
+      return FaNotificationMutationResponse(
+        statusCode: response.statusCode,
+        redirectLocation: _dioHeaderValue(response.headers, 'location'),
+      );
+    } on DioException catch (error) {
+      if (_isRecoverableDioFailure(error)) {
+        FaRequestCoordinator.instance.recordRecoverableFailure();
+      }
+      rethrow;
+    }
   }
 
   Future<String> _cookieHeader(FaNotificationsRemoteSession session) {
@@ -163,4 +197,22 @@ class FaNotificationsRemoteDataSource {
       'a=${session._cookieA}; b=${session._cookieB}',
     );
   }
+}
+
+bool _isRecoverableDioFailure(DioException error) {
+  return error.type == DioExceptionType.connectionTimeout ||
+      error.type == DioExceptionType.sendTimeout ||
+      error.type == DioExceptionType.receiveTimeout ||
+      error.type == DioExceptionType.connectionError ||
+      (error.type == DioExceptionType.unknown && error.error is SocketException);
+}
+
+String? _dioHeaderValue(Headers headers, String name) {
+  final lowerName = name.toLowerCase();
+  for (final entry in headers.map.entries) {
+    if (entry.key.toLowerCase() == lowerName && entry.value.isNotEmpty) {
+      return entry.value.first;
+    }
+  }
+  return null;
 }

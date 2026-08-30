@@ -40,6 +40,7 @@ import 'package:fanotifier/features/submissions/presentation/openpost_submission
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
 import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/navigation/detachable_webview_route_registry.dart';
 import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
@@ -196,6 +197,7 @@ class _OpenPostState extends State<OpenPost>
   String? get gender => _controller.gender;
   String? get size => _controller.size;
   String? get fileSize => _controller.fileSize;
+  List<OpenPostFolderLink> get folders => _controller.folders;
   List<FaPostTag> get keywordTags => _controller.keywordTags;
   List<FaPostTag> get metaKeywordTags => _controller.metaKeywordTags;
   String? get tagBlocklistNonce => _controller.tagBlocklistNonce;
@@ -1377,16 +1379,17 @@ class _OpenPostState extends State<OpenPost>
     }
   }
 
-  void _showInfoDialog() {
+  Future<void> _showInfoDialog() async {
     _dismissCommentComposerFocus();
     _suppressNextRouteDetach = true;
-    showDialog(
+    final selectedFolder = await showDialog<OpenPostFolderLink>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Post Information'),
           content: SingleChildScrollView(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (category != null)
@@ -1424,12 +1427,44 @@ class _OpenPostState extends State<OpenPost>
                     'File Size: $fileSize',
                     style: const TextStyle(fontSize: 16),
                   ),
+                if (folders.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Folders',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  for (final folder in folders)
+                    Semantics(
+                      button: true,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () =>
+                            Navigator.of(dialogContext).pop(folder),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              folder.name,
+                              style: const TextStyle(
+                                color: Color(0xFFE09321),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('Close'),
             ),
           ],
@@ -1438,6 +1473,9 @@ class _OpenPostState extends State<OpenPost>
     ).whenComplete(() {
       _suppressNextRouteDetach = false;
     });
+
+    if (!mounted || selectedFolder == null) return;
+    await handleFALink(context, selectedFolder.url);
   }
 
   Future<void> _openImageInspectScreen(String imageUrl) async {
@@ -2372,7 +2410,7 @@ class _OpenPostState extends State<OpenPost>
                                 await _handleBlockUnblock();
                                 break;
                               case 'info':
-                                _showInfoDialog();
+                                await _showInfoDialog();
                                 break;
                               case 'edit':
                                 await _showEditDialog();

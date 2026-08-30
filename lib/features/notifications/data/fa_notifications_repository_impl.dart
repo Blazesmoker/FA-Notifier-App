@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:fanotifier/features/notifications/data/fa_notification_cookie_header_provider.dart';
 import 'package:fanotifier/features/notifications/data/fa_notification_media_repository.dart';
 import 'package:fanotifier/features/notifications/data/fa_notification_shout_repository.dart';
@@ -9,6 +10,7 @@ import 'package:fanotifier/features/notifications/domain/fa_notification_models.
 import 'package:fanotifier/features/notifications/domain/fa_notifications_page_parser_state.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notifications_page_snapshot.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notifications_repository.dart';
+import 'package:fanotifier/features/notifications/domain/notification_removal_outcome.dart';
 
 class FaNotificationsRepositoryImpl implements FaNotificationsRepository {
   factory FaNotificationsRepositoryImpl({
@@ -66,25 +68,40 @@ class FaNotificationsRepositoryImpl implements FaNotificationsRepository {
   }
 
   @override
-  Future<int?> removeSelected(
+  Future<NotificationRemovalRequestOutcome> removeSelected(
     FaNotificationsMutationSession session, {
     required String sectionTitle,
     required String formAction,
     required Iterable<String> itemIds,
   }) async {
-    final response = await _remoteDataSource.removeSelected(
-      _remoteSession(session),
-      formAction: formAction,
-      fields: buildSelectedNotificationRemovalFields(
-        sectionTitle,
-        itemIds,
-      ),
+    final fields = buildSelectedNotificationRemovalFields(
+      sectionTitle,
+      itemIds,
     );
-    return response.statusCode;
+    if (fields.isEmpty) {
+      return NotificationRemovalRequestOutcome.rejected;
+    }
+    try {
+      final response = await _remoteDataSource.removeSelected(
+        _remoteSession(session),
+        formAction: formAction,
+        fields: fields,
+      );
+      if (response.statusCode == 302 &&
+          _isNotificationsRedirect(response.redirectLocation)) {
+        return NotificationRemovalRequestOutcome.accepted;
+      }
+      if (response.statusCode != null && response.statusCode! >= 400) {
+        return NotificationRemovalRequestOutcome.rejected;
+      }
+      return NotificationRemovalRequestOutcome.indeterminate;
+    } on DioException {
+      return NotificationRemovalRequestOutcome.indeterminate;
+    }
   }
 
   @override
-  Future<int?> nukeSection(
+  Future<NotificationRemovalRequestOutcome> nukeSection(
     FaNotificationsMutationSession session, {
     required String sectionTitle,
     required String formAction,
@@ -93,30 +110,52 @@ class FaNotificationsRepositoryImpl implements FaNotificationsRepository {
     if (fields.isEmpty) {
       throw Exception('Unknown section type for nuking: $sectionTitle');
     }
-    final response = await _remoteDataSource.nukeSection(
-      _remoteSession(session),
-      formAction: formAction,
-      fields: fields,
-    );
-    return response.statusCode;
+    try {
+      final response = await _remoteDataSource.nukeSection(
+        _remoteSession(session),
+        formAction: formAction,
+        fields: fields,
+      );
+      if (response.statusCode == 302 &&
+          _isNotificationsRedirect(response.redirectLocation)) {
+        return NotificationRemovalRequestOutcome.accepted;
+      }
+      if (response.statusCode != null && response.statusCode! >= 400) {
+        return NotificationRemovalRequestOutcome.rejected;
+      }
+      return NotificationRemovalRequestOutcome.indeterminate;
+    } on DioException {
+      return NotificationRemovalRequestOutcome.indeterminate;
+    }
   }
 
   @override
-  Future<int?> removeAllFromSection(
+  Future<NotificationRemovalRequestOutcome> removeAllFromSection(
     FaNotificationsMutationSession session, {
     required String sectionTitle,
     required String formAction,
     required Iterable<String> itemIds,
   }) async {
-    final response = await _remoteDataSource.removeAllFromSection(
-      _remoteSession(session),
-      formAction: formAction,
-      fields: buildSelectedNotificationRemovalFields(
-        sectionTitle,
-        itemIds,
-      ),
-    );
-    return response.statusCode;
+    try {
+      final response = await _remoteDataSource.removeAllFromSection(
+        _remoteSession(session),
+        formAction: formAction,
+        fields: buildSelectedNotificationRemovalFields(
+          sectionTitle,
+          itemIds,
+        ),
+      );
+      if (response.statusCode == 302 &&
+          _isNotificationsRedirect(response.redirectLocation)) {
+        return NotificationRemovalRequestOutcome.accepted;
+      }
+      if (response.statusCode != null && response.statusCode! >= 400) {
+        return NotificationRemovalRequestOutcome.rejected;
+      }
+      return NotificationRemovalRequestOutcome.indeterminate;
+    } on DioException {
+      return NotificationRemovalRequestOutcome.indeterminate;
+    }
   }
 
   @override
@@ -166,6 +205,12 @@ class FaNotificationsRepositoryImpl implements FaNotificationsRepository {
     }
     return session.remoteSession;
   }
+}
+
+bool _isNotificationsRedirect(String? location) {
+  final uri = Uri.tryParse(location?.trim() ?? '');
+  return uri != null &&
+      (uri.path == '/msg/others/' || uri.path == '/msg/others');
 }
 
 class _FaNotificationsMutationSession

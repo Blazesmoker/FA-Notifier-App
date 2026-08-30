@@ -83,4 +83,17 @@ class UserProfileRepositoryImpl implements UserProfileRepository {
       sfwEnabled: sfwEnabled,
     );
   }
+
+  @override
+  Future<DeleteShoutResult> deleteOwnShoutFromProfile({
+    required Shout shout,
+    required String sanitizedProfileUsername,
+    required bool sfwEnabled,
+  }) {
+    return _api.deleteOwnShoutFromProfile(
+      shout: shout,
+      sanitizedProfileUsername: sanitizedProfileUsername,
+      sfwEnabled: sfwEnabled,
+    );
+  }
 }

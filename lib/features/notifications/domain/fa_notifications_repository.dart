@@ -1,6 +1,7 @@
 import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notifications_page_parser_state.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notifications_page_snapshot.dart';
+import 'package:fanotifier/features/notifications/domain/notification_removal_outcome.dart';
 
 abstract interface class FaNotificationsMutationSession {}
 
@@ -12,20 +13,20 @@ abstract interface class FaNotificationsRepository {
 
   Future<FaNotificationsMutationSession> createMutationSession();
 
-  Future<int?> removeSelected(
+  Future<NotificationRemovalRequestOutcome> removeSelected(
     FaNotificationsMutationSession session, {
     required String sectionTitle,
     required String formAction,
     required Iterable<String> itemIds,
   });
 
-  Future<int?> nukeSection(
+  Future<NotificationRemovalRequestOutcome> nukeSection(
     FaNotificationsMutationSession session, {
     required String sectionTitle,
     required String formAction,
   });
 
-  Future<int?> removeAllFromSection(
+  Future<NotificationRemovalRequestOutcome> removeAllFromSection(
     FaNotificationsMutationSession session, {
     required String sectionTitle,
     required String formAction,

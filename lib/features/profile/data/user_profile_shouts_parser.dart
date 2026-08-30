@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:html/parser.dart' as html_parser;
 
 import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/features/profile/data/user_profile_shout_delete_url.dart';
 
 List<Shout> parseAdditionalProfileShoutsJson(
   String jsonBody,
@@ -117,6 +118,8 @@ List<Shout> parseAdditionalProfileShoutsJson(
           iconBeforeUrls: iconBeforeUrls,
           iconAfterUrls: iconAfterUrls,
           symbol: symbol,
+          ownShoutDeleteUrl:
+              findOwnShoutDeleteUrlInValue(shoutMap, shoutId),
           sourcePage: sourcePage,
         ),
       );

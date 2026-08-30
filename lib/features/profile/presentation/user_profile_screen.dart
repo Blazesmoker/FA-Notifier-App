@@ -36,6 +36,7 @@ import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
 import 'package:fanotifier/shared/utils/utils.dart';
 import 'package:fanotifier/shared/navigation/detachable_webview_route_registry.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_action_key.dart';
+import 'package:fanotifier/features/profile/presentation/experimental_full_profile_banner.dart';
 import 'package:fanotifier/features/profile/presentation/profile_avatar_transparency_detector.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_controller.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_sliver_helpers.dart';
@@ -403,6 +404,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   static const double _bulkSelectionMoveUpGap = 8.0;
   static const double _moveUpFabDefaultBottomSpacing = 16.0;
   static const bool _webViewScrollOptimizationEnabled = false;
+  static const bool _experimentalFullProfileBannerEnabled = true;
 
   late ScrollController _scrollController;
   late final ValueNotifier<bool> _showMoveUpFab = ValueNotifier<bool>(false);
@@ -1148,13 +1150,18 @@ class UserProfileScreenState extends State<UserProfileScreen>
     });
   }
 
-  Future<bool> _showDeleteShoutsDialog(List<Shout> shoutsToDelete) async {
+  Future<bool> _showDeleteShoutsDialog(
+    List<Shout> shoutsToDelete, {
+    bool ownShoutOnOtherProfile = false,
+  }) async {
     final bool isSingle = shoutsToDelete.length == 1;
     final String title =
         isSingle ? 'Confirm deletion' : 'Delete selected shouts';
-    final String message = isSingle
-        ? 'Are you sure you want to delete shout from ${shoutsToDelete.first.username}?'
-        : 'Are you sure you want to delete ${shoutsToDelete.length} selected shouts?';
+    final String message = ownShoutOnOtherProfile
+        ? 'Are you sure you want to delete your shout from this profile?'
+        : isSingle
+            ? 'Are you sure you want to delete shout from ${shoutsToDelete.first.username}?'
+            : 'Are you sure you want to delete ${shoutsToDelete.length} selected shouts?';
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1300,13 +1307,84 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _confirmDeleteShout(int index, Shout shout) async {
-    if (!_profileController.isOwnProfile) {
+    final canDeleteOwnShoutOnOtherProfile =
+        !_profileController.isOwnProfile && shout.ownShoutDeleteUrl != null;
+    if (!_profileController.isOwnProfile &&
+        !canDeleteOwnShoutOnOtherProfile) {
       return;
     }
 
-    final confirmed = await _showDeleteShoutsDialog([shout]);
+    final confirmed = await _showDeleteShoutsDialog(
+      [shout],
+      ownShoutOnOtherProfile: canDeleteOwnShoutOnOtherProfile,
+    );
     if (confirmed) {
-      await _deleteShout(index, shout);
+      if (canDeleteOwnShoutOnOtherProfile) {
+        await _deleteOwnShoutFromOtherProfile(shout);
+      } else {
+        await _deleteShout(index, shout);
+      }
+    }
+  }
+
+  Future<void> _deleteOwnShoutFromOtherProfile(Shout shout) async {
+    if (_isDeletingSelectedShouts || shout.ownShoutDeleteUrl == null) {
+      return;
+    }
+
+    final loadedProfilePage = _profileController.currentShoutPage;
+    setState(() {
+      _isDeletingSelectedShouts = true;
+    });
+
+    try {
+      final result = await _profileRepository.deleteOwnShoutFromProfile(
+        shout: shout,
+        sanitizedProfileUsername: _profileController.sanitizedUsername,
+        sfwEnabled: _profileController.sfwEnabled,
+      );
+      if (!mounted) return;
+
+      if (result.missingCookies) {
+        showAppSnackBar(
+          context,
+          'Please log in to perform this action.',
+          backgroundColor: Colors.red,
+        );
+      } else if (result.success) {
+        showAppSnackBar(
+          context,
+          'Shout deleted.',
+          backgroundColor: Colors.green,
+        );
+        await _fetchUserProfile();
+        await _restoreLoadedShoutPages(loadedProfilePage);
+      } else if (result.error != null) {
+        showAppSnackBar(
+          context,
+          'The delete result could not be confirmed. Refresh the profile before trying again.',
+          backgroundColor: Colors.red,
+        );
+      } else {
+        showAppSnackBar(
+          context,
+          'Failed to delete shout.',
+          backgroundColor: Colors.red,
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        'The delete result could not be confirmed. Refresh the profile before trying again.',
+        backgroundColor: Colors.red,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeletingSelectedShouts = false;
+        });
+      }
     }
   }
 
@@ -2243,7 +2321,19 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                         child: Stack(
                                           fit: StackFit.expand,
                                           children: [
-                                            buildAnimatedBanner(constraints),
+                                            _experimentalFullProfileBannerEnabled
+                                                ? ExperimentalFullProfileBanner(
+                                                    imageUrl: _profileController
+                                                            .profileBannerUrl ??
+                                                        'https://d.furaffinity.net/media/banners/modern/fa-banner-summer.jpg',
+                                                    mediaRevision:
+                                                        _profileMediaRevision,
+                                                    expandedHeight:
+                                                        sliverAppBarExpandedHeight,
+                                                  )
+                                                : buildAnimatedBanner(
+                                                    constraints,
+                                                  ),
                                             ColoredBox(
                                               color: Colors.black
                                                   .withValues(alpha: 0.15),

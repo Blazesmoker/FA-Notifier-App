@@ -207,7 +207,8 @@ class _FurAffinityPasswordResetScreenState
               IosSettingsSection(
                 header: 'Step 1 - Password Recovery',
                 footer:
-                    'Use the account Username. A Display Name will not work.',
+                    'Please enter your Username and Email Address to request a password verification code.\n\n'
+                    'Using Display Name instead of the account Username will not work.',
                 children: [
                   IosSettingsTextFieldRow(
                     title: 'Username',
@@ -231,16 +232,19 @@ class _FurAffinityPasswordResetScreenState
                 header: 'Step 2 - Be Patient!',
                 children: [
                   IosSettingsRow(
-                    title: 'Email delivery can take up to 15 minutes.',
+                    title: 'Email delivery can take upwards of 15 minutes.',
                     subtitle:
-                        'Add noreply@furaffinity.net to your contacts or whitelist. If the message does not arrive, check your spam or junk folder. Resetting the password signs the account out of all active sessions.',
+                        "To help ensure delivery please add noreply@furaffinity.net to your email contacts or whitelist. If, after 15 minutes, you still have not received a password reset please check your email's spam/junk folder.\n\n"
+                        'Resetting the password on the account will sign it out of all currently active sessions.',
                   ),
                 ],
               ),
               IosSettingsSection(
                 header: 'Step 3 - Verification',
                 footer:
-                    'Provide every field after receiving the verification code. Use the account Username, not the Display Name.',
+                    'Once you have received your verification code you can reset your password below.\n\n'
+                    'You need to provide data for all the input fields.\n\n'
+                    'Using Display Name instead of the account Username will not work.',
                 children: [
                   IosSettingsTextFieldRow(
                     title: 'Username',
@@ -260,7 +264,6 @@ class _FurAffinityPasswordResetScreenState
                   ),
                   IosSettingsTextFieldRow(
                     title: 'New Password',
-                    subtitle: 'Must be at least 6 characters.',
                     controller: _controller('new_password'),
                     obscureText: true,
                     maxLength: 72,

@@ -341,7 +341,9 @@ class UserProfileShoutsSection extends StatelessWidget {
                                                     context, 'copy'),
                                                 child: const Text('Copy text'),
                                               ),
-                                              if (isOwnProfile)
+                                              if (isOwnProfile ||
+                                                  shout.ownShoutDeleteUrl !=
+                                                      null)
                                                 TextButton(
                                                   onPressed: () =>
                                                       Navigator.pop(

@@ -2,6 +2,7 @@ import 'package:fanotifier/features/notifications/presentation/fa_notification_s
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_shouts_controller.dart';
+import 'package:fanotifier/features/notifications/domain/notification_removal_outcome.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/shared/utils/special_text_span_builder.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
@@ -160,10 +161,12 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
   Future<void> toggleSelectAll() => _controller.toggleSelectAll();
 
   /// Called when user taps "Remove Selected"
-  Future<void> removeSelected() => _controller.removeSelected();
+  Future<NotificationRemovalOutcome> removeSelected() =>
+      _controller.removeSelected();
 
   /// Called when user taps "Nuke" for the entire "Shouts" section
-  Future<void> nukeSection() => _controller.nukeSection();
+  Future<NotificationRemovalOutcome> nukeSection() =>
+      _controller.nukeSection();
 
   /// Called when the checkbox is toggled
   void _onCheckboxChanged(Shout s, bool? val) {
