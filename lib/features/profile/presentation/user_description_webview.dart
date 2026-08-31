@@ -55,6 +55,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   bool _isPausedForScroll = false;
   double _webViewHeight = 50.0;
   bool _mountWebView = true;
+  bool _didReportLoaded = false;
 
   // Store the cleaned HTML so we search it for full links.
   String? _userDescriptionHtml;
@@ -265,11 +266,14 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
         _userDescriptionHtml ??= cleanHtml;
 
         if (!_mountWebView) {
-          return ColoredBox(
-            color: Colors.black,
-            child: SizedBox(
-              height: _webViewHeight,
-              width: double.infinity,
+          return Padding(
+            padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+            child: ColoredBox(
+              color: Colors.black,
+              child: SizedBox(
+                height: _webViewHeight,
+                width: double.infinity,
+              ),
             ),
           );
         }
@@ -344,12 +348,16 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
                       double height = double.tryParse(heightString) ?? 300.0;
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (!mounted) return;
-                        if (!widget.fillAvailableHeight) {
+                        if (!widget.fillAvailableHeight &&
+                            (_webViewHeight - height).abs() > 0.1) {
                           setState(() {
                             _webViewHeight = height;
                           });
                         }
-                        widget.onWebViewLoaded?.call(true);
+                        if (!_didReportLoaded) {
+                          _didReportLoaded = true;
+                          widget.onWebViewLoaded?.call(true);
+                        }
                       });
                     },
                     onScrollChanged: (controller, x, y) {

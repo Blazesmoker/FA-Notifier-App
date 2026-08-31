@@ -49,6 +49,10 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   final Map<String, String> _favUrls = {};
   final Map<String, String> _unfavUrls = {};
   final Set<String> _selectedSubmissionIds = {};
+  final Map<String, ValueNotifier<bool>> _favoriteStates =
+      <String, ValueNotifier<bool>>{};
+  final Map<String, ValueNotifier<bool>> _selectionStates =
+      <String, ValueNotifier<bool>>{};
   late final SubmissionFavoriteRepository _favoriteRepository;
   late final SubmissionManagementRepository _managementRepository;
 
@@ -69,16 +73,85 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   void didUpdateWidget(ProfileScrapsSliver oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectionMode && !widget.selectionMode) {
-      _selectedSubmissionIds.clear();
+      _clearSelectionState();
     }
     if (oldWidget.username != widget.username) {
       unawaited(refresh());
     }
   }
 
+  @override
+  void dispose() {
+    for (final notifier in _favoriteStates.values) {
+      notifier.dispose();
+    }
+    for (final notifier in _selectionStates.values) {
+      notifier.dispose();
+    }
+    _favoriteStates.clear();
+    _selectionStates.clear();
+    super.dispose();
+  }
+
+  ValueNotifier<bool> _favoriteState(String uniqueNumber) {
+    return _favoriteStates.putIfAbsent(
+      uniqueNumber,
+      () => ValueNotifier<bool>(_favoritedImages.contains(uniqueNumber)),
+    );
+  }
+
+  ValueNotifier<bool> _selectionState(String submissionId) {
+    return _selectionStates.putIfAbsent(
+      submissionId,
+      () => ValueNotifier<bool>(_selectedSubmissionIds.contains(submissionId)),
+    );
+  }
+
+  void _setFavoriteState(String uniqueNumber, bool isFavorite) {
+    if (isFavorite) {
+      _favoritedImages.add(uniqueNumber);
+    } else {
+      _favoritedImages.remove(uniqueNumber);
+    }
+    _favoriteState(uniqueNumber).value = isFavorite;
+  }
+
+  void _setSelectionState(String submissionId, bool selected) {
+    if (selected) {
+      _selectedSubmissionIds.add(submissionId);
+    } else {
+      _selectedSubmissionIds.remove(submissionId);
+    }
+    _selectionState(submissionId).value = selected;
+  }
+
+  void _clearSelectionState() {
+    final selectedIds = _selectedSubmissionIds.toList(growable: false);
+    _selectedSubmissionIds.clear();
+    for (final id in selectedIds) {
+      final notifier = _selectionStates[id];
+      if (notifier != null) notifier.value = false;
+    }
+  }
+
+  void _resetTileStates() {
+    final staleNotifiers = <ValueNotifier<bool>>[
+      ..._favoriteStates.values,
+      ..._selectionStates.values,
+    ];
+    _favoriteStates.clear();
+    _selectionStates.clear();
+    if (staleNotifiers.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final notifier in staleNotifiers) {
+        notifier.dispose();
+      }
+    });
+  }
+
   void clearSelection() {
     if (_selectedSubmissionIds.isEmpty) return;
-    setState(_selectedSubmissionIds.clear);
+    _clearSelectionState();
     widget.onSelectionCountChanged(0);
   }
 
@@ -89,13 +162,10 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
         .where((id) => RegExp(r'^\d+$').hasMatch(id))
         .toSet();
     if (displayedIds.isEmpty) return;
-    setState(() {
-      if (_selectedSubmissionIds.containsAll(displayedIds)) {
-        _selectedSubmissionIds.removeAll(displayedIds);
-      } else {
-        _selectedSubmissionIds.addAll(displayedIds);
-      }
-    });
+    final selectAll = !_selectedSubmissionIds.containsAll(displayedIds);
+    for (final id in displayedIds) {
+      _setSelectionState(id, selectAll);
+    }
     widget.onSelectionCountChanged(_selectedSubmissionIds.length);
   }
 
@@ -114,11 +184,10 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
       );
       return;
     }
-    setState(() {
-      if (!_selectedSubmissionIds.add(submissionId)) {
-        _selectedSubmissionIds.remove(submissionId);
-      }
-    });
+    _setSelectionState(
+      submissionId,
+      !_selectedSubmissionIds.contains(submissionId),
+    );
     widget.onSelectionCountChanged(_selectedSubmissionIds.length);
   }
 
@@ -126,6 +195,7 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     if (!mounted) return;
     _fetchGeneration++;
     final selectionChanged = _selectedSubmissionIds.isNotEmpty;
+    _resetTileStates();
     setState(() {
       _nextPageUrl =
           _profileScrapsRepository.buildInitialScrapsPageUrl(widget.username);
@@ -181,42 +251,69 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   }
 
   // Favorite logic
-  Future<void> _fetchPostDetails(String uniqueNumber) async {
+  Future<bool> _fetchPostDetails(
+    String uniqueNumber, {
+    required int fetchGeneration,
+  }) async {
     try {
       final links = await _favoriteRepository.fetchLinksForSubmissionId(
         submissionId: uniqueNumber,
         cookieHeaderProvider: _profileScrapsRepository.buildCookieHeader,
       );
+      if (!mounted || fetchGeneration != _fetchGeneration) {
+        return false;
+      }
       if (links != null) {
         if (links.hasAnyUrl) {
           if (links.hasFavUrl) _favUrls[uniqueNumber] = links.favUrl;
           if (links.hasUnfavUrl) _unfavUrls[uniqueNumber] = links.unfavUrl;
           if (links.hasUnfavUrl && !links.hasFavUrl) {
-            _favoritedImages.add(uniqueNumber);
+            _setFavoriteState(uniqueNumber, true);
           }
           if (links.hasFavUrl && !links.hasUnfavUrl) {
-            _favoritedImages.remove(uniqueNumber);
+            _setFavoriteState(uniqueNumber, false);
           }
         }
       }
+      return true;
     } catch (e) {
       debugPrint('Error fetching post details for $uniqueNumber => $e');
+      return false;
     }
   }
 
-  Future<void> _refetchFavLinks(String uniqueNumber) async {
+  Future<void> _refetchFavLinks(
+    String uniqueNumber, {
+    required int fetchGeneration,
+  }) async {
+    if (!mounted || fetchGeneration != _fetchGeneration) {
+      return;
+    }
     _favUrls[uniqueNumber] = '';
     _unfavUrls[uniqueNumber] = '';
-    await _fetchPostDetails(uniqueNumber);
+    await _fetchPostDetails(
+      uniqueNumber,
+      fetchGeneration: fetchGeneration,
+    );
   }
 
-  Future<void> _toggleFavorite(String uniqueNumber, bool wantFavorite) async {
+  Future<void> _toggleFavorite(
+    String uniqueNumber,
+    bool wantFavorite,
+  ) async {
+    final fetchGeneration = _fetchGeneration;
     bool hasFavUrl = _favUrls[uniqueNumber]?.isNotEmpty ?? false;
     bool hasUnfavUrl = _unfavUrls[uniqueNumber]?.isNotEmpty ?? false;
 
 
     if (!hasFavUrl && !hasUnfavUrl) {
-      await _fetchPostDetails(uniqueNumber);
+      final fetched = await _fetchPostDetails(
+        uniqueNumber,
+        fetchGeneration: fetchGeneration,
+      );
+      if (!fetched || !mounted || fetchGeneration != _fetchGeneration) {
+        return;
+      }
       hasFavUrl = _favUrls[uniqueNumber]?.isNotEmpty ?? false;
       hasUnfavUrl = _unfavUrls[uniqueNumber]?.isNotEmpty ?? false;
     }
@@ -233,26 +330,19 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
       return;
     }
 
-    // Optimistic update
-    if (wantFavorite) {
-      _favoritedImages.add(uniqueNumber);
-    } else {
-      _favoritedImages.remove(uniqueNumber);
-    }
-    setState(() {});
+    _setFavoriteState(uniqueNumber, wantFavorite);
 
     final success = await _favoriteRepository.executePostWithRetry(urlToUse);
+    if (!mounted || fetchGeneration != _fetchGeneration) {
+      return;
+    }
     if (success) {
-      await _refetchFavLinks(uniqueNumber);
-      setState(() {});
+      await _refetchFavLinks(
+        uniqueNumber,
+        fetchGeneration: fetchGeneration,
+      );
     } else {
-      // revert
-      if (wantFavorite) {
-        _favoritedImages.remove(uniqueNumber);
-      } else {
-        _favoritedImages.add(uniqueNumber);
-      }
-      setState(() {});
+      _setFavoriteState(uniqueNumber, !wantFavorite);
     }
   }
 
@@ -323,31 +413,40 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   Widget _buildImageContainer(Map<String, dynamic> im, double width, double height) {
     final imageUrl = im['url'] as String;
     final uniqueNumber = im['uniqueNumber'] as String;
-    final isFav = _favoritedImages.contains(uniqueNumber);
     final String? rating = im['rating'] as String?;
     final String? title = im['title'] as String?;
     final String? author = null;
 
-    return _FavImageTileScrapsSliver(
-      key: ValueKey<String>('profile-scrap-$uniqueNumber'),
-      width: width,
-      height: height,
-      imageUrl: imageUrl,
-      isFav: isFav,
-      rating: rating,
-      title: title,
-      author: author,
-      selectionMode: widget.selectionMode,
-      isSelected: _selectedSubmissionIds.contains(uniqueNumber),
-      onSelectionToggle: () => _toggleSelection(uniqueNumber),
-      onToggle: (val) => _toggleFavorite(uniqueNumber, val),
-      onTap: () {
-        Navigator.push(
-          context,
-          OpenPost.route(
-            imageUrl: imageUrl,
-            uniqueNumber: uniqueNumber,
-          ),
+    return ValueListenableBuilder<bool>(
+      valueListenable: _favoriteState(uniqueNumber),
+      builder: (context, isFav, child) {
+        return ValueListenableBuilder<bool>(
+          valueListenable: _selectionState(uniqueNumber),
+          builder: (context, isSelected, child) {
+            return _FavImageTileScrapsSliver(
+              key: ValueKey<String>('profile-scrap-$uniqueNumber'),
+              width: width,
+              height: height,
+              imageUrl: imageUrl,
+              isFav: isFav,
+              rating: rating,
+              title: title,
+              author: author,
+              selectionMode: widget.selectionMode,
+              isSelected: isSelected,
+              onSelectionToggle: () => _toggleSelection(uniqueNumber),
+              onToggle: (val) => _toggleFavorite(uniqueNumber, val),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  OpenPost.route(
+                    imageUrl: imageUrl,
+                    uniqueNumber: uniqueNumber,
+                  ),
+                );
+              },
+            );
+          },
         );
       },
     );
@@ -503,7 +602,7 @@ class _FavImageTileScrapsSliverState extends State<_FavImageTileScrapsSliver> {
           isFavorite: _localFav,
           containerWidth: widget.width,
           containerHeight: widget.height,
-          onDebounceComplete: (finalVal) => widget.onToggle(finalVal),
+          onDebounceComplete: widget.onToggle,
           debounceDuration: const Duration(seconds: 2),
           child: thumbnail,
         ),

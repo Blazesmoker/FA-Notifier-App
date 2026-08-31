@@ -11,7 +11,6 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:fanotifier/app/navigation/app_navigation.dart';
-import 'package:fanotifier/features/profile/domain/fa_folder.dart';
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/features/profile/domain/shout.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
@@ -45,6 +44,7 @@ import 'package:fanotifier/features/profile/presentation/user_profile_gallery_se
 import 'package:fanotifier/features/profile/presentation/user_profile_home_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_journals_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_scraps_section.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_shout_selection_controller.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
 import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
@@ -272,6 +272,14 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _backSwipeOffsetNotifier.dispose();
     _showMoveUpFab.dispose();
     _moveUpFabLift.dispose();
+    _webViewLoaded.dispose();
+    _isLoadingMoreShouts.dispose();
+    _shoutsRevision.dispose();
+    _watchRequestInFlight.dispose();
+    _isDeletingSelectedShouts.dispose();
+    _profileAvatarBorderVisible.dispose();
+    _profileNameRowKey.dispose();
+    _shoutSelectionController.dispose();
     DetachableWebViewRouteRegistry.unregister(this);
     routeObserver.unsubscribe(this);
     super.dispose();
@@ -297,10 +305,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
   final ProfileAvatarTransparencyDetector _avatarTransparencyDetector =
       const ProfileAvatarTransparencyDetector();
   final TranslationService _translationService = TranslationService.instance;
+  final UserProfileShoutSelectionController _shoutSelectionController =
+      UserProfileShoutSelectionController();
 
   Future<void> _loadSfwEnabled() async {
     await _profileController.loadSfwEnabled();
-    setState(() {});
   }
 
   Future<void> _handleDescriptionLongPress(
@@ -358,9 +367,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
         .plainTextFromHtml(_profileController.userDescription ?? '');
   }
 
-  Future<void> _openProfileTranslation(
-    TranslatorSettingsProvider settings,
-  ) async {
+  Future<void> _openProfileTranslation() async {
+    final settings = context.read<TranslatorSettingsProvider>();
     final webViewText = await _webViewKey.currentState?.getPlainText();
     await NativeTranslateLauncher.open(
       webViewText?.trim().isNotEmpty == true
@@ -370,19 +378,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
-  void _onFoldersParsed(List<FaFolder> folders) {
-    setState(() {
-      _profileController.updateFolders(folders);
-    });
-  }
-
-  void _onFolderSelected(FaFolder folder) {
-    setState(() {
-      _profileController.selectFolder(folder);
-    });
-  }
-
-  bool _webViewLoaded = false;
+  final ValueNotifier<bool> _webViewLoaded = ValueNotifier<bool>(false);
 
   static const double sliverAppBarExpandedHeight = 120.0;
   static const double sliverAppBarMinHeight = kToolbarHeight - 80.0; // 56.0
@@ -428,10 +424,13 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   int _previousIndex = 0;
 
-  bool isLoadingMoreShouts = false;
-  bool _isShoutSelectionMode = false;
-  bool _isDeletingSelectedShouts = false;
-  bool _isWatchRequestInFlight = false;
+  final ValueNotifier<bool> _isLoadingMoreShouts =
+      ValueNotifier<bool>(false);
+  final ValueNotifier<int> _shoutsRevision = ValueNotifier<int>(0);
+  final ValueNotifier<bool> _isDeletingSelectedShouts =
+      ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _watchRequestInFlight =
+      ValueNotifier<bool>(false);
   bool _isDraggingBackFromEdge = false;
   bool _isProfileWebViewDetached = false;
   bool _suppressNextRouteDetach = false;
@@ -441,7 +440,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
   int _frameTimingCount = 0;
   int _frameTimingTotalMicros = 0;
   int _iosScrollRecoveryKey = IosScrollRecovery.revision;
-  bool _shouldShowProfileAvatarBorder = false;
+  final ValueNotifier<bool> _profileAvatarBorderVisible =
+      ValueNotifier<bool>(false);
   String? _profileAvatarTransparencyCheckedUrl;
   int _profileAvatarTransparencyCheckGeneration = 0;
   double _backDragStartX = 0.0;
@@ -449,6 +449,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   double get _backSwipeOffset => _backSwipeOffsetNotifier.value;
   set _backSwipeOffset(double value) => _backSwipeOffsetNotifier.value = value;
+  bool get _isShoutSelectionMode =>
+      _shoutSelectionController.isSelectionMode;
 
   @override
   void initState() {
@@ -460,8 +462,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _profileController = UserProfileController(
       repository: profileRepository,
       nickname: widget.nickname,
-      initialFolderUrl: widget.initialFolderUrl,
-      initialFolderName: widget.initialFolderName,
     );
     if (_webViewScrollOptimizationEnabled) {
       SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
@@ -469,10 +469,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
     IosScrollRecovery.addListener(_handleIosScrollRecovery);
 
     if (widget.initialSection != ProfileSection.home) {
-      _webViewLoaded = true;
+      _webViewLoaded.value = true;
     }
-
-    _loadSfwEnabled();
 
     _scrollController = ScrollController();
     _scrollController.addListener(_onProfileScroll);
@@ -698,6 +696,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   Future<void> _initAsyncFetch() async {
     await _loadSfwEnabled();
+    if (!mounted) {
+      return;
+    }
     await _fetchUserProfile();
   }
 
@@ -1017,12 +1018,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
     if (result.success) {
       debugPrint('${shouldWatch ? 'Watch' : 'Unwatch'} action successful.');
-
-      if (mounted) {
-        setState(() {
-          _profileController.setWatching(shouldWatch);
-        });
-      }
+      _profileController.setWatching(shouldWatch);
     } else if (result.error != null) {
       debugPrint(
           'Error during ${shouldWatch ? 'watch' : 'unwatch'}: ${result.error}');
@@ -1078,8 +1074,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _handleWatchButtonPressed() async {
-    if (_isWatchRequestInFlight) return;
-    setState(() => _isWatchRequestInFlight = true);
+    if (_watchRequestInFlight.value) return;
+    _watchRequestInFlight.value = true;
     WatchUnwatchResult? result;
     final shouldWatch = !_profileController.isWatching;
     try {
@@ -1106,37 +1102,27 @@ class UserProfileScreenState extends State<UserProfileScreen>
       }
     } finally {
       if (mounted) {
-        setState(() => _isWatchRequestInFlight = false);
+        _watchRequestInFlight.value = false;
       }
     }
     _showWatchOutcomeSnackBar(result, shouldWatch: shouldWatch);
   }
 
-  int get _selectedShoutCount =>
-      _profileController.shouts.where((shout) => shout.selected).length;
-
   void _toggleShoutSelectionMode() {
-    setState(() {
-      final nextValue = !_isShoutSelectionMode;
-      _isShoutSelectionMode = nextValue;
-      if (!nextValue) {
-        for (final shout in _profileController.shouts) {
-          shout.selected = false;
-        }
-      }
-    });
+    _shoutSelectionController.toggleMode();
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void exitShoutSelectionMode() {
     if (!_isShoutSelectionMode) {
       return;
     }
-    setState(() {
-      _isShoutSelectionMode = false;
-      for (final shout in _profileController.shouts) {
-        shout.selected = false;
-      }
-    });
+    _shoutSelectionController.exitSelectionMode();
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _toggleShoutSelection(Shout shout) {
@@ -1144,9 +1130,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       return;
     }
 
-    setState(() {
-      shout.selected = !shout.selected;
-    });
+    _shoutSelectionController.toggle(shout);
   }
 
   Future<bool> _showDeleteShoutsDialog(
@@ -1286,13 +1270,14 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _confirmDeleteSelectedShouts() async {
-    if (!_profileController.isOwnProfile || _isDeletingSelectedShouts) {
+    if (!_profileController.isOwnProfile ||
+        _isDeletingSelectedShouts.value) {
       return;
     }
 
-    final selectedShouts = _profileController.shouts
-        .where((shout) => shout.selected)
-        .toList(growable: false);
+    final selectedShouts = _shoutSelectionController.selectedShouts(
+      _profileController.shouts,
+    );
     if (selectedShouts.isEmpty) {
       return;
     }
@@ -1327,14 +1312,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _deleteOwnShoutFromOtherProfile(Shout shout) async {
-    if (_isDeletingSelectedShouts || shout.ownShoutDeleteUrl == null) {
+    if (_isDeletingSelectedShouts.value || shout.ownShoutDeleteUrl == null) {
       return;
     }
 
     final loadedProfilePage = _profileController.currentShoutPage;
-    setState(() {
-      _isDeletingSelectedShouts = true;
-    });
+    _isDeletingSelectedShouts.value = true;
 
     try {
       final result = await _profileRepository.deleteOwnShoutFromProfile(
@@ -1380,9 +1363,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       );
     } finally {
       if (mounted) {
-        setState(() {
-          _isDeletingSelectedShouts = false;
-        });
+        _isDeletingSelectedShouts.value = false;
       }
     }
   }
@@ -1392,15 +1373,13 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _deleteShouts(List<Shout> shoutsToDelete) async {
-    if (shoutsToDelete.isEmpty || _isDeletingSelectedShouts) {
+    if (shoutsToDelete.isEmpty || _isDeletingSelectedShouts.value) {
       return;
     }
 
     final loadedProfilePage = _profileController.currentShoutPage;
 
-    setState(() {
-      _isDeletingSelectedShouts = true;
-    });
+    _isDeletingSelectedShouts.value = true;
 
     try {
       final deletionResult = await _profileRepository.deleteShouts(
@@ -1433,12 +1412,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
               : "$deletedCount shouts deleted.",
           backgroundColor: Colors.green,
         );
-        setState(() {
-          _isShoutSelectionMode = false;
-          for (final shout in _profileController.shouts) {
-            shout.selected = false;
-          }
-        });
+        exitShoutSelectionMode();
         await _fetchUserProfile();
         await _restoreLoadedShoutPages(loadedProfilePage);
       } else if (deletionResult.status ==
@@ -1448,12 +1422,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
           "Some selected shouts were deleted, but one page failed.",
           backgroundColor: Colors.red,
         );
-        setState(() {
-          _isShoutSelectionMode = false;
-          for (final shout in _profileController.shouts) {
-            shout.selected = false;
-          }
-        });
+        exitShoutSelectionMode();
         await _fetchUserProfile();
         await _restoreLoadedShoutPages(loadedProfilePage);
       } else if (deletionResult.error != null) {
@@ -1468,9 +1437,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       showAppSnackBar(context, "Error: $e", backgroundColor: Colors.red);
     } finally {
       if (mounted) {
-        setState(() {
-          _isDeletingSelectedShouts = false;
-        });
+        _isDeletingSelectedShouts.value = false;
       }
     }
   }
@@ -1600,15 +1567,18 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
       final rebuildDescription =
           afterEdit || previousDescription != result.parsed.userDescription;
+      final wasWebViewLoaded = _webViewLoaded.value;
       setState(() {
         if (rebuildDescription) {
           _webViewKey = GlobalKey<UserDescriptionWebViewState>();
         }
         if (afterEdit) _profileMediaRevision++;
-        _webViewLoaded = result.shouldShowDescription
-            ? (rebuildDescription ? false : _webViewLoaded)
-            : true;
       });
+      _webViewLoaded.value = result.shouldShowDescription
+          ? (rebuildDescription ? false : wasWebViewLoaded)
+          : true;
+      _shoutSelectionController.reconcile(_profileController.shouts);
+      _shoutsRevision.value++;
       _updateProfileAvatarTransparency(result.parsed.profileImageUrl);
 
       debugPrint(
@@ -1640,17 +1610,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _loadMoreShouts() async {
-    if (isLoadingMoreShouts ||
+    if (_isLoadingMoreShouts.value ||
         _profileController.currentShoutPage >=
             _profileController.totalShoutPages) {
       debugPrint(
-          "Cannot load more shouts. Loading: $isLoadingMoreShouts, Current: ${_profileController.currentShoutPage}, Total: ${_profileController.totalShoutPages}");
+          "Cannot load more shouts. Loading: ${_isLoadingMoreShouts.value}, Current: ${_profileController.currentShoutPage}, Total: ${_profileController.totalShoutPages}");
       return;
     }
 
-    setState(() {
-      isLoadingMoreShouts = true;
-    });
+    _isLoadingMoreShouts.value = true;
 
     try {
       final nextPage = _profileController.currentShoutPage + 1;
@@ -1669,9 +1637,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
         return;
       }
 
-      setState(() {
-        _profileController.addShouts(payload);
-      });
+      _profileController.addShouts(payload);
+      _shoutSelectionController.reconcile(_profileController.shouts);
+      _shoutsRevision.value++;
     } catch (e) {
       debugPrint('Error loading more shouts: $e');
       if (!mounted) return;
@@ -1679,9 +1647,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
           backgroundColor: Colors.red);
     } finally {
       if (mounted) {
-        setState(() {
-          isLoadingMoreShouts = false;
-        });
+        _isLoadingMoreShouts.value = false;
       }
     }
   }
@@ -1714,10 +1680,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
     final int generation = ++_profileAvatarTransparencyCheckGeneration;
     if (trimmedUrl == null || trimmedUrl.isEmpty) {
       _profileAvatarTransparencyCheckedUrl = null;
-      if (!_shouldShowProfileAvatarBorder && mounted) {
-        setState(() {
-          _shouldShowProfileAvatarBorder = true;
-        });
+      if (!_profileAvatarBorderVisible.value && mounted) {
+        _profileAvatarBorderVisible.value = true;
       }
       return;
     }
@@ -1725,10 +1689,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
       return;
     }
     _profileAvatarTransparencyCheckedUrl = trimmedUrl;
-    if (_shouldShowProfileAvatarBorder && mounted) {
-      setState(() {
-        _shouldShowProfileAvatarBorder = false;
-      });
+    if (_profileAvatarBorderVisible.value && mounted) {
+      _profileAvatarBorderVisible.value = false;
     }
 
     faNetworkImageProvider(trimmedUrl).then((provider) {
@@ -1751,10 +1713,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
             return;
           }
           final bool shouldShowBorder = !hasTransparentEdge;
-          if (_shouldShowProfileAvatarBorder != shouldShowBorder) {
-            setState(() {
-              _shouldShowProfileAvatarBorder = shouldShowBorder;
-            });
+          if (_profileAvatarBorderVisible.value != shouldShowBorder) {
+            _profileAvatarBorderVisible.value = shouldShowBorder;
           }
         },
         onError: (Object error, StackTrace? stackTrace) {
@@ -1764,10 +1724,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
               _profileAvatarTransparencyCheckedUrl != trimmedUrl) {
             return;
           }
-          if (!_shouldShowProfileAvatarBorder) {
-            setState(() {
-              _shouldShowProfileAvatarBorder = true;
-            });
+          if (!_profileAvatarBorderVisible.value) {
+            _profileAvatarBorderVisible.value = true;
           }
         },
       );
@@ -1823,39 +1781,44 @@ class UserProfileScreenState extends State<UserProfileScreen>
         child: SizedBox(
           width: outerAvatarSize,
           height: outerAvatarSize,
-          child: Stack(
-            children: [
-              Positioned(
-                left: _profileAvatarBorderWidth,
-                top: _profileAvatarBorderWidth,
-                child: avatarImage,
-              ),
-              if (_shouldShowProfileAvatarBorder)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: const Color(0xFF111111),
-                          width: _profileAvatarBorderWidth,
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _profileAvatarBorderVisible,
+            child: Positioned(
+              left: _profileAvatarBorderWidth,
+              top: _profileAvatarBorderWidth,
+              child: avatarImage,
+            ),
+            builder: (context, showBorder, child) {
+              return Stack(
+                children: [
+                  child!,
+                  if (showBorder)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: const Color(0xFF111111),
+                              width: _profileAvatarBorderWidth,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),
     );
   }
 
-  GlobalKey _profileNameRowKey = GlobalKey();
+  final ValueNotifier<GlobalKey> _profileNameRowKey =
+      ValueNotifier<GlobalKey>(GlobalKey());
 
   void _clearProfileNameSelection() {
-    setState(() {
-      _profileNameRowKey = GlobalKey();
-    });
+    _profileNameRowKey.value = GlobalKey();
   }
 
   void _copyProfileLinkToClipboard() {
@@ -1873,12 +1836,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
     });
   }
 
-  Widget _buildProfileHeaderNameRow() {
+  Widget _buildProfileHeaderNameRow(GlobalKey profileNameRowKey) {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTapDown: (TapDownDetails details) {
         final RenderBox? renderBox =
-            _profileNameRowKey.currentContext?.findRenderObject() as RenderBox?;
+            profileNameRowKey.currentContext?.findRenderObject() as RenderBox?;
         if (renderBox != null) {
           final Offset localPosition =
               renderBox.globalToLocal(details.globalPosition);
@@ -1890,7 +1853,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         }
       },
       child: Container(
-        key: _profileNameRowKey,
+        key: profileNameRowKey,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
@@ -2039,6 +2002,62 @@ class UserProfileScreenState extends State<UserProfileScreen>
     }
   }
 
+  Widget _buildDeleteSelectedShoutsFab() {
+    return Positioned(
+      left: 16.0,
+      bottom: 16.0,
+      child: ValueListenableBuilder<int>(
+        valueListenable: _shoutSelectionController.selectedCount,
+        builder: (context, selectedCount, child) {
+          final showDeleteSelectedFab = !_profileController.isLoading &&
+              _profileController.isOwnProfile &&
+              _isShoutSelectionMode &&
+              selectedCount > 0;
+          return IgnorePointer(
+            ignoring: !showDeleteSelectedFab,
+            child: ExcludeSemantics(
+              excluding: !showDeleteSelectedFab,
+              child: AnimatedOpacity(
+                opacity: showDeleteSelectedFab ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 210),
+                curve: Curves.easeInOut,
+                child: AnimatedScale(
+                  scale: showDeleteSelectedFab ? 1.0 : 0.92,
+                  duration: const Duration(milliseconds: 210),
+                  curve: Curves.easeInOut,
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: _isDeletingSelectedShouts,
+                    builder: (context, isDeleting, child) {
+                      return FloatingActionButton(
+                        heroTag: null,
+                        onPressed:
+                            isDeleting ? null : _confirmDeleteSelectedShouts,
+                        backgroundColor: Colors.red,
+                        tooltip: 'Delete Selected Shouts',
+                        child: isDeleting
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : const Icon(Icons.delete, color: Colors.white),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   /// Builds the main UI of the screen with unified scrolling.
   @override
   Widget build(BuildContext context) {
@@ -2048,23 +2067,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
     const double marginBetweenAvatarAndText = 0.0;
     final double textLeftPadding =
         avatarLeft + avatarWidth + marginBetweenAvatarAndText;
-    final bool needsDescriptionLoad = _profileController.hasRealUserProfile &&
-        _profileController.userDescription != null;
-    bool showLoadingIndicator = _profileController.isLoading ||
-        (needsDescriptionLoad &&
-            !_webViewLoaded &&
-            _tabController.index == ProfileSection.home.index);
     final platformViews = WidgetsBinding.instance.platformDispatcher.views;
     final baseView =
         platformViews.isNotEmpty ? platformViews.first : View.of(context);
     final fixedTextScaleMediaQuery = MediaQueryData.fromView(baseView)
         .copyWith(textScaler: TextScaler.linear(1.0));
-    final bool showDeleteSelectedFab = !_profileController.isLoading &&
-        _profileController.isOwnProfile &&
-        _isShoutSelectionMode &&
-        _selectedShoutCount > 0;
-    final translatorSettings = context.watch<TranslatorSettingsProvider>();
-
     return ExcludeSemantics(
       child: AnnotatedRegion<SystemUiOverlayStyle>(
         value: const SystemUiOverlayStyle(
@@ -2080,9 +2087,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
               _toggleShoutSelectionMode();
             }
           },
-          child: DefaultTabController(
-            length: ProfileSection.values.length,
-            child: TickerMode(
+          child: TickerMode(
               enabled: !_isProfileWebViewDetached,
               child: _buildEdgeBackSwipeTransition(
                 child: Scaffold(
@@ -2248,9 +2253,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                             _copyProfileLinkToClipboard();
                                             break;
                                           case 'translate':
-                                            await _openProfileTranslation(
-                                              translatorSettings,
-                                            );
+                                            await _openProfileTranslation();
                                             break;
                                         }
                                       },
@@ -2389,8 +2392,18 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                                   alignment:
                                                                       Alignment
                                                                           .centerLeft,
-                                                                  child:
-                                                                      _buildProfileHeaderNameRow(),
+                                                                  child: ValueListenableBuilder<
+                                                                      GlobalKey>(
+                                                                    valueListenable:
+                                                                        _profileNameRowKey,
+                                                                    builder: (context,
+                                                                        profileNameRowKey,
+                                                                        child) {
+                                                                      return _buildProfileHeaderNameRow(
+                                                                        profileNameRowKey,
+                                                                      );
+                                                                    },
+                                                                  ),
                                                                 ),
                                                               ),
                                                             ),
@@ -2526,8 +2539,14 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                           SizedBox(
                                                             width: 100,
                                                             height: 38,
-                                                            child:
-                                                                _isWatchRequestInFlight
+                                                            child: ValueListenableBuilder<
+                                                                bool>(
+                                                              valueListenable:
+                                                                  _watchRequestInFlight,
+                                                              builder: (context,
+                                                                  isWatchRequestInFlight,
+                                                                  child) {
+                                                                return isWatchRequestInFlight
                                                                     ? const Center(
                                                                         child:
                                                                             SizedBox(
@@ -2586,7 +2605,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                                             ),
                                                                           ),
                                                                         ),
-                                                                      ),
+                                                                      );
+                                                              },
+                                                            ),
                                                           ),
                                                           const SizedBox(
                                                               height: 5),
@@ -2760,58 +2781,40 @@ class UserProfileScreenState extends State<UserProfileScreen>
                             ),
                           ),
                         ),
-                        if (showLoadingIndicator)
-                          Container(
-                            color: Colors.black.withValues(alpha: 1.0),
-                            child: const Center(
-                              child: PulsatingLoadingIndicator(
-                                size: 88.0,
-                                assetPath: 'assets/icons/fathemed.png',
-                              ),
-                            ),
-                          ),
-                        _buildEdgeBackSwipeOverlay(),
-                        Positioned(
-                          left: 16.0,
-                          bottom: 16.0,
-                          child: IgnorePointer(
-                            ignoring: !showDeleteSelectedFab,
-                            child: ExcludeSemantics(
-                              excluding: !showDeleteSelectedFab,
-                              child: AnimatedOpacity(
-                                opacity: showDeleteSelectedFab ? 1.0 : 0.0,
-                                duration: const Duration(milliseconds: 210),
-                                curve: Curves.easeInOut,
-                                child: AnimatedScale(
-                                  scale: showDeleteSelectedFab ? 1.0 : 0.92,
-                                  duration: const Duration(milliseconds: 210),
-                                  curve: Curves.easeInOut,
-                                  child: FloatingActionButton(
-                                    heroTag: null,
-                                    onPressed: _isDeletingSelectedShouts
-                                        ? null
-                                        : _confirmDeleteSelectedShouts,
-                                    backgroundColor: Colors.red,
-                                    tooltip: 'Delete Selected Shouts',
-                                    child: _isDeletingSelectedShouts
-                                        ? const SizedBox(
-                                            width: 22,
-                                            height: 22,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2.2,
-                                              valueColor:
-                                                  AlwaysStoppedAnimation<Color>(
-                                                      Colors.white),
-                                            ),
-                                          )
-                                        : const Icon(Icons.delete,
-                                            color: Colors.white),
+                        AnimatedBuilder(
+                          animation: _tabController,
+                          builder: (context, child) {
+                            return ValueListenableBuilder<bool>(
+                              valueListenable: _webViewLoaded,
+                              builder: (context, webViewLoaded, child) {
+                                final needsDescriptionLoad =
+                                    _profileController.hasRealUserProfile &&
+                                        _profileController.userDescription !=
+                                            null;
+                                final showLoadingIndicator =
+                                    _profileController.isLoading ||
+                                        (needsDescriptionLoad &&
+                                            !webViewLoaded &&
+                                            _tabController.index ==
+                                                ProfileSection.home.index);
+                                if (!showLoadingIndicator) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Container(
+                                  color: Colors.black.withValues(alpha: 1.0),
+                                  child: const Center(
+                                    child: PulsatingLoadingIndicator(
+                                      size: 88.0,
+                                      assetPath: 'assets/icons/fathemed.png',
+                                    ),
                                   ),
-                                ),
-                              ),
-                            ),
-                          ),
+                                );
+                              },
+                            );
+                          },
                         ),
+                        _buildEdgeBackSwipeOverlay(),
+                        _buildDeleteSelectedShoutsFab(),
                       ],
                     ),
                   ),
@@ -2871,7 +2874,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
                 ),
               ),
             ),
-          ),
         ),
       ),
     );
@@ -3021,19 +3023,23 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Widget _buildHomeSection() {
+    final webViewKey = _webViewKey;
     return UserProfileHomeSection(
       hasRealUserProfile: _profileController.hasRealUserProfile,
       userDescription: _profileController.userDescription,
-      webViewKey: _webViewKey,
+      webViewKey: webViewKey,
       sanitizedUsername: _profileController.sanitizedUsername,
       onDescriptionLongPressStart: _handleDescriptionLongPress,
       enableScrollPerformancePause:
           _webViewScrollOptimizationEnabled && _enableScrollWebViewPause,
       onWebViewLoaded: (loaded) {
-        Future.delayed(Duration(milliseconds: 25), () {
-          setState(() {
-            _webViewLoaded = loaded;
-          });
+        Future<void>.delayed(const Duration(milliseconds: 25), () {
+          if (!mounted ||
+              !identical(_webViewKey, webViewKey) ||
+              _webViewLoaded.value == loaded) {
+            return;
+          }
+          _webViewLoaded.value = loaded;
         });
       },
       featuredImageUrl: _profileController.featuredImageUrl,
@@ -3063,11 +3069,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
       recentlyWatchedCount: _profileController.recentlyWatchedCount,
       shouts: _profileController.shouts,
       isOwnProfile: _profileController.isOwnProfile,
-      isShoutSelectionMode: _isShoutSelectionMode,
-      selectedShoutCount: _selectedShoutCount,
-      currentShoutPage: _profileController.currentShoutPage,
-      totalShoutPages: _profileController.totalShoutPages,
-      isLoadingMoreShouts: isLoadingMoreShouts,
+      selectionController: _shoutSelectionController,
+      shoutsRevision: _shoutsRevision,
+      currentShoutPage: () => _profileController.currentShoutPage,
+      totalShoutPages: () => _profileController.totalShoutPages,
+      isLoadingMoreShouts: _isLoadingMoreShouts,
       onOpenPostShout: (context) async {
         final result = await Navigator.push(
           context,
@@ -3094,11 +3100,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
     return UserProfileGallerySection(
       nickname: widget.nickname,
       sanitizedUsername: _profileController.sanitizedUsername,
-      selectedFolderName: _profileController.selectedFolderName,
-      selectedFolderUrl: _profileController.selectedFolderUrl,
-      allFolders: _profileController.allFolders,
-      onFolderSelected: _onFolderSelected,
-      onFoldersParsed: _onFoldersParsed,
+      initialFolderName: widget.initialFolderName,
+      initialFolderUrl: widget.initialFolderUrl,
       isOwnProfile: _profileController.isOwnProfile,
     );
   }

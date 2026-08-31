@@ -24,6 +24,11 @@ class _ProfileBannerHeaderState extends State<ProfileBannerHeader> {
   static const Size _bannerSize = Size(1850.0, 300.0);
   static const double _blurSigma = 20.0;
   static const double _seamOverlap = 2.0;
+  static final ui.ImageFilter _ambientBlurFilter = ui.ImageFilter.blur(
+    sigmaX: _blurSigma,
+    sigmaY: _blurSigma,
+    tileMode: ui.TileMode.mirror,
+  );
 
   late Future<ImageProvider> _imageProviderFuture;
 
@@ -154,11 +159,7 @@ class _ProfileBannerHeaderState extends State<ProfileBannerHeader> {
             height: ambientLayerHeight,
             child: ClipRect(
               child: ImageFiltered(
-                imageFilter: ui.ImageFilter.blur(
-                  sigmaX: _blurSigma,
-                  sigmaY: _blurSigma,
-                  tileMode: ui.TileMode.mirror,
-                ),
+                imageFilter: _ambientBlurFilter,
                 child: Transform(
                   alignment: Alignment.center,
                   transform: Matrix4.diagonal3Values(1.0, -1.0, 1.0),

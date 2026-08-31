@@ -3,6 +3,7 @@ import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:fanotifier/features/profile/domain/shout.dart';
+import 'package:fanotifier/features/profile/presentation/cached_profile_html.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 
@@ -209,9 +210,11 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                 ),
                 Padding(
                   padding: const EdgeInsets.only(top: 8.0, bottom: 1.0),
-                  child: html_pkg.Html(
-                    data: widget.shout.text,
-                    style: {
+                  child: CachedProfileHtml(
+                    cacheKey: widget.shout.text,
+                    child: html_pkg.Html(
+                      data: widget.shout.text,
+                      style: {
                       "body": html_pkg.Style(
                         margin: html_pkg.Margins.zero,
                         textAlign: TextAlign.left,
@@ -250,9 +253,9 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                       ".bbcode_left": html_pkg.Style(
                         textAlign: TextAlign.left,
                       ),
-                    },
-                    onLinkTap: (url, _, _) => handleFALink(context, url!),
-                    extensions: [
+                      },
+                      onLinkTap: (url, _, _) => handleFALink(context, url!),
+                      extensions: [
                       html_pkg.TagExtension(
                         tagsToExtend: {"i"},
                         builder: (html_pkg.ExtensionContext context) {
@@ -389,7 +392,8 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                           );
                         },
                       ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 Padding(

@@ -7,6 +7,7 @@ import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:fanotifier/features/journals/presentation/openjournal.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
+import 'package:fanotifier/features/profile/presentation/cached_profile_html.dart';
 
 class ProfileJournals extends StatefulWidget {
   final String username;
@@ -23,6 +24,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
   List<Map<String, dynamic>> journals = [];
   bool hasMore = true;
   int _fetchGeneration = 0;
+  final ValueNotifier<bool> _isLoadingMore = ValueNotifier<bool>(false);
 
   late final ProfileJournalsRepository _profileJournalsRepository;
 
@@ -41,9 +43,16 @@ class ProfileJournalsState extends State<ProfileJournals> {
     }
   }
 
+  @override
+  void dispose() {
+    _isLoadingMore.dispose();
+    super.dispose();
+  }
+
   Future<void> refreshJournals() async {
     if (!mounted) return;
     _fetchGeneration++;
+    _isLoadingMore.value = false;
     setState(() {
       journals.clear();
       currentPage = 1;
@@ -81,9 +90,13 @@ class ProfileJournalsState extends State<ProfileJournals> {
       return;
     }
     final fetchGeneration = _fetchGeneration;
-    setState(() {
-      isLoading = true;
-    });
+    final loadingMore = journals.isNotEmpty;
+    isLoading = true;
+    if (loadingMore) {
+      _isLoadingMore.value = true;
+    } else {
+      setState(() {});
+    }
     try {
       final page = await _profileJournalsRepository.fetchJournalsPage(
         username: widget.username,
@@ -93,6 +106,9 @@ class ProfileJournalsState extends State<ProfileJournals> {
         return;
       }
 
+      if (loadingMore) {
+        _isLoadingMore.value = false;
+      }
       setState(() {
         journals.addAll(page.journals);
         hasMore = page.hasMore;
@@ -103,9 +119,12 @@ class ProfileJournalsState extends State<ProfileJournals> {
       if (!mounted || fetchGeneration != _fetchGeneration) {
         return;
       }
-      setState(() {
-        isLoading = false;
-      });
+      isLoading = false;
+      if (loadingMore) {
+        _isLoadingMore.value = false;
+      } else {
+        setState(() {});
+      }
       debugPrint(
           'ProfileJournals: Error fetching journals from page $pageNumber: $e');
       debugPrint('Stack trace: $stackTrace');
@@ -164,9 +183,11 @@ class ProfileJournalsState extends State<ProfileJournals> {
                         children: [
                           Text('Posted on: ${journal['datePosted']}'),
                           const SizedBox(height: 8.0),
-                          Html(
-                            data: journal['contentHtml'],
-                            style: {
+                          CachedProfileHtml(
+                            cacheKey: journal['contentHtml'],
+                            child: Html(
+                              data: journal['contentHtml'],
+                              style: {
                               "a": Style(
                                 textDecoration: TextDecoration.none,
                                 color: const Color(0xFFE09321),
@@ -188,11 +209,11 @@ class ProfileJournalsState extends State<ProfileJournals> {
                                 textAlign: TextAlign.left,
                                 display: Display.block,
                               ),
-                            },
-                            onLinkTap: (url, _, _) async {
-                              await _openJournal(journal['uniqueNumber']);
-                            },
-                            extensions: [
+                              },
+                              onLinkTap: (url, _, _) async {
+                                await _openJournal(journal['uniqueNumber']);
+                              },
+                              extensions: [
                               faHtmlImageExtension(),
                               TagExtension(
                                 tagsToExtend: {"i"},
@@ -347,7 +368,8 @@ class ProfileJournalsState extends State<ProfileJournals> {
                                   }
                                 },
                               ),
-                            ],
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 8.0),
                           Align(
@@ -380,33 +402,39 @@ class ProfileJournalsState extends State<ProfileJournals> {
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16.0),
                   child: Center(
-                    child: isLoading
-                        ? const CircularProgressIndicator(
+                    child: ValueListenableBuilder<bool>(
+                      valueListenable: _isLoadingMore,
+                      builder: (context, isLoadingMore, child) {
+                        if (isLoadingMore) {
+                          return const CircularProgressIndicator(
                             valueColor: AlwaysStoppedAnimation<Color>(
                               Color(0xFFE09321),
                             ),
-                          )
-                        : ElevatedButton(
-                            onPressed: loadNextPage,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFE09321),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24.0,
-                                vertical: 12.0,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8.0),
-                              ),
+                          );
+                        }
+                        return ElevatedButton(
+                          onPressed: loadNextPage,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE09321),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24.0,
+                              vertical: 12.0,
                             ),
-                            child: const Text(
-                              'Load More',
-                              style: TextStyle(
-                                fontSize: 16.0,
-                                fontWeight: FontWeight.bold,
-                              ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8.0),
                             ),
                           ),
+                          child: const Text(
+                            'Load More',
+                            style: TextStyle(
+                              fontSize: 16.0,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 );
               } else {

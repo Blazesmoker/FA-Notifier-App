@@ -28,7 +28,7 @@ class _UserProfileFavoritesSectionState
   final GlobalKey _bulkSelectionBarKey = GlobalKey();
   bool _selectionMode = false;
   bool _isApplying = false;
-  int _selectedCount = 0;
+  final ValueNotifier<int> _selectedCount = ValueNotifier<int>(0);
 
   @override
   bool get wantKeepAlive => true;
@@ -41,12 +41,18 @@ class _UserProfileFavoritesSectionState
         _selectionMode) {
       _selectionMode = false;
       _isApplying = false;
-      _selectedCount = 0;
+      _selectedCount.value = 0;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         widget.onSelectionLayoutChanged(false, 0);
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _selectedCount.dispose();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -61,8 +67,8 @@ class _UserProfileFavoritesSectionState
     if (_selectionMode) _favsKey.currentState?.clearSelection();
     setState(() {
       _selectionMode = nextSelectionMode;
-      _selectedCount = 0;
     });
+    _selectedCount.value = 0;
     widget.onSelectionLayoutChanged(nextSelectionMode, 0);
   }
 
@@ -82,8 +88,8 @@ class _UserProfileFavoritesSectionState
   }
 
   void _onSelectionCountChanged(int count) {
-    if (!mounted || count == _selectedCount) return;
-    setState(() => _selectedCount = count);
+    if (!mounted || count == _selectedCount.value) return;
+    _selectedCount.value = count;
   }
 
   Future<void> _confirmAndRemove() async {
@@ -125,8 +131,8 @@ class _UserProfileFavoritesSectionState
       setState(() {
         _selectionMode = false;
         _isApplying = false;
-        _selectedCount = 0;
       });
+      _selectedCount.value = 0;
       widget.onSelectionLayoutChanged(false, 0);
       await _refresh();
       if (!mounted) return;
@@ -210,22 +216,27 @@ class _UserProfileFavoritesSectionState
                             ),
                           ),
                         if (widget.isOwnProfile && _selectionMode)
-                          IconButton(
-                            key: const ValueKey(
-                              'profile-favs-select-all-button',
-                            ),
-                            tooltip:
-                                'Select or deselect all displayed favorites',
-                            onPressed: _isApplying
-                                ? null
-                                : _toggleAllDisplayedSelection,
-                            icon: Icon(
-                              _selectedCount == 0
-                                  ? Icons.library_add_check_outlined
-                                  : Icons.library_add_check,
-                              size: 22,
-                              color: const Color(0xFFE09321),
-                            ),
+                          ValueListenableBuilder<int>(
+                            valueListenable: _selectedCount,
+                            builder: (context, selectedCount, child) {
+                              return IconButton(
+                                key: const ValueKey(
+                                  'profile-favs-select-all-button',
+                                ),
+                                tooltip:
+                                    'Select or deselect all displayed favorites',
+                                onPressed: _isApplying
+                                    ? null
+                                    : _toggleAllDisplayedSelection,
+                                icon: Icon(
+                                  selectedCount == 0
+                                      ? Icons.library_add_check_outlined
+                                      : Icons.library_add_check,
+                                  size: 22,
+                                  color: const Color(0xFFE09321),
+                                ),
+                              );
+                            },
                           ),
                       ],
                     ),
@@ -248,16 +259,21 @@ class _UserProfileFavoritesSectionState
             left: 0,
             right: 0,
             bottom: 0,
-            child: ProfileBulkSelectionBar(
-              key: _bulkSelectionBarKey,
-              selectedCount: _selectedCount,
-              actionLabel: 'Unfavorite',
-              actionIcon: Icons.heart_broken_outlined,
-              destructive: true,
-              isApplying: _isApplying,
-              onToggleAll: _toggleAllDisplayedSelection,
-              onCancel: _toggleSelectionMode,
-              onApply: _confirmAndRemove,
+            child: ValueListenableBuilder<int>(
+              valueListenable: _selectedCount,
+              builder: (context, selectedCount, child) {
+                return ProfileBulkSelectionBar(
+                  key: _bulkSelectionBarKey,
+                  selectedCount: selectedCount,
+                  actionLabel: 'Unfavorite',
+                  actionIcon: Icons.heart_broken_outlined,
+                  destructive: true,
+                  isApplying: _isApplying,
+                  onToggleAll: _toggleAllDisplayedSelection,
+                  onCancel: _toggleSelectionMode,
+                  onApply: _confirmAndRemove,
+                );
+              },
             ),
           ),
       ],

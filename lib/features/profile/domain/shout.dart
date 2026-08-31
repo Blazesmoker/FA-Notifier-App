@@ -12,7 +12,6 @@ class Shout {
   final String? symbol;
   final String? ownShoutDeleteUrl;
   final int sourcePage;
-  bool selected;
 
   Shout({
     required this.id,
@@ -28,6 +27,5 @@ class Shout {
     this.symbol,
     this.ownShoutDeleteUrl,
     this.sourcePage = 1,
-    this.selected = false,
   });
 }

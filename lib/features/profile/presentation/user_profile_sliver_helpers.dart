@@ -151,6 +151,7 @@ class _NavigationSliderState<T> extends State<NavigationSlider<T>> {
   void dispose() {
     widget.tabController.removeListener(_onTabChanged);
     widget.tabController.animation?.removeListener(_onAnimationChanged);
+    _listScrollController.dispose();
     super.dispose();
   }
 

@@ -1,6 +1,4 @@
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:fanotifier/features/profile/domain/fa_folder.dart';
-import 'package:fanotifier/features/profile/domain/profile_folder_selection_resolver.dart';
 import 'package:fanotifier/features/profile/domain/shout.dart';
 import 'package:fanotifier/shared/fa/domain/user_link.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
@@ -13,23 +11,13 @@ class UserProfileController {
     required this._repository,
     SfwModePreference? sfwModePreference,
     required String nickname,
-    String? initialFolderUrl,
-    String? initialFolderName,
   })  : _sfwModePreference = sfwModePreference ?? SfwModePreference(),
-        sanitizedUsername = sanitizeFAUsername(nickname) {
-    if (initialFolderUrl != null && initialFolderUrl.isNotEmpty) {
-      selectedFolderUrl = initialFolderUrl;
-      selectedFolderName = initialFolderName ?? selectedFolderName;
-    }
-  }
+        sanitizedUsername = sanitizeFAUsername(nickname);
 
   final UserProfileRepository _repository;
   final SfwModePreference _sfwModePreference;
 
   bool sfwEnabled = true;
-  String selectedFolderName = 'Main Gallery';
-  String selectedFolderUrl = '';
-  List<FaFolder> allFolders = <FaFolder>[];
   UserProfileParsed? _parsed;
   String sanitizedUsername;
   bool isLoading = true;
@@ -122,21 +110,4 @@ class UserProfileController {
     }
   }
 
-  void updateFolders(List<FaFolder> folders) {
-    final selected = resolveProfileFolderSelection(
-      folders: folders,
-      selectedName: selectedFolderName,
-      selectedUrl: selectedFolderUrl,
-    );
-    selectedFolderName = selected.name;
-    if (!areFaFolderUrlsEquivalent(selected.url, selectedFolderUrl)) {
-      selectedFolderUrl = selected.url;
-    }
-    allFolders = folders;
-  }
-
-  void selectFolder(FaFolder folder) {
-    selectedFolderName = folder.name;
-    selectedFolderUrl = folder.url;
-  }
 }

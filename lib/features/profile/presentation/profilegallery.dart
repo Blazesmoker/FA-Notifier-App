@@ -53,6 +53,8 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
   // Set to track which indices are visible so it doesn’t queue repeatedly.
   final Set<int> _visibleTileIndices = {};
+  final Map<String, ValueNotifier<int>> _tileRevisions =
+      <String, ValueNotifier<int>>{};
 
   bool _isDisposed = false;
 
@@ -91,7 +93,38 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   @override
   void dispose() {
     _isDisposed = true;
+    for (final notifier in _tileRevisions.values) {
+      notifier.dispose();
+    }
+    _tileRevisions.clear();
     super.dispose();
+  }
+
+  String _tileId(Map<String, dynamic> item) =>
+      item['uniqueNumber'] as String;
+
+  ValueNotifier<int> _tileRevisionFor(Map<String, dynamic> item) {
+    return _tileRevisions.putIfAbsent(
+      _tileId(item),
+      () => ValueNotifier<int>(0),
+    );
+  }
+
+  void _notifyTile(int index) {
+    if (index < 0 || index >= _images.length) return;
+    final notifier = _tileRevisionFor(_images[index]);
+    notifier.value++;
+  }
+
+  void _resetTileRevisions() {
+    if (_tileRevisions.isEmpty) return;
+    final staleNotifiers = _tileRevisions.values.toList(growable: false);
+    _tileRevisions.clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final notifier in staleNotifiers) {
+        notifier.dispose();
+      }
+    });
   }
 
 
@@ -105,6 +138,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   Future<void> refresh() async {
     if (_isDisposed) return;
     _fetchGeneration++;
+    _resetTileRevisions();
     setState(() {
       _images.clear();
       _hasMore = true;
@@ -170,20 +204,33 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
     while (_submissionQueue.isNotEmpty && _activeFetches < _maxConcurrentFetches) {
       final index = _submissionQueue.removeFirst();
+      if (index < 0 || index >= _images.length) {
+        continue;
+      }
       _activeFetches++;
+      final uniqueNumber = _tileId(_images[index]);
       final postUrl = _images[index]['postUrl'] as String;
       final fetchGeneration = _fetchGeneration;
       _profileGalleryRepository.fetchSubmissionData(postUrl).then((data) {
-        if (_isDisposed || fetchGeneration != _fetchGeneration) return;
-        setState(() {
-          _images[index]['hqUrl'] = data.hqUrl;
-          _images[index]['isFav'] = data.isFav;
-          _images[index]['favUrl'] = data.favUrl;
-          _images[index]['unfavUrl'] = data.unfavUrl;
-          if (_images[index]['initialIsFav'] == null) {
-            _images[index]['initialIsFav'] = data.isFav;
-          }
-        });
+        if (_isDisposed ||
+            fetchGeneration != _fetchGeneration) {
+          return;
+        }
+        final currentIndex = _images.indexWhere(
+          (item) => _tileId(item) == uniqueNumber,
+        );
+        if (currentIndex < 0) {
+          return;
+        }
+        final item = _images[currentIndex];
+        item['hqUrl'] = data.hqUrl;
+        item['isFav'] = data.isFav;
+        item['favUrl'] = data.favUrl;
+        item['unfavUrl'] = data.unfavUrl;
+        if (item['initialIsFav'] == null) {
+          item['initialIsFav'] = data.isFav;
+        }
+        _notifyTile(currentIndex);
       }).catchError((err) {
         debugPrint('Error fetching submission data: $err');
       }).whenComplete(() {
@@ -198,6 +245,11 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   // Fav toggle logic
 
   void _handleToggleFavorite(int index, bool isFav) async {
+    if (_isDisposed || index < 0 || index >= _images.length) {
+      return;
+    }
+    final fetchGeneration = _fetchGeneration;
+    final uniqueNumber = _tileId(_images[index]);
     if (!await _favoriteRepository.hasAuthCookies()) {
       debugPrint('[DEBUG] Missing cookies for fav/unfav POST request.');
       if (!mounted) return;
@@ -207,13 +259,23 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
       return;
     }
 
-    setState(() {
-      _images[index]['isFav'] = isFav;
-    });
+    if (_isDisposed ||
+        !mounted ||
+        fetchGeneration != _fetchGeneration) {
+      return;
+    }
+    final currentIndex = _images.indexWhere(
+      (item) => _tileId(item) == uniqueNumber,
+    );
+    if (currentIndex < 0) {
+      return;
+    }
+    final item = _images[currentIndex];
+    item['isFav'] = isFav;
+    _notifyTile(currentIndex);
 
-    final uniqueNumber = _images[index]['uniqueNumber'] as String;
-    final favUrl = _images[index]['favUrl'] as String? ?? '';
-    final unfavUrl = _images[index]['unfavUrl'] as String? ?? '';
+    final favUrl = item['favUrl'] as String? ?? '';
+    final unfavUrl = item['unfavUrl'] as String? ?? '';
 
     _favoriteRepository.toggleFavorite(
       uniqueNumber: uniqueNumber,
@@ -238,14 +300,13 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
       final data =
           await _profileGalleryRepository.fetchSubmissionData(postUrl);
       if (_isDisposed || fetchGeneration != _fetchGeneration) return;
-      setState(() {
-        _images[idx]['isFav'] = data.isFav;
-        _images[idx]['favUrl'] = data.favUrl;
-        _images[idx]['unfavUrl'] = data.unfavUrl;
-        if (_images[idx]['initialIsFav'] == null) {
-          _images[idx]['initialIsFav'] = data.isFav;
-        }
-      });
+      _images[idx]['isFav'] = data.isFav;
+      _images[idx]['favUrl'] = data.favUrl;
+      _images[idx]['unfavUrl'] = data.unfavUrl;
+      if (_images[idx]['initialIsFav'] == null) {
+        _images[idx]['initialIsFav'] = data.isFav;
+      }
+      _notifyTile(idx);
     } catch (e) {
       debugPrint('Error refreshing links after post => $e');
     }
@@ -310,41 +371,47 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
             Future.microtask(() => _fetchPage());
           }
           final item = _images[index];
-          final aspect = (item['width'] as double) / (item['height'] as double);
-          final hqUrl = item['hqUrl'] as String?;
-          final thumbUrl = item['thumbnailUrl'] as String;
-          final isFav = item['isFav'] as bool? ?? false;
-          final initialIsFav = item['initialIsFav'] as bool? ?? false;
-
-          return VisibilityDetector(
-            key: Key('visible-${item['uniqueNumber']}'),
-            onVisibilityChanged: (info) {
-              _onTileVisibilityChanged(index, info.visibleFraction > 0.2);
+          return ValueListenableBuilder<int>(
+            valueListenable: _tileRevisionFor(item),
+            builder: (context, revision, child) {
+              final aspect =
+                  (item['width'] as double) / (item['height'] as double);
+              final hqUrl = item['hqUrl'] as String?;
+              final thumbUrl = item['thumbnailUrl'] as String;
+              final isFav = item['isFav'] as bool? ?? false;
+              final initialIsFav = item['initialIsFav'] as bool? ?? false;
+              return VisibilityDetector(
+                key: Key('visible-${item['uniqueNumber']}'),
+                onVisibilityChanged: (info) {
+                  _onTileVisibilityChanged(index, info.visibleFraction > 0.2);
+                },
+                child: _FavImageTile(
+                  key: ValueKey(item['uniqueNumber']),
+                  width: item['width'] as double,
+                  height: item['height'] as double,
+                  aspectRatio: aspect,
+                  thumbnailUrl: thumbUrl,
+                  hqUrl: hqUrl,
+                  isFavorite: isFav,
+                  wasInitiallyFavorited: initialIsFav,
+                  rating: item['rating'] as String?,
+                  title: item['title'] as String?,
+                  author: null,
+                  onToggle: (val) => _handleToggleFavorite(index, val),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      OpenPost.route(
+                        imageUrl: hqUrl != null && hqUrl.isNotEmpty
+                            ? hqUrl
+                            : thumbUrl,
+                        uniqueNumber: item['uniqueNumber'] as String,
+                      ),
+                    );
+                  },
+                ),
+              );
             },
-            child: _FavImageTile(
-              key: ValueKey(item['uniqueNumber']),
-              width: item['width'] as double,
-              height: item['height'] as double,
-              aspectRatio: aspect,
-              thumbnailUrl: thumbUrl,
-              hqUrl: hqUrl,
-              isFavorite: isFav,
-              wasInitiallyFavorited: initialIsFav,
-              rating: item['rating'] as String?,
-              title: item['title'] as String?,
-              author: null,
-              onToggle: (val) => _handleToggleFavorite(index, val),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  OpenPost.route(
-                    imageUrl:
-                        hqUrl != null && hqUrl.isNotEmpty ? hqUrl : thumbUrl,
-                    uniqueNumber: item['uniqueNumber'] as String,
-                  ),
-                );
-              },
-            ),
           );
         },
       ),

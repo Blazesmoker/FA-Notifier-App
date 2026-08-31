@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
@@ -8,9 +9,11 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:fanotifier/features/profile/domain/shout.dart';
 import 'package:fanotifier/shared/fa/domain/user_link.dart';
 import 'package:fanotifier/features/profile/presentation/user_description_webview.dart';
+import 'package:fanotifier/features/profile/presentation/cached_profile_html.dart';
 import 'package:fanotifier/features/profile/presentation/user_grid_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_components.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_shouts_section.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_shout_selection_controller.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_styles.dart';
 
 class UserProfileHomeSection extends StatelessWidget {
@@ -42,8 +45,8 @@ class UserProfileHomeSection extends StatelessWidget {
     required this.recentlyWatchedCount,
     required this.shouts,
     required this.isOwnProfile,
-    required this.isShoutSelectionMode,
-    required this.selectedShoutCount,
+    required this.selectionController,
+    required this.shoutsRevision,
     required this.currentShoutPage,
     required this.totalShoutPages,
     required this.isLoadingMoreShouts,
@@ -86,11 +89,11 @@ class UserProfileHomeSection extends StatelessWidget {
 
   final List<Shout> shouts;
   final bool isOwnProfile;
-  final bool isShoutSelectionMode;
-  final int selectedShoutCount;
-  final int currentShoutPage;
-  final int totalShoutPages;
-  final bool isLoadingMoreShouts;
+  final UserProfileShoutSelectionController selectionController;
+  final ValueListenable<int> shoutsRevision;
+  final ValueGetter<int> currentShoutPage;
+  final ValueGetter<int> totalShoutPages;
+  final ValueListenable<bool> isLoadingMoreShouts;
   final Future<void> Function(BuildContext context) onOpenPostShout;
   final Future<void> Function() onLoadMoreShouts;
   final Future<void> Function(int index, Shout shout) onConfirmDeleteShout;
@@ -108,127 +111,154 @@ class UserProfileHomeSection extends StatelessWidget {
         ),
         SliverPadding(
           padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 8.0),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
+          sliver: SliverMainAxisGroup(
+            slivers: [
               if (hasRealUserProfile &&
                   userDescription != null &&
                   userDescription!.trim().isNotEmpty)
-                GestureDetector(
-                  onLongPressStart: onDescriptionLongPressStart,
-                  child: enableScrollPerformancePause
-                      ? VisibilityDetector(
-                          key: ObjectKey(webViewKey),
-                          onVisibilityChanged: (info) {
-                            final state = webViewKey.currentState;
-                            if (state == null) {
-                              return;
-                            }
-                            if (info.visibleFraction > 0.15) {
-                              state.resumeWebView(
-                                reason: UserDescriptionWebViewPauseReason
-                                    .visibility,
-                              );
-                            } else {
-                              state.pauseWebView(
-                                reason: UserDescriptionWebViewPauseReason
-                                    .visibility,
-                              );
-                            }
-                          },
-                          child: UserDescriptionWebView(
+                SliverToBoxAdapter(
+                  child: GestureDetector(
+                    onLongPressStart: onDescriptionLongPressStart,
+                    child: enableScrollPerformancePause
+                        ? VisibilityDetector(
+                            key: ObjectKey(webViewKey),
+                            onVisibilityChanged: (info) {
+                              final state = webViewKey.currentState;
+                              if (state == null) {
+                                return;
+                              }
+                              if (info.visibleFraction > 0.15) {
+                                state.resumeWebView(
+                                  reason: UserDescriptionWebViewPauseReason
+                                      .visibility,
+                                );
+                              } else {
+                                state.pauseWebView(
+                                  reason: UserDescriptionWebViewPauseReason
+                                      .visibility,
+                                );
+                              }
+                            },
+                            child: UserDescriptionWebView(
+                              key: webViewKey,
+                              sanitizedUsername: sanitizedUsername,
+                              initialHtml: userDescription,
+                              forceHybridComposition: false,
+                              enableTextSelection: false,
+                              enableScrollPerformancePause:
+                                  enableScrollPerformancePause,
+                              disableIosScrolling: true,
+                              onWebViewLoaded: onWebViewLoaded,
+                            ),
+                          )
+                        : UserDescriptionWebView(
                             key: webViewKey,
                             sanitizedUsername: sanitizedUsername,
                             initialHtml: userDescription,
                             forceHybridComposition: false,
                             enableTextSelection: false,
-                            enableScrollPerformancePause:
-                                enableScrollPerformancePause,
+                            enableScrollPerformancePause: false,
                             disableIosScrolling: true,
                             onWebViewLoaded: onWebViewLoaded,
                           ),
-                        )
-                      : UserDescriptionWebView(
-                          key: webViewKey,
-                          sanitizedUsername: sanitizedUsername,
-                          initialHtml: userDescription,
-                          forceHybridComposition: false,
-                          enableTextSelection: false,
-                          enableScrollPerformancePause: false,
-                          disableIosScrolling: true,
-                          onWebViewLoaded: onWebViewLoaded,
-                        ),
+                  ),
                 ),
-              const SizedBox(height: 16.0),
+              const SliverToBoxAdapter(child: SizedBox(height: 16.0)),
               if (featuredImageUrl != null &&
                   featuredImageUrl!.isNotEmpty &&
                   featuredImageTitle != null &&
                   featuredImageTitle!.isNotEmpty &&
                   featuredPostNumber != null &&
-                  featuredPostNumber!.isNotEmpty) ...[
-                FeaturedSubmissionSection(
-                  imageUrl: featuredImageUrl!,
-                  title: featuredImageTitle!,
-                  onTap: () {
-                    onOpenPost(context, featuredImageUrl!, featuredPostNumber!);
-                  },
+                  featuredPostNumber!.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: FeaturedSubmissionSection(
+                    imageUrl: featuredImageUrl!,
+                    title: featuredImageTitle!,
+                    onTap: () {
+                      onOpenPost(
+                        context,
+                        featuredImageUrl!,
+                        featuredPostNumber!,
+                      );
+                    },
+                  ),
                 ),
-                const SizedBox(height: 8.0),
-              ],
+              if (featuredImageUrl != null &&
+                  featuredImageUrl!.isNotEmpty &&
+                  featuredImageTitle != null &&
+                  featuredImageTitle!.isNotEmpty &&
+                  featuredPostNumber != null &&
+                  featuredPostNumber!.isNotEmpty)
+                const SliverToBoxAdapter(child: SizedBox(height: 8.0)),
               if (hasRealUserProfile &&
                   userProfileTexts != null &&
                   userProfileTexts!.isNotEmpty &&
                   userProfileTexts != 'No additional profile information.')
-                UserProfileAdditionalInfoSection(
-                  userProfileImageUrl: userProfileImageUrl,
-                  userProfilePostNumber: userProfilePostNumber,
-                  userProfileTexts: userProfileTexts!,
-                  isClassicMarkup: isClassicMarkup,
-                  acceptingTrades: acceptingTrades,
-                  acceptingCommissions: acceptingCommissions,
-                  onOpenPost: onOpenPost,
-                  onHandleFALink: onHandleFALink,
+                SliverToBoxAdapter(
+                  child: UserProfileAdditionalInfoSection(
+                    userProfileImageUrl: userProfileImageUrl,
+                    userProfilePostNumber: userProfilePostNumber,
+                    userProfileTexts: userProfileTexts!,
+                    isClassicMarkup: isClassicMarkup,
+                    acceptingTrades: acceptingTrades,
+                    acceptingCommissions: acceptingCommissions,
+                    onOpenPost: onOpenPost,
+                    onHandleFALink: onHandleFALink,
+                  ),
                 ),
-              const SizedBox(height: 8.0),
+              const SliverToBoxAdapter(child: SizedBox(height: 8.0)),
               if (contactInformationLinks.isNotEmpty)
-                ContactInformationSection(
-                  contacts: contactInformationLinks,
-                  onLinkTap: onLaunchUrl,
+                SliverToBoxAdapter(
+                  child: ContactInformationSection(
+                    contacts: contactInformationLinks,
+                    onLinkTap: onLaunchUrl,
+                  ),
                 ),
-              const SizedBox(height: 8.0),
+              const SliverToBoxAdapter(child: SizedBox(height: 8.0)),
               if (recentWatchers.isNotEmpty || recentWatchersCount > 0)
-                UserGridSection(
-                  title: 'Recent Watchers',
-                  viewListText: 'Watched by $recentWatchersCount',
-                  totalUsersCount: recentWatchersCount,
-                  users: recentWatchers,
-                  sanitizedUsername: sanitizedUsername,
+                SliverToBoxAdapter(
+                  child: UserGridSection(
+                    title: 'Recent Watchers',
+                    viewListText: 'Watched by $recentWatchersCount',
+                    totalUsersCount: recentWatchersCount,
+                    users: recentWatchers,
+                    sanitizedUsername: sanitizedUsername,
+                  ),
                 ),
-              const SizedBox(height: 8.0),
+              const SliverToBoxAdapter(child: SizedBox(height: 8.0)),
               if (recentlyWatched.isNotEmpty || recentlyWatchedCount > 0)
-                UserGridSection(
-                  title: 'Recently Watched',
-                  viewListText: 'Watching $recentlyWatchedCount',
-                  totalUsersCount: recentlyWatchedCount,
-                  users: recentlyWatched,
-                  sanitizedUsername: sanitizedUsername,
+                SliverToBoxAdapter(
+                  child: UserGridSection(
+                    title: 'Recently Watched',
+                    viewListText: 'Watching $recentlyWatchedCount',
+                    totalUsersCount: recentlyWatchedCount,
+                    users: recentlyWatched,
+                    sanitizedUsername: sanitizedUsername,
+                  ),
                 ),
-              const SizedBox(height: 8.0),
-              UserProfileShoutsSection(
-                shouts: shouts,
-                isOwnProfile: isOwnProfile,
-                isSelectionMode: isShoutSelectionMode,
-                selectedShoutCount: selectedShoutCount,
-                currentShoutPage: currentShoutPage,
-                totalShoutPages: totalShoutPages,
-                isLoadingMoreShouts: isLoadingMoreShouts,
-                onOpenPostShout: onOpenPostShout,
-                onLoadMoreShouts: onLoadMoreShouts,
-                onConfirmDeleteShout: onConfirmDeleteShout,
-                onToggleSelectionMode: onToggleShoutSelectionMode,
-                onToggleShoutSelection: onToggleShoutSelection,
+              const SliverToBoxAdapter(child: SizedBox(height: 8.0)),
+              SliverToBoxAdapter(
+                child: ValueListenableBuilder<int>(
+                  valueListenable: shoutsRevision,
+                  builder: (context, revision, child) {
+                    return UserProfileShoutsSection(
+                      shouts: shouts,
+                      isOwnProfile: isOwnProfile,
+                      selectionController: selectionController,
+                      currentShoutPage: currentShoutPage(),
+                      totalShoutPages: totalShoutPages(),
+                      isLoadingMoreShouts: isLoadingMoreShouts,
+                      onOpenPostShout: onOpenPostShout,
+                      onLoadMoreShouts: onLoadMoreShouts,
+                      onConfirmDeleteShout: onConfirmDeleteShout,
+                      onToggleSelectionMode: onToggleShoutSelectionMode,
+                      onToggleShoutSelection: onToggleShoutSelection,
+                    );
+                  },
+                ),
               ),
-              const SizedBox(height: 8.0),
-            ]),
+              const SliverToBoxAdapter(child: SizedBox(height: 8.0)),
+            ],
           ),
         ),
       ],
@@ -331,11 +361,14 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 8.0),
-            html_pkg.Html(
-              data: userProfileTexts,
-              style: userProfileHtmlStylesCompact(),
-              extensions: buildUserProfileBBCodeExtensions(),
-              onLinkTap: (url, _, _) => onHandleFALink(context, url!),
+            CachedProfileHtml(
+              cacheKey: userProfileTexts,
+              child: html_pkg.Html(
+                data: userProfileTexts,
+                style: userProfileHtmlStylesCompact(),
+                extensions: buildUserProfileBBCodeExtensions(),
+                onLinkTap: (url, _, _) => onHandleFALink(context, url!),
+              ),
             ),
           ],
         ),
