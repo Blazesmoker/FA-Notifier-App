@@ -119,7 +119,10 @@ class SubmissionsService {
     return resp.statusCode == 302;
   }
 
-  Future<SubmissionData> fetchSubmissionData(String postUrl) async {
+  Future<SubmissionData> fetchSubmissionData(
+    String postUrl, {
+    bool Function()? isCancelled,
+  }) async {
     final absoluteUrl = postUrl.startsWith('http')
         ? postUrl
         : 'https://www.furaffinity.net$postUrl';
@@ -128,6 +131,7 @@ class SubmissionsService {
     final cookieHeader = await buildAuthCookieHeader();
     final resp = await FAHttp.get(
       Uri.parse(absoluteUrl),
+      isCancelled: isCancelled,
       headers: {
         HttpHeaders.cookieHeader: cookieHeader,
         'User-Agent': FAHttp.userAgent,

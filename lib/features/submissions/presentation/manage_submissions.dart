@@ -23,10 +23,10 @@ const Color _fallbackFolderColor = Color(0xFF455A64);
 const Color _selectedSubmissionOverlay = Color(0x3AE09321);
 const Color _submissionCheckboxBackground = Color(0x66000000);
 const double _managementMenuVerticalPadding = 16;
-const double _managementActionsFadeCeilingAboveButtons = 24.0;
+const double _managementActionsFadeCeilingAboveButtons = 50.0;
 const double _managementActionsFadeTransitionStart = 0.0;
 const double _managementActionsFadeBlackStop = 1.0;
-const double _managementActionsFadePosition = 0.35;
+const double _managementActionsFadePosition = 0.20;
 const double _managementActionsFadeSmoothness = 1.0;
 const int _managementActionsFadeSteps = 64;
 const double _managementActionsScrollClearance = 160.0;
@@ -746,7 +746,7 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
             alpha: _submissionPreviewBarrierOpacity,
           ),
           transitionDuration: _submissionPreviewAnimationDuration,
-          reverseTransitionDuration: Duration.zero,
+          reverseTransitionDuration: const Duration(milliseconds: 90),
           pageBuilder: (routeContext, animation, _) => _SubmissionImagePreview(
             submission: submission,
             imageProvider: previewImageProvider,
@@ -819,6 +819,8 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
               Text(
                 'Warning icon ⚠️ next to submission titles means that submission is missing tags.',
               ),
+              SizedBox(height: 12),
+              Text('Press and hold an image to preview it.'),
             ],
           ),
         ),
@@ -1495,6 +1497,12 @@ class _PaginationControls extends StatelessWidget {
             style: OutlinedButton.styleFrom(
               backgroundColor: _managementCard,
               disabledBackgroundColor: _managementCard,
+            ).copyWith(
+              side: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.disabled)
+                    ? null
+                    : const BorderSide(color: _managementAccent),
+              ),
             ),
             icon: const Icon(Icons.chevron_left_rounded),
             label: const SubmissionManagementShrinkableText('Newer'),
@@ -1517,6 +1525,12 @@ class _PaginationControls extends StatelessWidget {
             style: OutlinedButton.styleFrom(
               backgroundColor: _managementCard,
               disabledBackgroundColor: _managementCard,
+            ).copyWith(
+              side: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.disabled)
+                    ? null
+                    : const BorderSide(color: _managementAccent),
+              ),
             ),
             icon: const Icon(Icons.chevron_right_rounded),
             label: const SubmissionManagementShrinkableText('Older'),
@@ -1780,11 +1794,8 @@ class _SubmissionImagePreview extends StatelessWidget {
                       final progress = Curves.easeOutCubic.transform(
                         animation.value,
                       );
-                      final scale = animation.status == AnimationStatus.reverse
-                          ? 1.0
-                          : _submissionPreviewInitialScale +
-                              ((1.0 - _submissionPreviewInitialScale) *
-                                  progress);
+                      final scale = _submissionPreviewInitialScale +
+                          ((1.0 - _submissionPreviewInitialScale) * progress);
                       return Transform.scale(scale: scale, child: child);
                     },
                   ),

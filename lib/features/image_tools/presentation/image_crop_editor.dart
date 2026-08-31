@@ -40,6 +40,7 @@ class _ImageCropEditorState extends State<ImageCropEditor> {
   double _gestureStartZoom = 1;
   int _pointerCount = 0;
   bool _scaleActive = false;
+  bool _showInteractionHint = true;
 
   @override
   void initState() {
@@ -56,7 +57,12 @@ class _ImageCropEditorState extends State<ImageCropEditor> {
   }
 
   void _handlePointerDown(PointerDownEvent event) {
-    if (_pointerCount == 0) widget.onInteractionChanged(true);
+    if (_pointerCount == 0) {
+      if (_showInteractionHint) {
+        setState(() => _showInteractionHint = false);
+      }
+      widget.onInteractionChanged(true);
+    }
     _pointerCount++;
   }
 
@@ -232,35 +238,36 @@ class _ImageCropEditorState extends State<ImageCropEditor> {
                           CustomPaint(
                             painter: _CropFramePainter(frame),
                           ),
-                          const Positioned(
-                            left: 12,
-                            right: 12,
-                            bottom: 12,
-                            child: Center(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: Color(0xCC202020),
-                                  borderRadius: BorderRadius.all(
-                                    Radius.circular(20),
+                          if (_showInteractionHint)
+                            const Positioned(
+                              left: 12,
+                              right: 12,
+                              bottom: 12,
+                              child: Center(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: Color(0xCC202020),
+                                    borderRadius: BorderRadius.all(
+                                      Radius.circular(20),
+                                    ),
                                   ),
-                                ),
-                                child: Padding(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 7,
-                                  ),
-                                  child: Text(
-                                    'Drag to position · Pinch to zoom',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 7,
+                                    ),
+                                    child: Text(
+                                      'Drag to position · Pinch to zoom',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
                         ],
                       ),
                     ),

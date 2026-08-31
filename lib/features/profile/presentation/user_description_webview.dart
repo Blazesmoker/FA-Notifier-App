@@ -12,7 +12,7 @@ import 'package:fanotifier/shared/fa/fa_webview_document_scripts.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 
-enum UserDescriptionWebViewPauseReason { route, visibility, scrolling }
+enum UserDescriptionWebViewPauseReason { route, tab, visibility, scrolling }
 
 class UserDescriptionWebView extends StatefulWidget {
   final String sanitizedUsername;
@@ -23,6 +23,7 @@ class UserDescriptionWebView extends StatefulWidget {
   final bool enableScrollPerformancePause;
   final bool disableIosScrolling;
   final bool fillAvailableHeight;
+  final bool gifPlaybackEnabled;
   final ValueChanged<bool>? onWebViewLoaded;
 
   const UserDescriptionWebView({
@@ -34,6 +35,7 @@ class UserDescriptionWebView extends StatefulWidget {
     this.enableScrollPerformancePause = true,
     this.disableIosScrolling = false,
     this.fillAvailableHeight = false,
+    this.gifPlaybackEnabled = true,
     this.forceHybridComposition = false,
     this.onWebViewLoaded,
   });
@@ -49,6 +51,9 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   InAppWebViewController? _controller;
   final Set<UserDescriptionWebViewPauseReason> _pauseReasons =
       <UserDescriptionWebViewPauseReason>{};
+  final Set<UserDescriptionWebViewPauseReason> _gifPauseReasons =
+      <UserDescriptionWebViewPauseReason>{};
+  Future<void> _gifPlaybackUpdate = Future<void>.value();
   static const Duration _scrollWebViewResumeDelay =
       Duration(milliseconds: 50);
   Timer? _scrollWebViewResumeTimer;
@@ -64,6 +69,9 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   void initState() {
     super.initState();
     _userDescriptionRepository = context.read<UserDescriptionRepository>();
+    if (!widget.gifPlaybackEnabled) {
+      _gifPauseReasons.add(UserDescriptionWebViewPauseReason.tab);
+    }
     if (widget.initialHtml != null) {
       _userDescriptionFuture = _processInitialHtml(widget.initialHtml!);
     } else {
@@ -82,6 +90,66 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   @override
   bool get wantKeepAlive => true;
 
+  @override
+  void didUpdateWidget(covariant UserDescriptionWebView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.gifPlaybackEnabled != widget.gifPlaybackEnabled) {
+      if (widget.gifPlaybackEnabled) {
+        unawaited(
+          resumeGifPlayback(reason: UserDescriptionWebViewPauseReason.tab),
+        );
+      } else {
+        unawaited(
+          pauseGifPlayback(reason: UserDescriptionWebViewPauseReason.tab),
+        );
+      }
+    }
+  }
+
+  Future<void> pauseGifPlayback({
+    UserDescriptionWebViewPauseReason reason =
+        UserDescriptionWebViewPauseReason.visibility,
+  }) {
+    if (!_gifPauseReasons.add(reason)) {
+      return Future<void>.value();
+    }
+    return _queueGifPlaybackUpdate();
+  }
+
+  Future<void> resumeGifPlayback({
+    UserDescriptionWebViewPauseReason reason =
+        UserDescriptionWebViewPauseReason.visibility,
+  }) {
+    if (!_gifPauseReasons.remove(reason)) {
+      return Future<void>.value();
+    }
+    return _queueGifPlaybackUpdate();
+  }
+
+  Future<void> _queueGifPlaybackUpdate() {
+    _gifPlaybackUpdate = _gifPlaybackUpdate.then((_) async {
+      final controller = _controller;
+      if (controller == null) {
+        return;
+      }
+      final enabled = _gifPauseReasons.isEmpty;
+      if (Platform.isAndroid) {
+        if (enabled) {
+          await controller.resume();
+        } else {
+          await controller.pause();
+        }
+      } else {
+        await controller.evaluateJavascript(
+          source: 'window.__faProfileSetGifPlayback?.call(null, $enabled);',
+        );
+      }
+    }).catchError((Object error, StackTrace stackTrace) {
+      debugPrint('Failed to update profile GIF playback: $error');
+    });
+    return _gifPlaybackUpdate;
+  }
+
   Future<void> pauseWebView({
     UserDescriptionWebViewPauseReason reason =
         UserDescriptionWebViewPauseReason.route,
@@ -89,6 +157,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     if (!_pauseReasons.add(reason)) {
       return;
     }
+    await pauseGifPlayback(reason: reason);
     if (_pauseReasons.contains(UserDescriptionWebViewPauseReason.route)) {
       if (!mounted) {
         _mountWebView = false;
@@ -103,17 +172,6 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
       _controller = null;
       return;
     }
-    final controller = _controller;
-    if (controller == null) {
-      return;
-    }
-    try {
-      if (Platform.isAndroid) {
-        await controller.pause();
-      }
-    } catch (e) {
-      debugPrint('Failed to pause profile WebView: $e');
-    }
   }
 
   Future<void> resumeWebView({
@@ -123,6 +181,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     if (!_pauseReasons.remove(reason)) {
       return;
     }
+    await resumeGifPlayback(reason: reason);
     final shouldMount =
         !_pauseReasons.contains(UserDescriptionWebViewPauseReason.route);
     if (!shouldMount) {
@@ -141,17 +200,6 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
     if (_pauseReasons.contains(UserDescriptionWebViewPauseReason.visibility) ||
         _pauseReasons.contains(UserDescriptionWebViewPauseReason.scrolling)) {
       return;
-    }
-    final controller = _controller;
-    if (controller == null) {
-      return;
-    }
-    try {
-      if (Platform.isAndroid) {
-        await controller.resume();
-      }
-    } catch (e) {
-      debugPrint('Failed to resume profile WebView: $e');
     }
   }
 
@@ -328,7 +376,9 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
                     ),
                     onWebViewCreated: (controller) {
                       _controller = controller;
-                      if (Platform.isAndroid && _pauseReasons.isNotEmpty) {
+                      if (Platform.isAndroid &&
+                          (_pauseReasons.isNotEmpty ||
+                              _gifPauseReasons.isNotEmpty)) {
                         controller.pause();
                       }
                     },
@@ -341,6 +391,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
                       return true;
                     },
                     onLoadStop: (controller, url) async {
+                      await _queueGifPlaybackUpdate();
                       String heightString =
                           await controller.evaluateJavascript(
                         source: faDocumentBodyScrollHeightScript,

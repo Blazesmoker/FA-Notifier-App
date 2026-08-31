@@ -14,10 +14,12 @@ class SubmissionData {
 
 class SubmissionQueueItem {
   final int indexInFlatList;
+  final String uniqueNumber;
   final String postUrl;
 
   SubmissionQueueItem({
     required this.indexInFlatList,
+    required this.uniqueNumber,
     required this.postUrl,
   });
 }

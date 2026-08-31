@@ -82,6 +82,9 @@ class ProfileGalleryService implements ProfileGalleryRepository {
       post['favUrl'] = '';
       post['unfavUrl'] = '';
       post['detailFetchQueued'] = false;
+      post['detailFetchInProgress'] = false;
+      post['detailFetched'] = false;
+      post['detailFetchVisibilityGeneration'] = 0;
     }
 
     return ProfileGalleryPageData(
@@ -92,13 +95,17 @@ class ProfileGalleryService implements ProfileGalleryRepository {
   }
 
   @override
-  Future<ProfileSubmissionData> fetchSubmissionData(String postUrl) async {
+  Future<ProfileSubmissionData> fetchSubmissionData(
+    String postUrl, {
+    bool Function()? isCancelled,
+  }) async {
     final absolute =
         Uri.parse('https://www.furaffinity.net').resolve(postUrl).toString();
 
     final cookieHeader = await _buildCookieHeader();
     final resp = await FAHttp.get(
       Uri.parse(absolute),
+      isCancelled: isCancelled,
       headers: {
         'Cookie': cookieHeader,
         'User-Agent': FAHttp.userAgent,

@@ -71,6 +71,7 @@ Map<String, dynamic>? _extractListingData(html_dom.Element fig) {
     'favUrl': '',
     'unfavUrl': '',
     'detailFetchQueued': false,
+    'detailFetchVisibilityGeneration': 0,
   };
 }
 

@@ -45,6 +45,7 @@ import 'package:fanotifier/features/profile/presentation/user_profile_home_secti
 import 'package:fanotifier/features/profile/presentation/user_profile_journals_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_scraps_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_shout_selection_controller.dart';
+import 'package:fanotifier/features/profile/presentation/profile_animated_media_visibility.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
 import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
@@ -61,12 +62,16 @@ class _ProfileTabScrollScope extends StatefulWidget {
     required this.tabIndex,
     required this.recoveryKey,
     required this.child,
+    this.onActiveChanged,
+    this.onMediaVisibilityChanged,
   });
 
   final TabController tabController;
   final int tabIndex;
   final int recoveryKey;
   final Widget child;
+  final ValueChanged<bool>? onActiveChanged;
+  final ValueChanged<bool>? onMediaVisibilityChanged;
 
   @override
   State<_ProfileTabScrollScope> createState() =>
@@ -77,6 +82,7 @@ class _ProfileTabScrollScopeState extends State<_ProfileTabScrollScope>
     with AutomaticKeepAliveClientMixin<_ProfileTabScrollScope> {
   late final ScrollController _inactiveScrollController;
   late bool _isActive;
+  late bool _isMediaVisible;
 
   @override
   bool get wantKeepAlive => true;
@@ -86,7 +92,15 @@ class _ProfileTabScrollScopeState extends State<_ProfileTabScrollScope>
     super.initState();
     _inactiveScrollController = ScrollController();
     _isActive = widget.tabController.index == widget.tabIndex;
+    _isMediaVisible = _calculateMediaVisibility();
     widget.tabController.addListener(_handleTabChanged);
+    widget.tabController.animation?.addListener(_handleTabChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.onActiveChanged?.call(_isActive);
+        widget.onMediaVisibilityChanged?.call(_isMediaVisible);
+      }
+    });
   }
 
   @override
@@ -94,22 +108,47 @@ class _ProfileTabScrollScopeState extends State<_ProfileTabScrollScope>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tabController != widget.tabController) {
       oldWidget.tabController.removeListener(_handleTabChanged);
+      oldWidget.tabController.animation?.removeListener(_handleTabChanged);
       widget.tabController.addListener(_handleTabChanged);
+      widget.tabController.animation?.addListener(_handleTabChanged);
     }
     _handleTabChanged();
   }
 
+  bool _calculateMediaVisibility() {
+    final animationValue =
+        widget.tabController.animation?.value ?? widget.tabController.index;
+    final distance = (animationValue - widget.tabIndex).abs();
+    return distance < 1.0 ||
+        (widget.tabController.indexIsChanging &&
+            widget.tabController.index == widget.tabIndex);
+  }
+
   void _handleTabChanged() {
     final isActive = widget.tabController.index == widget.tabIndex;
-    if (!mounted || _isActive == isActive) return;
+    final isMediaVisible = _calculateMediaVisibility();
+    if (!mounted ||
+        (_isActive == isActive && _isMediaVisible == isMediaVisible)) {
+      return;
+    }
+    final activeChanged = _isActive != isActive;
+    final mediaVisibilityChanged = _isMediaVisible != isMediaVisible;
     setState(() {
       _isActive = isActive;
+      _isMediaVisible = isMediaVisible;
     });
+    if (activeChanged) {
+      widget.onActiveChanged?.call(isActive);
+    }
+    if (mediaVisibilityChanged) {
+      widget.onMediaVisibilityChanged?.call(isMediaVisible);
+    }
   }
 
   @override
   void dispose() {
     widget.tabController.removeListener(_handleTabChanged);
+    widget.tabController.animation?.removeListener(_handleTabChanged);
     _inactiveScrollController.dispose();
     super.dispose();
   }
@@ -120,13 +159,16 @@ class _ProfileTabScrollScopeState extends State<_ProfileTabScrollScope>
     final nestedScrollController = PrimaryScrollController.of(context);
     final scrollController =
         _isActive ? nestedScrollController : _inactiveScrollController;
-    return PrimaryScrollController(
-      controller: scrollController,
-      child: KeyedSubtree(
-        key: ValueKey<(ScrollController, int)>(
-          (scrollController, widget.recoveryKey),
+    return TickerMode(
+      enabled: TickerMode.valuesOf(context).enabled && _isMediaVisible,
+      child: PrimaryScrollController(
+        controller: scrollController,
+        child: KeyedSubtree(
+          key: ValueKey<(ScrollController, int)>(
+            (scrollController, widget.recoveryKey),
+          ),
+          child: widget.child,
         ),
-        child: widget.child,
       ),
     );
   }
@@ -261,6 +303,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   void dispose() {
     _tabSettleTimer?.cancel();
     _scrollWebViewResumeTimer?.cancel();
+    _moveUpMediaProactiveTimer?.cancel();
     if (_webViewScrollOptimizationEnabled) {
       SchedulerBinding.instance.removeTimingsCallback(_handleFrameTimings);
     }
@@ -272,6 +315,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _backSwipeOffsetNotifier.dispose();
     _showMoveUpFab.dispose();
     _moveUpFabLift.dispose();
+    _moveUpMediaProactive.dispose();
+    _galleryDetailFetchesActive.dispose();
     _webViewLoaded.dispose();
     _isLoadingMoreShouts.dispose();
     _shoutsRevision.dispose();
@@ -298,6 +343,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
       GlobalKey<ProfileJournalsState>();
   GlobalKey<UserDescriptionWebViewState> _webViewKey =
       GlobalKey<UserDescriptionWebViewState>();
+  final GlobalKey<ProfileAnimatedMediaVisibilityState>
+      _descriptionMediaVisibilityKey =
+      GlobalKey<ProfileAnimatedMediaVisibilityState>();
+  final GlobalKey<ProfileAnimatedMediaVisibilityState>
+      _avatarMediaVisibilityKey =
+      GlobalKey<ProfileAnimatedMediaVisibilityState>();
   int _profileMediaRevision = 0;
 
   late final UserProfileRepository _profileRepository;
@@ -405,6 +456,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
   late final ValueNotifier<bool> _showMoveUpFab = ValueNotifier<bool>(false);
   late final ValueNotifier<double> _moveUpFabLift =
       ValueNotifier<double>(0.0);
+  final ValueNotifier<bool> _moveUpMediaProactive =
+      ValueNotifier<bool>(false);
   late final ValueNotifier<double> _backSwipeOffsetNotifier =
       ValueNotifier<double>(0.0);
   late final AnimationController _backSwipeAnimationController;
@@ -417,6 +470,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   static const Duration _scrollWebViewResumeDelay = Duration(milliseconds: 50);
   Timer? _tabSettleTimer;
   Timer? _scrollWebViewResumeTimer;
+  Timer? _moveUpMediaProactiveTimer;
   final Set<ProfileSection> _lazyLoadedSections = <ProfileSection>{};
   final Set<ProfileSection> _bulkSelectionActiveSections = <ProfileSection>{};
   final Map<ProfileSection, double> _bulkSelectionBarHeights =
@@ -432,6 +486,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
   final ValueNotifier<bool> _watchRequestInFlight =
       ValueNotifier<bool>(false);
   bool _isDraggingBackFromEdge = false;
+  bool _isHomeTabMediaVisible = true;
+  bool _isGalleryTabActive = false;
+  bool _isProfileRouteCurrent = true;
+  late final ValueNotifier<bool> _galleryDetailFetchesActive;
   bool _isProfileWebViewDetached = false;
   bool _suppressNextRouteDetach = false;
   bool _didTemporarilyRestorePreviousForSwipe = false;
@@ -480,6 +538,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
       vsync: this,
       initialIndex: widget.initialSection.index,
     );
+    _isHomeTabMediaVisible = widget.initialSection == ProfileSection.home;
+    _isGalleryTabActive = widget.initialSection == ProfileSection.gallery;
+    _galleryDetailFetchesActive = ValueNotifier<bool>(_isGalleryTabActive);
     appAnalytics.logScreen(
       UserProfileScreen._screenFor(
         ProfileSection.values[_tabController.index],
@@ -534,11 +595,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
     if (_suppressNextRouteDetach) {
       return;
     }
+    _isProfileRouteCurrent = false;
+    _updateGalleryDetailFetchActivity();
     _setRouteWebViewDetached(true);
   }
 
   @override
   void didPopNext() {
+    _isProfileRouteCurrent = true;
+    _updateGalleryDetailFetchActivity();
     _setRouteWebViewDetached(false);
   }
 
@@ -700,6 +765,58 @@ class UserProfileScreenState extends State<UserProfileScreen>
       return;
     }
     await _fetchUserProfile();
+  }
+
+  void _handleHomeTabMediaVisibility(bool visible) {
+    if (_isHomeTabMediaVisible == visible) {
+      return;
+    }
+    _isHomeTabMediaVisible = visible;
+    final state = _webViewKey.currentState;
+    if (state == null) {
+      return;
+    }
+    if (visible) {
+      unawaited(
+        state.resumeGifPlayback(
+          reason: UserDescriptionWebViewPauseReason.tab,
+        ),
+      );
+    } else {
+      unawaited(
+        state.pauseGifPlayback(
+          reason: UserDescriptionWebViewPauseReason.tab,
+        ),
+      );
+    }
+  }
+
+  void _handleGalleryTabActivity(bool active) {
+    if (_isGalleryTabActive == active) return;
+    _isGalleryTabActive = active;
+    _updateGalleryDetailFetchActivity();
+  }
+
+  void _updateGalleryDetailFetchActivity() {
+    _galleryDetailFetchesActive.value =
+        _isGalleryTabActive && _isProfileRouteCurrent;
+  }
+
+  void _resumeTopMediaForMoveUp() {
+    _moveUpMediaProactiveTimer?.cancel();
+    _moveUpMediaProactive.value = true;
+    _moveUpMediaProactiveTimer = Timer(
+      const Duration(milliseconds: 450),
+      () => _moveUpMediaProactive.value = false,
+    );
+    _avatarMediaVisibilityKey.currentState?.resumeProactively();
+    _descriptionMediaVisibilityKey.currentState?.resumeProactively();
+    unawaited(
+      _webViewKey.currentState?.resumeGifPlayback(
+            reason: UserDescriptionWebViewPauseReason.visibility,
+          ) ??
+          Future<void>.value(),
+    );
   }
 
   Future<bool> _attemptCloseProfileScreen({
@@ -1652,7 +1769,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
     }
   }
 
-  Widget buildAnimatedAvatar(double offset, Widget avatarChild) {
+  Widget buildAnimatedAvatar(
+    double offset,
+    Widget avatarChild, {
+    required bool animationEnabled,
+  }) {
     final double scaleProgress =
         (offset / _profileAvatarScrollDownEnd).clamp(0.0, 1.0).toDouble();
     final double scale = 1.0 - ((1.0 - _profileAvatarMinScale) * scaleProgress);
@@ -1665,11 +1786,14 @@ class UserProfileScreenState extends State<UserProfileScreen>
       key: const ValueKey<String>('profileAvatar'),
       bottom: -_profileAvatarSize / 1.5 - _profileAvatarBorderWidth,
       left: _profileAvatarLeft - _profileAvatarBorderWidth,
-      child: Transform.translate(
-        offset: Offset(0.0, translateY),
-        child: Transform.scale(
-          scale: scale,
-          child: avatarChild,
+      child: TickerMode(
+        enabled: TickerMode.valuesOf(context).enabled && animationEnabled,
+        child: Transform.translate(
+          offset: Offset(0.0, translateY),
+          child: Transform.scale(
+            scale: scale,
+            child: avatarChild,
+          ),
         ),
       ),
     );
@@ -1775,39 +1899,43 @@ class UserProfileScreenState extends State<UserProfileScreen>
                 },
               );
 
-    return RepaintBoundary(
-      child: GestureDetector(
-        onTap: () {},
-        child: SizedBox(
-          width: outerAvatarSize,
-          height: outerAvatarSize,
-          child: ValueListenableBuilder<bool>(
-            valueListenable: _profileAvatarBorderVisible,
-            child: Positioned(
-              left: _profileAvatarBorderWidth,
-              top: _profileAvatarBorderWidth,
-              child: avatarImage,
-            ),
-            builder: (context, showBorder, child) {
-              return Stack(
-                children: [
-                  child!,
-                  if (showBorder)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: const Color(0xFF111111),
-                              width: _profileAvatarBorderWidth,
+    return ProfileAnimatedMediaVisibility(
+      key: _avatarMediaVisibilityKey,
+      lookAhead: 90.0,
+      child: RepaintBoundary(
+        child: GestureDetector(
+          onTap: () {},
+          child: SizedBox(
+            width: outerAvatarSize,
+            height: outerAvatarSize,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _profileAvatarBorderVisible,
+              child: Positioned(
+                left: _profileAvatarBorderWidth,
+                top: _profileAvatarBorderWidth,
+                child: avatarImage,
+              ),
+              builder: (context, showBorder, child) {
+                return Stack(
+                  children: [
+                    child!,
+                    if (showBorder)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: const Color(0xFF111111),
+                                width: _profileAvatarBorderWidth,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                ],
-              );
-            },
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -2308,7 +2436,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                       );
 
                                       return AnimatedBuilder(
-                                        animation: _scrollController,
+                                        animation: Listenable.merge([
+                                          _scrollController,
+                                          _moveUpMediaProactive,
+                                        ]),
                                         child: buildAvatarImage(),
                                         builder: (context, child) {
                                           final double offset =
@@ -2319,6 +2450,9 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                               buildAnimatedAvatar(
                                             offset,
                                             child ?? const SizedBox.shrink(),
+                                            animationEnabled: offset <
+                                                    _profileAvatarBehindBannerStart ||
+                                                _moveUpMediaProactive.value,
                                           );
                                           final bool avatarBehindBanner =
                                               offset >=
@@ -2753,6 +2887,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                         onTabTapped:
                                             (index, isAlreadySelected) {
                                           if (isAlreadySelected) {
+                                            _resumeTopMediaForMoveUp();
                                             _scrollController.animateTo(
                                               0.0,
                                               duration: const Duration(
@@ -2774,6 +2909,14 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                     tabController: _tabController,
                                     tabIndex: section.index,
                                     recoveryKey: _iosScrollRecoveryKey,
+                                    onActiveChanged:
+                                        section == ProfileSection.gallery
+                                            ? _handleGalleryTabActivity
+                                            : null,
+                                    onMediaVisibilityChanged:
+                                        section == ProfileSection.home
+                                            ? _handleHomeTabMediaVisibility
+                                            : null,
                                     child: _buildLazySection(section),
                                   );
                                 }).toList(),
@@ -2853,6 +2996,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                             },
                             child: FloatingActionButton(
                               onPressed: () {
+                                _resumeTopMediaForMoveUp();
                                 _scrollController.animateTo(
                                   0.0,
                                   duration: const Duration(milliseconds: 300),
@@ -3028,10 +3172,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
       hasRealUserProfile: _profileController.hasRealUserProfile,
       userDescription: _profileController.userDescription,
       webViewKey: webViewKey,
+      descriptionMediaVisibilityKey: _descriptionMediaVisibilityKey,
       sanitizedUsername: _profileController.sanitizedUsername,
       onDescriptionLongPressStart: _handleDescriptionLongPress,
       enableScrollPerformancePause:
           _webViewScrollOptimizationEnabled && _enableScrollWebViewPause,
+      gifPlaybackEnabled: _isHomeTabMediaVisible,
       onWebViewLoaded: (loaded) {
         Future<void>.delayed(const Duration(milliseconds: 25), () {
           if (!mounted ||
@@ -3040,6 +3186,38 @@ class UserProfileScreenState extends State<UserProfileScreen>
             return;
           }
           _webViewLoaded.value = loaded;
+          final state = webViewKey.currentState;
+          if (state == null) {
+            return;
+          }
+          if (_isHomeTabMediaVisible) {
+            unawaited(
+              state.resumeGifPlayback(
+                reason: UserDescriptionWebViewPauseReason.tab,
+              ),
+            );
+          } else {
+            unawaited(
+              state.pauseGifPlayback(
+                reason: UserDescriptionWebViewPauseReason.tab,
+              ),
+            );
+          }
+          final descriptionIsActive =
+              _descriptionMediaVisibilityKey.currentState?.isActive ?? true;
+          if (descriptionIsActive) {
+            unawaited(
+              state.resumeGifPlayback(
+                reason: UserDescriptionWebViewPauseReason.visibility,
+              ),
+            );
+          } else {
+            unawaited(
+              state.pauseGifPlayback(
+                reason: UserDescriptionWebViewPauseReason.visibility,
+              ),
+            );
+          }
         });
       },
       featuredImageUrl: _profileController.featuredImageUrl,
@@ -3103,6 +3281,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       initialFolderName: widget.initialFolderName,
       initialFolderUrl: widget.initialFolderUrl,
       isOwnProfile: _profileController.isOwnProfile,
+      detailFetchesActive: _galleryDetailFetchesActive,
     );
   }
 

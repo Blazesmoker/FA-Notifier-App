@@ -46,7 +46,13 @@ class SubmissionsRepositoryImpl implements SubmissionsRepository {
   }
 
   @override
-  Future<SubmissionData> fetchSubmissionData(String postUrl) {
-    return _service.fetchSubmissionData(postUrl);
+  Future<SubmissionData> fetchSubmissionData(
+    String postUrl, {
+    bool Function()? isCancelled,
+  }) {
+    return _service.fetchSubmissionData(
+      postUrl,
+      isCancelled: isCancelled,
+    );
   }
 }

@@ -861,7 +861,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         _buildHomeStackChild(
           2,
-          () => SubmissionsScreen(key: _submissionsKey),
+          () => SubmissionsScreen(
+            key: _submissionsKey,
+            isActive: _selectedIndex == 2,
+          ),
         ),
         _buildHomeStackChild(
           3,

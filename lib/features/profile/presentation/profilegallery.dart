@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:collection';
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
@@ -23,11 +24,13 @@ class ProfileGallerySliver extends StatefulWidget {
   /// This value is provided from the parent if a folder is pre-selected.
   final String? selectedFolderUrl;
   final FoldersCallback onFoldersParsed;
+  final ValueListenable<bool> detailFetchesActive;
 
   const ProfileGallerySliver({
     super.key,
     required this.username,
     required this.onFoldersParsed,
+    required this.detailFetchesActive,
     this.selectedFolderUrl,
   });
 
@@ -50,6 +53,8 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   final Queue<int> _submissionQueue = Queue<int>();
   static const int _maxConcurrentFetches = 6;
   int _activeFetches = 0;
+  int _detailFetchGeneration = 0;
+  late bool _detailFetchesActive;
 
   // Set to track which indices are visible so it doesn’t queue repeatedly.
   final Set<int> _visibleTileIndices = {};
@@ -65,6 +70,8 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
     super.initState();
     _profileGalleryRepository = context.read<ProfileGalleryRepository>();
     _favoriteRepository = context.read<ProfileGalleryFavoriteRepository>();
+    _detailFetchesActive = widget.detailFetchesActive.value;
+    widget.detailFetchesActive.addListener(_handleDetailFetchActivityChanged);
 
     if (widget.selectedFolderUrl != null && widget.selectedFolderUrl!.isNotEmpty) {
       _selectedFolderUrl = widget.selectedFolderUrl!;
@@ -79,6 +86,12 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   @override
   void didUpdateWidget(ProfileGallerySliver oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.detailFetchesActive != widget.detailFetchesActive) {
+      oldWidget.detailFetchesActive
+          .removeListener(_handleDetailFetchActivityChanged);
+      widget.detailFetchesActive.addListener(_handleDetailFetchActivityChanged);
+      _setDetailFetchesActive(widget.detailFetchesActive.value);
+    }
     if (oldWidget.username != widget.username ||
         oldWidget.selectedFolderUrl != widget.selectedFolderUrl) {
       _selectedFolderUrl = (widget.selectedFolderUrl == null || widget.selectedFolderUrl!.isEmpty)
@@ -93,11 +106,82 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   @override
   void dispose() {
     _isDisposed = true;
+    widget.detailFetchesActive
+        .removeListener(_handleDetailFetchActivityChanged);
     for (final notifier in _tileRevisions.values) {
       notifier.dispose();
     }
     _tileRevisions.clear();
     super.dispose();
+  }
+
+  void _handleDetailFetchActivityChanged() {
+    _setDetailFetchesActive(widget.detailFetchesActive.value);
+  }
+
+  void _setDetailFetchesActive(bool active) {
+    if (_isDisposed || _detailFetchesActive == active) return;
+    _detailFetchesActive = active;
+    _detailFetchGeneration++;
+    if (!active) {
+      for (final index in _submissionQueue) {
+        if (index >= 0 && index < _images.length) {
+          _images[index]['detailFetchQueued'] = false;
+        }
+      }
+      _submissionQueue.clear();
+      return;
+    }
+    _queueVisibleDetailFetches();
+    _processSubmissionQueue();
+  }
+
+  void _queueVisibleDetailFetches() {
+    final visibleIndices = _visibleTileIndices.toList()..sort();
+    for (final index in visibleIndices) {
+      _queueDetailFetch(index);
+    }
+  }
+
+  void _queueDetailFetch(int index) {
+    if (!_detailFetchesActive ||
+        index < 0 ||
+        index >= _images.length ||
+        !_visibleTileIndices.contains(index)) {
+      return;
+    }
+    final item = _images[index];
+    final hqUrl = item['hqUrl'] as String? ?? '';
+    if (item['detailFetched'] == true || hqUrl.isNotEmpty) return;
+    if (item['detailFetchQueued'] == true ||
+        item['detailFetchInProgress'] == true) {
+      return;
+    }
+    item['detailFetchQueued'] = true;
+    _submissionQueue.add(index);
+  }
+
+  bool _isDetailFetchCancelled({
+    required String uniqueNumber,
+    required int fetchGeneration,
+    required int detailFetchGeneration,
+    required int visibilityGeneration,
+  }) {
+    if (_isDisposed ||
+        !_detailFetchesActive ||
+        fetchGeneration != _fetchGeneration ||
+        detailFetchGeneration != _detailFetchGeneration) {
+      return true;
+    }
+    final currentIndex = _images.indexWhere(
+      (item) => _tileId(item) == uniqueNumber,
+    );
+    if (currentIndex < 0 || !_visibleTileIndices.contains(currentIndex)) {
+      return true;
+    }
+    final item = _images[currentIndex];
+    return (item['detailFetchVisibilityGeneration'] as int? ?? 0) !=
+        visibilityGeneration;
   }
 
   String _tileId(Map<String, dynamic> item) =>
@@ -200,18 +284,40 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
   // Process the submission queue with a concurrency limit.
   void _processSubmissionQueue() {
-    if (_isDisposed) return;
+    if (_isDisposed || !_detailFetchesActive) return;
 
     while (_submissionQueue.isNotEmpty && _activeFetches < _maxConcurrentFetches) {
       final index = _submissionQueue.removeFirst();
-      if (index < 0 || index >= _images.length) {
+      if (index < 0 ||
+          index >= _images.length ||
+          !_visibleTileIndices.contains(index)) {
         continue;
       }
+      final queuedItem = _images[index];
+      queuedItem['detailFetchQueued'] = false;
+      final hqUrl = queuedItem['hqUrl'] as String? ?? '';
+      if (queuedItem['detailFetched'] == true ||
+          hqUrl.isNotEmpty ||
+          queuedItem['detailFetchInProgress'] == true) {
+        continue;
+      }
+      queuedItem['detailFetchInProgress'] = true;
       _activeFetches++;
-      final uniqueNumber = _tileId(_images[index]);
-      final postUrl = _images[index]['postUrl'] as String;
+      final uniqueNumber = _tileId(queuedItem);
+      final postUrl = queuedItem['postUrl'] as String;
       final fetchGeneration = _fetchGeneration;
-      _profileGalleryRepository.fetchSubmissionData(postUrl).then((data) {
+      final detailFetchGeneration = _detailFetchGeneration;
+      final visibilityGeneration =
+          queuedItem['detailFetchVisibilityGeneration'] as int? ?? 0;
+      bool isCancelled() => _isDetailFetchCancelled(
+            uniqueNumber: uniqueNumber,
+            fetchGeneration: fetchGeneration,
+            detailFetchGeneration: detailFetchGeneration,
+            visibilityGeneration: visibilityGeneration,
+          );
+      _profileGalleryRepository
+          .fetchSubmissionData(postUrl, isCancelled: isCancelled)
+          .then((data) {
         if (_isDisposed ||
             fetchGeneration != _fetchGeneration) {
           return;
@@ -227,15 +333,28 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
         item['isFav'] = data.isFav;
         item['favUrl'] = data.favUrl;
         item['unfavUrl'] = data.unfavUrl;
+        item['detailFetched'] = true;
         if (item['initialIsFav'] == null) {
           item['initialIsFav'] = data.isFav;
         }
         _notifyTile(currentIndex);
       }).catchError((err) {
-        debugPrint('Error fetching submission data: $err');
+        if (!isCancelled()) {
+          debugPrint('Error fetching submission data: $err');
+        }
       }).whenComplete(() {
         if (_isDisposed || fetchGeneration != _fetchGeneration) return;
         _activeFetches--;
+        final currentIndex = _images.indexWhere(
+          (item) => _tileId(item) == uniqueNumber,
+        );
+        if (currentIndex >= 0) {
+          final item = _images[currentIndex];
+          item['detailFetchInProgress'] = false;
+          if (isCancelled()) {
+            _queueDetailFetch(currentIndex);
+          }
+        }
         _processSubmissionQueue();
       });
     }
@@ -318,14 +437,17 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
     if (isVisible) {
       if (_visibleTileIndices.contains(index)) return;
       _visibleTileIndices.add(index);
-      if (_images[index]['detailFetchQueued'] == true) return;
-      _images[index]['detailFetchQueued'] = true;
-      _submissionQueue.add(index);
+      _queueDetailFetch(index);
       _processSubmissionQueue();
     } else {
       _visibleTileIndices.remove(index);
       _submissionQueue.removeWhere((qIndex) => qIndex == index);
-      _images[index]['detailFetchQueued'] = false;
+      final item = _images[index];
+      item['detailFetchVisibilityGeneration'] =
+          (item['detailFetchVisibilityGeneration'] as int? ?? 0) + 1;
+      if (item['detailFetchInProgress'] != true) {
+        item['detailFetchQueued'] = false;
+      }
     }
   }
 

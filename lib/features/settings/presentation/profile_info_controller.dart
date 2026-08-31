@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:fanotifier/features/settings/domain/fur_affinity_profile_management_models.dart';
@@ -43,8 +44,11 @@ class ProfileInfoController extends ChangeNotifier {
   bool saving = false;
   bool didSave = false;
   bool _disposed = false;
+  final ValueNotifier<bool> _dirtyNotifier = ValueNotifier<bool>(false);
 
   FaProfileInfoSnapshot? get snapshot => _snapshot;
+
+  ValueListenable<bool> get dirtyListenable => _dirtyNotifier;
 
   bool get dirty {
     for (final name in textFields) {
@@ -80,6 +84,7 @@ class ProfileInfoController extends ChangeNotifier {
 
   void setValue(String name, String value) {
     _values[name] = value;
+    _updateDirtyState();
     notifyListeners();
   }
 
@@ -132,10 +137,18 @@ class ProfileInfoController extends ChangeNotifier {
       _values[name] = value;
       _initial[name] = value;
     }
+    _updateDirtyState();
   }
 
   void _changed() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) _updateDirtyState();
+  }
+
+  void _updateDirtyState() {
+    if (!_disposed) {
+      final value = dirty;
+      if (_dirtyNotifier.value != value) _dirtyNotifier.value = value;
+    }
   }
 
   @override
@@ -144,6 +157,7 @@ class ProfileInfoController extends ChangeNotifier {
     for (final controller in _controllers.values) {
       controller.dispose();
     }
+    _dirtyNotifier.dispose();
     super.dispose();
   }
 }

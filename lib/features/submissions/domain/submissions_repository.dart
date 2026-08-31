@@ -19,5 +19,8 @@ abstract interface class SubmissionsRepository {
     required Iterable<String> submissionIds,
   });
 
-  Future<SubmissionData> fetchSubmissionData(String postUrl);
+  Future<SubmissionData> fetchSubmissionData(
+    String postUrl, {
+    bool Function()? isCancelled,
+  });
 }

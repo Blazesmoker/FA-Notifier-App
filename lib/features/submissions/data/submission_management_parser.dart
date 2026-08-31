@@ -106,7 +106,10 @@ FaSubmissionManagementPage parseSubmissionManagementPage(
       FaManagedSubmission(
         id: id,
         title: title,
-        thumbnailUri: _resolveUri(sourceUri, imageSource),
+        thumbnailUri: _withThumbnailSize(
+          _resolveUri(sourceUri, imageSource),
+          600,
+        ),
         postUri: _resolveUri(sourceUri, postHref),
         rating: rating,
         width: width,
@@ -718,6 +721,11 @@ Uri _resolveUri(Uri base, String raw) {
   final value = raw.trim();
   if (value.startsWith('//')) return Uri.parse('${base.scheme}:$value');
   return base.resolve(value);
+}
+
+Uri _withThumbnailSize(Uri uri, int size) {
+  final path = uri.path.replaceFirst(RegExp(r'@\d+-'), '@$size-');
+  return path == uri.path ? uri : uri.replace(path: path);
 }
 
 bool _sameLocation(Uri? left, Uri right) {

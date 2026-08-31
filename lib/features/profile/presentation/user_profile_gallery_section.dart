@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -15,6 +16,7 @@ class UserProfileGallerySection extends StatefulWidget {
     required this.initialFolderName,
     required this.initialFolderUrl,
     required this.isOwnProfile,
+    required this.detailFetchesActive,
   });
 
   final String nickname;
@@ -22,6 +24,7 @@ class UserProfileGallerySection extends StatefulWidget {
   final String? initialFolderName;
   final String? initialFolderUrl;
   final bool isOwnProfile;
+  final ValueListenable<bool> detailFetchesActive;
 
   @override
   State<UserProfileGallerySection> createState() =>
@@ -33,9 +36,11 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
   final GlobalKey<ProfileGallerySliverState> _galleryKey =
       GlobalKey<ProfileGallerySliverState>();
   final ValueNotifier<int> _folderRevision = ValueNotifier<int>(0);
+  late final ValueNotifier<bool> _effectiveDetailFetchesActive;
   late String _selectedFolderName;
   late String _selectedFolderUrl;
   List<FaFolder> _allFolders = <FaFolder>[];
+  bool _manageSubmissionsOpen = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -45,11 +50,21 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
     super.initState();
     _selectedFolderName = widget.initialFolderName ?? 'Main Gallery';
     _selectedFolderUrl = widget.initialFolderUrl ?? '';
+    _effectiveDetailFetchesActive = ValueNotifier<bool>(
+      widget.detailFetchesActive.value,
+    );
+    widget.detailFetchesActive.addListener(_updateDetailFetchActivity);
   }
 
   @override
   void didUpdateWidget(covariant UserProfileGallerySection oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.detailFetchesActive != widget.detailFetchesActive) {
+      oldWidget.detailFetchesActive
+          .removeListener(_updateDetailFetchActivity);
+      widget.detailFetchesActive.addListener(_updateDetailFetchActivity);
+      _updateDetailFetchActivity();
+    }
     if (oldWidget.sanitizedUsername != widget.sanitizedUsername ||
         oldWidget.initialFolderName != widget.initialFolderName ||
         oldWidget.initialFolderUrl != widget.initialFolderUrl) {
@@ -61,8 +76,15 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
 
   @override
   void dispose() {
+    widget.detailFetchesActive.removeListener(_updateDetailFetchActivity);
+    _effectiveDetailFetchesActive.dispose();
     _folderRevision.dispose();
     super.dispose();
+  }
+
+  void _updateDetailFetchActivity() {
+    _effectiveDetailFetchesActive.value =
+        widget.detailFetchesActive.value && !_manageSubmissionsOpen;
   }
 
   Future<void> _refresh() async {
@@ -72,9 +94,19 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
   }
 
   Future<void> _openManageSubmissions() async {
-    await Navigator.of(context).push(ManageSubmissionsScreen.route());
-    if (!mounted) return;
-    await _refresh();
+    if (_manageSubmissionsOpen) return;
+    _manageSubmissionsOpen = true;
+    _updateDetailFetchActivity();
+    try {
+      await Navigator.of(context).push(ManageSubmissionsScreen.route());
+      if (!mounted) return;
+      await _refresh();
+    } finally {
+      if (mounted) {
+        _manageSubmissionsOpen = false;
+        _updateDetailFetchActivity();
+      }
+    }
   }
 
   bool _foldersEqual(List<FaFolder> left, List<FaFolder> right) {
@@ -188,11 +220,13 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
                           disabledForegroundColor: Colors.white,
                         ),
                         onPressed: null,
-                        child: Text(
-                          'Folder: $_selectedFolderName',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'Folder: $_selectedFolderName',
+                            maxLines: 1,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ),
                     ),
@@ -206,6 +240,7 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
             username: widget.nickname,
             selectedFolderUrl: galleryUrl,
             onFoldersParsed: _onFoldersParsed,
+            detailFetchesActive: _effectiveDetailFetchesActive,
           ),
             ],
           ),

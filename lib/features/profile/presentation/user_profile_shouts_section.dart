@@ -6,6 +6,7 @@ import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
 import 'package:fanotifier/features/profile/domain/profile_shout_text_repository.dart';
 import 'package:fanotifier/features/profile/domain/shout.dart';
 import 'package:fanotifier/features/profile/presentation/shout_widget.dart';
+import 'package:fanotifier/features/profile/presentation/profile_animated_media_visibility.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_shout_selection_controller.dart';
 import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
@@ -256,23 +257,26 @@ class UserProfileShoutsSection extends StatelessWidget {
     bool isSelectionMode,
     bool isSelected,
   ) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: isSelectionMode ? () => onToggleShoutSelection(shout) : null,
-      onLongPress: isSelectionMode
-          ? () => onToggleShoutSelection(shout)
-          : () => _openShoutActions(context, index, shout),
-      child: AbsorbPointer(
-        absorbing: isSelectionMode,
-        child: ShoutWidget(
-          shout: shout,
-          isSelectionMode: isSelectionMode,
-          isSelected: isSelected,
-          onDelete: () {
-            if (isOwnProfile) {
-              onConfirmDeleteShout(index, shout);
-            }
-          },
+    return ProfileAnimatedMediaVisibility(
+      lookAhead: 120.0,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: isSelectionMode ? () => onToggleShoutSelection(shout) : null,
+        onLongPress: isSelectionMode
+            ? () => onToggleShoutSelection(shout)
+            : () => _openShoutActions(context, index, shout),
+        child: AbsorbPointer(
+          absorbing: isSelectionMode,
+          child: ShoutWidget(
+            shout: shout,
+            isSelectionMode: isSelectionMode,
+            isSelected: isSelected,
+            onDelete: () {
+              if (isOwnProfile) {
+                onConfirmDeleteShout(index, shout);
+              }
+            },
+          ),
         ),
       ),
     );

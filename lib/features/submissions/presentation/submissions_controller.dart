@@ -40,6 +40,8 @@ class SubmissionsController extends ChangeNotifier {
   String? _baseSubmissionsUrl;
   bool _selectionMode = false;
   int _activeFetches = 0;
+  int _detailFetchGeneration = 0;
+  bool _detailFetchesActive = false;
   bool _sfwEnabled = true;
   bool _disposed = false;
 
@@ -62,13 +64,12 @@ class SubmissionsController extends ChangeNotifier {
   }
 
   Future<void> refresh({required VoidCallback onListingApplied}) async {
+    _invalidateDetailFetches(clearVisible: true);
     _dateGroups.clear();
     _flatSubmissionsList.clear();
     _listItems.clear();
     _hasMore = true;
     _nextPageUrl = null;
-    _submissionQueue.clear();
-    _activeFetches = 0;
     _baseSubmissionsUrl = null;
     _isError = false;
     _errorMessage = null;
@@ -149,10 +150,10 @@ class SubmissionsController extends ChangeNotifier {
         baseSubmissionsUrl: _baseSubmissionsUrl,
       );
       if (success) {
+        _invalidateDetailFetches(clearVisible: true);
         _dateGroups.clear();
         _flatSubmissionsList.clear();
         _listItems.clear();
-        _submissionQueue.clear();
         _notifyChanged();
         debugPrint('[Submissions] Nuke success => cleared UI');
       } else {
@@ -163,11 +164,11 @@ class SubmissionsController extends ChangeNotifier {
     }
   }
 
-  Future<void> deleteSelectedSubmissions() async {
+  Future<bool> deleteSelectedSubmissions() async {
     try {
       if (!await _repository.hasAuthCookies()) {
         debugPrint('[Submissions] Missing cookies, cannot delete.');
-        return;
+        return false;
       }
 
       final success = await _repository.deleteSubmissions(
@@ -176,6 +177,7 @@ class SubmissionsController extends ChangeNotifier {
       );
 
       if (success) {
+        _invalidateDetailFetches(clearVisible: true);
         for (final group in _dateGroups) {
           group.images.removeWhere(
               (img) => _selectedSubmissions.contains(img['uniqueNumber']));
@@ -187,8 +189,10 @@ class SubmissionsController extends ChangeNotifier {
       } else {
         debugPrint('[Submissions] Deletion request failed');
       }
+      return success;
     } catch (e) {
       debugPrint('[Submissions] Error deleting => $e');
+      return false;
     }
   }
 
@@ -197,33 +201,107 @@ class SubmissionsController extends ChangeNotifier {
         flatListIndex >= _flatSubmissionsList.length) {
       return;
     }
-    final item = _flatSubmissionsList[flatListIndex];
     if (isVisible) {
       _visibleTileIndices.add(flatListIndex);
-      final existingHqUrl = item['hqUrl'] as String? ?? '';
-      if (item['detailFetched'] == true || existingHqUrl.isNotEmpty) return;
-      if (item['detailFetchQueued'] == true ||
-          item['detailFetchInProgress'] == true) {
-        return;
-      }
-      debugPrint(
-          '[Submissions] Visibility => queue HQ for item #$flatListIndex / ${item['postUrl']}');
-      item['detailFetchQueued'] = true;
-      _submissionQueue.add(SubmissionQueueItem(
-        indexInFlatList: flatListIndex,
-        postUrl: item['postUrl'],
-      ));
+      _queueDetailFetch(flatListIndex);
       _startNextFetches();
     } else {
       _visibleTileIndices.remove(flatListIndex);
       _submissionQueue
           .removeWhere((item) => item.indexInFlatList == flatListIndex);
+      final item = _flatSubmissionsList[flatListIndex];
+      item['detailFetchVisibilityGeneration'] =
+          (item['detailFetchVisibilityGeneration'] as int? ?? 0) + 1;
       if (item['detailFetched'] == true ||
           item['detailFetchInProgress'] == true) {
         return;
       }
       item['detailFetchQueued'] = false;
     }
+  }
+
+  void setDetailFetchesActive(bool active) {
+    if (_disposed || _detailFetchesActive == active) return;
+    _detailFetchesActive = active;
+    _detailFetchGeneration++;
+    if (!active) {
+      _clearPendingDetailFetches();
+      return;
+    }
+    _queueVisibleDetailFetches();
+    _startNextFetches();
+  }
+
+  void _invalidateDetailFetches({required bool clearVisible}) {
+    _detailFetchGeneration++;
+    _clearPendingDetailFetches();
+    if (clearVisible) {
+      _visibleTileIndices.clear();
+    }
+  }
+
+  void _clearPendingDetailFetches() {
+    for (final queueItem in _submissionQueue) {
+      final index = _indexOfSubmission(queueItem.uniqueNumber);
+      if (index >= 0) {
+        _flatSubmissionsList[index]['detailFetchQueued'] = false;
+      }
+    }
+    _submissionQueue.clear();
+  }
+
+  void _queueVisibleDetailFetches() {
+    final visibleIndices = _visibleTileIndices.toList()..sort();
+    for (final index in visibleIndices) {
+      _queueDetailFetch(index);
+    }
+  }
+
+  void _queueDetailFetch(int flatListIndex) {
+    if (!_detailFetchesActive ||
+        flatListIndex < 0 ||
+        flatListIndex >= _flatSubmissionsList.length ||
+        !_visibleTileIndices.contains(flatListIndex)) {
+      return;
+    }
+    final item = _flatSubmissionsList[flatListIndex];
+    final existingHqUrl = item['hqUrl'] as String? ?? '';
+    if (item['detailFetched'] == true || existingHqUrl.isNotEmpty) return;
+    if (item['detailFetchQueued'] == true ||
+        item['detailFetchInProgress'] == true) {
+      return;
+    }
+    debugPrint(
+        '[Submissions] Visibility => queue HQ for item #$flatListIndex / ${item['postUrl']}');
+    item['detailFetchQueued'] = true;
+    _submissionQueue.add(SubmissionQueueItem(
+      indexInFlatList: flatListIndex,
+      uniqueNumber: item['uniqueNumber'] as String,
+      postUrl: item['postUrl'] as String,
+    ));
+  }
+
+  int _indexOfSubmission(String uniqueNumber) {
+    return _flatSubmissionsList.indexWhere(
+      (item) => item['uniqueNumber'] == uniqueNumber,
+    );
+  }
+
+  bool _isDetailFetchCancelled(
+    SubmissionQueueItem queueItem,
+    int detailFetchGeneration,
+    int visibilityGeneration,
+  ) {
+    if (_disposed ||
+        !_detailFetchesActive ||
+        detailFetchGeneration != _detailFetchGeneration) {
+      return true;
+    }
+    final index = _indexOfSubmission(queueItem.uniqueNumber);
+    if (index < 0 || !_visibleTileIndices.contains(index)) return true;
+    final item = _flatSubmissionsList[index];
+    return (item['detailFetchVisibilityGeneration'] as int? ?? 0) !=
+        visibilityGeneration;
   }
 
   void handleToggleFavorite(Map<String, dynamic> item, bool newValue) {
@@ -332,28 +410,46 @@ class SubmissionsController extends ChangeNotifier {
   }
 
   void _startNextFetches() {
+    if (_disposed || !_detailFetchesActive) return;
     while (_activeFetches < _maxConcurrentFetches &&
         _submissionQueue.isNotEmpty) {
       final queueItem = _submissionQueue.removeFirst();
       final postUrl = queueItem.postUrl;
+      final currentIndex = _indexOfSubmission(queueItem.uniqueNumber);
+      if (currentIndex < 0 ||
+          !_visibleTileIndices.contains(currentIndex)) {
+        continue;
+      }
+      final queuedItem = _flatSubmissionsList[currentIndex];
+      queuedItem['detailFetchQueued'] = false;
+      final hqUrl = queuedItem['hqUrl'] as String? ?? '';
+      if (queuedItem['detailFetched'] == true ||
+          hqUrl.isNotEmpty ||
+          queuedItem['detailFetchInProgress'] == true) {
+        continue;
+      }
+      queuedItem['detailFetchInProgress'] = true;
       _activeFetches++;
 
       debugPrint(
           '[Submissions] Start detail fetch for $postUrl. Active: $_activeFetches');
 
-      if (queueItem.indexInFlatList >= 0 &&
-          queueItem.indexInFlatList < _flatSubmissionsList.length) {
-        final item = _flatSubmissionsList[queueItem.indexInFlatList];
-        item['detailFetchQueued'] = false;
-        item['detailFetchInProgress'] = true;
-      }
-
-      _repository.fetchSubmissionData(postUrl).then((data) {
+      final detailFetchGeneration = _detailFetchGeneration;
+      final visibilityGeneration =
+          queuedItem['detailFetchVisibilityGeneration'] as int? ?? 0;
+      bool isCancelled() => _isDetailFetchCancelled(
+            queueItem,
+            detailFetchGeneration,
+            visibilityGeneration,
+          );
+      _repository
+          .fetchSubmissionData(postUrl, isCancelled: isCancelled)
+          .then((data) {
         debugPrint('[Submissions] Fetched detail => $postUrl');
         if (_disposed) return;
-        if (queueItem.indexInFlatList >= 0 &&
-            queueItem.indexInFlatList < _flatSubmissionsList.length) {
-          final item = _flatSubmissionsList[queueItem.indexInFlatList];
+        final index = _indexOfSubmission(queueItem.uniqueNumber);
+        if (index >= 0) {
+          final item = _flatSubmissionsList[index];
           item['hqUrl'] = data.hqUrl;
           item['isFav'] = data.isFav;
           item['initialIsFav'] = data.isFav;
@@ -363,12 +459,18 @@ class SubmissionsController extends ChangeNotifier {
         }
         _notifyChanged();
       }).catchError((err) {
-        debugPrint('[Submissions] Error fetching detail => $err');
+        if (!isCancelled()) {
+          debugPrint('[Submissions] Error fetching detail => $err');
+        }
       }).whenComplete(() {
-        if (queueItem.indexInFlatList >= 0 &&
-            queueItem.indexInFlatList < _flatSubmissionsList.length) {
-          final item = _flatSubmissionsList[queueItem.indexInFlatList];
+        if (_disposed) return;
+        final index = _indexOfSubmission(queueItem.uniqueNumber);
+        if (index >= 0) {
+          final item = _flatSubmissionsList[index];
           item['detailFetchInProgress'] = false;
+          if (isCancelled()) {
+            _queueDetailFetch(index);
+          }
         }
         _activeFetches--;
         debugPrint(

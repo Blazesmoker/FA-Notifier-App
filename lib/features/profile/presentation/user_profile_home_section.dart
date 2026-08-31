@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
-import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:fanotifier/features/profile/domain/shout.dart';
 import 'package:fanotifier/shared/fa/domain/user_link.dart';
@@ -15,6 +14,7 @@ import 'package:fanotifier/features/profile/presentation/user_profile_components
 import 'package:fanotifier/features/profile/presentation/user_profile_shouts_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_shout_selection_controller.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_styles.dart';
+import 'package:fanotifier/features/profile/presentation/profile_animated_media_visibility.dart';
 
 class UserProfileHomeSection extends StatelessWidget {
   const UserProfileHomeSection({
@@ -22,9 +22,11 @@ class UserProfileHomeSection extends StatelessWidget {
     required this.hasRealUserProfile,
     required this.userDescription,
     required this.webViewKey,
+    required this.descriptionMediaVisibilityKey,
     required this.sanitizedUsername,
     required this.onDescriptionLongPressStart,
     required this.enableScrollPerformancePause,
+    required this.gifPlaybackEnabled,
     required this.onWebViewLoaded,
     required this.featuredImageUrl,
     required this.featuredImageTitle,
@@ -60,9 +62,12 @@ class UserProfileHomeSection extends StatelessWidget {
   final bool hasRealUserProfile;
   final String? userDescription;
   final GlobalKey<UserDescriptionWebViewState> webViewKey;
+  final GlobalKey<ProfileAnimatedMediaVisibilityState>
+      descriptionMediaVisibilityKey;
   final String sanitizedUsername;
   final GestureLongPressStartCallback onDescriptionLongPressStart;
   final bool enableScrollPerformancePause;
+  final bool gifPlaybackEnabled;
   final ValueChanged<bool> onWebViewLoaded;
 
   final String? featuredImageUrl;
@@ -119,48 +124,40 @@ class UserProfileHomeSection extends StatelessWidget {
                 SliverToBoxAdapter(
                   child: GestureDetector(
                     onLongPressStart: onDescriptionLongPressStart,
-                    child: enableScrollPerformancePause
-                        ? VisibilityDetector(
-                            key: ObjectKey(webViewKey),
-                            onVisibilityChanged: (info) {
-                              final state = webViewKey.currentState;
-                              if (state == null) {
-                                return;
-                              }
-                              if (info.visibleFraction > 0.15) {
-                                state.resumeWebView(
-                                  reason: UserDescriptionWebViewPauseReason
-                                      .visibility,
-                                );
-                              } else {
-                                state.pauseWebView(
-                                  reason: UserDescriptionWebViewPauseReason
-                                      .visibility,
-                                );
-                              }
-                            },
-                            child: UserDescriptionWebView(
-                              key: webViewKey,
-                              sanitizedUsername: sanitizedUsername,
-                              initialHtml: userDescription,
-                              forceHybridComposition: false,
-                              enableTextSelection: false,
-                              enableScrollPerformancePause:
-                                  enableScrollPerformancePause,
-                              disableIosScrolling: true,
-                              onWebViewLoaded: onWebViewLoaded,
-                            ),
-                          )
-                        : UserDescriptionWebView(
-                            key: webViewKey,
-                            sanitizedUsername: sanitizedUsername,
-                            initialHtml: userDescription,
-                            forceHybridComposition: false,
-                            enableTextSelection: false,
-                            enableScrollPerformancePause: false,
-                            disableIosScrolling: true,
-                            onWebViewLoaded: onWebViewLoaded,
-                          ),
+                    child: ProfileAnimatedMediaVisibility(
+                      key: descriptionMediaVisibilityKey,
+                      manageTickerMode: false,
+                      lookAhead: 220.0,
+                      onActiveChanged: (active) {
+                        final state = webViewKey.currentState;
+                        if (state == null) {
+                          return;
+                        }
+                        if (active) {
+                          state.resumeGifPlayback(
+                            reason:
+                                UserDescriptionWebViewPauseReason.visibility,
+                          );
+                        } else {
+                          state.pauseGifPlayback(
+                            reason:
+                                UserDescriptionWebViewPauseReason.visibility,
+                          );
+                        }
+                      },
+                      child: UserDescriptionWebView(
+                        key: webViewKey,
+                        sanitizedUsername: sanitizedUsername,
+                        initialHtml: userDescription,
+                        forceHybridComposition: false,
+                        enableTextSelection: false,
+                        enableScrollPerformancePause:
+                            enableScrollPerformancePause,
+                        disableIosScrolling: true,
+                        gifPlaybackEnabled: gifPlaybackEnabled,
+                        onWebViewLoaded: onWebViewLoaded,
+                      ),
+                    ),
                   ),
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 16.0)),

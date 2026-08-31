@@ -13,5 +13,8 @@ abstract interface class ProfileGalleryRepository {
     String? selectedFolderUrl,
   });
 
-  Future<ProfileSubmissionData> fetchSubmissionData(String postUrl);
+  Future<ProfileSubmissionData> fetchSubmissionData(
+    String postUrl, {
+    bool Function()? isCancelled,
+  });
 }

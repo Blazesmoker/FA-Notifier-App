@@ -13,15 +13,22 @@ import 'package:fanotifier/features/submissions/presentation/widgets/submission_
 import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:fanotifier/shared/widgets/fa_unavailable_screen.dart';
 import 'package:fanotifier/shared/widgets/dashed_loading_indicator.dart';
+import 'package:fanotifier/shared/widgets/success_burst_animation.dart';
 
 enum _SubmissionsAppBarAction {
   none,
   deleteSelected,
+  deleteSelectedSuccess,
   nukeAll,
 }
 
 class SubmissionsScreen extends StatefulWidget {
-  const SubmissionsScreen({super.key});
+  const SubmissionsScreen({
+    super.key,
+    required this.isActive,
+  });
+
+  final bool isActive;
 
   @override
   State<SubmissionsScreen> createState() => SubmissionsScreenState();
@@ -32,6 +39,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   late final SubmissionsController _controller;
   late final FaActivitiesPollingPort _activitiesPollingPort;
   final ScrollController _scrollController = ScrollController();
+  bool _isScreenVisible = false;
   _SubmissionsAppBarAction _processingAppBarAction =
       _SubmissionsAppBarAction.none;
 
@@ -62,6 +70,14 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     _controller.addListener(_handleControllerChanged);
     _scrollController.addListener(_scrollListenerForPagination);
     _controller.loadSfwEnabled().then((_) => _refreshSubmissions());
+  }
+
+  @override
+  void didUpdateWidget(covariant SubmissionsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive) {
+      _updateDetailFetchActivity();
+    }
   }
 
   @override
@@ -187,6 +203,12 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     }
   }
 
+  void _updateDetailFetchActivity() {
+    _controller.setDetailFetchesActive(
+      widget.isActive && _isScreenVisible,
+    );
+  }
+
   Future<void> _onTrashIconPressed() async {
     if (_isAppBarActionProcessing) return;
     if (!_selectionMode) {
@@ -222,13 +244,26 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
         _processingAppBarAction =
             _SubmissionsAppBarAction.deleteSelected;
       });
+      var deleted = false;
       try {
-        await _controller.deleteSelectedSubmissions();
+        deleted = await _controller.deleteSelectedSubmissions();
       } finally {
-        if (mounted) {
+        if (mounted && !deleted) {
           setState(() {
             _processingAppBarAction = _SubmissionsAppBarAction.none;
           });
+        }
+      }
+      if (deleted && mounted) {
+        setState(() {
+          _processingAppBarAction =
+              _SubmissionsAppBarAction.deleteSelectedSuccess;
+        });
+        await Future<void>.delayed(SuccessBurstAnimation.displayDuration);
+        if (!mounted ||
+            _processingAppBarAction !=
+                _SubmissionsAppBarAction.deleteSelectedSuccess) {
+          return;
         }
       }
     }
@@ -238,13 +273,14 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   Widget _buildAppBarActionIcon({
     required Widget idleIcon,
     required bool isProcessing,
+    bool isSuccess = false,
   }) {
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.center,
       children: [
         Opacity(
-          opacity: isProcessing ? 0 : 1,
+          opacity: isProcessing || isSuccess ? 0 : 1,
           child: idleIcon,
         ),
         if (isProcessing)
@@ -257,6 +293,10 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
               maxHeight: 17,
               child: DashedLoadingIndicator(size: 17),
             ),
+          ),
+        if (isSuccess)
+          const Positioned.fill(
+            child: SuccessBurstAnimation(),
           ),
       ],
     );
@@ -348,8 +388,11 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     return VisibilityDetector(
       key: const Key('submissions_screen_visibility'),
       onVisibilityChanged: (info) {
+        final isVisible = info.visibleFraction > 0.01;
+        _isScreenVisible = isVisible;
+        _updateDetailFetchActivity();
         _activitiesPollingPort
-            .setSubmissionsScreenVisible(info.visibleFraction > 0.01);
+            .setSubmissionsScreenVisible(isVisible);
       },
       child: PopScope(
         canPop: !_selectionMode,
@@ -379,6 +422,8 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
                   ),
                   isProcessing: _processingAppBarAction ==
                       _SubmissionsAppBarAction.deleteSelected,
+                  isSuccess: _processingAppBarAction ==
+                      _SubmissionsAppBarAction.deleteSelectedSuccess,
                 ),
                 tooltip: 'Delete Selected',
                 onPressed:
@@ -553,6 +598,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   }
 
   void _openSubmission(Map<String, dynamic> item) {
+    _controller.setDetailFetchesActive(false);
     Navigator.push(
       context,
       OpenPost.route(
@@ -562,7 +608,11 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
                 : item['thumbnailUrl'] as String,
         uniqueNumber: item['uniqueNumber'] as String,
       ),
-    );
+    ).whenComplete(() {
+      if (mounted) {
+        _updateDetailFetchActivity();
+      }
+    });
   }
 
   void _handleToggleFavorite(Map<String, dynamic> item, bool newValue) {
