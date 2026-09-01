@@ -1,10 +1,8 @@
-import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:fanotifier/features/submissions/domain/submission_fetch_models.dart';
 import 'package:fanotifier/features/submissions/domain/submission_image_group.dart';
 import 'package:fanotifier/features/submissions/domain/submission_list_item.dart';
@@ -14,22 +12,18 @@ import 'package:fanotifier/features/submissions/domain/submissions_repository.da
 class SubmissionsController extends ChangeNotifier {
   SubmissionsController({
     required this._repository,
-    required this._favoriteRepository,
     SfwModePreference? sfwModePreference,
   }) : _sfwModePreference = sfwModePreference ?? SfwModePreference();
 
   static const int _maxConcurrentFetches = 5;
 
   final SubmissionsRepository _repository;
-  final SubmissionFavoriteRepository _favoriteRepository;
   final SfwModePreference _sfwModePreference;
   final List<DateImageGroup> _dateGroups = [];
   final List<Map<String, dynamic>> _flatSubmissionsList = [];
   final List<SubmissionListItem> _listItems = [];
   final Set<String> _selectedSubmissions = {};
   final Queue<SubmissionQueueItem> _submissionQueue = Queue();
-  final Map<String, Timer> _debounceTimers = {};
-  final Map<String, bool> _pendingFavStates = {};
   final Set<int> _visibleTileIndices = {};
 
   bool _isLoading = false;
@@ -304,42 +298,6 @@ class SubmissionsController extends ChangeNotifier {
         visibilityGeneration;
   }
 
-  void handleToggleFavorite(Map<String, dynamic> item, bool newValue) {
-    final favUrl = item['favUrl'] as String? ?? '';
-    final unfavUrl = item['unfavUrl'] as String? ?? '';
-    final uniqueNumber = item['uniqueNumber'] as String;
-
-    item['isFav'] = newValue;
-    _notifyChanged();
-
-    _pendingFavStates[uniqueNumber] = newValue;
-    _debounceTimers[uniqueNumber]?.cancel();
-
-    _debounceTimers[uniqueNumber] =
-        Timer(const Duration(seconds: 3), () async {
-      final finalState = _pendingFavStates.remove(uniqueNumber);
-      _debounceTimers.remove(uniqueNumber);
-      if (finalState == null) return;
-
-      final urlToSend = finalState ? favUrl : unfavUrl;
-      if (urlToSend.isEmpty) {
-        debugPrint('[Submissions] No link found to do fav/unfav.');
-        return;
-      }
-
-      final success =
-          await _favoriteRepository.executePostWithRetry(urlToSend);
-      if (!success && !_disposed) {
-        debugPrint('[Submissions] Fav/unfav failed => revert');
-        item['isFav'] = !finalState;
-        _notifyChanged();
-        return;
-      }
-
-      await _refreshLinksAfterPost(item);
-    });
-  }
-
   void _applyListing(SubmissionsListingParseResult parsed) {
     _baseSubmissionsUrl ??= parsed.baseSubmissionsUrl;
     _dateGroups.addAll(parsed.dateGroups);
@@ -477,21 +435,6 @@ class SubmissionsController extends ChangeNotifier {
             '[Submissions] Done detail fetch for $postUrl. Active: $_activeFetches');
         _startNextFetches();
       });
-    }
-  }
-
-  Future<void> _refreshLinksAfterPost(Map<String, dynamic> item) async {
-    try {
-      final newData =
-          await _repository.fetchSubmissionData(item['postUrl']);
-      if (_disposed) return;
-      item['isFav'] = newData.isFav;
-      item['favUrl'] = newData.favUrl;
-      item['unfavUrl'] = newData.unfavUrl;
-      item['hqUrl'] = newData.hqUrl;
-      _notifyChanged();
-    } catch (e) {
-      debugPrint('[Submissions] Error refreshing => $e');
     }
   }
 

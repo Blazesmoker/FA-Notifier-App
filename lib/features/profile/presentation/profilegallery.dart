@@ -9,7 +9,7 @@ import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:fanotifier/features/profile/domain/profile_gallery_repository.dart';
-import 'package:fanotifier/features/profile/domain/profile_gallery_favorite_repository.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
 import 'package:fanotifier/features/profile/domain/fa_folder.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/shared/widgets/heart_animation_optimized.dart';
@@ -63,13 +63,10 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
   bool _isDisposed = false;
 
-  late final ProfileGalleryFavoriteRepository _favoriteRepository;
-
   @override
   void initState() {
     super.initState();
     _profileGalleryRepository = context.read<ProfileGalleryRepository>();
-    _favoriteRepository = context.read<ProfileGalleryFavoriteRepository>();
     _detailFetchesActive = widget.detailFetchesActive.value;
     widget.detailFetchesActive.addListener(_handleDetailFetchActivityChanged);
 
@@ -361,76 +358,6 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   }
 
 
-  // Fav toggle logic
-
-  void _handleToggleFavorite(int index, bool isFav) async {
-    if (_isDisposed || index < 0 || index >= _images.length) {
-      return;
-    }
-    final fetchGeneration = _fetchGeneration;
-    final uniqueNumber = _tileId(_images[index]);
-    if (!await _favoriteRepository.hasAuthCookies()) {
-      debugPrint('[DEBUG] Missing cookies for fav/unfav POST request.');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Authentication cookies missing. Please log in again.')),
-      );
-      return;
-    }
-
-    if (_isDisposed ||
-        !mounted ||
-        fetchGeneration != _fetchGeneration) {
-      return;
-    }
-    final currentIndex = _images.indexWhere(
-      (item) => _tileId(item) == uniqueNumber,
-    );
-    if (currentIndex < 0) {
-      return;
-    }
-    final item = _images[currentIndex];
-    item['isFav'] = isFav;
-    _notifyTile(currentIndex);
-
-    final favUrl = item['favUrl'] as String? ?? '';
-    final unfavUrl = item['unfavUrl'] as String? ?? '';
-
-    _favoriteRepository.toggleFavorite(
-      uniqueNumber: uniqueNumber,
-      isFav: isFav,
-      favUrl: favUrl,
-      unfavUrl: unfavUrl,
-      onPostComplete: (uniqueNumber, finalState) {
-        _refreshLinksAfterPost(uniqueNumber);
-      },
-    );
-  }
-
-  Future<void> _refreshLinksAfterPost(String uniqueNumber) async {
-    if (_isDisposed) return;
-
-    final idx = _images.indexWhere((p) => p['uniqueNumber'] == uniqueNumber);
-    if (idx < 0) return;
-
-    final postUrl = _images[idx]['postUrl'] as String;
-    final fetchGeneration = _fetchGeneration;
-    try {
-      final data =
-          await _profileGalleryRepository.fetchSubmissionData(postUrl);
-      if (_isDisposed || fetchGeneration != _fetchGeneration) return;
-      _images[idx]['isFav'] = data.isFav;
-      _images[idx]['favUrl'] = data.favUrl;
-      _images[idx]['unfavUrl'] = data.unfavUrl;
-      if (_images[idx]['initialIsFav'] == null) {
-        _images[idx]['initialIsFav'] = data.isFav;
-      }
-      _notifyTile(idx);
-    } catch (e) {
-      debugPrint('Error refreshing links after post => $e');
-    }
-  }
-
 
   void _onTileVisibilityChanged(int index, bool isVisible) {
     if (index < 0 || index >= _images.length) return;
@@ -514,12 +441,14 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
                   aspectRatio: aspect,
                   thumbnailUrl: thumbUrl,
                   hqUrl: hqUrl,
-                  isFavorite: isFav,
+                  submissionId: item['uniqueNumber'] as String,
+                  fallbackIsFavorite: isFav,
+                  favUrl: item['favUrl'] as String?,
+                  unfavUrl: item['unfavUrl'] as String?,
                   wasInitiallyFavorited: initialIsFav,
                   rating: item['rating'] as String?,
                   title: item['title'] as String?,
                   author: null,
-                  onToggle: (val) => _handleToggleFavorite(index, val),
                   onTap: () {
                     Navigator.push(
                       context,
@@ -547,12 +476,14 @@ class _FavImageTile extends StatelessWidget {
   final double aspectRatio;
   final String thumbnailUrl;
   final String? hqUrl;
-  final bool isFavorite;
+  final String submissionId;
+  final bool fallbackIsFavorite;
+  final String? favUrl;
+  final String? unfavUrl;
   final bool wasInitiallyFavorited;
   final String? rating;
   final String? title;
   final String? author;
-  final ValueChanged<bool> onToggle;
   final VoidCallback onTap;
   const _FavImageTile({
     super.key,
@@ -561,16 +492,24 @@ class _FavImageTile extends StatelessWidget {
     required this.aspectRatio,
     required this.thumbnailUrl,
     this.hqUrl,
-    required this.isFavorite,
+    required this.submissionId,
+    required this.fallbackIsFavorite,
+    this.favUrl,
+    this.unfavUrl,
     required this.wasInitiallyFavorited,
     required this.rating,
     required this.title,
     required this.author,
-    required this.onToggle,
     required this.onTap,
   });
   @override
   Widget build(BuildContext context) {
+    final isFavorite = context.select<SubmissionFavoriteStateController, bool>(
+      (controller) => controller.valueFor(
+        submissionId,
+        fallbackIsFavorite,
+      ),
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
         final displayedWidth = constraints.maxWidth;
@@ -601,7 +540,7 @@ class _FavImageTile extends StatelessWidget {
 
         return GestureDetector(
           onTap: onTap,
-          onLongPress: _onLongPressToggle,
+          onLongPress: () => _onLongPressToggle(context),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -611,7 +550,6 @@ class _FavImageTile extends StatelessWidget {
                 containerHeight: displayedHeight,
                 isFavorite: isFavorite,
                 wasInitiallyFavorited: wasInitiallyFavorited,
-                onToggle: (val) => onToggle(val),
                 child: SizedBox(
                   width: displayedWidth,
                   height: displayedHeight,
@@ -633,8 +571,12 @@ class _FavImageTile extends StatelessWidget {
       },
     );
   }
-  void _onLongPressToggle() {
-    final newVal = !isFavorite;
-    onToggle(newVal);
+  void _onLongPressToggle(BuildContext context) {
+    context.read<SubmissionFavoriteStateController>().toggle(
+          submissionId: submissionId,
+          fallbackIsFavorite: fallbackIsFavorite,
+          favUrl: favUrl,
+          unfavUrl: unfavUrl,
+        );
   }
 }

@@ -6,7 +6,7 @@ import 'package:fanotifier/features/profile/presentation/profile_image_row_layou
 import 'package:fanotifier/features/profile/domain/profile_scraps_repository.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/submissions/presentation/openpost.dart';
-import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
 import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
 import 'package:fanotifier/features/submissions/domain/submission_management_repository.dart';
 import 'package:fanotifier/shared/widgets/heart_animation.dart';
@@ -44,16 +44,9 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
 
   late final ProfileScrapsRepository _profileScrapsRepository;
 
-  // Favorite functionality
-  final Set<String> _favoritedImages = {};
-  final Map<String, String> _favUrls = {};
-  final Map<String, String> _unfavUrls = {};
   final Set<String> _selectedSubmissionIds = {};
-  final Map<String, ValueNotifier<bool>> _favoriteStates =
-      <String, ValueNotifier<bool>>{};
   final Map<String, ValueNotifier<bool>> _selectionStates =
       <String, ValueNotifier<bool>>{};
-  late final SubmissionFavoriteRepository _favoriteRepository;
   late final SubmissionManagementRepository _managementRepository;
 
   int get selectedCount => _selectedSubmissionIds.length;
@@ -62,7 +55,6 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   void initState() {
     super.initState();
     _profileScrapsRepository = context.read<ProfileScrapsRepository>();
-    _favoriteRepository = context.read<SubmissionFavoriteRepository>();
     _managementRepository = context.read<SubmissionManagementRepository>();
     _nextPageUrl =
         _profileScrapsRepository.buildInitialScrapsPageUrl(widget.username);
@@ -82,22 +74,11 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
 
   @override
   void dispose() {
-    for (final notifier in _favoriteStates.values) {
-      notifier.dispose();
-    }
     for (final notifier in _selectionStates.values) {
       notifier.dispose();
     }
-    _favoriteStates.clear();
     _selectionStates.clear();
     super.dispose();
-  }
-
-  ValueNotifier<bool> _favoriteState(String uniqueNumber) {
-    return _favoriteStates.putIfAbsent(
-      uniqueNumber,
-      () => ValueNotifier<bool>(_favoritedImages.contains(uniqueNumber)),
-    );
   }
 
   ValueNotifier<bool> _selectionState(String submissionId) {
@@ -105,15 +86,6 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
       submissionId,
       () => ValueNotifier<bool>(_selectedSubmissionIds.contains(submissionId)),
     );
-  }
-
-  void _setFavoriteState(String uniqueNumber, bool isFavorite) {
-    if (isFavorite) {
-      _favoritedImages.add(uniqueNumber);
-    } else {
-      _favoritedImages.remove(uniqueNumber);
-    }
-    _favoriteState(uniqueNumber).value = isFavorite;
   }
 
   void _setSelectionState(String submissionId, bool selected) {
@@ -135,11 +107,7 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   }
 
   void _resetTileStates() {
-    final staleNotifiers = <ValueNotifier<bool>>[
-      ..._favoriteStates.values,
-      ..._selectionStates.values,
-    ];
-    _favoriteStates.clear();
+    final staleNotifiers = _selectionStates.values.toList(growable: false);
     _selectionStates.clear();
     if (staleNotifiers.isEmpty) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -204,9 +172,6 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
       _images.clear();
       _imageRows.clear();
       _normalImagesQueue.clear();
-      _favoritedImages.clear();
-      _favUrls.clear();
-      _unfavUrls.clear();
       _selectedSubmissionIds.clear();
     });
     if (selectionChanged) widget.onSelectionCountChanged(0);
@@ -247,102 +212,6 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
       faNetworkImageProvider(image['url']).then((provider) {
         if (mounted) precacheImage(provider, context);
       });
-    }
-  }
-
-  // Favorite logic
-  Future<bool> _fetchPostDetails(
-    String uniqueNumber, {
-    required int fetchGeneration,
-  }) async {
-    try {
-      final links = await _favoriteRepository.fetchLinksForSubmissionId(
-        submissionId: uniqueNumber,
-        cookieHeaderProvider: _profileScrapsRepository.buildCookieHeader,
-      );
-      if (!mounted || fetchGeneration != _fetchGeneration) {
-        return false;
-      }
-      if (links != null) {
-        if (links.hasAnyUrl) {
-          if (links.hasFavUrl) _favUrls[uniqueNumber] = links.favUrl;
-          if (links.hasUnfavUrl) _unfavUrls[uniqueNumber] = links.unfavUrl;
-          if (links.hasUnfavUrl && !links.hasFavUrl) {
-            _setFavoriteState(uniqueNumber, true);
-          }
-          if (links.hasFavUrl && !links.hasUnfavUrl) {
-            _setFavoriteState(uniqueNumber, false);
-          }
-        }
-      }
-      return true;
-    } catch (e) {
-      debugPrint('Error fetching post details for $uniqueNumber => $e');
-      return false;
-    }
-  }
-
-  Future<void> _refetchFavLinks(
-    String uniqueNumber, {
-    required int fetchGeneration,
-  }) async {
-    if (!mounted || fetchGeneration != _fetchGeneration) {
-      return;
-    }
-    _favUrls[uniqueNumber] = '';
-    _unfavUrls[uniqueNumber] = '';
-    await _fetchPostDetails(
-      uniqueNumber,
-      fetchGeneration: fetchGeneration,
-    );
-  }
-
-  Future<void> _toggleFavorite(
-    String uniqueNumber,
-    bool wantFavorite,
-  ) async {
-    final fetchGeneration = _fetchGeneration;
-    bool hasFavUrl = _favUrls[uniqueNumber]?.isNotEmpty ?? false;
-    bool hasUnfavUrl = _unfavUrls[uniqueNumber]?.isNotEmpty ?? false;
-
-
-    if (!hasFavUrl && !hasUnfavUrl) {
-      final fetched = await _fetchPostDetails(
-        uniqueNumber,
-        fetchGeneration: fetchGeneration,
-      );
-      if (!fetched || !mounted || fetchGeneration != _fetchGeneration) {
-        return;
-      }
-      hasFavUrl = _favUrls[uniqueNumber]?.isNotEmpty ?? false;
-      hasUnfavUrl = _unfavUrls[uniqueNumber]?.isNotEmpty ?? false;
-    }
-
-    final isCurrentlyFav = _favoritedImages.contains(uniqueNumber);
-    if (wantFavorite == isCurrentlyFav) {
-
-      return;
-    }
-
-    final urlToUse = wantFavorite ? _favUrls[uniqueNumber] : _unfavUrls[uniqueNumber];
-    if (urlToUse == null || urlToUse.isEmpty) {
-      debugPrint('No URL found for fav/unfav on $uniqueNumber');
-      return;
-    }
-
-    _setFavoriteState(uniqueNumber, wantFavorite);
-
-    final success = await _favoriteRepository.executePostWithRetry(urlToUse);
-    if (!mounted || fetchGeneration != _fetchGeneration) {
-      return;
-    }
-    if (success) {
-      await _refetchFavLinks(
-        uniqueNumber,
-        fetchGeneration: fetchGeneration,
-      );
-    } else {
-      _setFavoriteState(uniqueNumber, !wantFavorite);
     }
   }
 
@@ -418,33 +287,27 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     final String? author = null;
 
     return ValueListenableBuilder<bool>(
-      valueListenable: _favoriteState(uniqueNumber),
-      builder: (context, isFav, child) {
-        return ValueListenableBuilder<bool>(
-          valueListenable: _selectionState(uniqueNumber),
-          builder: (context, isSelected, child) {
-            return _FavImageTileScrapsSliver(
-              key: ValueKey<String>('profile-scrap-$uniqueNumber'),
-              width: width,
-              height: height,
-              imageUrl: imageUrl,
-              isFav: isFav,
-              rating: rating,
-              title: title,
-              author: author,
-              selectionMode: widget.selectionMode,
-              isSelected: isSelected,
-              onSelectionToggle: () => _toggleSelection(uniqueNumber),
-              onToggle: (val) => _toggleFavorite(uniqueNumber, val),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  OpenPost.route(
-                    imageUrl: imageUrl,
-                    uniqueNumber: uniqueNumber,
-                  ),
-                );
-              },
+      valueListenable: _selectionState(uniqueNumber),
+      builder: (context, isSelected, child) {
+        return _FavImageTileScrapsSliver(
+          key: ValueKey<String>('profile-scrap-$uniqueNumber'),
+          width: width,
+          height: height,
+          imageUrl: imageUrl,
+          submissionId: uniqueNumber,
+          rating: rating,
+          title: title,
+          author: author,
+          selectionMode: widget.selectionMode,
+          isSelected: isSelected,
+          onSelectionToggle: () => _toggleSelection(uniqueNumber),
+          onTap: () {
+            Navigator.push(
+              context,
+              OpenPost.route(
+                imageUrl: imageUrl,
+                uniqueNumber: uniqueNumber,
+              ),
             );
           },
         );
@@ -508,11 +371,10 @@ class _FavImageTileScrapsSliver extends StatefulWidget {
   final double width;
   final double height;
   final String imageUrl;
-  final bool isFav;
+  final String submissionId;
   final String? rating;
   final String? title;
   final String? author;
-  final ValueChanged<bool> onToggle;
   final VoidCallback onTap;
   final bool selectionMode;
   final bool isSelected;
@@ -523,11 +385,10 @@ class _FavImageTileScrapsSliver extends StatefulWidget {
     required this.width,
     required this.height,
     required this.imageUrl,
-    required this.isFav,
+    required this.submissionId,
     required this.rating,
     required this.title,
     required this.author,
-    required this.onToggle,
     required this.onTap,
     required this.selectionMode,
     required this.isSelected,
@@ -539,22 +400,6 @@ class _FavImageTileScrapsSliver extends StatefulWidget {
 }
 
 class _FavImageTileScrapsSliverState extends State<_FavImageTileScrapsSliver> {
-  late bool _localFav;
-
-  @override
-  void initState() {
-    super.initState();
-    _localFav = widget.isFav;
-  }
-
-  @override
-  void didUpdateWidget(covariant _FavImageTileScrapsSliver oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.isFav != widget.isFav) {
-      setState(() => _localFav = widget.isFav);
-    }
-  }
-
   Widget _buildPlaceholder(double width, double height) {
     return Container(
       width: width,
@@ -565,6 +410,9 @@ class _FavImageTileScrapsSliverState extends State<_FavImageTileScrapsSliver> {
 
   @override
   Widget build(BuildContext context) {
+    final isFavorite = context.select<SubmissionFavoriteStateController, bool>(
+      (controller) => controller.valueFor(widget.submissionId, false),
+    );
     final thumbnail = FaThumbnailOutline(
       rating: widget.rating,
       borderRadius: 8,
@@ -599,11 +447,9 @@ class _FavImageTileScrapsSliverState extends State<_FavImageTileScrapsSliver> {
     final image = Stack(
       children: [
         HeartAnimationWidget(
-          isFavorite: _localFav,
+          isFavorite: isFavorite,
           containerWidth: widget.width,
           containerHeight: widget.height,
-          onDebounceComplete: widget.onToggle,
-          debounceDuration: const Duration(seconds: 2),
           child: thumbnail,
         ),
         Positioned.fill(
@@ -652,7 +498,10 @@ class _FavImageTileScrapsSliverState extends State<_FavImageTileScrapsSliver> {
             widget.selectionMode ? widget.onSelectionToggle : widget.onTap,
         onLongPress: widget.selectionMode
             ? widget.onSelectionToggle
-            : () => setState(() => _localFav = !_localFav),
+            : () => context.read<SubmissionFavoriteStateController>().toggle(
+                  submissionId: widget.submissionId,
+                  fallbackIsFavorite: false,
+                ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

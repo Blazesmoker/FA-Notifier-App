@@ -5,7 +5,6 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/features/submissions/presentation/openpost.dart';
-import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:fanotifier/features/submissions/domain/submission_list_item.dart';
 import 'package:fanotifier/features/submissions/domain/submissions_repository.dart';
 import 'package:fanotifier/features/submissions/presentation/submissions_controller.dart';
@@ -65,7 +64,6 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     _activitiesPollingPort = context.read<FaActivitiesPollingPort>();
     _controller = SubmissionsController(
       repository: context.read<SubmissionsRepository>(),
-      favoriteRepository: context.read<SubmissionFavoriteRepository>(),
     );
     _controller.addListener(_handleControllerChanged);
     _scrollController.addListener(_scrollListenerForPagination);
@@ -534,7 +532,6 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
                 isSelected: _selectedSubmissions.contains(data['uniqueNumber']),
                 onToggleSelection: _toggleSelection,
                 onOpenSubmission: _openSubmission,
-                onToggleFavorite: _handleToggleFavorite,
                 onVisibilityChanged: onTileVisibilityChanged,
               ),
             ),
@@ -572,7 +569,6 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
               isSelected: _selectedSubmissions.contains(left['uniqueNumber']),
               onToggleSelection: _toggleSelection,
               onOpenSubmission: _openSubmission,
-              onToggleFavorite: _handleToggleFavorite,
               onVisibilityChanged: onTileVisibilityChanged,
             ),
             SizedBox(width: margin),
@@ -584,7 +580,6 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
               isSelected: _selectedSubmissions.contains(right['uniqueNumber']),
               onToggleSelection: _toggleSelection,
               onOpenSubmission: _openSubmission,
-              onToggleFavorite: _handleToggleFavorite,
               onVisibilityChanged: onTileVisibilityChanged,
             ),
           ],
@@ -615,7 +610,4 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     });
   }
 
-  void _handleToggleFavorite(Map<String, dynamic> item, bool newValue) {
-    _controller.handleToggleFavorite(item, newValue);
-  }
 }

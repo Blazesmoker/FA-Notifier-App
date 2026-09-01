@@ -7,6 +7,7 @@ import 'package:fanotifier/features/profile/presentation/profile_image_row_layou
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/submissions/presentation/openpost.dart';
 import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
 import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
 import 'package:fanotifier/shared/widgets/heart_animation.dart';
 import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
@@ -45,12 +46,7 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
   late final ProfileFavoritesRepository _profileFavoritesRepository;
 
 
-  final Set<String> _favoritedImages = {};
-  final Map<String, String> _favUrls = {};
-  final Map<String, String> _unfavUrls = {};
   final Set<String> _selectedFavoriteIds = {};
-  final Map<String, ValueNotifier<bool>> _favoriteStates =
-      <String, ValueNotifier<bool>>{};
   final Map<String, ValueNotifier<bool>> _selectionStates =
       <String, ValueNotifier<bool>>{};
   late final SubmissionFavoriteRepository _favoriteRepository;
@@ -83,22 +79,11 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
 
   @override
   void dispose() {
-    for (final notifier in _favoriteStates.values) {
-      notifier.dispose();
-    }
     for (final notifier in _selectionStates.values) {
       notifier.dispose();
     }
-    _favoriteStates.clear();
     _selectionStates.clear();
     super.dispose();
-  }
-
-  ValueNotifier<bool> _favoriteState(String uniqueNumber) {
-    return _favoriteStates.putIfAbsent(
-      uniqueNumber,
-      () => ValueNotifier<bool>(_favoritedImages.contains(uniqueNumber)),
-    );
   }
 
   ValueNotifier<bool> _selectionState(String favoriteId) {
@@ -106,15 +91,6 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
       favoriteId,
       () => ValueNotifier<bool>(_selectedFavoriteIds.contains(favoriteId)),
     );
-  }
-
-  void _setFavoriteState(String uniqueNumber, bool isFavorite) {
-    if (isFavorite) {
-      _favoritedImages.add(uniqueNumber);
-    } else {
-      _favoritedImages.remove(uniqueNumber);
-    }
-    _favoriteState(uniqueNumber).value = isFavorite;
   }
 
   void _setSelectionState(String favoriteId, bool selected) {
@@ -136,11 +112,7 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
   }
 
   void _resetTileStates() {
-    final staleNotifiers = <ValueNotifier<bool>>[
-      ..._favoriteStates.values,
-      ..._selectionStates.values,
-    ];
-    _favoriteStates.clear();
+    final staleNotifiers = _selectionStates.values.toList(growable: false);
     _selectionStates.clear();
     if (staleNotifiers.isEmpty) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -206,9 +178,6 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
       _images.clear();
       _imageRows.clear();
       _normalImagesQueue.clear();
-      _favoritedImages.clear();
-      _favUrls.clear();
-      _unfavUrls.clear();
       _selectedFavoriteIds.clear();
     });
     if (selectionChanged) widget.onSelectionCountChanged(0);
@@ -252,96 +221,6 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
     }
   }
 
-
-
-  /// Fetch the /fav/ or /unfav/ links for a given post.
-  Future<bool> _fetchPostDetails(
-    String uniqueNumber, {
-    required int fetchGeneration,
-  }) async {
-    try {
-      final links = await _favoriteRepository.fetchLinksForSubmissionId(
-        submissionId: uniqueNumber,
-        cookieHeaderProvider: _profileFavoritesRepository.buildCookieHeader,
-      );
-      if (!mounted || fetchGeneration != _fetchGeneration) {
-        return false;
-      }
-      if (links != null) {
-        if (links.hasAnyUrl) {
-          if (links.hasFavUrl) _favUrls[uniqueNumber] = links.favUrl;
-          if (links.hasUnfavUrl) _unfavUrls[uniqueNumber] = links.unfavUrl;
-          if (links.hasUnfavUrl && !links.hasFavUrl) {
-            _setFavoriteState(uniqueNumber, true);
-          }
-          if (links.hasFavUrl && !links.hasUnfavUrl) {
-            _setFavoriteState(uniqueNumber, false);
-          }
-        }
-      }
-      return true;
-    } catch (e) {
-      debugPrint('Error fetching post details for $uniqueNumber: $e');
-      return false;
-    }
-  }
-
-  Future<void> _refetchFavLinks(
-    String uniqueNumber, {
-    required int fetchGeneration,
-  }) async {
-    if (!mounted || fetchGeneration != _fetchGeneration) {
-      return;
-    }
-    _favUrls[uniqueNumber] = '';
-    _unfavUrls[uniqueNumber] = '';
-    await _fetchPostDetails(
-      uniqueNumber,
-      fetchGeneration: fetchGeneration,
-    );
-  }
-
-
-  Future<void> _toggleFavorite(
-    String uniqueNumber,
-    bool wantFavorite,
-  ) async {
-    final fetchGeneration = _fetchGeneration;
-    bool hasFavUrl = _favUrls[uniqueNumber]?.isNotEmpty ?? false;
-    bool hasUnfavUrl = _unfavUrls[uniqueNumber]?.isNotEmpty ?? false;
-    if (!hasFavUrl && !hasUnfavUrl) {
-      final fetched = await _fetchPostDetails(
-        uniqueNumber,
-        fetchGeneration: fetchGeneration,
-      );
-      if (!fetched || !mounted || fetchGeneration != _fetchGeneration) {
-        return;
-      }
-      hasFavUrl = _favUrls[uniqueNumber]?.isNotEmpty ?? false;
-      hasUnfavUrl = _unfavUrls[uniqueNumber]?.isNotEmpty ?? false;
-    }
-    final isCurrentlyFav = _favoritedImages.contains(uniqueNumber);
-    if (wantFavorite == isCurrentlyFav) return;
-    final urlToUse = wantFavorite ? _favUrls[uniqueNumber] : _unfavUrls[uniqueNumber];
-    if (urlToUse == null || urlToUse.isEmpty) {
-      debugPrint('No URL found for fav/unfav on $uniqueNumber');
-      return;
-    }
-
-    _setFavoriteState(uniqueNumber, wantFavorite);
-    final success = await _favoriteRepository.executePostWithRetry(urlToUse);
-    if (!mounted || fetchGeneration != _fetchGeneration) {
-      return;
-    }
-    if (success) {
-      await _refetchFavLinks(
-        uniqueNumber,
-        fetchGeneration: fetchGeneration,
-      );
-    } else {
-      _setFavoriteState(uniqueNumber, !wantFavorite);
-    }
-  }
 
 
 
@@ -412,45 +291,39 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
     final selectionState = favoriteId == null
         ? null
         : _selectionState(favoriteId);
-    return ValueListenableBuilder<bool>(
-      valueListenable: _favoriteState(uniqueNumber),
-      builder: (context, isFav, child) {
-        Widget buildTile(bool isSelected) {
-          return _FavImageTileFavs(
-            key: ValueKey<String>(
-              'profile-favorite-${favoriteId ?? uniqueNumber}',
+    Widget buildTile(bool isSelected) {
+      return _FavImageTileFavs(
+        key: ValueKey<String>(
+          'profile-favorite-${favoriteId ?? uniqueNumber}',
+        ),
+        width: width,
+        height: height,
+        imageUrl: imageUrl,
+        submissionId: uniqueNumber,
+        rating: im['rating'] as String?,
+        title: im['title'] as String?,
+        author: im['author'] as String?,
+        selectionMode: widget.selectionMode,
+        isSelected: isSelected,
+        onSelectionToggle: () => _toggleSelection(favoriteId),
+        onTap: () {
+          Navigator.push(
+            context,
+            OpenPost.route(
+              imageUrl: imageUrl,
+              uniqueNumber: uniqueNumber,
             ),
-            width: width,
-            height: height,
-            imageUrl: imageUrl,
-            isFav: isFav,
-            rating: im['rating'] as String?,
-            title: im['title'] as String?,
-            author: im['author'] as String?,
-            selectionMode: widget.selectionMode,
-            isSelected: isSelected,
-            onSelectionToggle: () => _toggleSelection(favoriteId),
-            onToggle: (val) => _toggleFavorite(uniqueNumber, val),
-            onTap: () {
-              Navigator.push(
-                context,
-                OpenPost.route(
-                  imageUrl: imageUrl,
-                  uniqueNumber: uniqueNumber,
-                ),
-              );
-            },
           );
-        }
+        },
+      );
+    }
 
-        if (selectionState == null) {
-          return buildTile(false);
-        }
-        return ValueListenableBuilder<bool>(
-          valueListenable: selectionState,
-          builder: (context, isSelected, child) => buildTile(isSelected),
-        );
-      },
+    if (selectionState == null) {
+      return buildTile(false);
+    }
+    return ValueListenableBuilder<bool>(
+      valueListenable: selectionState,
+      builder: (context, isSelected, child) => buildTile(isSelected),
     );
   }
 
@@ -505,17 +378,14 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
   }
 }
 
-/// A widget that displays a favorite image tile with rounded corners and debounced favorite toggling using HeartAnimationWidget.
-
 class _FavImageTileFavs extends StatefulWidget {
   final double width;
   final double height;
   final String imageUrl;
-  final bool isFav;
+  final String submissionId;
   final String? rating;
   final String? title;
   final String? author;
-  final ValueChanged<bool> onToggle;
   final VoidCallback onTap;
   final bool selectionMode;
   final bool isSelected;
@@ -526,11 +396,10 @@ class _FavImageTileFavs extends StatefulWidget {
     required this.width,
     required this.height,
     required this.imageUrl,
-    required this.isFav,
+    required this.submissionId,
     required this.rating,
     required this.title,
     required this.author,
-    required this.onToggle,
     required this.onTap,
     required this.selectionMode,
     required this.isSelected,
@@ -542,24 +411,6 @@ class _FavImageTileFavs extends StatefulWidget {
 }
 
 class _FavImageTileFavsState extends State<_FavImageTileFavs> {
-  late bool _localFav;
-
-  @override
-  void initState() {
-    super.initState();
-    _localFav = widget.isFav;
-  }
-
-  @override
-  void didUpdateWidget(covariant _FavImageTileFavs oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.isFav != widget.isFav) {
-      setState(() {
-        _localFav = widget.isFav;
-      });
-    }
-  }
-
   Widget _buildPlaceholder(double width, double height) {
     return Container(
       width: width,
@@ -570,6 +421,9 @@ class _FavImageTileFavsState extends State<_FavImageTileFavs> {
 
   @override
   Widget build(BuildContext context) {
+    final isFavorite = context.select<SubmissionFavoriteStateController, bool>(
+      (controller) => controller.valueFor(widget.submissionId, true),
+    );
     final thumbnail = FaThumbnailOutline(
       rating: widget.rating,
       borderRadius: 8,
@@ -604,11 +458,9 @@ class _FavImageTileFavsState extends State<_FavImageTileFavs> {
     final image = Stack(
       children: [
         HeartAnimationWidget(
-          isFavorite: _localFav,
+          isFavorite: isFavorite,
           containerWidth: widget.width,
           containerHeight: widget.height,
-          onDebounceComplete: widget.onToggle,
-          debounceDuration: const Duration(seconds: 3),
           child: thumbnail,
         ),
         Positioned.fill(
@@ -657,9 +509,10 @@ class _FavImageTileFavsState extends State<_FavImageTileFavs> {
             widget.selectionMode ? widget.onSelectionToggle : widget.onTap,
         onLongPress: widget.selectionMode
             ? widget.onSelectionToggle
-            : () => setState(() {
-                  _localFav = !_localFav;
-                }),
+            : () => context.read<SubmissionFavoriteStateController>().toggle(
+                  submissionId: widget.submissionId,
+                  fallbackIsFavorite: true,
+                ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

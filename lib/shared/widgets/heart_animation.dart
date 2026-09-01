@@ -1,26 +1,13 @@
 // lib/widgets/heart_animation.dart
 
-import 'dart:async';
 import 'dart:math';
 import 'package:material_ui/material_ui.dart';
 
 /// A reusable widget that shows an animated heart or broken-heart
 /// when [isFavorite] changes.
 ///
-/// 3-second debounce by default; if the user toggles again
-/// within that time, we cancel and restart the timer. After the user
-/// leaves the state unchanged for the full debounce period, we call
-/// [onDebounceComplete] with the final "favorite" value.
-///
-/// Additionally, if this widget is disposed (e.g. user navigates away),
-/// and the debounce timer is still active, we call [onDebounceComplete]
-/// right in dispose() to ensure the final toggle doesn't get lost.
 class HeartAnimationWidget extends StatefulWidget {
   final bool isFavorite;
-
-  /// Called after user leaves `isFavorite` unchanged for [debounceDuration],
-  /// or if the widget disposes while there's still an active timer.
-  final ValueChanged<bool>? onDebounceComplete;
 
   final Widget child;
 
@@ -32,18 +19,13 @@ class HeartAnimationWidget extends StatefulWidget {
   /// The quick fade/scale animation duration for the big heart.
   final Duration animationDuration;
 
-  /// How long we wait for the user to stop toggling before finalizing.
-  final Duration debounceDuration;
-
   const HeartAnimationWidget({
     super.key,
     required this.isFavorite,
     required this.child,
     required this.containerWidth,
     required this.containerHeight,
-    this.onDebounceComplete,
     this.animationDuration = const Duration(milliseconds: 600),
-    this.debounceDuration = const Duration(seconds: 3),
   });
 
   @override
@@ -61,8 +43,6 @@ class _HeartAnimationWidgetState extends State<HeartAnimationWidget>
   late AnimationController _controller;
   late Animation<double> _scaleAnim;
   late Animation<double> _opacityAnim;
-
-  Timer? _debounceTimer;
 
   @override
   void initState() {
@@ -95,29 +75,13 @@ class _HeartAnimationWidgetState extends State<HeartAnimationWidget>
 
     if (oldWidget.isFavorite != widget.isFavorite) {
       _triggerAnimation(widget.isFavorite);
-      _resetDebounceTimer();
     }
   }
 
   @override
   void dispose() {
-    // If the user leaves before the timer fires, we finalize the last known state:
-    if (_debounceTimer?.isActive ?? false) {
-      _debounceTimer!.cancel();
-      widget.onDebounceComplete?.call(_localFav);
-    }
     _controller.dispose();
     super.dispose();
-  }
-
-  /// Cancel any existing timer, start a new 3s countdown.
-  void _resetDebounceTimer() {
-    _debounceTimer?.cancel();
-    if (widget.onDebounceComplete != null) {
-      _debounceTimer = Timer(widget.debounceDuration, () {
-        widget.onDebounceComplete?.call(_localFav);
-      });
-    }
   }
 
   /// Run the pop animation (heart or broken heart).

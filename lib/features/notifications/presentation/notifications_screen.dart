@@ -522,6 +522,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               child: NotificationActionButtonContent(
                 phase: _nukeSectionPhase,
                 idleChild: const Text('Nuke'),
+                processingIndicatorColor: Colors.black,
               ),
             ),
           ),

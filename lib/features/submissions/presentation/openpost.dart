@@ -26,6 +26,7 @@ import 'package:fanotifier/features/submissions/domain/openpost_repository.dart'
 import 'package:fanotifier/features/submissions/domain/openpost_delete_models.dart';
 import 'package:fanotifier/features/submissions/domain/openpost_submission_attachment.dart';
 import 'package:fanotifier/features/submissions/presentation/openpost_controller.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
 import 'package:fanotifier/features/submissions/presentation/edit_submission_screen.dart';
 import 'package:fanotifier/features/submissions/presentation/manage_submissions.dart';
 import 'package:fanotifier/features/comments/presentation/editcommentscreen.dart';
@@ -112,8 +113,8 @@ class _OpenPostState extends State<OpenPost>
   final FocusNode _commentFocusNode = FocusNode();
   bool _commentComposerFocusRequestedByUser = false;
   bool _blockRestoredCommentComposerFocus = true;
-  Timer? _debounceTimer;
-  bool _pendingFavoriteState = false;
+  late final SubmissionFavoriteStateController _favoriteStateController;
+  bool _observedFavoriteState = false;
   bool _showTagsSection = false;
   final Set<String> _tagToggleInFlight = <String>{};
   final ValueNotifier<bool> _showScrollToTopNotifier =
@@ -177,12 +178,24 @@ class _OpenPostState extends State<OpenPost>
       _controller.submissionAttachment;
   DateTime? get publicationTime => _controller.publicationTime;
   String? get rating => _controller.rating;
-  int get favoritesCount => _controller.favoritesCount;
+  int get favoritesCount {
+    final parsedState = _controller.isFavorited;
+    final effectiveState = isFavorited;
+    final delta = effectiveState == parsedState
+        ? 0
+        : effectiveState
+            ? 1
+            : -1;
+    return max(0, _controller.favoritesCount + delta);
+  }
   int get viewCount => _controller.viewCount;
   int get commentsCount => _controller.commentsCount;
   List<Map<String, dynamic>> get comments => _controller.comments;
   String? get currentUsername => _controller.currentUsername;
-  bool get isFavorited => _controller.isFavorited;
+  bool get isFavorited => _favoriteStateController.valueFor(
+        widget.uniqueNumber,
+        _controller.isFavorited,
+      );
   String? get watchLink => _controller.watchLink;
   String? get unwatchLink => _controller.unwatchLink;
   String? get blockLink => _controller.blockLink;
@@ -213,6 +226,10 @@ class _OpenPostState extends State<OpenPost>
       submissionId: widget.uniqueNumber,
       repository: widget.repository ?? context.read<OpenPostRepository>(),
     );
+    _favoriteStateController =
+        context.read<SubmissionFavoriteStateController>();
+    _observedFavoriteState = isFavorited;
+    _favoriteStateController.addListener(_handleFavoriteStateChanged);
     DetachableWebViewRouteRegistry.register(this);
     WidgetsBinding.instance.addObserver(this);
     if (_webViewScrollOptimizationEnabled) {
@@ -278,6 +295,7 @@ class _OpenPostState extends State<OpenPost>
 
   @override
   void dispose() {
+    _favoriteStateController.removeListener(_handleFavoriteStateChanged);
     DetachableWebViewRouteRegistry.unregister(this);
     routeObserver.unsubscribe(this);
     if (_webViewScrollOptimizationEnabled) {
@@ -299,6 +317,13 @@ class _OpenPostState extends State<OpenPost>
     _commentDraftHasText.dispose();
     _commentDraftCollapsedLines.dispose();
     super.dispose();
+  }
+
+  void _handleFavoriteStateChanged() {
+    final nextState = isFavorited;
+    if (!mounted || nextState == _observedFavoriteState) return;
+    _observedFavoriteState = nextState;
+    setState(() {});
   }
 
   void _handleIosScrollRecovery() {
@@ -1116,6 +1141,7 @@ class _OpenPostState extends State<OpenPost>
         confirmNsfw: _showNSFWConfirmationDialog,
         onNsfwAllowed: () => setState(() {}),
       );
+      _observedFavoriteState = isFavorited;
       setState(() {});
 
       if (result.status == OpenPostDetailsLoadStatus.httpFailure) {
@@ -1971,15 +1997,6 @@ class _OpenPostState extends State<OpenPost>
     return true;
   }
 
-  Future<void> _sendFavoriteRequest(bool shouldFavorite) async {
-    final updated = await _controller.sendFavoriteRequest(
-      shouldFavorite: shouldFavorite,
-      confirmNsfw: _showNSFWConfirmationDialog,
-      onNsfwAllowed: () => setState(() {}),
-    );
-    if (updated) setState(() {});
-  }
-
   Future<bool> _toggleFavorite(bool isLiked) async {
     String normalizedCurrent =
         normalizeFAUsernameForComparison(currentUsername);
@@ -1995,16 +2012,13 @@ class _OpenPostState extends State<OpenPost>
       return isLiked;
     }
 
-    bool newLikeState = !isLiked;
-    setState(() => _controller.toggleFavoriteLocally(newLikeState));
-
-    _pendingFavoriteState = newLikeState;
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(seconds: 2), () async {
-      await _sendFavoriteRequest(_pendingFavoriteState);
-    });
-
-    return newLikeState;
+    return _favoriteStateController.toggle(
+      submissionId: widget.uniqueNumber,
+      fallbackIsFavorite: _controller.isFavorited,
+      favUrl: _controller.favLink,
+      unfavUrl: _controller.unfavLink,
+      sfwEnabled: _controller.sfwEnabled,
+    );
   }
 
   void _onBackSwipeAnimationTick() {
@@ -3207,8 +3221,8 @@ class _OpenPostState extends State<OpenPost>
                                                     ),
                                                   ),
                                                   Expanded(
-                                                    child: IconButton(
-                                                      icon: LikeButton(
+                                                    child: Center(
+                                                      child: LikeButton(
                                                         isLiked: isFavorited,
                                                         size: 26,
                                                         circleColor:
@@ -3242,11 +3256,6 @@ class _OpenPostState extends State<OpenPost>
                                                                     500),
                                                         onTap: _toggleFavorite,
                                                       ),
-                                                      onPressed: () {
-                                                        _toggleFavorite(
-                                                            isFavorited);
-                                                      },
-                                                      splashRadius: 24,
                                                     ),
                                                   ),
                                                   Expanded(

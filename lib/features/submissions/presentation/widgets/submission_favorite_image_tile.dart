@@ -1,6 +1,8 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
 import 'package:fanotifier/shared/widgets/heart_animation_optimized.dart';
@@ -15,7 +17,6 @@ class SubmissionFavoriteImageTile extends StatelessWidget {
     required this.isSelected,
     required this.onToggleSelection,
     required this.onOpenSubmission,
-    required this.onToggleFavorite,
     required this.onVisibilityChanged,
   });
 
@@ -26,16 +27,18 @@ class SubmissionFavoriteImageTile extends StatelessWidget {
   final bool isSelected;
   final Function(String uniqueNumber) onToggleSelection;
   final Function(Map<String, dynamic> item) onOpenSubmission;
-  final Function(Map<String, dynamic> item, bool newVal) onToggleFavorite;
   final Function(int flatListIndex, bool isVisible) onVisibilityChanged;
 
   @override
   Widget build(BuildContext context) {
     final thumbnailUrl = item['thumbnailUrl'] as String;
     final hqUrl = item['hqUrl'] as String? ?? '';
-    final bool isFav = item['isFav'] as bool? ?? false;
+    final fallbackIsFav = item['isFav'] as bool? ?? false;
     final bool wasInitiallyFav = item['initialIsFav'] as bool? ?? false;
     final uniqueNumber = item['uniqueNumber'] as String;
+    final isFav = context.select<SubmissionFavoriteStateController, bool>(
+      (controller) => controller.valueFor(uniqueNumber, fallbackIsFav),
+    );
     final int flatIndex = item['flatIndex'] as int? ?? -1;
     final displayUrl = hqUrl.isNotEmpty ? hqUrl : thumbnailUrl;
     final String? rating = item['rating'] as String?;
@@ -57,7 +60,12 @@ class SubmissionFavoriteImageTile extends StatelessWidget {
           }
         },
         onLongPress: () {
-          onToggleFavorite(item, !isFav);
+          context.read<SubmissionFavoriteStateController>().toggle(
+                submissionId: uniqueNumber,
+                fallbackIsFavorite: fallbackIsFav,
+                favUrl: item['favUrl'] as String?,
+                unfavUrl: item['unfavUrl'] as String?,
+              );
         },
         child: SizedBox(
           width: width,
@@ -73,7 +81,6 @@ class SubmissionFavoriteImageTile extends StatelessWidget {
                   wasInitiallyFavorited: wasInitiallyFav,
                   containerWidth: width,
                   containerHeight: height,
-                  onToggle: (val) => onToggleFavorite(item, val),
                   child: FaThumbnailOutline(
                     rating: rating,
                     borderRadius: 8.0,

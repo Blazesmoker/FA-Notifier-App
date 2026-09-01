@@ -30,10 +30,12 @@ class NotificationActionButtonContent extends StatelessWidget {
     super.key,
     required this.phase,
     required this.idleChild,
+    this.processingIndicatorColor = const Color(0xFFE09321),
   });
 
   final NotificationRemovalButtonPhase phase;
   final Widget idleChild;
+  final Color processingIndicatorColor;
 
   @override
   Widget build(BuildContext context) {
@@ -49,14 +51,17 @@ class NotificationActionButtonContent extends StatelessWidget {
             child: idleChild,
           ),
           if (phase == NotificationRemovalButtonPhase.processing)
-            const Positioned.fill(
+            Positioned.fill(
               child: OverflowBox(
                 alignment: Alignment.center,
                 minWidth: 17,
                 maxWidth: 17,
                 minHeight: 17,
                 maxHeight: 17,
-                child: DashedLoadingIndicator(size: 17),
+                child: DashedLoadingIndicator(
+                  size: 17,
+                  color: processingIndicatorColor,
+                ),
               ),
             ),
           if (phase == NotificationRemovalButtonPhase.success)

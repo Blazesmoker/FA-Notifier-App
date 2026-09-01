@@ -6,7 +6,6 @@ import 'package:fanotifier/core/logging/app_logging.dart';
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/features/auth/domain/cloudflare_check_result.dart';
 import 'package:fanotifier/features/browse/domain/browse_repository.dart';
-import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:fanotifier/shared/fa/fa_thumbnail_processing.dart';
 
@@ -18,7 +17,6 @@ class BrowseImageGridController extends ChangeNotifier {
     required this._selectedFilters,
     required this._onCloudflareChallenge,
     required this._repository,
-    required this._favoriteRepository,
     SfwModePreference? sfwModePreference,
   }) : _sfwModePreference = sfwModePreference ?? SfwModePreference();
 
@@ -26,15 +24,11 @@ class BrowseImageGridController extends ChangeNotifier {
 
   final BrowseCloudflareChallengeHandler _onCloudflareChallenge;
   final BrowseRepository _repository;
-  final SubmissionFavoriteRepository _favoriteRepository;
   final SfwModePreference _sfwModePreference;
   final ScrollController scrollController = ScrollController();
   final List<Map<String, dynamic>> _images = [];
   final List<List<Map<String, dynamic>>> _imageRows = [];
   final Set<String> _imageUrls = <String>{};
-  final Set<String> _favoritedImages = {};
-  final Map<String, String> _favUrls = {};
-  final Map<String, String> _unfavUrls = {};
 
   Map<String, String> _selectedFilters;
   List<Map<String, dynamic>> _normalImagesQueue = [];
@@ -57,7 +51,7 @@ class BrowseImageGridController extends ChangeNotifier {
   List<List<Map<String, dynamic>>> get imageRows => _imageRows;
   List<Map<String, dynamic>> get normalImagesQueue => _normalImagesQueue;
   Set<String> get imageUrls => _imageUrls;
-  Set<String> get favoritedImages => _favoritedImages;
+  bool get sfwEnabled => _sfwEnabled;
   bool get isLoading => _isLoading;
   bool get isError => _isError;
   String? get errorMessage => _errorMessage;
@@ -113,9 +107,6 @@ class BrowseImageGridController extends ChangeNotifier {
     _nextPageTriggerOffset = double.infinity;
     _pendingNextPageFetch = false;
     _isNextPageFetchQueued = false;
-    _favoritedImages.clear();
-    _favUrls.clear();
-    _unfavUrls.clear();
     _isError = false;
     _errorMessage = null;
     _notifyChanged();
@@ -346,92 +337,6 @@ class BrowseImageGridController extends ChangeNotifier {
       return await _onCloudflareChallenge(initialUrl);
     } finally {
       _isHandlingCloudflareChallenge = false;
-    }
-  }
-
-  Future<String> _getAllCookies() async {
-    await _sfwLoadFuture;
-    return _repository.buildCookieHeader(
-      selectedFilters: _selectedFilters,
-      sfwEnabled: _sfwEnabled,
-    );
-  }
-
-  Future<void> _fetchPostDetails(String uniqueNumber) async {
-    final links = await _favoriteRepository.fetchLinksForSubmissionId(
-      submissionId: uniqueNumber,
-      cookieHeaderProvider: _getAllCookies,
-    );
-    if (links == null) return;
-
-    if (links.hasAnyUrl) {
-      if (links.hasFavUrl) _favUrls[uniqueNumber] = links.favUrl;
-      if (links.hasUnfavUrl) _unfavUrls[uniqueNumber] = links.unfavUrl;
-      if (links.hasUnfavUrl && !links.hasFavUrl) {
-        _favoritedImages.add(uniqueNumber);
-      }
-      if (links.hasFavUrl && !links.hasUnfavUrl) {
-        _favoritedImages.remove(uniqueNumber);
-      }
-    }
-  }
-
-  Future<void> _refetchFavLinks(String uniqueNumber) async {
-    _favUrls[uniqueNumber] = '';
-    _unfavUrls[uniqueNumber] = '';
-    await _fetchPostDetails(uniqueNumber);
-  }
-
-  Future<void> toggleFavorite(String uniqueNumber, bool wantFavorite) async {
-    bool hasFavUrl = _favUrls.containsKey(uniqueNumber) &&
-        _favUrls[uniqueNumber]!.isNotEmpty;
-    bool hasUnfavUrl = _unfavUrls.containsKey(uniqueNumber) &&
-        _unfavUrls[uniqueNumber]!.isNotEmpty;
-    if (!hasFavUrl && !hasUnfavUrl) {
-      await _fetchPostDetails(uniqueNumber);
-      hasFavUrl = _favUrls.containsKey(uniqueNumber) &&
-          _favUrls[uniqueNumber]!.isNotEmpty;
-      hasUnfavUrl = _unfavUrls.containsKey(uniqueNumber) &&
-          _unfavUrls[uniqueNumber]!.isNotEmpty;
-    }
-
-    final isCurrentlyFav = _favoritedImages.contains(uniqueNumber);
-
-    if (wantFavorite && isCurrentlyFav) {
-      debugPrint('Already favored; skipping POST for $uniqueNumber');
-      return;
-    } else if (!wantFavorite && !isCurrentlyFav) {
-      debugPrint('Already unfavored; skipping POST for $uniqueNumber');
-      return;
-    }
-
-    final urlToUse =
-        wantFavorite ? _favUrls[uniqueNumber] : _unfavUrls[uniqueNumber];
-    if (urlToUse == null || urlToUse.isEmpty) {
-      debugPrint(
-          'DEBUG: No URL found for fav/unfav operation on $uniqueNumber.');
-      return;
-    }
-
-    if (wantFavorite) {
-      _favoritedImages.add(uniqueNumber);
-    } else {
-      _favoritedImages.remove(uniqueNumber);
-    }
-    _notifyChanged();
-
-    final success =
-        await _favoriteRepository.executePostWithRetry(urlToUse);
-    if (success) {
-      await _refetchFavLinks(uniqueNumber);
-      _notifyChanged();
-    } else {
-      if (wantFavorite) {
-        _favoritedImages.remove(uniqueNumber);
-      } else {
-        _favoritedImages.add(uniqueNumber);
-      }
-      _notifyChanged();
     }
   }
 

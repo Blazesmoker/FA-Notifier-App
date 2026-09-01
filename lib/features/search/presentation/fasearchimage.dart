@@ -5,7 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:fanotifier/features/search/domain/search_repository.dart';
 import 'package:fanotifier/features/search/presentation/search_image_controller.dart';
-import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
 import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/shared/widgets/heart_animation.dart';
@@ -38,7 +38,6 @@ class FASearchImageState extends State<FASearchImage> {
   String? get _errorMessage => _controller.errorMessage;
   List<List<Map<String, dynamic>>> get imageRows => _controller.imageRows;
   ScrollController get _scrollController => _controller.scrollController;
-  Set<String> get _favoritedImages => _controller.favoritedImages;
 
   @override
   void initState() {
@@ -52,7 +51,6 @@ class FASearchImageState extends State<FASearchImage> {
       },
       showCloudflareCheck: _showCloudflareDialog,
       repository: context.read<SearchRepository>(),
-      favoriteRepository: context.read<SubmissionFavoriteRepository>(),
     );
     _controller.start();
   }
@@ -99,10 +97,6 @@ class FASearchImageState extends State<FASearchImage> {
 
   bool _handleScrollNotification(ScrollNotification notification) {
     return _controller.handleScrollNotification(notification);
-  }
-
-  Future<void> _toggleFavorite(String uniqueNumber, bool wantFavorite) async {
-    await _controller.toggleFavorite(uniqueNumber, wantFavorite);
   }
 
   @override
@@ -217,9 +211,7 @@ class FASearchImageState extends State<FASearchImage> {
               item: image,
               width: width,
               height: height,
-              isFavorited: _favoritedImages.contains(image['uniqueNumber']),
-              onFinalFavState: (finalVal) =>
-                  _toggleFavorite(image['uniqueNumber'], finalVal),
+              sfwEnabled: _controller.sfwEnabled,
               onTap: () {
                 Navigator.push(
                   context,
@@ -265,9 +257,7 @@ class FASearchImageState extends State<FASearchImage> {
               item: left,
               width: wL,
               height: h,
-              isFavorited: _favoritedImages.contains(left['uniqueNumber']),
-              onFinalFavState: (finalVal) =>
-                  _toggleFavorite(left['uniqueNumber'], finalVal),
+              sfwEnabled: _controller.sfwEnabled,
               onTap: () {
                 Navigator.push(
                   context,
@@ -284,9 +274,7 @@ class FASearchImageState extends State<FASearchImage> {
               item: right,
               width: wR,
               height: h,
-              isFavorited: _favoritedImages.contains(right['uniqueNumber']),
-              onFinalFavState: (finalVal) =>
-                  _toggleFavorite(right['uniqueNumber'], finalVal),
+              sfwEnabled: _controller.sfwEnabled,
               onTap: () {
                 Navigator.push(
                   context,
@@ -309,16 +297,14 @@ class _FavSearchTile extends StatefulWidget {
   final Map<String, dynamic> item;
   final double width;
   final double height;
-  final bool isFavorited;
-  final ValueChanged<bool> onFinalFavState;
+  final bool sfwEnabled;
   final VoidCallback onTap;
 
   const _FavSearchTile({
     required this.item,
     required this.width,
     required this.height,
-    required this.isFavorited,
-    required this.onFinalFavState,
+    required this.sfwEnabled,
     required this.onTap,
   });
 
@@ -327,25 +313,14 @@ class _FavSearchTile extends StatefulWidget {
 }
 
 class _FavSearchTileState extends State<_FavSearchTile> {
-  late bool _localFav;
-
-  @override
-  void initState() {
-    super.initState();
-    _localFav = widget.isFavorited;
-  }
-
-  @override
-  void didUpdateWidget(covariant _FavSearchTile oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.isFavorited != widget.isFavorited) {
-      setState(() => _localFav = widget.isFavorited);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final imageUrl = widget.item['url'] as String;
+    final uniqueNumber = widget.item['uniqueNumber'] as String;
+    final fallbackIsFavorite = widget.item['isFav'] as bool? ?? false;
+    final isFavorite = context.select<SubmissionFavoriteStateController, bool>(
+      (controller) => controller.valueFor(uniqueNumber, fallbackIsFavorite),
+    );
     final String? rating = widget.item['rating'] as String?;
     final String? title = widget.item['title'] as String?;
     final String? author = widget.item['author'] as String?;
@@ -355,20 +330,22 @@ class _FavSearchTileState extends State<_FavSearchTile> {
     return GestureDetector(
       onTap: widget.onTap,
       onLongPress: () {
-        setState(() => _localFav = !_localFav);
+        context.read<SubmissionFavoriteStateController>().toggle(
+              submissionId: uniqueNumber,
+              fallbackIsFavorite: fallbackIsFavorite,
+              favUrl: widget.item['favUrl'] as String?,
+              unfavUrl: widget.item['unfavUrl'] as String?,
+              sfwEnabled: widget.sfwEnabled,
+            );
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HeartAnimationWidget(
-            isFavorite: _localFav,
+            isFavorite: isFavorite,
             containerWidth: widget.width,
             containerHeight: widget.height,
-            onDebounceComplete: (finalVal) {
-              widget.onFinalFavState(finalVal);
-            },
-            debounceDuration: const Duration(seconds: 3),
             child: FaThumbnailOutline(
               rating: rating,
               borderRadius: 8.0,

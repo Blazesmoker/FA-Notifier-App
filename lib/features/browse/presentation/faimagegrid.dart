@@ -4,7 +4,7 @@ import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:fanotifier/features/browse/domain/browse_repository.dart';
 import 'package:fanotifier/features/browse/presentation/browse_image_grid_controller.dart';
-import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
 import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/shared/widgets/heart_animation.dart';
@@ -37,7 +37,6 @@ class FAImageGridState extends State<FAImageGrid> {
   List<Map<String, dynamic>> get normalImagesQueue =>
       _controller.normalImagesQueue;
   Set<String> get imageUrls => _controller.imageUrls;
-  Set<String> get _favoritedImages => _controller.favoritedImages;
   ScrollController get _scrollController => _controller.scrollController;
 
   @override
@@ -48,7 +47,6 @@ class FAImageGridState extends State<FAImageGrid> {
       onCloudflareChallenge: (initialUrl) =>
           _showCloudflareDialog(initialUrl: initialUrl),
       repository: context.read<BrowseRepository>(),
-      favoriteRepository: context.read<SubmissionFavoriteRepository>(),
     );
     _controller.addListener(_handleControllerChanged);
     _controller.initialize();
@@ -97,10 +95,6 @@ class FAImageGridState extends State<FAImageGrid> {
         returnPageHtml: true,
       ),
     );
-  }
-
-  Future<void> _toggleFavorite(String uniqueNumber, bool wantFavorite) async {
-    await _controller.toggleFavorite(uniqueNumber, wantFavorite);
   }
 
   @override
@@ -219,9 +213,7 @@ class FAImageGridState extends State<FAImageGrid> {
               image: image,
               width: width,
               height: height,
-              isFav: _favoritedImages.contains(image['uniqueNumber']),
-              onToggle: (wantFav) =>
-                  _toggleFavorite(image['uniqueNumber'], wantFav),
+              sfwEnabled: _controller.sfwEnabled,
               onTap: () {
                 Navigator.push(
                   context,
@@ -270,9 +262,7 @@ class FAImageGridState extends State<FAImageGrid> {
               image: left,
               width: wL,
               height: h,
-              isFav: _favoritedImages.contains(left['uniqueNumber']),
-              onToggle: (wantFav) =>
-                  _toggleFavorite(left['uniqueNumber'], wantFav),
+              sfwEnabled: _controller.sfwEnabled,
               onTap: () {
                 Navigator.push(
                   context,
@@ -289,9 +279,7 @@ class FAImageGridState extends State<FAImageGrid> {
               image: right,
               width: wR,
               height: h,
-              isFav: _favoritedImages.contains(right['uniqueNumber']),
-              onToggle: (wantFav) =>
-                  _toggleFavorite(right['uniqueNumber'], wantFav),
+              sfwEnabled: _controller.sfwEnabled,
               onTap: () {
                 Navigator.push(
                   context,
@@ -314,16 +302,14 @@ class _FavImageTile extends StatefulWidget {
   final Map<String, dynamic> image;
   final double width;
   final double height;
-  final bool isFav;
-  final ValueChanged<bool> onToggle;
+  final bool sfwEnabled;
   final VoidCallback onTap;
 
   const _FavImageTile({
     required this.image,
     required this.width,
     required this.height,
-    required this.isFav,
-    required this.onToggle,
+    required this.sfwEnabled,
     required this.onTap,
   });
 
@@ -332,25 +318,14 @@ class _FavImageTile extends StatefulWidget {
 }
 
 class _FavImageTileState extends State<_FavImageTile> {
-  late bool _localFav;
-
-  @override
-  void initState() {
-    super.initState();
-    _localFav = widget.isFav;
-  }
-
-  @override
-  void didUpdateWidget(covariant _FavImageTile oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.isFav != widget.isFav) {
-      setState(() => _localFav = widget.isFav);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final imageUrl = widget.image['url'];
+    final uniqueNumber = widget.image['uniqueNumber'] as String;
+    final fallbackIsFavorite = widget.image['isFav'] as bool? ?? false;
+    final isFavorite = context.select<SubmissionFavoriteStateController, bool>(
+      (controller) => controller.valueFor(uniqueNumber, fallbackIsFavorite),
+    );
     final String? rating = widget.image['rating'] as String?;
     final String? title = widget.image['title'] as String?;
     final String? author = widget.image['author'] as String?;
@@ -359,20 +334,22 @@ class _FavImageTileState extends State<_FavImageTile> {
     return GestureDetector(
       onTap: widget.onTap,
       onLongPress: () {
-        setState(() => _localFav = !_localFav);
+        context.read<SubmissionFavoriteStateController>().toggle(
+              submissionId: uniqueNumber,
+              fallbackIsFavorite: fallbackIsFavorite,
+              favUrl: widget.image['favUrl'] as String?,
+              unfavUrl: widget.image['unfavUrl'] as String?,
+              sfwEnabled: widget.sfwEnabled,
+            );
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HeartAnimationWidget(
-            isFavorite: _localFav,
+            isFavorite: isFavorite,
             containerWidth: widget.width,
             containerHeight: widget.height,
-            onDebounceComplete: (finalVal) {
-              widget.onToggle(finalVal);
-            },
-            debounceDuration: const Duration(seconds: 3),
             child: FaThumbnailOutline(
               rating: rating,
               borderRadius: 8.0,

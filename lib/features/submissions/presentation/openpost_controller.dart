@@ -1,7 +1,6 @@
 import 'package:fanotifier/features/submissions/domain/openpost_action_result.dart';
 import 'package:fanotifier/features/submissions/domain/openpost_delete_models.dart';
 import 'package:fanotifier/features/submissions/domain/openpost_details_load_result.dart';
-import 'package:fanotifier/features/submissions/domain/openpost_favorite_links_load_result.dart';
 import 'package:fanotifier/features/submissions/domain/openpost_file_download_result.dart';
 import 'package:fanotifier/features/submissions/domain/openpost_media_export_result.dart';
 import 'package:fanotifier/features/submissions/domain/openpost_models.dart';
@@ -281,31 +280,6 @@ class OpenPostController {
     }
   }
 
-  Future<bool> loadFavoriteLinks({
-    required Future<bool> Function() confirmNsfw,
-    required void Function() onNsfwAllowed,
-  }) async {
-    final result = await _repository.loadFavoriteLinks(
-      submissionId: submissionId,
-      fetch: (url) => getWithSfwCookie(
-        url,
-        confirmNsfw: confirmNsfw,
-        onNsfwAllowed: onNsfwAllowed,
-      ),
-    );
-
-    if (result.status == OpenPostFavoriteLinksLoadStatus.success) {
-      favLink = result.favoriteLink;
-      unfavLink = result.unfavoriteLink;
-      isFavorited = result.isFavorited;
-      return true;
-    }
-    if (result.status == OpenPostFavoriteLinksLoadStatus.httpFailure) {
-      debugPrint('Failed to fetch favorite links: ${result.statusCode}');
-    }
-    return false;
-  }
-
   bool applyLocalTagBlockState(
     String tagName, {
     required bool isBlocked,
@@ -412,38 +386,6 @@ class OpenPostController {
       },
     ];
     commentsCount += 1;
-  }
-
-  void toggleFavoriteLocally(bool isFavorited) {
-    this.isFavorited = isFavorited;
-    favoritesCount += isFavorited ? 1 : -1;
-  }
-
-  Future<bool> sendFavoriteRequest({
-    required bool shouldFavorite,
-    required Future<bool> Function() confirmNsfw,
-    required void Function() onNsfwAllowed,
-  }) async {
-    final relativeUrl = shouldFavorite ? favLink : unfavLink;
-    if (relativeUrl == null) return false;
-
-    try {
-      final result = await _repository.performWatchUnwatch(
-        urlPath: relativeUrl,
-        sfwEnabled: sfwEnabled,
-      );
-      if (result.status == OpenPostActionStatus.missingAuth) return false;
-      if (result.status == OpenPostActionStatus.success) {
-        return await loadFavoriteLinks(
-          confirmNsfw: confirmNsfw,
-          onNsfwAllowed: onNsfwAllowed,
-        );
-      }
-      debugPrint('Failed to toggle favorite: ${result.statusCode}');
-    } catch (error) {
-      debugPrint('Error toggling favorite: $error');
-    }
-    return false;
   }
 
   Future<bool> submitComment(String commentText) {

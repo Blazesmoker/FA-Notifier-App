@@ -7,6 +7,7 @@ import 'package:fanotifier/features/notes/presentation/notesscreen.dart';
 import 'package:fanotifier/features/notifications/presentation/notifications_screen.dart';
 import 'package:fanotifier/features/search/presentation/search_screen.dart';
 import 'package:fanotifier/features/submissions/presentation/submissions_screen.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
 import 'package:fanotifier/features/upload/presentation/upload_submission.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
@@ -957,6 +958,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       _activitiesPolling.stop();
+      context.read<SubmissionFavoriteStateController>().clear();
       await _homeSessionRepository.clearLocalSession();
 
       if (!mounted) return;

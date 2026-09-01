@@ -50,7 +50,6 @@ import 'package:fanotifier/features/notes/notes_feature.dart';
 import 'package:fanotifier/features/notes/presentation/note_image_preview_settings_provider.dart';
 import 'package:fanotifier/features/profile/profile_feature.dart';
 import 'package:fanotifier/features/profile/domain/profile_favorites_repository.dart';
-import 'package:fanotifier/features/profile/domain/profile_gallery_favorite_repository.dart';
 import 'package:fanotifier/features/profile/domain/profile_gallery_repository.dart';
 import 'package:fanotifier/features/profile/domain/profile_journals_repository.dart';
 import 'package:fanotifier/features/profile/domain/profile_media_export_repository.dart';
@@ -61,6 +60,7 @@ import 'package:fanotifier/features/profile/domain/user_description_repository.d
 import 'package:fanotifier/features/search/domain/find_source_repository.dart';
 import 'package:fanotifier/features/search/domain/search_repository.dart';
 import 'package:fanotifier/features/search/search_feature.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
 import 'package:fanotifier/features/settings/domain/app_icon_repository.dart';
 import 'package:fanotifier/features/settings/domain/fur_affinity_settings_repository.dart';
 import 'package:fanotifier/features/settings/domain/settings_app_info_repository.dart';
@@ -181,9 +181,6 @@ class AppProviders extends StatelessWidget {
         Provider<ProfileGalleryRepository>(
           create: (_) => ProfileFeature.createGalleryRepository(),
         ),
-        Provider<ProfileGalleryFavoriteRepository>(
-          create: (_) => ProfileFeature.createGalleryFavoriteRepository(),
-        ),
         Provider<ProfileJournalsRepository>(
           create: (_) => ProfileFeature.createJournalsRepository(),
         ),
@@ -207,6 +204,11 @@ class AppProviders extends StatelessWidget {
         ),
         Provider<SubmissionFavoriteRepository>(
           create: (_) => SubmissionsFeature.createFavoriteRepository(),
+        ),
+        ChangeNotifierProvider<SubmissionFavoriteStateController>(
+          create: (context) => SubmissionFavoriteStateController(
+            repository: context.read<SubmissionFavoriteRepository>(),
+          ),
         ),
         Provider<SubmissionsRepository>(
           create: (_) => SubmissionsFeature.createSubmissionsRepository(),

@@ -19,9 +19,6 @@ class HeartAnimationOptimized extends StatefulWidget {
   /// Animation duration for the big heart
   final Duration animationDuration;
 
-  /// Called when the user toggles the favorite state
-  final ValueChanged<bool> onToggle;
-
   const HeartAnimationOptimized({
     super.key,
     required this.isFavorite,
@@ -30,7 +27,6 @@ class HeartAnimationOptimized extends StatefulWidget {
     required this.containerWidth,
     required this.containerHeight,
     this.animationDuration = const Duration(milliseconds: 600),
-    required this.onToggle,
   });
 
   @override

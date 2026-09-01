@@ -1,31 +1,41 @@
-import 'package:fanotifier/features/submissions/data/favorite_service.dart';
-import 'package:fanotifier/features/submissions/data/submission_favorite_details_service.dart';
+import 'package:fanotifier/features/submissions/data/submission_favorite_remote_data_source.dart';
 import 'package:fanotifier/features/submissions/data/submission_management_parser.dart';
 import 'package:fanotifier/features/submissions/data/submission_management_remote_data_source.dart';
 import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
-import 'package:fanotifier/shared/fa/domain/submission_favorite_links.dart';
 import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
 
 class SubmissionFavoriteRepositoryImpl
     implements SubmissionFavoriteRepository {
   SubmissionFavoriteRepositoryImpl({
-    FavoriteService? favoriteService,
+    SubmissionFavoriteRemoteDataSource? favoriteRemoteDataSource,
     SubmissionManagementRemoteDataSource? managementRemoteDataSource,
-    this._favoriteDetailsService = const SubmissionFavoriteDetailsService(),
-  })  : _favoriteService = favoriteService ?? FavoriteService(),
+  })  : _favoriteRemoteDataSource =
+            favoriteRemoteDataSource ??
+                const SubmissionFavoriteRemoteDataSource(),
         _managementRemoteDataSource = managementRemoteDataSource ??
             const SubmissionManagementRemoteDataSource();
 
   static final Uri _favoritesUri =
       Uri.parse('https://www.furaffinity.net/controls/favorites/');
 
-  final FavoriteService _favoriteService;
-  final SubmissionFavoriteDetailsService _favoriteDetailsService;
+  final SubmissionFavoriteRemoteDataSource _favoriteRemoteDataSource;
   final SubmissionManagementRemoteDataSource _managementRemoteDataSource;
 
   @override
-  Future<bool> executePostWithRetry(String url) {
-    return _favoriteService.executePostWithRetry(url);
+  Future<SubmissionFavoriteMutationResult> setFavoriteState({
+    required String submissionId,
+    required bool isFavorite,
+    String? favUrl,
+    String? unfavUrl,
+    bool? sfwEnabled,
+  }) {
+    return _favoriteRemoteDataSource.setFavoriteState(
+      submissionId: submissionId,
+      isFavorite: isFavorite,
+      favUrl: favUrl,
+      unfavUrl: unfavUrl,
+      sfwEnabled: sfwEnabled,
+    );
   }
 
   @override
@@ -90,29 +100,5 @@ class SubmissionFavoriteRepositoryImpl
       }
       return FaContentManagementResult(success: false, message: '$error');
     }
-  }
-
-  @override
-  Future<SubmissionFavoriteLinks?> fetchLinksForSubmissionId({
-    required String submissionId,
-    required Future<String> Function() cookieHeaderProvider,
-  }) {
-    return _favoriteDetailsService.fetchLinksForSubmissionId(
-      submissionId: submissionId,
-      cookieHeaderProvider: cookieHeaderProvider,
-    );
-  }
-
-  @override
-  Future<SubmissionFavoriteLinks?> fetchLinksForPostUrl({
-    required String postUrl,
-    required Future<String> Function() cookieHeaderProvider,
-    String? debugPostLabel,
-  }) {
-    return _favoriteDetailsService.fetchLinksForPostUrl(
-      postUrl: postUrl,
-      cookieHeaderProvider: cookieHeaderProvider,
-      debugPostLabel: debugPostLabel,
-    );
   }
 }

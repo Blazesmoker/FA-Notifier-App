@@ -4,7 +4,6 @@ import 'package:fanotifier/core/logging/app_logging.dart';
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/features/auth/domain/cloudflare_check_result.dart';
 import 'package:fanotifier/features/search/domain/search_repository.dart';
-import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:fanotifier/shared/fa/fa_thumbnail_processing.dart';
 import 'package:material_ui/material_ui.dart';
@@ -21,7 +20,6 @@ class SearchImageController {
     required this._notifyView,
     required this._showCloudflareCheck,
     required this._repository,
-    required this._favoriteRepository,
     SfwModePreference? sfwModePreference,
   }) : _sfwModePreference = sfwModePreference ?? SfwModePreference();
 
@@ -33,7 +31,6 @@ class SearchImageController {
   final VoidCallback _notifyView;
   final SearchCloudflareCheck _showCloudflareCheck;
   final SearchRepository _repository;
-  final SubmissionFavoriteRepository _favoriteRepository;
   final SfwModePreference _sfwModePreference;
 
   int currentPage = 1;
@@ -46,14 +43,9 @@ class SearchImageController {
   List<Map<String, dynamic>> normalImagesQueue = [];
   final Set<String> imageUrls = <String>{};
   final ScrollController scrollController = ScrollController();
-  final Set<String> favoritedImages = {};
-  final Map<String, String> favUrls = {};
-  final Map<String, String> unfavUrls = {};
 
   bool _sfwEnabled = true;
   late final Future<void> _sfwLoadFuture;
-  int _detailsEpoch = 0;
-  final Map<String, Future<void>> _detailsInFlight = {};
   bool _isHandlingCloudflareChallenge = false;
   double _nextPageTriggerOffset = double.infinity;
   bool _pendingNextPageFetch = false;
@@ -64,6 +56,8 @@ class SearchImageController {
     fetchImages(currentPage);
     scrollController.addListener(_scrollListener);
   }
+
+  bool get sfwEnabled => _sfwEnabled;
 
   Future<void> _loadSfwEnabled() async {
     _sfwEnabled = await _sfwModePreference.loadSfwEnabled();
@@ -92,9 +86,6 @@ class SearchImageController {
   }) async {
     _selectedFilters = selectedFilters;
     _searchQuery = searchQuery;
-    _detailsEpoch++;
-    _detailsInFlight.clear();
-
     images.clear();
     imageUrls.clear();
     imageRows.clear();
@@ -104,9 +95,6 @@ class SearchImageController {
     _nextPageTriggerOffset = double.infinity;
     _pendingNextPageFetch = false;
     _isNextPageFetchQueued = false;
-    favoritedImages.clear();
-    favUrls.clear();
-    unfavUrls.clear();
     isError = false;
     errorMessage = null;
     _notifyIfMounted();
@@ -374,137 +362,6 @@ class SearchImageController {
 
       _nextPageTriggerOffset = previousMaxScrollExtent + (addedExtent * 0.6);
     });
-  }
-
-  Future<void> _ensurePostDetails({
-    required String uniqueNumber,
-    required String postUrl,
-  }) async {
-    if (uniqueNumber.isEmpty || postUrl.isEmpty) return;
-
-    final hasFav = favUrls[uniqueNumber]?.isNotEmpty == true;
-    final hasUnfav = unfavUrls[uniqueNumber]?.isNotEmpty == true;
-    if (hasFav || hasUnfav) return;
-
-    final existing = _detailsInFlight[uniqueNumber];
-    if (existing != null) {
-      await existing;
-      return;
-    }
-
-    final int epoch = _detailsEpoch;
-
-    final future = () async {
-      final details = await _fetchPostDetails(postUrl);
-      if (!_isMounted()) return;
-      if (epoch != _detailsEpoch) return;
-      if (details == null) return;
-
-      final favUrl = details['favUrl'] ?? '';
-      final unfavUrl = details['unfavUrl'] ?? '';
-
-      favUrls[uniqueNumber] = favUrl;
-      unfavUrls[uniqueNumber] = unfavUrl;
-
-      if (unfavUrl.isNotEmpty && favUrl.isEmpty) {
-        favoritedImages.add(uniqueNumber);
-      } else if (favUrl.isNotEmpty && unfavUrl.isEmpty) {
-        favoritedImages.remove(uniqueNumber);
-      } else if (unfavUrl.isNotEmpty) {
-        favoritedImages.add(uniqueNumber);
-      }
-      _notifyView();
-    }();
-
-    _detailsInFlight[uniqueNumber] = future;
-
-    try {
-      await future;
-    } finally {
-      if (_detailsInFlight[uniqueNumber] == future) {
-        _detailsInFlight.remove(uniqueNumber);
-      }
-    }
-  }
-
-  Future<Map<String, String>?> _fetchPostDetails(String postUrl) async {
-    final links = await _favoriteRepository.fetchLinksForPostUrl(
-      postUrl: postUrl,
-      cookieHeaderProvider: _getAllCookies,
-    );
-    if (links == null) return null;
-
-    return {
-      'favUrl': links.favUrl,
-      'unfavUrl': links.unfavUrl,
-    };
-  }
-
-  Future<void> toggleFavorite(String uniqueNumber, bool wantFavorite) async {
-    final idx = images.indexWhere((e) => e['uniqueNumber'] == uniqueNumber);
-    if (idx == -1) return;
-
-    final postUrl = (images[idx]['postUrl'] ?? '') as String;
-    if (postUrl.isEmpty) return;
-
-    await _ensurePostDetails(uniqueNumber: uniqueNumber, postUrl: postUrl);
-
-    final hasFav = favUrls[uniqueNumber]?.isNotEmpty == true;
-    final hasUnfav = unfavUrls[uniqueNumber]?.isNotEmpty == true;
-
-    if (!hasFav && !hasUnfav) {
-      debugPrint('DEBUG: No fav/unfav URLs found for $uniqueNumber');
-      return;
-    }
-
-    final isCurrentlyFav = favoritedImages.contains(uniqueNumber);
-
-    if (wantFavorite && isCurrentlyFav) {
-      debugPrint('Already favored; skipping POST for $uniqueNumber');
-      return;
-    }
-    if (!wantFavorite && !isCurrentlyFav) {
-      debugPrint('Already unfavored; skipping POST for $uniqueNumber');
-      return;
-    }
-
-    final urlToUse = wantFavorite ? favUrls[uniqueNumber] : unfavUrls[uniqueNumber];
-    if (urlToUse == null || urlToUse.isEmpty) {
-      debugPrint(
-        'DEBUG: No URL found for fav/unfav operation on $uniqueNumber.',
-      );
-      return;
-    }
-
-    if (wantFavorite) {
-      favoritedImages.add(uniqueNumber);
-    } else {
-      favoritedImages.remove(uniqueNumber);
-    }
-    _notifyIfMounted();
-
-    final success =
-        await _favoriteRepository.executePostWithRetry(urlToUse);
-    if (!success) {
-      if (wantFavorite) {
-        favoritedImages.remove(uniqueNumber);
-      } else {
-        favoritedImages.add(uniqueNumber);
-      }
-      _notifyIfMounted();
-      debugPrint(
-        'DEBUG: Failed to ${wantFavorite ? 'fav' : 'unfav'} $uniqueNumber.',
-      );
-      return;
-    }
-
-    debugPrint(
-      'DEBUG: Successfully ${wantFavorite ? 'favored' : 'unfavored'} $uniqueNumber.',
-    );
-
-    favUrls[uniqueNumber] = '';
-    unfavUrls[uniqueNumber] = '';
-    await _ensurePostDetails(uniqueNumber: uniqueNumber, postUrl: postUrl);
   }
 
   void _notifyIfMounted() {
