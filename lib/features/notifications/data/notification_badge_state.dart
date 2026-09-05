@@ -13,26 +13,6 @@ const String _iosNoteBadgeCountKey = 'iosNoteBadgeCount';
 const String _iosActivityNotificationRestoredForCurrentKey =
     'iosActivityNotificationRestoredForCurrent';
 
-class IOSActivityNotificationPresence {
-  const IOSActivityNotificationPresence({
-    required this.inspectionSucceeded,
-    required this.notificationId,
-    required this.delivered,
-    required this.restoredForCurrent,
-  });
-
-  final bool inspectionSucceeded;
-  final int? notificationId;
-  final bool delivered;
-  final bool restoredForCurrent;
-
-  bool get shouldRestore =>
-      inspectionSucceeded &&
-      notificationId != null &&
-      !delivered &&
-      !restoredForCurrent;
-}
-
 Future<int?> nextIOSNoteBadgeNumberForNotification() async {
   if (!Platform.isIOS) return null;
   final prefs = await SharedPreferences.getInstance();
@@ -130,59 +110,21 @@ Future<void> rememberActivityNotification(
   }
 }
 
-Future<IOSActivityNotificationPresence> inspectIOSActivityNotificationPresence(
+Future<void> reconcileIOSActivityNotificationBadge(
   NotificationService notificationService,
 ) async {
-  if (!Platform.isIOS) {
-    return const IOSActivityNotificationPresence(
-      inspectionSucceeded: false,
-      notificationId: null,
-      delivered: false,
-      restoredForCurrent: false,
-    );
-  }
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.reload();
-  final notificationId = prefs.getInt(_currentActivityNotificationIdKey);
-  final restoredForCurrent =
-      prefs.getBool(_iosActivityNotificationRestoredForCurrentKey) ?? false;
-  if (notificationId == null) {
-    return IOSActivityNotificationPresence(
-      inspectionSucceeded: true,
-      notificationId: null,
-      delivered: false,
-      restoredForCurrent: restoredForCurrent,
-    );
-  }
-  try {
-    final activeIds = await notificationService.getActiveNotificationIds();
-    return IOSActivityNotificationPresence(
-      inspectionSucceeded: true,
-      notificationId: notificationId,
-      delivered: activeIds.contains(notificationId),
-      restoredForCurrent: restoredForCurrent,
-    );
-  } catch (error) {
-    appLog(
-      '[BADGE] Failed to inspect iOS activity notification presence: $error',
-    );
-    return IOSActivityNotificationPresence(
-      inspectionSucceeded: false,
-      notificationId: notificationId,
-      delivered: false,
-      restoredForCurrent: restoredForCurrent,
-    );
-  }
-}
-
-Future<void> markIOSActivityNotificationRestored(int? badgeNumber) async {
   if (!Platform.isIOS) return;
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
-  await prefs.setBool(_iosActivityNotificationRestoredForCurrentKey, true);
-  await prefs.setBool(_currentActivityNotificationBadgeCountedKey, true);
-  if (badgeNumber != null) {
-    await prefs.setInt('badgeCounter', badgeNumber);
+  final notificationId = prefs.getInt(_currentActivityNotificationIdKey);
+  if (notificationId == null) return;
+  try {
+    final activeIds = await notificationService.getActiveNotificationIds();
+    if (!activeIds.contains(notificationId)) {
+      await clearMissingIOSActivityNotificationBadge();
+    }
+  } catch (error) {
+    appLog('[BADGE] Failed to reconcile activity notification: $error');
   }
 }
 

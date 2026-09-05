@@ -22,6 +22,8 @@ import 'package:fanotifier/features/notes/data/message_storage.dart';
 import 'package:fanotifier/features/notes/domain/background_inbox_models.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
+import 'package:fanotifier/features/notifications/data/ios_activity_notification_lock.dart';
+import 'package:fanotifier/features/notifications/domain/notification_payloads.dart';
 import 'package:fanotifier/features/notifications/data/adaptive_background_fetch_scheduler.dart'
     as background_scheduler;
 import 'package:fanotifier/features/notifications/data/notification_badge_state.dart'
@@ -190,6 +192,14 @@ class BackgroundNotificationWorker {
   final AppForegroundStatePreference appForegroundStatePreference;
   bool _notificationShownThisRun = false;
 
+  Future<void> _recordAnalytics(Future<void> operation) {
+    if (Platform.isIOS) {
+      unawaited(operation);
+      return Future<void>.value();
+    }
+    return operation;
+  }
+
   Future<bool> _restorePendingUnreadBatch({
     required BackgroundNotificationExecutionCancellation cancellation,
     DateTime? finishBy,
@@ -297,13 +307,14 @@ class BackgroundNotificationWorker {
         'note_$noteId',
         'notes',
         badgeNumber: badgeNumber,
+        isCancelled: Platform.isIOS ? () => cancellation.isCancelled : null,
       );
       notificationShown = true;
       _notificationShownThisRun = true;
-      await appAnalytics.logNotificationDisplayed(
+      await _recordAnalytics(appAnalytics.logNotificationDisplayed(
         executionContext: NotificationExecutionContext.backgroundPeriodic,
         notificationType: 'note',
-      );
+      ));
       notificationStopwatch.stop();
       await notification_badge.commitIOSNoteBadgeNumber(badgeNumber);
       appLog(
@@ -366,6 +377,41 @@ class BackgroundNotificationWorker {
   }
 
   Future<_ActivitySnapshotResult> _processActivitySnapshot({
+    required NotificationCounts? counts,
+    required NotificationService notificationService,
+    required SharedPreferences prefs,
+    required BackgroundNotificationExecutionCancellation cancellation,
+    bool preserveUnreadNotes = false,
+    int temporarilyReadNotes = 0,
+  }) {
+    return IOSActivityNotificationLock.synchronized(() async {
+      cancellation.throwIfCancelled();
+      if (Platform.isIOS) {
+        await prefs.reload();
+        if (appForegroundStatePreference.isAppForegroundActive(prefs)) {
+          return const _ActivitySnapshotResult(
+            completed: true,
+            foundNewContent: false,
+          );
+        }
+      }
+      final normalizedCounts = counts == null
+          ? null
+          : await ActivitiesNotificationStateStore().normalizeUnreadNoteCounts(
+              counts,
+              preserveUnreadNotes: preserveUnreadNotes,
+              temporarilyReadNotes: temporarilyReadNotes,
+            );
+      return _processActivitySnapshotLocked(
+        counts: normalizedCounts,
+        notificationService: notificationService,
+        prefs: prefs,
+        cancellation: cancellation,
+      );
+    }, isCancelled: () => cancellation.isCancelled);
+  }
+
+  Future<_ActivitySnapshotResult> _processActivitySnapshotLocked({
     required NotificationCounts? counts,
     required NotificationService notificationService,
     required SharedPreferences prefs,
@@ -493,15 +539,21 @@ class BackgroundNotificationWorker {
             activityNotificationId,
             'New FA Activity',
             messageBody,
-            'fa_activity_$activityNotificationId',
+            Platform.isIOS
+                ? activityPayloadWithCounts(
+                    'fa_activity_$activityNotificationId', counts)
+                : 'fa_activity_$activityNotificationId',
             'activities',
             badgeNumber: badgeNumber,
+            isCancelled: Platform.isIOS ? () => cancellation.isCancelled : null,
           );
           _notificationShownThisRun = true;
-          await appAnalytics.logNotificationDisplayed(
-            executionContext: NotificationExecutionContext.backgroundPeriodic,
-            notificationType: 'activity',
-          );
+          if (!Platform.isIOS) {
+            await appAnalytics.logNotificationDisplayed(
+              executionContext: NotificationExecutionContext.backgroundPeriodic,
+              notificationType: 'activity',
+            );
+          }
           await activitiesStateStore.markActivityNotificationShown(
             currentCounts: counts,
             body: messageBody,
@@ -510,43 +562,20 @@ class BackgroundNotificationWorker {
           await notification_badge.rememberActivityNotification(
             activityNotificationId,
           );
+          if (Platform.isIOS) {
+            unawaited(appAnalytics.logNotificationDisplayed(
+              executionContext: NotificationExecutionContext.backgroundPeriodic,
+              notificationType: 'activity',
+            ));
+          }
           cancellation.throwIfCancelled();
           appLog('[BG] Activity notification shown.');
           kDebugPrint('[BG] Activity notification shown: $messageBody');
         }
-      } else if (alreadyShown &&
-          messageBody.contains('(+') &&
-          Platform.isIOS) {
-        final presence =
-            await notification_badge.inspectIOSActivityNotificationPresence(
+      } else if (alreadyShown && Platform.isIOS) {
+        await notification_badge.reconcileIOSActivityNotificationBadge(
           notificationService,
         );
-        if (presence.shouldRestore) {
-          final activityNotificationId = presence.notificationId ??
-              NotificationService.activityNotificationId;
-          final badgeNumber = await notification_badge
-              .nextIOSActivityBadgeNumberForNotification();
-          await notificationService.showNotification(
-            activityNotificationId,
-            'New FA Activity',
-            messageBody,
-            'fa_activity_$activityNotificationId',
-            'activities',
-            badgeNumber: badgeNumber,
-          );
-          _notificationShownThisRun = true;
-          await appAnalytics.logNotificationDisplayed(
-            executionContext: NotificationExecutionContext.backgroundPeriodic,
-            notificationType: 'activity',
-          );
-          await notification_badge
-              .markIOSActivityNotificationRestored(badgeNumber);
-          cancellation.throwIfCancelled();
-        } else if (presence.inspectionSucceeded &&
-            !presence.delivered &&
-            presence.restoredForCurrent) {
-          await notification_badge.clearMissingIOSActivityNotificationBadge();
-        }
       }
     } else {
       appLog('[BG] No enabled category increased; not notifying.');
@@ -655,24 +684,24 @@ class BackgroundNotificationWorker {
         };
         final analyticsOutcome =
             runResult.analyticsOutcome ?? contentAnalyticsOutcome;
-        await appAnalytics.logNotificationCheckCompleted(
+        await _recordAnalytics(appAnalytics.logNotificationCheckCompleted(
           executionContext: NotificationExecutionContext.backgroundPeriodic,
           triggerSource: 'workmanager',
           outcome: analyticsOutcome,
           notificationShown: _notificationShownThisRun,
           durationMilliseconds:
               DateTime.now().difference(taskStartedAt).inMilliseconds,
-        );
+        ));
         return runResult.success;
       } on BackgroundNotificationExecutionCancelled {
-        await appAnalytics.logNotificationCheckCompleted(
+        await _recordAnalytics(appAnalytics.logNotificationCheckCompleted(
           executionContext: NotificationExecutionContext.backgroundPeriodic,
           triggerSource: 'workmanager',
           outcome: NotificationCheckOutcome.cancelled,
           notificationShown: _notificationShownThisRun,
           durationMilliseconds:
               DateTime.now().difference(taskStartedAt).inMilliseconds,
-        );
+        ));
         return false;
       } finally {
         await releaseExecutionLease();
@@ -682,22 +711,24 @@ class BackgroundNotificationWorker {
     final taskFuture = runTask();
     if (!Platform.isIOS) return taskFuture;
     return taskFuture.timeout(
-      _iosTaskCompletionTimeout,
+      _iosTaskCompletionTimeout - const Duration(seconds: 3),
       onTimeout: () async {
         appLog(
-          '[BG] iOS task reached the 29s completion limit; '
-          'cancelling work and completing successfully.',
+          '[BG] iOS task reached its cancellation deadline; '
+          'cancelling work and waiting for notification work to finish.',
         );
         cancellation.cancel();
-        await releaseExecutionLease();
-        await appAnalytics.logNotificationCheckCompleted(
+        try {
+          await taskFuture;
+        } catch (_) {}
+        await _recordAnalytics(appAnalytics.logNotificationCheckCompleted(
           executionContext: NotificationExecutionContext.backgroundPeriodic,
           triggerSource: 'workmanager',
           outcome: NotificationCheckOutcome.timedOut,
           notificationShown: _notificationShownThisRun,
           durationMilliseconds:
               DateTime.now().difference(taskStartedAt).inMilliseconds,
-        );
+        ));
         return true;
       },
     );
@@ -794,6 +825,11 @@ class BackgroundNotificationWorker {
             final Set<String> shownSet = await MessageStorage.getShownNoteIds();
             final Set<String> seenSet = await MessageStorage.getSeenNoteIds();
             cancellation.throwIfCancelled();
+            final pendingUnreadNoteIds = Platform.isIOS
+                ? (await MessageStorage.getPendingUnreadRestores())
+                    .map((pending) => pending.noteId)
+                    .toSet()
+                : <String>{};
             final inboxStopwatch = Stopwatch()..start();
             final BackgroundInboxSnapshot snapshot =
                 await fetchBackgroundInboxSnapshot(
@@ -830,6 +866,13 @@ class BackgroundNotificationWorker {
             try {
               final activityResult = await _processActivitySnapshot(
                 counts: currentCounts,
+                preserveUnreadNotes: pendingUnreadNoteIds.isNotEmpty,
+                temporarilyReadNotes: fetchedInbox
+                    .where((message) => !message.isUnread &&
+                        pendingUnreadNoteIds.contains(message.id))
+                    .map((message) => message.id)
+                    .toSet()
+                    .length,
                 notificationService: notificationService,
                 prefs: prefs,
                 cancellation: cancellation,
@@ -1116,12 +1159,13 @@ class BackgroundNotificationWorker {
         'Tap to open FA Notifier.',
         NotificationService.appUpdatePayload,
         'updates',
+        isCancelled: Platform.isIOS ? () => cancellation.isCancelled : null,
       );
       _notificationShownThisRun = true;
-      await appAnalytics.logNotificationDisplayed(
+      await _recordAnalytics(appAnalytics.logNotificationDisplayed(
         executionContext: NotificationExecutionContext.backgroundPeriodic,
         notificationType: 'update',
-      );
+      ));
       cancellation.throwIfCancelled();
       await prefs.setBool(shownKey, true);
       appLog(

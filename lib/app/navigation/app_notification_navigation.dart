@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -36,14 +37,33 @@ class AppNotificationNavigation {
   static const Duration _duplicateTapWindow = Duration(seconds: 1);
   String? _lastNavigationPayload;
   DateTime? _lastNavigationAt;
+  Future<void> _processingQueue = Future<void>.value();
 
-  Future<void> handleTap(String payload, String source) async {
-    await _pendingNavigationRepository.savePayload(payload);
-    appLog('[NOTIF] Notification navigation queued (source=$source).');
-    await processPending(from: 'tap:$source');
+  Future<void> _enqueue(Future<void> Function() operation) {
+    if (!Platform.isIOS) return operation();
+    final pending = _processingQueue.catchError((_) {}).then((_) => operation());
+    _processingQueue = pending.then<void>((_) {}, onError: (_, _) {});
+    return pending;
   }
 
-  Future<void> processPending({String from = 'unknown'}) async {
+  Future<void> handleTap(String payload, String source) {
+    return _enqueue(() async {
+      await _pendingNavigationRepository.savePayload(payload);
+      if (Platform.isIOS && isActivityNotificationPayload(payload)) {
+        await ActivitiesNotificationStateStore().acknowledgeLastShownCounts(
+          tappedCounts: activityCountsFromPayload(payload),
+        );
+      }
+      appLog('[NOTIF] Notification navigation queued (source=$source).');
+      await _processPending(from: 'tap:$source');
+    });
+  }
+
+  Future<void> processPending({String from = 'unknown'}) {
+    return _enqueue(() => _processPending(from: from));
+  }
+
+  Future<void> _processPending({required String from}) async {
     final payload =
         await _pendingNavigationRepository.loadPayload(reload: true);
     if (payload == null) {
@@ -65,6 +85,10 @@ class AppNotificationNavigation {
       return;
     }
 
+    if (Platform.isIOS &&
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
     final context = navigatorKey.currentContext;
     final navigator = navigatorKey.currentState;
     debugPrint(
@@ -101,20 +125,25 @@ class AppNotificationNavigation {
 
     final isNotes = isNoteNotificationPayload(payload);
     final isBackgroundActivity = payload.startsWith('fa_activity_');
-    await appAnalytics.logNotificationOpened(
+    final openAnalytics = appAnalytics.logNotificationOpened(
       notificationType: isNotes ? 'note' : 'activity',
       executionContext: isNotes || isBackgroundActivity
           ? NotificationExecutionContext.backgroundPeriodic
           : NotificationExecutionContext.foregroundImmediate,
       openContext: from,
     );
+    if (Platform.isIOS) {
+      unawaited(openAnalytics);
+    } else {
+      await openAnalytics;
+    }
 
     navigator.popUntil((route) => route.isFirst);
     navigationProvider.setTargetIndex(isNotes ? 4 : 3);
     await _waitForNavigationFrame();
 
     try {
-      if (isActivityNotificationPayload(payload)) {
+      if (!Platform.isIOS && isActivityNotificationPayload(payload)) {
         await ActivitiesNotificationStateStore()
             .acknowledgeLastShownCounts();
       }

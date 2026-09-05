@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fanotifier/features/notes/data/message_storage.dart';
 import 'package:fanotifier/features/notifications/data/pending_navigation_store.dart';
+import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
 import 'package:fanotifier/features/notifications/domain/notification_payloads.dart';
 import 'package:fanotifier/core/logging/app_logging.dart';
 import 'package:fanotifier/core/notifications/domain/local_notification_gateway.dart';
@@ -104,8 +105,18 @@ class NotificationService implements LocalNotificationGateway {
         details?.notificationResponse != null) {
       final payload = details!.notificationResponse!.payload;
       if (payload != null && payload.isNotEmpty) {
-        await _markTappedNoteAsShown(payload);
-        await const PendingNavigationStore().savePayload(payload);
+        if (Platform.isIOS) {
+          await const PendingNavigationStore().savePayload(payload);
+          await _markTappedNoteAsShown(payload);
+          if (isActivityNotificationPayload(payload)) {
+            await ActivitiesNotificationStateStore().acknowledgeLastShownCounts(
+              tappedCounts: activityCountsFromPayload(payload),
+            );
+          }
+        } else {
+          await _markTappedNoteAsShown(payload);
+          await const PendingNavigationStore().savePayload(payload);
+        }
       }
     }
     _pluginInitialized = true;
@@ -267,6 +278,11 @@ class NotificationService implements LocalNotificationGateway {
       final handler = _notificationTapHandler;
       if (handler == null) {
         await pendingNavigationStore.savePayload(payload);
+        if (Platform.isIOS && isActivityNotificationPayload(payload)) {
+          await ActivitiesNotificationStateStore().acknowledgeLastShownCounts(
+            tappedCounts: activityCountsFromPayload(payload),
+          );
+        }
         return;
       }
       await handler(payload, source);
@@ -289,6 +305,7 @@ class NotificationService implements LocalNotificationGateway {
     String payload,
     String type, {
     int? badgeNumber,
+    bool Function()? isCancelled,
   }) async {
     final normalizedTitle = title.trim();
     final normalizedBody = body.trim();
@@ -349,6 +366,9 @@ class NotificationService implements LocalNotificationGateway {
 
     final details = NotificationDetails(android: android, iOS: ios);
 
+    if (isCancelled?.call() ?? false) {
+      throw StateError('Notification delivery cancelled before dispatch');
+    }
     await flutterLocalNotificationsPlugin.show(
       id: id,
       title: normalizedTitle,

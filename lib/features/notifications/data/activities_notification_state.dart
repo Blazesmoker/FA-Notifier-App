@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:fanotifier/features/notes/data/message_storage.dart';
+import 'package:fanotifier/features/notifications/data/ios_activity_notification_lock.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fanotifier/features/notifications/domain/activity_count_change_policy.dart';
@@ -66,9 +70,41 @@ class ActivitiesNotificationStateStore {
       first >= second ? first : second;
 
   static Future<T> _withMutex<T>(Future<T> Function() fn) {
+    if (Platform.isIOS) {
+      return IOSActivityNotificationLock.synchronized(fn);
+    }
     final operation = _mutex.catchError((_) {}).then((_) => fn());
     _mutex = operation.then<void>((_) {}, onError: (_, _) {});
     return operation;
+  }
+
+  Future<NotificationCounts> normalizeUnreadNoteCounts(
+    NotificationCounts counts, {
+    bool preserveUnreadNotes = false,
+    int temporarilyReadNotes = 0,
+  }) async {
+    if (!Platform.isIOS) return counts;
+    return _withMutex(() async {
+      final pending = await MessageStorage.getPendingUnreadRestores();
+      if (!preserveUnreadNotes && pending.isEmpty) return counts;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final protectedNotes = _maxCount(
+        counts.notes + temporarilyReadNotes,
+        _maxCount(
+          prefs.getInt(_kObservedNotes) ?? counts.notes,
+          prefs.getInt(_kLastShownNotes) ?? counts.notes,
+        ),
+      );
+      return NotificationCounts(
+        submissions: counts.submissions,
+        watches: counts.watches,
+        comments: counts.comments,
+        favorites: counts.favorites,
+        journals: counts.journals,
+        notes: protectedNotes,
+      );
+    });
   }
 
   Future<NotificationCounts> loadLastSeenCounts() async {
@@ -88,6 +124,7 @@ class ActivitiesNotificationStateStore {
     required NotificationCounts currentCounts,
   }) async {
     return _withMutex(() async {
+      currentCounts = await normalizeUnreadNoteCounts(currentCounts);
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
 
@@ -160,6 +197,7 @@ class ActivitiesNotificationStateStore {
     required NotificationCounts currentCounts,
   }) async {
     return _withMutex(() async {
+      currentCounts = await normalizeUnreadNoteCounts(currentCounts);
       final prefs = await SharedPreferences.getInstance();
       await _saveLastSeenCounts(prefs, currentCounts);
       await _saveLastObservedCounts(prefs, currentCounts);
@@ -168,7 +206,7 @@ class ActivitiesNotificationStateStore {
     });
   }
 
-  Future<void> acknowledgeLastShownCounts() {
+  Future<void> acknowledgeLastShownCounts({NotificationCounts? tappedCounts}) {
     return _withMutex(() async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
@@ -179,9 +217,9 @@ class ActivitiesNotificationStateStore {
           prefs.containsKey(_kLastShownFavorites) &&
           prefs.containsKey(_kLastShownJournals) &&
           prefs.containsKey(_kLastShownNotes);
-      if (!hasLastShownCounts) return;
+      if (!hasLastShownCounts && tappedCounts == null) return;
 
-      final lastShownCounts = NotificationCounts(
+      final lastShownCounts = tappedCounts ?? NotificationCounts(
         submissions: prefs.getInt(_kLastShownSubmissions)!,
         watches: prefs.getInt(_kLastShownWatches)!,
         comments: prefs.getInt(_kLastShownComments)!,
@@ -223,8 +261,17 @@ class ActivitiesNotificationStateStore {
         ),
       );
       await _saveLastSeenCounts(prefs, acknowledgedCounts);
-      await _clearLastShownNotification(prefs);
-      await _clearDeferredActivityNotification(prefs);
+      final matchesLastShown =
+          prefs.getInt(_kLastShownSubmissions) == lastShownCounts.submissions &&
+          prefs.getInt(_kLastShownWatches) == lastShownCounts.watches &&
+          prefs.getInt(_kLastShownComments) == lastShownCounts.comments &&
+          prefs.getInt(_kLastShownFavorites) == lastShownCounts.favorites &&
+          prefs.getInt(_kLastShownJournals) == lastShownCounts.journals &&
+          prefs.getInt(_kLastShownNotes) == lastShownCounts.notes;
+      if (!Platform.isIOS || matchesLastShown) {
+        await _clearLastShownNotification(prefs);
+        await _clearDeferredActivityNotification(prefs);
+      }
     });
   }
 
@@ -260,6 +307,7 @@ class ActivitiesNotificationStateStore {
     bool acknowledgeNotes = false,
   }) async {
     return _withMutex(() async {
+      currentCounts = await normalizeUnreadNoteCounts(currentCounts);
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
       final changed = await _saveSelectedLastSeenCounts(

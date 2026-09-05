@@ -10,6 +10,8 @@ import 'package:fanotifier/shared/fa/domain/fa_notification_state_port.dart';
 import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 import 'package:fanotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
+import 'package:fanotifier/features/notifications/data/ios_activity_notification_lock.dart';
+import 'package:fanotifier/features/notifications/domain/notification_payloads.dart';
 import 'package:fanotifier/features/notifications/data/notification_refresh_service.dart';
 import 'package:fanotifier/features/notifications/data/notification_badge_state.dart'
     as notification_badge;
@@ -488,6 +490,22 @@ class FaActivitiesPollingService
     NotificationCounts currentCounts, {
     bool triggerNotesRefreshOnNotesIncrease = true,
     required String source,
+  }) {
+    return IOSActivityNotificationLock.synchronized(() async {
+      final normalizedCounts = await ActivitiesNotificationStateStore()
+          .normalizeUnreadNoteCounts(currentCounts);
+      await _maybeSendActivitiesNotificationLocked(
+        normalizedCounts,
+        triggerNotesRefreshOnNotesIncrease: triggerNotesRefreshOnNotesIncrease,
+        source: source,
+      );
+    });
+  }
+
+  Future<void> _maybeSendActivitiesNotificationLocked(
+    NotificationCounts currentCounts, {
+    bool triggerNotesRefreshOnNotesIncrease = true,
+    required String source,
   }) async {
     final activitiesStateStore = ActivitiesNotificationStateStore();
     final foregroundEntryCheck =
@@ -643,14 +661,22 @@ class FaActivitiesPollingService
         NotificationService.activityNotificationId,
         'New FA Activity',
         messageBody,
-        'activity_fa_activity',
+        Platform.isIOS
+            ? activityPayloadWithCounts('activity_fa_activity', currentCounts)
+            : 'activity_fa_activity',
         'activities',
+        isCancelled: Platform.isIOS
+            ? () => WidgetsBinding.instance.lifecycleState !=
+                AppLifecycleState.resumed
+            : null,
       );
       _notificationShownInCurrentRun = true;
-      await appAnalytics.logNotificationDisplayed(
-        executionContext: appAnalytics.foregroundContext(source),
-        notificationType: 'activity',
-      );
+      if (!Platform.isIOS) {
+        await appAnalytics.logNotificationDisplayed(
+          executionContext: appAnalytics.foregroundContext(source),
+          notificationType: 'activity',
+        );
+      }
       await activitiesStateStore.markActivityNotificationShown(
         currentCounts: currentCounts,
         body: messageBody,
@@ -658,6 +684,12 @@ class FaActivitiesPollingService
       await notification_badge.rememberActivityNotification(
         NotificationService.activityNotificationId,
       );
+      if (Platform.isIOS) {
+        unawaited(appAnalytics.logNotificationDisplayed(
+          executionContext: appAnalytics.foregroundContext(source),
+          notificationType: 'activity',
+        ));
+      }
       _pendingResumeActivityNotification = false;
       debugPrint(
         '[ACTIVITY_NOTIF] producer=foreground_polling shown body=$messageBody',

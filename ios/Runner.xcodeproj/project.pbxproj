@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		FA0905010000000000000001 /* BackgroundPluginRegistration.m in Sources */ = {isa = PBXBuildFile; fileRef = FA0905010000000000000002 /* BackgroundPluginRegistration.m */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		1754012D2F33E502009B26BE /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1754012C2F33E502009B26BE /* SceneDelegate.swift */; };
 		17C7A1242DDD0A1D0065F125 /* Flutter.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 17C7A1232DDD0A1D0065F125 /* Flutter.xcframework */; };
@@ -33,6 +34,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		FA0905010000000000000002 /* BackgroundPluginRegistration.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BackgroundPluginRegistration.m; sourceTree = "<group>"; };
+		FA0905010000000000000003 /* BackgroundPluginRegistration.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BackgroundPluginRegistration.h; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		174F61872E95474700560AE2 /* RunnerRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RunnerRelease.entitlements; sourceTree = "<group>"; };
@@ -145,6 +148,8 @@
 			children = (
 				17FC2F8E2F360DFB00173430 /* GoogleService-Info.plist */,
 				1754012C2F33E502009B26BE /* SceneDelegate.swift */,
+				FA0905010000000000000002 /* BackgroundPluginRegistration.m */,
+				FA0905010000000000000003 /* BackgroundPluginRegistration.h */,
 				174F61872E95474700560AE2 /* RunnerRelease.entitlements */,
 				17F0BC462E8C726000B8B59D /* Runner.entitlements */,
 				97C146FA1CF9000F007C117D /* Main.storyboard */,
@@ -389,6 +394,7 @@
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
+				FA0905010000000000000001 /* BackgroundPluginRegistration.m in Sources */,
 				1754012D2F33E502009B26BE /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

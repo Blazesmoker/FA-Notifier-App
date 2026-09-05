@@ -1,3 +1,5 @@
+import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
+
 const String appUpdateNotificationPayload = 'app_update_available';
 
 const List<String> notificationTypes = <String>[
@@ -29,4 +31,27 @@ String? noteIdFromNotificationPayload(String payload) {
   if (!payload.startsWith(prefix)) return null;
   final noteId = payload.substring(prefix.length).trim();
   return noteId.isEmpty ? null : noteId;
+}
+
+String activityPayloadWithCounts(String payload, NotificationCounts counts) {
+  return '$payload|activityCounts=${counts.submissions},${counts.watches},'
+      '${counts.comments},${counts.favorites},${counts.journals},${counts.notes}';
+}
+
+NotificationCounts? activityCountsFromPayload(String payload) {
+  if (!isActivityNotificationPayload(payload)) return null;
+  final parts = payload.split('|activityCounts=');
+  if (parts.length != 2) return null;
+  final values = parts.last.split(',').map(int.tryParse).toList();
+  if (values.length != 6 || values.any((value) => value == null || value < 0)) {
+    return null;
+  }
+  return NotificationCounts(
+    submissions: values[0]!,
+    watches: values[1]!,
+    comments: values[2]!,
+    favorites: values[3]!,
+    journals: values[4]!,
+    notes: values[5]!,
+  );
 }
