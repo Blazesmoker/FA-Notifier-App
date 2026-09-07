@@ -40,8 +40,6 @@ private func submitBackgroundFetch() throws -> Date {
 
 final class AdaptiveBackgroundFetchPlugin: NSObject, FlutterPlugin {
     private static let executionLeaseLock = NSLock()
-    private static weak var activityStateOwner: AdaptiveBackgroundFetchPlugin?
-    private static var activityStateToken: String?
     private static var executionLeaseToken: String?
     private static var executionLeaseIssuedAt: Date?
     private static let executionLeaseMaxAge: TimeInterval = 2 * 60
@@ -56,28 +54,6 @@ final class AdaptiveBackgroundFetchPlugin: NSObject, FlutterPlugin {
 
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
-        case "acquireActivityState":
-            Self.executionLeaseLock.lock()
-            if Self.activityStateOwner == nil {
-                let token = UUID().uuidString
-                Self.activityStateOwner = self
-                Self.activityStateToken = token
-                Self.executionLeaseLock.unlock()
-                result(token)
-            } else {
-                Self.executionLeaseLock.unlock()
-                result(nil)
-            }
-        case "releaseActivityState":
-            Self.executionLeaseLock.lock()
-            if Self.activityStateOwner === self,
-               let token = call.arguments as? String,
-               Self.activityStateToken == token {
-                Self.activityStateOwner = nil
-                Self.activityStateToken = nil
-            }
-            Self.executionLeaseLock.unlock()
-            result(nil)
         case "acquireExecution":
             result(Self.acquireExecutionLease())
         case "releaseExecution":
@@ -144,7 +120,7 @@ func registerAdaptiveBackgroundFetchPlugin(registry: FlutterPluginRegistry) {
 }
 
 func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
-    FARegisterBackgroundPlugins(registry)
+    GeneratedPluginRegistrant.register(with: registry)
     registerAdaptiveBackgroundFetchPlugin(registry: registry)
     NSLog("[AppDelegate] Background isolate plugins registered")
 }

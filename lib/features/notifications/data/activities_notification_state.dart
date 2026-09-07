@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:fanotifier/features/notes/data/message_storage.dart';
-import 'package:fanotifier/features/notifications/data/ios_activity_notification_lock.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fanotifier/features/notifications/domain/activity_count_change_policy.dart';
@@ -70,9 +69,6 @@ class ActivitiesNotificationStateStore {
       first >= second ? first : second;
 
   static Future<T> _withMutex<T>(Future<T> Function() fn) {
-    if (Platform.isIOS) {
-      return IOSActivityNotificationLock.synchronized(fn);
-    }
     final operation = _mutex.catchError((_) {}).then((_) => fn());
     _mutex = operation.then<void>((_) {}, onError: (_, _) {});
     return operation;
@@ -82,29 +78,39 @@ class ActivitiesNotificationStateStore {
     NotificationCounts counts, {
     bool preserveUnreadNotes = false,
     int temporarilyReadNotes = 0,
+  }) {
+    return _withMutex(() => _normalizeUnreadNoteCounts(
+          counts,
+          preserveUnreadNotes: preserveUnreadNotes,
+          temporarilyReadNotes: temporarilyReadNotes,
+        ));
+  }
+
+  Future<NotificationCounts> _normalizeUnreadNoteCounts(
+    NotificationCounts counts, {
+    bool preserveUnreadNotes = false,
+    int temporarilyReadNotes = 0,
   }) async {
     if (!Platform.isIOS) return counts;
-    return _withMutex(() async {
-      final pending = await MessageStorage.getPendingUnreadRestores();
-      if (!preserveUnreadNotes && pending.isEmpty) return counts;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.reload();
-      final protectedNotes = _maxCount(
-        counts.notes + temporarilyReadNotes,
-        _maxCount(
-          prefs.getInt(_kObservedNotes) ?? counts.notes,
-          prefs.getInt(_kLastShownNotes) ?? counts.notes,
-        ),
-      );
-      return NotificationCounts(
-        submissions: counts.submissions,
-        watches: counts.watches,
-        comments: counts.comments,
-        favorites: counts.favorites,
-        journals: counts.journals,
-        notes: protectedNotes,
-      );
-    });
+    final pending = await MessageStorage.getPendingUnreadRestores();
+    if (!preserveUnreadNotes && pending.isEmpty) return counts;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    final protectedNotes = _maxCount(
+      counts.notes + temporarilyReadNotes,
+      _maxCount(
+        prefs.getInt(_kObservedNotes) ?? counts.notes,
+        prefs.getInt(_kLastShownNotes) ?? counts.notes,
+      ),
+    );
+    return NotificationCounts(
+      submissions: counts.submissions,
+      watches: counts.watches,
+      comments: counts.comments,
+      favorites: counts.favorites,
+      journals: counts.journals,
+      notes: protectedNotes,
+    );
   }
 
   Future<NotificationCounts> loadLastSeenCounts() async {
@@ -124,7 +130,7 @@ class ActivitiesNotificationStateStore {
     required NotificationCounts currentCounts,
   }) async {
     return _withMutex(() async {
-      currentCounts = await normalizeUnreadNoteCounts(currentCounts);
+      currentCounts = await _normalizeUnreadNoteCounts(currentCounts);
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
 
@@ -197,7 +203,7 @@ class ActivitiesNotificationStateStore {
     required NotificationCounts currentCounts,
   }) async {
     return _withMutex(() async {
-      currentCounts = await normalizeUnreadNoteCounts(currentCounts);
+      currentCounts = await _normalizeUnreadNoteCounts(currentCounts);
       final prefs = await SharedPreferences.getInstance();
       await _saveLastSeenCounts(prefs, currentCounts);
       await _saveLastObservedCounts(prefs, currentCounts);
@@ -307,7 +313,7 @@ class ActivitiesNotificationStateStore {
     bool acknowledgeNotes = false,
   }) async {
     return _withMutex(() async {
-      currentCounts = await normalizeUnreadNoteCounts(currentCounts);
+      currentCounts = await _normalizeUnreadNoteCounts(currentCounts);
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
       final changed = await _saveSelectedLastSeenCounts(

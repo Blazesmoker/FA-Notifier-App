@@ -10,7 +10,6 @@ import 'package:fanotifier/shared/fa/domain/fa_notification_state_port.dart';
 import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 import 'package:fanotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
-import 'package:fanotifier/features/notifications/data/ios_activity_notification_lock.dart';
 import 'package:fanotifier/features/notifications/domain/notification_payloads.dart';
 import 'package:fanotifier/features/notifications/data/notification_refresh_service.dart';
 import 'package:fanotifier/features/notifications/data/notification_badge_state.dart'
@@ -490,23 +489,9 @@ class FaActivitiesPollingService
     NotificationCounts currentCounts, {
     bool triggerNotesRefreshOnNotesIncrease = true,
     required String source,
-  }) {
-    return IOSActivityNotificationLock.synchronized(() async {
-      final normalizedCounts = await ActivitiesNotificationStateStore()
-          .normalizeUnreadNoteCounts(currentCounts);
-      await _maybeSendActivitiesNotificationLocked(
-        normalizedCounts,
-        triggerNotesRefreshOnNotesIncrease: triggerNotesRefreshOnNotesIncrease,
-        source: source,
-      );
-    });
-  }
-
-  Future<void> _maybeSendActivitiesNotificationLocked(
-    NotificationCounts currentCounts, {
-    bool triggerNotesRefreshOnNotesIncrease = true,
-    required String source,
   }) async {
+    currentCounts = await ActivitiesNotificationStateStore()
+        .normalizeUnreadNoteCounts(currentCounts);
     final activitiesStateStore = ActivitiesNotificationStateStore();
     final foregroundEntryCheck =
         _foregroundEntryCheckPending || _isForegroundEntrySource(source);
