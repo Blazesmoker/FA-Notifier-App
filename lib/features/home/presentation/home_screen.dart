@@ -142,7 +142,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _initializeAndLoadLoginState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _logSelectedHomeScreen();
       if (widget.initialSearchQuery != null &&
           widget.initialSearchQuery!.isNotEmpty) {
         _triggerSearch(widget.initialSearchQuery!);
@@ -216,6 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
         isCheckingLoginStatus = false;
         isLoggedIn = false;
       });
+      _logSelectedHomeScreen();
       return;
     }
 
@@ -226,6 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         isCheckingLoginStatus = false;
       });
+      _logSelectedHomeScreen();
 
       if (!_profileFetched) {
         _profileFetched = true;
@@ -241,6 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         isCheckingLoginStatus = false;
       });
+      _logSelectedHomeScreen();
     }
   }
 
@@ -389,8 +391,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _logSelectedHomeScreen() {
+    if (isCheckingLoginStatus) {
+      return;
+    }
+    if (!isLoggedIn) {
+      appAnalytics.logScreen(AppScreens.login);
+      return;
+    }
     final screen = switch (_selectedIndex) {
-      0 => isLoggedIn ? AppScreens.browse : AppScreens.login,
+      0 => AppScreens.browse,
       1 => AppScreens.search,
       2 => AppScreens.submissions,
       3 => AppScreens.notifications,
@@ -543,6 +552,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isLoggedIn = true;
               _webViewController = null;
             });
+            _logSelectedHomeScreen();
             _startActivitiesPolling(triggerImmediate: false);
 
             await _setSfwCookieToNSFW();
@@ -636,6 +646,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isLoggedIn = true;
               _webViewController = null;
             });
+            _logSelectedHomeScreen();
             _cancelStabilityTimer();
 
             await _homeSessionRepository.saveCookiesFromWebView();
@@ -1031,7 +1042,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Consumer2<NotificationSettingsProvider, FANotificationService>(
-      child: isLoggedIn ? _buildMainAppScreen(context) : _buildWebView(),
+      child: isCheckingLoginStatus
+          ? const SafeArea(
+              child: Center(
+                child: PulsatingLoadingIndicator(
+                  size: 108.0,
+                  assetPath: 'assets/icons/fathemed.png',
+                ),
+              ),
+            )
+          : isLoggedIn
+              ? _buildMainAppScreen(context)
+              : _buildWebView(),
       builder: (context, settings, faNotificationService, child) {
         return PopScope(
           canPop: false,
