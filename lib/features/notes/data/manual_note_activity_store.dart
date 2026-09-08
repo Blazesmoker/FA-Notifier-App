@@ -1,0 +1,173 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:fanotifier/features/notes/data/background_inbox_service.dart';
+import 'package:fanotifier/features/notes/data/message_storage.dart';
+import 'package:fanotifier/features/notes/domain/note_activity_snapshot.dart';
+
+class ManualNoteActivityStore {
+  static const _key = 'manual_note_activity_state_v1';
+  static Future<void> _queue = Future<void>.value();
+
+  static Future<T> _serialized<T>(Future<T> Function() operation) {
+    final result = _queue.catchError((_) {}).then((_) => operation());
+    _queue = result.then<void>((_) {}, onError: (_, _) {});
+    return result;
+  }
+
+  Future<void> registerManualUnread(String noteId) {
+    return _serialized(() async {
+      if (!Platform.isIOS || noteId.isEmpty) return;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      var state = _read(prefs);
+      if (state == null) {
+        final shown = await MessageStorage.getShownNoteIds();
+        final seen = await MessageStorage.getSeenNoteIds();
+        await prefs.reload();
+        state = _read(prefs) ??
+            _ManualNoteActivityState(
+              knownIds: {...shown, ...seen},
+              pendingIds: {},
+              notBeforeMilliseconds: DateTime.now().millisecondsSinceEpoch,
+              baselineReady: (prefs.getBool('did_first_run_skip') ?? false) &&
+                  (shown.isNotEmpty || seen.isNotEmpty),
+            );
+      }
+      state.knownIds.add(noteId);
+      state.pendingIds.remove(noteId);
+      await _save(prefs, state);
+      await MessageStorage.addShownNoteIds([noteId]);
+    });
+  }
+
+  Future<NoteActivitySnapshot?> fetchSnapshotIfEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    if (_read(prefs) == null) return null;
+    final startedAt = DateTime.now().millisecondsSinceEpoch;
+    final snapshot = await BackgroundInboxService().fetchSnapshot(
+      shownNoteIds: await MessageStorage.getShownNoteIds(),
+      seenNoteIds: await MessageStorage.getSeenNoteIds(),
+    );
+    if (snapshot.topbarCounts == null) {
+      throw StateError('No valid note activity snapshot');
+    }
+    return NoteActivitySnapshot(
+      messages: snapshot.messages,
+      startedAtMilliseconds: startedAt,
+      unreadCount: snapshot.topbarCounts!.notes,
+    );
+  }
+
+  Future<Set<String>?> reconcile(NoteActivitySnapshot? snapshot) {
+    return _serialized(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final state = _read(prefs);
+      if (state == null) return null;
+      if (snapshot != null &&
+          snapshot.startedAtMilliseconds >= state.notBeforeMilliseconds) {
+        final restoring = await MessageStorage.getPendingUnreadRestores();
+        _observe(
+          state,
+          snapshot,
+          allowNewNotes: state.baselineReady &&
+              (prefs.getBool('did_first_run_skip') ?? false),
+          temporarilyReadIds: restoring.map((note) => note.noteId).toSet(),
+        );
+        state.notBeforeMilliseconds = snapshot.startedAtMilliseconds;
+        state.baselineReady = prefs.getBool('did_first_run_skip') ?? false;
+        await _save(prefs, state);
+      }
+      return {...state.pendingIds};
+    });
+  }
+
+  Future<void> acknowledge({Set<String>? noteIds}) {
+    return _serialized(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final state = _read(prefs);
+      if (state == null) return;
+      if (noteIds == null) {
+        state.pendingIds.clear();
+      } else {
+        state.pendingIds.removeAll(noteIds);
+      }
+      await _save(prefs, state);
+    });
+  }
+
+  void _observe(
+    _ManualNoteActivityState state,
+    NoteActivitySnapshot snapshot, {
+    required bool allowNewNotes,
+    required Set<String> temporarilyReadIds,
+  }) {
+    if (snapshot.unreadCount == 0 && temporarilyReadIds.isEmpty) {
+      state.pendingIds.clear();
+    }
+    var reachedKnownNote = false;
+    for (final message in snapshot.messages) {
+      if (message.id.isEmpty) continue;
+      if (state.knownIds.contains(message.id)) reachedKnownNote = true;
+      if (allowNewNotes &&
+          !reachedKnownNote &&
+          (message.isUnread || temporarilyReadIds.contains(message.id)) &&
+          !state.knownIds.contains(message.id)) {
+        state.pendingIds.add(message.id);
+      }
+      if (!message.isUnread && !temporarilyReadIds.contains(message.id)) {
+        state.pendingIds.remove(message.id);
+      }
+    }
+    state.knownIds.addAll(snapshot.messages.map((message) => message.id));
+  }
+
+  _ManualNoteActivityState? _read(SharedPreferences prefs) {
+    if (!Platform.isIOS) return null;
+    final encoded = prefs.getString(_key);
+    if (encoded == null) return null;
+    try {
+      final value = jsonDecode(encoded) as Map<String, dynamic>;
+      return _ManualNoteActivityState(
+        knownIds: (value['knownIds'] as List).cast<String>().toSet(),
+        pendingIds: (value['pendingIds'] as List).cast<String>().toSet(),
+        notBeforeMilliseconds: value['notBeforeMilliseconds'] as int,
+        baselineReady: value['baselineReady'] as bool,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _save(
+    SharedPreferences prefs,
+    _ManualNoteActivityState state,
+  ) async {
+    final saved = await prefs.setString(_key, jsonEncode({
+      'knownIds': state.knownIds.toList(),
+      'pendingIds': state.pendingIds.toList(),
+      'notBeforeMilliseconds': state.notBeforeMilliseconds,
+      'baselineReady': state.baselineReady,
+    }));
+    if (!saved) throw StateError('Failed to save manual note activity state');
+  }
+}
+
+class _ManualNoteActivityState {
+  _ManualNoteActivityState({
+    required this.knownIds,
+    required this.pendingIds,
+    required this.notBeforeMilliseconds,
+    required this.baselineReady,
+  });
+
+  final Set<String> knownIds;
+  final Set<String> pendingIds;
+  int notBeforeMilliseconds;
+  bool baselineReady;
+}

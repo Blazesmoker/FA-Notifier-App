@@ -9,6 +9,7 @@ import 'package:fanotifier/features/notifications/presentation/notification_shou
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:material_ui/material_ui.dart';
@@ -289,7 +290,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                             },
                                             onLinkTap: (String? url,
                                                 Map<String, String> attributes,
-                                                dom.Element? element) {
+                                                dom.Element? element) async {
                                               if (url != null) {
                                                 final target = matchFALink(url);
                                                 switch (target.type) {
@@ -399,6 +400,10 @@ class NotificationSectionWidget extends StatelessWidget {
                                                     return;
                                                   case FALinkTargetType
                                                         .external:
+                                                    await handleExternalLink(
+                                                      context,
+                                                      url,
+                                                    );
                                                     return;
                                                 }
                                               }

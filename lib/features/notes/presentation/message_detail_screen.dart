@@ -19,6 +19,8 @@ import 'package:fanotifier/shared/utils/utils.dart';
 import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
+import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:provider/provider.dart';
 
 const double _messageActionsFadeCeilingAboveButtons = 0.0;
@@ -495,7 +497,12 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              'Date: $sentDate',
+                              'Date: ${formatTimeInText(
+                                sentDate,
+                                use24HourTime: context
+                                    .watch<TimeDisplaySettingsProvider>()
+                                    .use24HourTime,
+                              )}',
                               style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.grey,

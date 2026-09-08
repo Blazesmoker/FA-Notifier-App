@@ -6,6 +6,7 @@ import 'package:fanotifier/features/browse/presentation/thumbnail_display_settin
 import 'package:fanotifier/features/settings/presentation/app_icon_settings_screen.dart';
 import 'package:fanotifier/features/settings/presentation/privacy_settings_screen.dart';
 import 'package:fanotifier/features/settings/presentation/set_home_screen_screen.dart';
+import 'package:fanotifier/features/settings/presentation/time_display_settings_screen.dart';
 import 'package:fanotifier/features/settings/presentation/translator_settings_screen.dart';
 import 'package:fanotifier/features/notes/presentation/notes_settings_screen.dart';
 import 'package:fanotifier/features/comments/presentation/comment_settings_screen.dart';
@@ -142,6 +143,29 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     AppScreens.commentSettings,
                   ),
                   builder: (context) => const CommentsSettingsScreen(),
+                ),
+              );
+            },
+          ),
+          const Divider(
+            height: 1.0,
+            color: Color(0xFF111111),
+            thickness: 3.0,
+          ),
+          ListTile(
+            leading: const Icon(
+              Icons.access_time_rounded,
+              color: Color(0xFFE09321),
+            ),
+            title: const Text('Time Display'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  settings: const AnalyticsRouteSettings(
+                    AppScreens.timeDisplaySettings,
+                  ),
+                  builder: (context) => const TimeDisplaySettingsScreen(),
                 ),
               );
             },

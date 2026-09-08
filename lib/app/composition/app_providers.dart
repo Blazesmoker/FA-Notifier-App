@@ -65,7 +65,9 @@ import 'package:fanotifier/features/settings/domain/app_icon_repository.dart';
 import 'package:fanotifier/features/settings/domain/fur_affinity_settings_repository.dart';
 import 'package:fanotifier/features/settings/domain/settings_app_info_repository.dart';
 import 'package:fanotifier/features/settings/domain/tag_blocklist_repository.dart';
+import 'package:fanotifier/features/settings/domain/time_display_preference.dart';
 import 'package:fanotifier/features/settings/domain/watchlist_repository.dart';
+import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
 import 'package:fanotifier/features/settings/settings_feature.dart';
 import 'package:fanotifier/features/submissions/domain/edit_submission_page_repository.dart';
 import 'package:fanotifier/features/submissions/domain/finalize_submission_repository.dart';
@@ -135,6 +137,9 @@ class AppProviders extends StatelessWidget {
         ),
         Provider<TagBlocklistRepository>(
           create: (_) => SettingsFeature.createTagBlocklistRepository(),
+        ),
+        Provider<TimeDisplayPreference>(
+          create: (_) => SettingsFeature.createTimeDisplayPreference(),
         ),
         Provider<WatchlistRepository>(
           create: (_) => SettingsFeature.createWatchlistRepository(),
@@ -305,6 +310,11 @@ class AppProviders extends StatelessWidget {
         ),
         ChangeNotifierProvider<ThumbnailDisplaySettingsProvider>(
           create: (_) => ThumbnailDisplaySettingsProvider(),
+        ),
+        ChangeNotifierProvider<TimeDisplaySettingsProvider>(
+          create: (context) => TimeDisplaySettingsProvider(
+            preference: context.read<TimeDisplayPreference>(),
+          ),
         ),
         ChangeNotifierProvider<TranslatorSettingsProvider>(
           create: (_) => TranslatorSettingsProvider(),

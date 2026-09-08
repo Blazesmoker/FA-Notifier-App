@@ -4,6 +4,9 @@ import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:fanotifier/shared/widgets/fa_unavailable_screen.dart';
+import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
+import 'package:fanotifier/shared/utils/time_display_formatter.dart';
+import 'package:provider/provider.dart';
 
 class MessageList extends StatelessWidget {
   static const Color _accent = Color(0xFFE09321);
@@ -229,7 +232,12 @@ class MessageList extends StatelessWidget {
                                 fit: BoxFit.scaleDown,
                                 alignment: Alignment.centerLeft,
                                 child: Text(
-                                  'Date: ${msg.date}',
+                                  'Date: ${formatTimeInText(
+                                    msg.date,
+                                    use24HourTime: context
+                                        .watch<TimeDisplaySettingsProvider>()
+                                        .use24HourTime,
+                                  )}',
                                   maxLines: 1,
                                   softWrap: false,
                                   style: const TextStyle(

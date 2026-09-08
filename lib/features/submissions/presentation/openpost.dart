@@ -8,7 +8,6 @@ import 'package:fanotifier/features/comments/presentation/inline_comment_compose
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:like_button/like_button.dart';
 import 'package:fanotifier/shared/theme/app_theme.dart';
@@ -40,6 +39,8 @@ import 'package:fanotifier/features/submissions/presentation/openpost_comments.d
 import 'package:fanotifier/features/submissions/presentation/openpost_submission_content.dart';
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
+import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/navigation/detachable_webview_route_registry.dart';
@@ -1517,10 +1518,12 @@ class _OpenPostState extends State<OpenPost>
     }
   }
 
-  String? getFormattedPublicationTime() {
+  String? getFormattedPublicationTime({required bool use24HourTime}) {
     if (publicationTime == null) return null;
-    final localTime = publicationTime!.toLocal();
-    return DateFormat.yMMMd().add_jm().format(localTime);
+    return formatLocalDateTime(
+      publicationTime!,
+      use24HourTime: use24HourTime,
+    );
   }
 
   void _sharePost() {
@@ -1843,7 +1846,7 @@ class _OpenPostState extends State<OpenPost>
         );
         return;
       case FALinkTargetType.external:
-        await launchUrlString(fullUrl, mode: LaunchMode.externalApplication);
+        await handleExternalLink(context, fullUrl);
         return;
     }
   }
@@ -2283,6 +2286,11 @@ class _OpenPostState extends State<OpenPost>
   Widget build(BuildContext context) {
     final translatorSettings = context.watch<TranslatorSettingsProvider>();
     final commentSettings = context.watch<CommentSettingsProvider>();
+    final use24HourTime =
+        context.watch<TimeDisplaySettingsProvider>().use24HourTime;
+    final formattedPublicationTime = getFormattedPublicationTime(
+      use24HourTime: use24HourTime,
+    );
     final bool showLoadingIndicator = !_detailsLoaded || !_webViewLoaded;
     final double viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
     return ExcludeSemantics(
@@ -2890,7 +2898,8 @@ class _OpenPostState extends State<OpenPost>
                                                       });
                                                     },
                                                     child: Text(
-                                                      '${getFormattedPublicationTime()}',
+                                                      formattedPublicationTime ??
+                                                          '',
                                                       style: const TextStyle(
                                                           fontSize: 13,
                                                           color: Colors.grey),

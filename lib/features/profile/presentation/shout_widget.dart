@@ -6,6 +6,9 @@ import 'package:fanotifier/features/profile/domain/shout.dart';
 import 'package:fanotifier/features/profile/presentation/cached_profile_html.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
+import 'package:fanotifier/shared/utils/time_display_formatter.dart';
+import 'package:provider/provider.dart';
 
 class ShoutWidget extends StatefulWidget {
   final Shout shout;
@@ -408,7 +411,12 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                       },
                       child: Text(
                         showFullDate
-                            ? widget.shout.popupDateFull
+                            ? formatTimeInText(
+                                widget.shout.popupDateFull,
+                                use24HourTime: context
+                                    .watch<TimeDisplaySettingsProvider>()
+                                    .use24HourTime,
+                              )
                             : widget.shout.popupDateRelative,
                         style: TextStyle(
                           fontSize: 12.0,

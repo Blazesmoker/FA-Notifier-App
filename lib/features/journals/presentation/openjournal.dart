@@ -22,6 +22,7 @@ import 'package:fanotifier/shared/utils/utils.dart';
 import 'package:fanotifier/shared/utils/comment_composer_lines.dart';
 import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
 import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
 import 'package:fanotifier/shared/translation/translation_service.dart';
@@ -686,6 +687,11 @@ class _OpenJournalState extends State<OpenJournal>
   Widget build(BuildContext context) {
     final translatorSettings = context.watch<TranslatorSettingsProvider>();
     final commentSettings = context.watch<CommentSettingsProvider>();
+    final use24HourTime =
+        context.watch<TimeDisplaySettingsProvider>().use24HourTime;
+    final formattedPublicationTime = _controller.formattedPublicationTime(
+      use24HourTime: use24HourTime,
+    );
     final double viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
     return ValueListenableBuilder<bool>(
       valueListenable: _commentDraftHasText,
@@ -933,7 +939,8 @@ class _OpenJournalState extends State<OpenJournal>
                                               ),
                                               const SizedBox(height: 6),
                                               Text(
-                                                  'Posted on: ${_controller.formattedPublicationTime ?? ''}'),
+                                                'Posted on: ${formattedPublicationTime ?? ''}',
+                                              ),
                                             ],
                                           ),
                                         ),

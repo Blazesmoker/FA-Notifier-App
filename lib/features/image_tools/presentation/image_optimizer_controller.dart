@@ -82,12 +82,14 @@ class ImageOptimizerController extends ChangeNotifier {
     try {
       final value = await _repository.inspect(_originalBytes, _originalFileName);
       if (_disposed) return;
-      var selectedFormat = _constraints.preferredFormat ?? value.format;
-      if (value.animated && !_constraints.allowAnimatedFrameSelection) {
-        selectedFormat = ImageOutputFormat.gif;
-      }
-      if (!_constraints.allowedFormats.contains(selectedFormat)) {
-        selectedFormat = _constraints.allowedFormats.first;
+      var selectedFormat = value.format;
+      if (selectedFormat == null ||
+          !_constraints.allowedFormats.contains(selectedFormat)) {
+        selectedFormat = _constraints.allowedFormats.contains(
+          ImageOutputFormat.png,
+        )
+            ? ImageOutputFormat.png
+            : _constraints.allowedFormats.first;
       }
       final initialSize = _initialSize(value);
       inspection = value;
@@ -344,7 +346,10 @@ class ImageOptimizerController extends ChangeNotifier {
       resizeMode: resizeMode,
       outputFormat: selectedFormat,
       cropRegion: cropRegion,
-      frameIndex: selectsAnimatedFrame ? selectedFrameIndex : null,
+      frameIndex: value.animated &&
+              (selectsAnimatedFrame || selectedFormat != ImageOutputFormat.gif)
+          ? selectedFrameIndex
+          : null,
     );
     try {
       final preview = await _repository.preview(

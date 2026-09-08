@@ -8,6 +8,8 @@ import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:fanotifier/features/journals/presentation/openjournal.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/profile/presentation/cached_profile_html.dart';
+import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
+import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 
 class ProfileJournals extends StatefulWidget {
   final String username;
@@ -181,7 +183,14 @@ class ProfileJournalsState extends State<ProfileJournals> {
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Posted on: ${journal['datePosted']}'),
+                          Text(
+                            'Posted on: ${formatTimeInText(
+                              journal['datePosted'] ?? '',
+                              use24HourTime: context
+                                  .watch<TimeDisplaySettingsProvider>()
+                                  .use24HourTime,
+                            )}',
+                          ),
                           const SizedBox(height: 8.0),
                           CachedProfileHtml(
                             cacheKey: journal['contentHtml'],

@@ -9,6 +9,8 @@ import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/shared/fa/domain/fa_notification_state_port.dart';
 import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 import 'package:fanotifier/features/notes/data/notes_refresh_service.dart';
+import 'package:fanotifier/features/notes/data/manual_note_activity_store.dart';
+import 'package:fanotifier/features/notes/domain/note_activity_snapshot.dart';
 import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
 import 'package:fanotifier/features/notifications/domain/notification_payloads.dart';
 import 'package:fanotifier/features/notifications/data/notification_refresh_service.dart';
@@ -490,13 +492,31 @@ class FaActivitiesPollingService
     bool triggerNotesRefreshOnNotesIncrease = true,
     required String source,
   }) async {
-    currentCounts = await ActivitiesNotificationStateStore()
-        .normalizeUnreadNoteCounts(currentCounts);
     final activitiesStateStore = ActivitiesNotificationStateStore();
     final foregroundEntryCheck =
         _foregroundEntryCheckPending || _isForegroundEntrySource(source);
     var deferredForResume = false;
     try {
+      NoteActivitySnapshot? noteActivitySnapshot;
+      try {
+        noteActivitySnapshot =
+            await ManualNoteActivityStore().fetchSnapshotIfEnabled();
+      } catch (_) {
+        debugPrint('[ACTIVITY_NOTIF] Note identity reconciliation deferred');
+      }
+      if (noteActivitySnapshot != null) {
+        currentCounts = NotificationCounts(
+          submissions: currentCounts.submissions,
+          watches: currentCounts.watches,
+          comments: currentCounts.comments,
+          favorites: currentCounts.favorites,
+          journals: currentCounts.journals,
+          notes: noteActivitySnapshot.unreadCount,
+        );
+        await ManualNoteActivityStore().reconcile(noteActivitySnapshot);
+      }
+      currentCounts = await activitiesStateStore
+          .normalizeUnreadNoteCounts(currentCounts);
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
 
@@ -533,6 +553,7 @@ class FaActivitiesPollingService
       final RecordedActivitiesDiff recordedDiff =
           await activitiesStateStore.recordAndDiffCurrentCounts(
         currentCounts: currentCounts,
+        noteActivitySnapshot: noteActivitySnapshot,
       );
       final ActivitiesDiff observedDiff = recordedDiff.observed;
       final ActivitiesDiff unacknowledgedDiff =
@@ -549,7 +570,8 @@ class FaActivitiesPollingService
 
       if (triggerNotesRefreshOnNotesIncrease &&
           _isResumed &&
-          observedDiff.increasedBy.notes > 0 &&
+          (observedDiff.increasedBy.notes > 0 ||
+              (recordedDiff.noteActivityIds?.isNotEmpty ?? false)) &&
           (!acknowledgeVisible || !_notesScreenVisible)) {
         NotesRefreshService().triggerRefresh();
       }
@@ -599,9 +621,12 @@ class FaActivitiesPollingService
         commentsEnabled: commentsNotificationEnabled,
         favoritesEnabled: favoritesNotificationEnabled,
         journalsEnabled: journalsNotificationEnabled,
-        notesEnabled: notesNotificationEnabled,
+        notesEnabled: notesNotificationEnabled &&
+            recordedDiff.noteActivityIds == null,
       );
-      if (alreadyShown) {
+      if (alreadyShown &&
+          (!notesNotificationEnabled ||
+              (recordedDiff.noteActivityIds?.isEmpty ?? true))) {
         return;
       }
 
@@ -665,6 +690,7 @@ class FaActivitiesPollingService
       await activitiesStateStore.markActivityNotificationShown(
         currentCounts: currentCounts,
         body: messageBody,
+        noteActivityIds: notesEnabled ? recordedDiff.noteActivityIds : null,
       );
       await notification_badge.rememberActivityNotification(
         NotificationService.activityNotificationId,

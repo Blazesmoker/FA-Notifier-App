@@ -327,11 +327,12 @@ class _ImageOptimizerScreenState extends State<ImageOptimizerScreen> {
           bytes: _controller.displaySourceBytes,
           extension: _controller.selectsAnimatedFrame
               ? ImageOutputFormat.png.extension
-              : inspection.format.extension,
+              : (inspection.format ?? ImageOutputFormat.png).extension,
         ),
         changed: AvatarImageData(
           bytes: changed?.bytes ?? _controller.displaySourceBytes,
-          extension: changed?.format.extension ?? inspection.format.extension,
+          extension: changed?.format.extension ??
+              (inspection.format ?? ImageOutputFormat.png).extension,
         ),
         initialIndex: initialIndex,
       ),

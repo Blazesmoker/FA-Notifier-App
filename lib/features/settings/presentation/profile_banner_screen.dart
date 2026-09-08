@@ -29,7 +29,6 @@ class _ProfileBannerScreenState extends State<ProfileBannerScreen> {
     maxBytes: 10 * 1024 * 1024,
     maxWidth: 1850,
     maxHeight: 300,
-    preferredFormat: ImageOutputFormat.jpeg,
     siteConvertsToJpeg: true,
     cropAspectRatio: 1850 / 300,
     allowAnimatedFrameSelection: true,

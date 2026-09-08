@@ -7,7 +7,10 @@ import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter_html/flutter_html.dart';
 
 import 'package:fanotifier/shared/utils/special_text_span_builder.dart';
+import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
+import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:provider/provider.dart';
 
 /// Comment display widget extracted from openpost.dart
 class CommentWidget extends StatefulWidget {
@@ -521,9 +524,15 @@ class _CommentWidgetState extends State<CommentWidget> {
                             alignment: Alignment.centerLeft,
                             child: Text(
                               _showFullDate
-                                  ? (widget.comment['popupDateFull'] ??
-                                      widget.comment['popupDateRelative'] ??
-                                      '')
+                                  ? formatTimeInText(
+                                      widget.comment['popupDateFull'] ??
+                                          widget.comment[
+                                              'popupDateRelative'] ??
+                                          '',
+                                      use24HourTime: context
+                                          .watch<TimeDisplaySettingsProvider>()
+                                          .use24HourTime,
+                                    )
                                   : (widget.comment['popupDateRelative'] ?? ''),
                               maxLines: 1,
                               softWrap: false,

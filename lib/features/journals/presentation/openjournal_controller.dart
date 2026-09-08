@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:intl/intl.dart';
 
 import 'package:fanotifier/features/journals/domain/journal_deletion_result.dart';
 import 'package:fanotifier/features/journals/domain/journal_optimistic_comment.dart';
@@ -9,6 +8,7 @@ import 'package:fanotifier/features/journals/domain/journal_publication_time_par
 import 'package:fanotifier/features/journals/domain/openjournal_fetch_result.dart';
 import 'package:fanotifier/features/journals/domain/openjournal_load_result.dart';
 import 'package:fanotifier/features/journals/domain/openjournal_repository.dart';
+import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 
 class OpenJournalController extends ChangeNotifier {
   OpenJournalController({
@@ -162,14 +162,17 @@ class OpenJournalController extends ChangeNotifier {
     return _repository.replaceTruncatedLinks(htmlContent);
   }
 
-  String? get formattedPublicationTime {
+  String? formattedPublicationTime({required bool use24HourTime}) {
     final raw = _publicationTimeRaw;
     if (raw != null && raw.isNotEmpty) {
-      return raw;
+      return formatTimeInText(raw, use24HourTime: use24HourTime);
     }
     final publicationTime = _publicationTime;
     if (publicationTime == null) return null;
-    return DateFormat.yMMMd().add_jm().format(publicationTime.toLocal());
+    return formatLocalDateTime(
+      publicationTime,
+      use24HourTime: use24HourTime,
+    );
   }
 
   void _applyJournal(OpenJournalFetchResult result) {

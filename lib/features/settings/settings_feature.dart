@@ -2,11 +2,13 @@ import 'package:fanotifier/features/settings/data/app_icon_service.dart';
 import 'package:fanotifier/features/settings/data/fur_affinity_settings_repository_impl.dart';
 import 'package:fanotifier/features/settings/data/settings_app_info_service.dart';
 import 'package:fanotifier/features/settings/data/tag_blocklist_repository_impl.dart';
+import 'package:fanotifier/features/settings/data/time_display_preference_impl.dart';
 import 'package:fanotifier/features/settings/data/watchlist_repository_impl.dart';
 import 'package:fanotifier/features/settings/domain/app_icon_repository.dart';
 import 'package:fanotifier/features/settings/domain/fur_affinity_settings_repository.dart';
 import 'package:fanotifier/features/settings/domain/settings_app_info_repository.dart';
 import 'package:fanotifier/features/settings/domain/tag_blocklist_repository.dart';
+import 'package:fanotifier/features/settings/domain/time_display_preference.dart';
 import 'package:fanotifier/features/settings/domain/watchlist_repository.dart';
 
 class SettingsFeature {
@@ -26,6 +28,10 @@ class SettingsFeature {
 
   static TagBlocklistRepository createTagBlocklistRepository() {
     return const TagBlocklistRepositoryImpl();
+  }
+
+  static TimeDisplayPreference createTimeDisplayPreference() {
+    return const TimeDisplayPreferenceImpl();
   }
 
   static WatchlistRepository createWatchlistRepository() {

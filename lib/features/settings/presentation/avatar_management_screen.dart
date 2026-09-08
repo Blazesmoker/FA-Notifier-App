@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -29,7 +27,6 @@ class _AvatarManagementScreenState extends State<AvatarManagementScreen> {
     maxBytes: 75 * 1024,
     maxWidth: 100,
     maxHeight: 100,
-    preferredFormat: ImageOutputFormat.gif,
     cropAspectRatio: 1,
   );
 
@@ -39,7 +36,6 @@ class _AvatarManagementScreenState extends State<AvatarManagementScreen> {
   final List<FaAvatarGalleryItem> _gallery = [];
   UploadSelectedFile? _selected;
   Uri? _currentUri;
-  Uint8List? _currentBytes;
   bool _loading = true;
   bool _working = false;
   String? _error;
@@ -102,8 +98,6 @@ class _AvatarManagementScreenState extends State<AvatarManagementScreen> {
     setState(() {
       _working = false;
       if (result.success) {
-        _currentBytes = selected.bytes;
-        _currentUri = null;
         _selected = null;
       }
     });
@@ -115,6 +109,7 @@ class _AvatarManagementScreenState extends State<AvatarManagementScreen> {
       successText: 'Avatar uploaded successfully.',
       failureText: 'Avatar upload failed',
     );
+    if (result.success) await _load();
   }
 
   Future<void> _choose(FaAvatarGalleryItem item) async {
@@ -157,7 +152,6 @@ class _AvatarManagementScreenState extends State<AvatarManagementScreen> {
       _working = false;
       if (result.success) {
         _currentUri = item.imageUri;
-        _currentBytes = null;
       }
     });
     if (result.success) widget.onChanged?.call();
@@ -355,9 +349,6 @@ class _AvatarManagementScreenState extends State<AvatarManagementScreen> {
   }
 
   Widget _currentAvatar() {
-    if (_currentBytes != null) {
-      return Image.memory(_currentBytes!, width: 150, height: 150, fit: BoxFit.contain);
-    }
     if (_currentUri != null) {
       return FaNetworkImage(_currentUri.toString(), width: 150, height: 150, fit: BoxFit.contain);
     }

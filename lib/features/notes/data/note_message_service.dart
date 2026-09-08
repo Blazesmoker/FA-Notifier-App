@@ -6,6 +6,7 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:fanotifier/features/notes/data/message_detail_parser.dart';
+import 'package:fanotifier/features/notes/data/manual_note_activity_store.dart';
 import 'package:fanotifier/features/notes/domain/note_message_models.dart';
 import 'package:fanotifier/features/notes/domain/note_message_repository.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
@@ -87,6 +88,9 @@ class NoteMessageService implements NoteMessageRepository {
     required int pageNumber,
   }) async {
     await _loadCookies(folder);
+    if (folder == 'inbox') {
+      await ManualNoteActivityStore().registerManualUnread(messageId);
+    }
 
     final formData = {
       'manage_notes': '1',

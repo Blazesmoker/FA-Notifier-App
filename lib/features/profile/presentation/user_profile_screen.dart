@@ -16,7 +16,7 @@ import 'package:fanotifier/features/profile/domain/shout.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_shout_deletion_result.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_repository.dart';
-import 'package:fanotifier/shared/utils/external_link_launcher.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_styles.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_components.dart';
@@ -47,6 +47,8 @@ import 'package:fanotifier/features/profile/presentation/user_profile_scraps_sec
 import 'package:fanotifier/features/profile/presentation/user_profile_shout_selection_controller.dart';
 import 'package:fanotifier/features/profile/presentation/profile_animated_media_visibility.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
+import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
 import 'package:fanotifier/shared/translation/translation_service.dart';
@@ -1569,12 +1571,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _launchURL(String url) async {
-    if (!await tryLaunchExternalUrl(url)) {
-      debugPrint('Could not launch $url');
-      if (!mounted) return;
-      showAppSnackBar(context, 'Could not launch URL: $url',
-          backgroundColor: Colors.red);
-    }
+    await handleFALink(context, url);
   }
 
   /// Handles FA links inside HTML/description, matching the legacy inline logic.
@@ -1659,7 +1656,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
         );
         return;
       case FALinkTargetType.external:
-        await launchUrlString(url, mode: LaunchMode.externalApplication);
+        await handleExternalLink(context, url);
         return;
     }
   }
@@ -2195,6 +2192,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
     const double marginBetweenAvatarAndText = 0.0;
     final double textLeftPadding =
         avatarLeft + avatarWidth + marginBetweenAvatarAndText;
+    final use24HourTime =
+        context.watch<TimeDisplaySettingsProvider>().use24HourTime;
     final platformViews = WidgetsBinding.instance.platformDispatcher.views;
     final baseView =
         platformViews.isNotEmpty ? platformViews.first : View.of(context);
@@ -2607,7 +2606,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                                           _profileController
                                                                               .registrationDate!
                                                                               .isNotEmpty
-                                                                      ? 'Joined ${_profileController.registrationDate}'
+                                                                      ? 'Joined ${formatTimeInText(
+                                                                          _profileController.registrationDate!,
+                                                                          use24HourTime:
+                                                                              use24HourTime,
+                                                                        )}'
                                                                       : '',
                                                                   style:
                                                                       const TextStyle(

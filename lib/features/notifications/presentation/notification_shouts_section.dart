@@ -4,11 +4,14 @@ import 'package:fanotifier/features/notifications/domain/fa_notification_models.
 import 'package:fanotifier/features/notifications/presentation/notification_shouts_controller.dart';
 import 'package:fanotifier/features/notifications/domain/notification_removal_outcome.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
+import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:fanotifier/shared/utils/special_text_span_builder.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:extended_text/extended_text.dart';
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
 
 /// A widget that toggles between relative and absolute date formats when tapped.
 class ToggleableDate extends StatefulWidget {
@@ -36,10 +39,17 @@ class _ToggleableDateState extends State<ToggleableDate> {
 
   @override
   Widget build(BuildContext context) {
+    final use24HourTime =
+        context.watch<TimeDisplaySettingsProvider>().use24HourTime;
     return GestureDetector(
       onTap: _toggleDate,
       child: Text(
-        _showRelative ? widget.relativeDate : widget.absoluteDate,
+        _showRelative
+            ? widget.relativeDate
+            : formatTimeInText(
+                widget.absoluteDate,
+                use24HourTime: use24HourTime,
+              ),
         style: const TextStyle(
           color: Colors.grey,
           fontSize: 12,

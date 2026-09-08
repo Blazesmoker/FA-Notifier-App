@@ -36,7 +36,6 @@ class ImageOptimizationConstraints {
     this.maxMegapixels,
     this.maxMegapixelEquivalentWidth,
     this.maxMegapixelEquivalentHeight,
-    this.preferredFormat,
     this.siteConvertsToJpeg = false,
     this.cropAspectRatio,
     this.allowAnimatedFrameSelection = false,
@@ -51,7 +50,6 @@ class ImageOptimizationConstraints {
   final double? maxMegapixels;
   final int? maxMegapixelEquivalentWidth;
   final int? maxMegapixelEquivalentHeight;
-  final ImageOutputFormat? preferredFormat;
   final bool siteConvertsToJpeg;
   final double? cropAspectRatio;
   final bool allowAnimatedFrameSelection;
@@ -146,7 +144,7 @@ class ImageInspection {
   final int height;
   final int byteLength;
   final int frameCount;
-  final ImageOutputFormat format;
+  final ImageOutputFormat? format;
 
   bool get animated => frameCount > 1;
 }

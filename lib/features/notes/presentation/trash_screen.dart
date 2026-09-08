@@ -4,6 +4,8 @@ import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/features/notes/domain/notes_trash_repository.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
+import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:provider/provider.dart';
 
 /// Regulate selection highlight opacity here. Values 0.0–1.0.
@@ -635,7 +637,12 @@ class TrashMessageList extends StatelessWidget {
                                 fit: BoxFit.scaleDown,
                                 alignment: Alignment.centerLeft,
                                 child: Text(
-                                  'Date: ${msg.date}',
+                                  'Date: ${formatTimeInText(
+                                    msg.date,
+                                    use24HourTime: context
+                                        .watch<TimeDisplaySettingsProvider>()
+                                        .use24HourTime,
+                                  )}',
                                   maxLines: 1,
                                   softWrap: false,
                                   style: const TextStyle(

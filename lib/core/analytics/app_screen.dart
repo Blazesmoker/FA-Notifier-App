@@ -116,6 +116,8 @@ abstract final class AppScreens {
       AppScreen('Comment Settings', 'CommentSettingsScreen');
   static const thumbnailSettings =
       AppScreen('Thumbnail Settings', 'ThumbnailSettingsScreen');
+  static const timeDisplaySettings =
+      AppScreen('Time Display Settings', 'TimeDisplaySettingsScreen');
   static const translatorSettings =
       AppScreen('Translator Settings', 'TranslatorSettingsScreen');
   static const appIconSettings =

@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:fanotifier/features/notes/data/message_storage.dart';
+import 'package:fanotifier/features/notes/data/manual_note_activity_store.dart';
+import 'package:fanotifier/features/notes/domain/note_activity_snapshot.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fanotifier/features/notifications/domain/activity_count_change_policy.dart';
@@ -128,11 +130,15 @@ class ActivitiesNotificationStateStore {
 
   Future<RecordedActivitiesDiff> recordAndDiffCurrentCounts({
     required NotificationCounts currentCounts,
+    NoteActivitySnapshot? noteActivitySnapshot,
   }) async {
     return _withMutex(() async {
       currentCounts = await _normalizeUnreadNoteCounts(currentCounts);
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
+
+      final noteActivityIds = await ManualNoteActivityStore()
+          .reconcile(noteActivitySnapshot);
 
       final hasBaseline =
           prefs.getInt(_kBaselineSchemaVersion) == _baselineSchemaVersion &&
@@ -143,6 +149,7 @@ class ActivitiesNotificationStateStore {
           prefs.containsKey(_kJournals) &&
           prefs.containsKey(_kNotes);
       if (!hasBaseline) {
+        await ManualNoteActivityStore().acknowledge();
         await _saveLastSeenCounts(prefs, currentCounts);
         await _saveLastObservedCounts(prefs, currentCounts);
         final diff = _countChangePolicy.diff(
@@ -179,9 +186,12 @@ class ActivitiesNotificationStateStore {
         previous: previousObservedCounts,
         current: currentCounts,
       );
-      final unacknowledgedDiff = _countChangePolicy.diff(
-        previous: previousCounts,
-        current: currentCounts,
+      final unacknowledgedDiff = _withNoteActivityIds(
+        _countChangePolicy.diff(
+          previous: previousCounts,
+          current: currentCounts,
+        ),
+        noteActivityIds,
       );
 
       await _lowerBaselineForDecreases(
@@ -195,6 +205,7 @@ class ActivitiesNotificationStateStore {
       return RecordedActivitiesDiff(
         observed: observedDiff,
         unacknowledged: unacknowledgedDiff,
+        noteActivityIds: noteActivityIds,
       );
     });
   }
@@ -209,6 +220,7 @@ class ActivitiesNotificationStateStore {
       await _saveLastObservedCounts(prefs, currentCounts);
       await _clearLastShownNotification(prefs);
       await _clearDeferredActivityNotification(prefs);
+      await ManualNoteActivityStore().acknowledge();
     });
   }
 
@@ -316,6 +328,9 @@ class ActivitiesNotificationStateStore {
       currentCounts = await _normalizeUnreadNoteCounts(currentCounts);
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
+      if (acknowledgeNotes) {
+        await ManualNoteActivityStore().acknowledge();
+      }
       final changed = await _saveSelectedLastSeenCounts(
         prefs,
         currentCounts,
@@ -357,6 +372,9 @@ class ActivitiesNotificationStateStore {
     return _withMutex(() async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
+      if (!notesEnabled) {
+        await ManualNoteActivityStore().acknowledge();
+      }
       final changed = await _saveSelectedLastSeenCounts(
         prefs,
         currentCounts,
@@ -695,6 +713,7 @@ class ActivitiesNotificationStateStore {
   Future<void> markActivityNotificationShown({
     required NotificationCounts currentCounts,
     required String body,
+    Set<String>? noteActivityIds,
     bool acknowledgeSubmissions = false,
     bool acknowledgeWatches = false,
     bool acknowledgeComments = false,
@@ -732,7 +751,30 @@ class ActivitiesNotificationStateStore {
         DateTime.now().millisecondsSinceEpoch,
       );
       await _clearDeferredActivityNotification(prefs);
+      if (noteActivityIds != null) {
+        await ManualNoteActivityStore().acknowledge(noteIds: noteActivityIds);
+      }
     });
+  }
+
+  ActivitiesDiff _withNoteActivityIds(
+    ActivitiesDiff diff,
+    Set<String>? noteActivityIds,
+  ) {
+    if (noteActivityIds == null) return diff;
+    final increases = diff.increasedBy;
+    return ActivitiesDiff(
+      previous: diff.previous,
+      current: diff.current,
+      increasedBy: NotificationCounts(
+        submissions: increases.submissions,
+        watches: increases.watches,
+        comments: increases.comments,
+        favorites: increases.favorites,
+        journals: increases.journals,
+        notes: noteActivityIds.length,
+      ),
+    );
   }
 }
 
@@ -740,8 +782,10 @@ class RecordedActivitiesDiff {
   const RecordedActivitiesDiff({
     required this.observed,
     required this.unacknowledged,
+    this.noteActivityIds,
   });
 
   final ActivitiesDiff observed;
   final ActivitiesDiff unacknowledged;
+  final Set<String>? noteActivityIds;
 }

@@ -6,6 +6,7 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/data/manual_note_activity_store.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
 import 'package:fanotifier/core/network/fa_request_coordinator.dart';
@@ -33,6 +34,8 @@ class NoteUnreadService {
       final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
       final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
       if (cookieA == null || cookieB == null) return;
+
+      await ManualNoteActivityStore().registerManualUnread(msgId);
 
       final dio = Dio();
       final cookieJar = CookieJar();

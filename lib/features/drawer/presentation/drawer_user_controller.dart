@@ -64,6 +64,9 @@ class DrawerUserControllerState extends State<DrawerUserController>
   double scrolloffset = 0.0;
 
 
+  bool _initialDrawerPositionResolved = false;
+  bool _initialDrawerPositionScheduled = false;
+
   bool _enableSwipe = true;
 
   @override
@@ -81,56 +84,78 @@ class DrawerUserControllerState extends State<DrawerUserController>
     iconAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 0),
-    );
-    iconAnimationController?.animateTo(
-      1.0,
-      duration: const Duration(milliseconds: 0),
-      curve: Curves.fastOutSlowIn,
+      value: 1.0,
     );
 
-    scrollController = ScrollController(initialScrollOffset: widget.drawerWidth);
-    scrollController!.addListener(() {
-      if (scrollController!.offset <= 0) {
-        if (scrolloffset != 1.0) {
-          setState(() {
-            scrolloffset = 1.0;
-            widget.drawerIsOpen?.call(true);
-          });
-        }
-        iconAnimationController?.animateTo(
-          0.0,
-          duration: const Duration(milliseconds: 0),
-          curve: Curves.fastOutSlowIn,
-        );
-      } else if (scrollController!.offset > 0 &&
-          scrollController!.offset < widget.drawerWidth.floor()) {
-        iconAnimationController?.animateTo(
-          (scrollController!.offset * 100 / widget.drawerWidth) / 100,
-          duration: const Duration(milliseconds: 0),
-          curve: Curves.fastOutSlowIn,
-        );
-      } else {
-        if (scrolloffset != 0.0) {
-          setState(() {
-            scrolloffset = 0.0;
-            widget.drawerIsOpen?.call(false);
-          });
-        }
-        iconAnimationController?.animateTo(
-          1.0,
-          duration: const Duration(milliseconds: 0),
-          curve: Curves.fastOutSlowIn,
-        );
-      }
-    });
+    scrollController = ScrollController(
+      initialScrollOffset: widget.drawerWidth,
+      keepScrollOffset: false,
+    );
+    scrollController!.addListener(_handleDrawerScroll);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => getInitState());
+    _scheduleInitialDrawerPosition();
   }
 
-  Future<bool> getInitState() async {
-    // Start with the drawer closed
-    scrollController?.jumpTo(widget.drawerWidth);
-    return true;
+  @override
+  void didUpdateWidget(DrawerUserController oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.drawerWidth == widget.drawerWidth) return;
+
+    final controller = scrollController;
+    final wasClosed = !_initialDrawerPositionResolved ||
+        controller == null ||
+        !controller.hasClients ||
+        controller.offset >= oldWidget.drawerWidth - 0.5;
+    if (!wasClosed) return;
+
+    _initialDrawerPositionResolved = false;
+    _scheduleInitialDrawerPosition();
+  }
+
+  void _handleDrawerScroll() {
+    final controller = scrollController;
+    if (controller == null || !controller.hasClients) return;
+
+    final position = controller.position;
+    if (!position.hasContentDimensions || position.maxScrollExtent <= 0) return;
+
+    final progress = ((controller.offset - position.minScrollExtent) /
+            (position.maxScrollExtent - position.minScrollExtent))
+        .clamp(0.0, 1.0)
+        .toDouble();
+    iconAnimationController?.value = progress;
+
+    final nextScrollOffset = controller.offset <= position.minScrollExtent
+        ? 1.0
+        : 0.0;
+    if (scrolloffset == nextScrollOffset) return;
+
+    setState(() {
+      scrolloffset = nextScrollOffset;
+    });
+    widget.drawerIsOpen?.call(nextScrollOffset == 1.0);
+  }
+
+  void _scheduleInitialDrawerPosition() {
+    if (_initialDrawerPositionResolved || _initialDrawerPositionScheduled) {
+      return;
+    }
+    _initialDrawerPositionScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initialDrawerPositionScheduled = false;
+      if (!mounted || _initialDrawerPositionResolved) return;
+
+      final controller = scrollController;
+      if (controller == null || !controller.hasClients) return;
+      final position = controller.position;
+      if (!position.hasContentDimensions || position.maxScrollExtent <= 0) {
+        return;
+      }
+
+      _initialDrawerPositionResolved = true;
+      controller.jumpTo(position.maxScrollExtent);
+      _handleDrawerScroll();
+    });
   }
 
   /// Sets the drawer's position based on the provided offset.
@@ -174,31 +199,36 @@ class DrawerUserControllerState extends State<DrawerUserController>
     return Scaffold(
       backgroundColor: isLightMode ? AppTheme.white : AppTheme.nearlyBlack,
 
-      body: SingleChildScrollView(
-        controller: scrollController,
-        // Decide which scroll physics to use, based on _enableSwipe
-        physics: _enableSwipe
-            ? const PageScrollPhysics(parent: ClampingScrollPhysics())
-            : const NeverScrollableScrollPhysics(),
-        scrollDirection: Axis.horizontal,
-        child: SizedBox(
-          height: size.height,
-          width: size.width + widget.drawerWidth,
-          child: Row(
-            children: <Widget>[
-              SizedBox(
-                width: widget.drawerWidth,
-                height: size.height,
-                child: AnimatedBuilder(
-                  animation: iconAnimationController!,
-                  builder: (BuildContext context, Widget? child) {
-                    return Transform(
-                      transform: Matrix4.translationValues(
-                        scrollController!.offset,
-                        0.0,
-                        0.0,
-                      ),
-                      child: HomeDrawer(
+      body: NotificationListener<ScrollMetricsNotification>(
+        onNotification: (_) {
+          _scheduleInitialDrawerPosition();
+          return false;
+        },
+        child: SingleChildScrollView(
+          controller: scrollController,
+          // Decide which scroll physics to use, based on _enableSwipe
+          physics: _enableSwipe
+              ? const PageScrollPhysics(parent: ClampingScrollPhysics())
+              : const NeverScrollableScrollPhysics(),
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            height: size.height,
+            width: size.width + widget.drawerWidth,
+            child: Row(
+              children: <Widget>[
+                SizedBox(
+                  width: widget.drawerWidth,
+                  height: size.height,
+                  child: AnimatedBuilder(
+                    animation: iconAnimationController!,
+                    builder: (BuildContext context, Widget? child) {
+                      return Transform(
+                        transform: Matrix4.translationValues(
+                          scrollController!.offset,
+                          0.0,
+                          0.0,
+                        ),
+                        child: HomeDrawer(
                         screenIndex: widget.screenIndex ?? DrawerIndex.home,
                         iconAnimationController: iconAnimationController,
                         callBackIndex: (DrawerIndex indexType) {
@@ -216,14 +246,14 @@ class DrawerUserControllerState extends State<DrawerUserController>
                         onBadgeTap: widget.onBadgeTap,
                         onUserProfileChanged: widget.onUserProfileChanged,
                         isUserProfileLoading: widget.isUserProfileLoading,
-                      ),
-                    );
-                  },
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
 
 
-              SizedBox(
+                SizedBox(
                 width: size.width,
                 height: size.height,
                 child: Container(
@@ -286,8 +316,9 @@ class DrawerUserControllerState extends State<DrawerUserController>
                     ],
                   ),
                 ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -21,6 +21,7 @@ import 'package:fanotifier/features/notes/data/background_note_unread_service.da
 import 'package:fanotifier/features/notes/data/message_storage.dart';
 import 'package:fanotifier/features/notes/domain/background_inbox_models.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/note_activity_snapshot.dart';
 import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
 import 'package:fanotifier/features/notifications/domain/notification_payloads.dart';
 import 'package:fanotifier/features/notifications/data/adaptive_background_fetch_scheduler.dart'
@@ -368,6 +369,7 @@ class BackgroundNotificationWorker {
 
   Future<_ActivitySnapshotResult> _processActivitySnapshot({
     required NotificationCounts? counts,
+    required NoteActivitySnapshot noteActivitySnapshot,
     required NotificationService notificationService,
     required SharedPreferences prefs,
     required BackgroundNotificationExecutionCancellation cancellation,
@@ -409,6 +411,7 @@ class BackgroundNotificationWorker {
     final activitiesStateStore = ActivitiesNotificationStateStore();
     final recordedDiff = await activitiesStateStore.recordAndDiffCurrentCounts(
       currentCounts: counts,
+      noteActivitySnapshot: noteActivitySnapshot,
     );
     final observedDiff = recordedDiff.observed;
     final unacknowledgedDiff = recordedDiff.unacknowledged;
@@ -469,9 +472,12 @@ class BackgroundNotificationWorker {
         commentsEnabled: commentsEnabled,
         favoritesEnabled: favoritesEnabled,
         journalsEnabled: journalsEnabled,
-        notesEnabled: notesEnabled,
+        notesEnabled: notesEnabled && recordedDiff.noteActivityIds == null,
       );
-      if (!alreadyShown && messageBody.contains('(+')) {
+      if ((!alreadyShown ||
+              (notesEnabled &&
+                  (recordedDiff.noteActivityIds?.isNotEmpty ?? false))) &&
+          messageBody.contains('(+')) {
         foundNewContent = true;
         await prefs.reload();
         cancellation.throwIfCancelled();
@@ -517,6 +523,7 @@ class BackgroundNotificationWorker {
           await activitiesStateStore.markActivityNotificationShown(
             currentCounts: counts,
             body: messageBody,
+            noteActivityIds: notesEnabled ? recordedDiff.noteActivityIds : null,
           );
           await notification_badge.commitIOSActivityBadgeNumber(badgeNumber);
           await notification_badge.rememberActivityNotification(
@@ -783,6 +790,7 @@ class BackgroundNotificationWorker {
                     .toSet()
                 : <String>{};
             final inboxStopwatch = Stopwatch()..start();
+            final inboxStartedAt = DateTime.now().millisecondsSinceEpoch;
             final BackgroundInboxSnapshot snapshot =
                 await fetchBackgroundInboxSnapshot(
               shownNoteIds: shownSet,
@@ -818,6 +826,11 @@ class BackgroundNotificationWorker {
             try {
               final activityResult = await _processActivitySnapshot(
                 counts: currentCounts,
+                noteActivitySnapshot: NoteActivitySnapshot(
+                  messages: fetchedInbox,
+                  startedAtMilliseconds: inboxStartedAt,
+                  unreadCount: currentCounts?.notes ?? 0,
+                ),
                 preserveUnreadNotes: pendingUnreadNoteIds.isNotEmpty,
                 temporarilyReadNotes: fetchedInbox
                     .where((message) => !message.isUnread &&

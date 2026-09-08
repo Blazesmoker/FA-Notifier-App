@@ -27,8 +27,8 @@ class ImageOptimizerRepositoryImpl implements ImageOptimizerRepository {
   int _previewGeneration = 0;
 
   @override
-  Future<ImageInspection> inspect(Uint8List bytes, String fileName) {
-    return Isolate.run(() => _inspect(bytes, fileName));
+  Future<ImageInspection> inspect(Uint8List bytes, String _) {
+    return Isolate.run(() => _inspect(bytes));
   }
 
   @override
@@ -322,7 +322,7 @@ bool _canUseNativeJpeg(
   return (sourceRatio - targetRatio).abs() < 0.01;
 }
 
-ImageInspection _inspect(Uint8List bytes, String fileName) {
+ImageInspection _inspect(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) {
     throw const FormatException('This image could not be decoded.');
@@ -332,7 +332,7 @@ ImageInspection _inspect(Uint8List bytes, String fileName) {
     height: decoded.height,
     byteLength: bytes.lengthInBytes,
     frameCount: decoded.numFrames,
-    format: _formatFromNameAndBytes(fileName, bytes),
+    format: _formatFromBytes(bytes),
   );
 }
 
@@ -693,23 +693,26 @@ bool _meetsLimits(
   return true;
 }
 
-ImageOutputFormat _formatFromNameAndBytes(String fileName, Uint8List bytes) {
-  final extension = fileName.split('.').last.toLowerCase();
-  if (extension == 'gif' ||
-      (bytes.length > 3 &&
-          bytes[0] == 0x47 &&
-          bytes[1] == 0x49 &&
-          bytes[2] == 0x46)) {
+ImageOutputFormat? _formatFromBytes(Uint8List bytes) {
+  if (bytes.length > 2 &&
+      bytes[0] == 0x47 &&
+      bytes[1] == 0x49 &&
+      bytes[2] == 0x46) {
     return ImageOutputFormat.gif;
   }
-  if (extension == 'png' ||
-      (bytes.length > 3 &&
-          bytes[0] == 0x89 &&
-          bytes[1] == 0x50 &&
-          bytes[2] == 0x4e)) {
+  if (bytes.length > 2 &&
+      bytes[0] == 0x89 &&
+      bytes[1] == 0x50 &&
+      bytes[2] == 0x4e) {
     return ImageOutputFormat.png;
   }
-  return ImageOutputFormat.jpeg;
+  if (bytes.length > 2 &&
+      bytes[0] == 0xff &&
+      bytes[1] == 0xd8 &&
+      bytes[2] == 0xff) {
+    return ImageOutputFormat.jpeg;
+  }
+  return null;
 }
 
 String _outputName(String originalName, ImageOutputFormat format) {
