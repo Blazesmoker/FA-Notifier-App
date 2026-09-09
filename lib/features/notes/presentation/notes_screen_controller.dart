@@ -143,6 +143,24 @@ class NotesScreenController {
     });
   }
 
+  void toggleSelectAll(Iterable<Message> messages) {
+    _setState(() {
+      final loadedIds = messages.map((message) => message.id).toSet();
+      final selectedIds = <String>{..._state.selectedIds};
+      final allLoadedSelected = loadedIds.isNotEmpty &&
+          loadedIds.every(selectedIds.contains);
+      if (allLoadedSelected) {
+        selectedIds.removeAll(loadedIds);
+      } else {
+        selectedIds.addAll(loadedIds);
+      }
+      _state = _state.copyWith(
+        isSelectionMode: true,
+        selectedIds: selectedIds,
+      );
+    });
+  }
+
   void clearSelection() {
     _setState(() {
       _state = _state.copyWith(

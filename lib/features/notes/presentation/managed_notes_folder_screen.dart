@@ -71,6 +71,7 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
     if (_scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent - 100 &&
         !_isFetchingMore &&
+        !_isSelectAllInProgress &&
         _hasMore) {
       _loadMore();
     }
@@ -173,8 +174,22 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
     });
   }
 
-  Future<void> _selectAll() async {
+  void _selectAllLoaded() {
     if (_isSelectAllInProgress || _isMutating) return;
+    setState(() {
+      final loadedIds = _messages.map((message) => message.id).toSet();
+      final allLoadedSelected = loadedIds.isNotEmpty &&
+          loadedIds.every(_selectedIds.contains);
+      if (allLoadedSelected) {
+        _selectedIds.removeAll(loadedIds);
+      } else {
+        _selectedIds.addAll(loadedIds);
+      }
+    });
+  }
+
+  Future<void> _selectAllPages() async {
+    if (_isSelectAllInProgress || _isMutating || _isFetchingMore) return;
     setState(() {
       _isSelectAllInProgress = true;
       _selectionMode = true;
@@ -183,6 +198,7 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
       _selectAllCancelled = false;
     });
 
+    final loadedIds = _messages.map((message) => message.id).toSet();
     var page = 1;
     while (mounted && !_selectAllCancelled) {
       setState(() => _selectAllProgressPage = page);
@@ -200,12 +216,17 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
         return;
       }
 
-      if (messages.isEmpty) break;
+      if (messages.isEmpty) {
+        if (mounted) setState(() => _hasMore = false);
+        break;
+      }
       if (!mounted) return;
       setState(() {
         for (final message in messages) {
           _selectedIds.add(message.id);
+          if (loadedIds.add(message.id)) _messages.add(message);
         }
+        if (page > _currentPage) _currentPage = page;
       });
       page++;
       await Future.delayed(
@@ -369,6 +390,58 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
     );
   }
 
+  Widget _buildSelectionBar() {
+    final controlsDisabled = _isSelectAllInProgress || _isMutating;
+    final allPagesDisabled = controlsDisabled || _isFetchingMore;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Colors.black,
+      child: Row(
+        children: [
+          InkResponse(
+            onTap: controlsDisabled ? null : _selectAllLoaded,
+            radius: 18,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            child: Text(
+              'Select All (${_selectedIds.length})',
+              style: TextStyle(
+                color: controlsDisabled ? Colors.grey : _accent,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const Spacer(),
+          InkResponse(
+            onTap: allPagesDisabled ? null : _selectAllPages,
+            radius: 18,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            child: Text(
+              'Select All Pages',
+              style: TextStyle(
+                color: allPagesDisabled ? Colors.grey : _accent,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          InkResponse(
+            onTap: controlsDisabled ? null : _exitSelectionMode,
+            radius: 18,
+            child: Icon(
+              Icons.close,
+              color: controlsDisabled ? Colors.grey : Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<Widget> _buildAppBarActions() {
     if (_isTrash) {
       return [
@@ -448,48 +521,9 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
           top: false,
           child: Column(
             children: [
-              if (_selectionMode)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  color: Colors.black,
-                  child: Row(
-                    children: [
-                      InkResponse(
-                        onTap: _isSelectAllInProgress || _isMutating
-                            ? null
-                            : _selectAll,
-                        radius: 18,
-                        child: Text(
-                          'Select All',
-                          style: TextStyle(
-                            color: _isSelectAllInProgress || _isMutating
-                                ? Colors.grey
-                                : _accent,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      InkResponse(
-                        onTap: _isSelectAllInProgress || _isMutating
-                            ? null
-                            : _exitSelectionMode,
-                        radius: 18,
-                        child: Icon(
-                          Icons.close,
-                          color: _isSelectAllInProgress || _isMutating
-                              ? Colors.grey
-                              : Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              _selectionMode
+                  ? _buildSelectionBar()
+                  : const SizedBox.shrink(),
               if (_isSelectAllInProgress)
                 Container(
                   width: double.infinity,

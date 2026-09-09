@@ -60,6 +60,7 @@ class NotesScreen extends StatefulWidget {
 class NotesScreenState extends State<NotesScreen>
     with RouteAware, WidgetsBindingObserver, SingleTickerProviderStateMixin {
   static const Color _accent = Color(0xFFE09321);
+  static const double _notesActionSpacing = 6.0;
 
   late final NotesScreenController _notesController;
   late final TabController _tabController;
@@ -158,6 +159,13 @@ class NotesScreenState extends State<NotesScreen>
   void _toggleSelection(Message msg) {
     if (_isMutating) return;
     _notesController.toggleSelection(msg);
+  }
+
+  void _selectAllLoadedMessages() {
+    if (_isMutating) return;
+    final messages =
+        _tabController.index == 0 ? inboxMessages : sentMessages;
+    _notesController.toggleSelectAll(messages);
   }
 
   void _handleTapItem(Message msg) {
@@ -482,6 +490,41 @@ class NotesScreenState extends State<NotesScreen>
 
   bool get isInSelectionMode => _selectionMode;
 
+  Widget _buildSelectionBar() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Colors.black,
+      child: Row(
+        children: [
+          InkResponse(
+            onTap: _isMutating ? null : _selectAllLoadedMessages,
+            radius: 18,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            child: Text(
+              'Select All (${_selectedIds.length})',
+              style: TextStyle(
+                color: _isMutating ? Colors.grey : _accent,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const Spacer(),
+          InkResponse(
+            onTap: _isMutating ? null : exitSelectionMode,
+            radius: 18,
+            child: Icon(
+              Icons.close,
+              color: _isMutating ? Colors.grey : Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildNewMessageAppBarButton() {
     return Padding(
       padding: const EdgeInsets.only(right: 20.0),
@@ -513,7 +556,7 @@ class NotesScreenState extends State<NotesScreen>
     return PopupMenuButton<_NotesMenuAction>(
       tooltip: 'Manage notes',
       position: PopupMenuPosition.under,
-      offset: const Offset(0, 8),
+      offset: const Offset(-6, 8),
       menuPadding: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
@@ -638,9 +681,8 @@ class NotesScreenState extends State<NotesScreen>
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(width: 52),
                 _buildNotesManagementMenu(),
-                const SizedBox(width: 2),
+                const SizedBox(width: _notesActionSpacing),
               ],
             ),
             _buildNewMessageAppBarButton(),
@@ -667,21 +709,8 @@ class NotesScreenState extends State<NotesScreen>
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
-                    width: 52,
-                    child: _selectionMode
-                        ? InkResponse(
-                            onTap: _isMutating ? null : exitSelectionMode,
-                            radius: 18,
-                            child: Icon(
-                              Icons.close,
-                              color: _isMutating ? Colors.grey : Colors.white,
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
                   _buildNotesManagementMenu(),
-                  const SizedBox(width: 2),
+                  const SizedBox(width: _notesActionSpacing),
                 ],
               ),
               _buildNewMessageAppBarButton(),
@@ -705,103 +734,117 @@ class NotesScreenState extends State<NotesScreen>
               ],
             ),
           ),
-          body: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 0.0),
-            child: NotificationListener<OverscrollNotification>(
-              onNotification: (OverscrollNotification notification) {
-                final tabIndex = _tabController.index;
-                if (tabIndex == 0 &&
-                    notification.metrics.axis == Axis.horizontal &&
-                    notification.overscroll < 0) {
-                  widget.drawerKey.currentState?.openDrawer();
-                  return true;
-                }
-                return false;
-              },
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  InboxTab(
-                    isLoading: isLoadingInbox,
-                    isLoadingMore: isLoadingMoreInbox,
-                    errorMessage: errorInbox,
-                    messages: inboxMessages,
-                    scrollController: _inboxScrollController,
-                    hasMore: _hasMoreInbox,
-                    refreshInbox: () async {
-                      _notesController.resetInboxPagination();
-                      await _fetchInbox(page: 1, clearOld: false);
+          body: Column(
+            children: [
+              _selectionMode
+                  ? _buildSelectionBar()
+                  : const SizedBox.shrink(),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 0.0),
+                  child: NotificationListener<OverscrollNotification>(
+                    onNotification: (OverscrollNotification notification) {
+                      final tabIndex = _tabController.index;
+                      if (tabIndex == 0 &&
+                          notification.metrics.axis == Axis.horizontal &&
+                          notification.overscroll < 0) {
+                        widget.drawerKey.currentState?.openDrawer();
+                        return true;
+                      }
+                      return false;
                     },
-                    refreshSent: () async {
-                      _notesController.resetSentPagination();
-                      await _refreshSentIfVisibleOrMarkStale();
-                    },
-                    loadMore: _loadMoreInbox,
-                    onOpenMessage: (msg) {
-                      Navigator.of(context)
-                          .push(MaterialPageRoute(
-                        settings:
-                            const AnalyticsRouteSettings(AppScreens.noteDetails),
-                        builder: (_) => MessageDetailScreen(
-                          messageLink: msg.link,
-                          folder: 'inbox',
-                          sourceFolder: NotesFolder.inbox,
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        InboxTab(
+                          isLoading: isLoadingInbox,
+                          isLoadingMore: isLoadingMoreInbox,
+                          errorMessage: errorInbox,
+                          messages: inboxMessages,
+                          scrollController: _inboxScrollController,
+                          hasMore: _hasMoreInbox,
+                          refreshInbox: () async {
+                            _notesController.resetInboxPagination();
+                            await _fetchInbox(page: 1, clearOld: false);
+                          },
+                          refreshSent: () async {
+                            _notesController.resetSentPagination();
+                            await _refreshSentIfVisibleOrMarkStale();
+                          },
+                          loadMore: _loadMoreInbox,
+                          onOpenMessage: (msg) {
+                            Navigator.of(context)
+                                .push(MaterialPageRoute(
+                              settings: const AnalyticsRouteSettings(
+                                AppScreens.noteDetails,
+                              ),
+                              builder: (_) => MessageDetailScreen(
+                                messageLink: msg.link,
+                                folder: 'inbox',
+                                sourceFolder: NotesFolder.inbox,
+                              ),
+                            ))
+                                .then((result) {
+                              if (result == 'refresh' ||
+                                  result == 'marked_unread') {
+                                _refreshAfterMessageMutation();
+                              }
+                            });
+                          },
+                          onPreviewMessage: (msg) =>
+                              _showPreviewDialog(msg, 'inbox'),
+                          isSelectionMode: _selectionMode,
+                          selectedIds: _selectedIds,
+                          onLongPressItem: _enterSelectionModeAndSelect,
+                          onTapItem: _handleTapItem,
                         ),
-                      ))
-                          .then((result) {
-                        if (result == 'refresh' || result == 'marked_unread') {
-                          _refreshAfterMessageMutation();
-                        }
-                      });
-                    },
-                    onPreviewMessage: (msg) => _showPreviewDialog(msg, 'inbox'),
-                    isSelectionMode: _selectionMode,
-                    selectedIds: _selectedIds,
-                    onLongPressItem: _enterSelectionModeAndSelect,
-                    onTapItem: _handleTapItem,
-                  ),
-                  SentTab(
-                    isLoading:
-                        isLoadingSent || (!_hasLoadedSent && errorSent.isEmpty),
-                    isLoadingMore: isLoadingMoreSent,
-                    errorMessage: errorSent,
-                    messages: sentMessages,
-                    scrollController: _sentScrollController,
-                    hasMore: _hasMoreSent,
-                    refreshInbox: () async {
-                      _notesController.resetInboxPagination();
-                      await _fetchInbox(page: 1, clearOld: false);
-                    },
-                    refreshSent: () async {
-                      _notesController.resetSentPagination();
-                      await _fetchSent(page: 1, clearOld: false);
-                    },
-                    loadMore: _loadMoreSent,
-                    onOpenMessage: (msg) {
-                      Navigator.of(context)
-                          .push(MaterialPageRoute(
-                        settings:
-                            const AnalyticsRouteSettings(AppScreens.noteDetails),
-                        builder: (_) => MessageDetailScreen(
-                          messageLink: msg.link,
-                          folder: 'sent',
-                          sourceFolder: NotesFolder.sent,
+                        SentTab(
+                          isLoading: isLoadingSent ||
+                              (!_hasLoadedSent && errorSent.isEmpty),
+                          isLoadingMore: isLoadingMoreSent,
+                          errorMessage: errorSent,
+                          messages: sentMessages,
+                          scrollController: _sentScrollController,
+                          hasMore: _hasMoreSent,
+                          refreshInbox: () async {
+                            _notesController.resetInboxPagination();
+                            await _fetchInbox(page: 1, clearOld: false);
+                          },
+                          refreshSent: () async {
+                            _notesController.resetSentPagination();
+                            await _fetchSent(page: 1, clearOld: false);
+                          },
+                          loadMore: _loadMoreSent,
+                          onOpenMessage: (msg) {
+                            Navigator.of(context)
+                                .push(MaterialPageRoute(
+                              settings: const AnalyticsRouteSettings(
+                                AppScreens.noteDetails,
+                              ),
+                              builder: (_) => MessageDetailScreen(
+                                messageLink: msg.link,
+                                folder: 'sent',
+                                sourceFolder: NotesFolder.sent,
+                              ),
+                            ))
+                                .then((result) {
+                              if (result == 'refresh' ||
+                                  result == 'marked_unread') {
+                                _refreshAfterMessageMutation();
+                              }
+                            });
+                          },
+                          isSelectionMode: _selectionMode,
+                          selectedIds: _selectedIds,
+                          onLongPressItem: _enterSelectionModeAndSelect,
+                          onTapItem: _handleTapItem,
                         ),
-                      ))
-                          .then((result) {
-                        if (result == 'refresh' || result == 'marked_unread') {
-                          _refreshAfterMessageMutation();
-                        }
-                      });
-                    },
-                    isSelectionMode: _selectionMode,
-                    selectedIds: _selectedIds,
-                    onLongPressItem: _enterSelectionModeAndSelect,
-                    onTapItem: _handleTapItem,
+                      ],
+                    ),
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
           backgroundColor: Colors.black,
         ),
