@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter_html/flutter_html.dart';
 
 import 'package:fanotifier/shared/utils/special_text_span_builder.dart';
+import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
 import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
@@ -252,6 +253,12 @@ class _CommentWidgetState extends State<CommentWidget> {
     required bool collapsed,
     required Widget? body,
   }) {
+    final timeFormat =
+        context.select<TimeDisplaySettingsProvider, TimeDisplayFormat>(
+      (settings) => settings.formatFor(
+        TimeDisplayOccasion.submissionComment,
+      ),
+    );
     final double widthPercent = (widget.comment['width'] ?? 100).toDouble();
     final int nestingLevel =
         ((100.0 - widthPercent) / 3.0).round().clamp(0, 4).toInt();
@@ -529,9 +536,7 @@ class _CommentWidgetState extends State<CommentWidget> {
                                           widget.comment[
                                               'popupDateRelative'] ??
                                           '',
-                                      use24HourTime: context
-                                          .watch<TimeDisplaySettingsProvider>()
-                                          .use24HourTime,
+                                      format: timeFormat,
                                     )
                                   : (widget.comment['popupDateRelative'] ?? ''),
                               maxLines: 1,

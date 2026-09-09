@@ -7,7 +7,9 @@ import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/notes/presentation/message_detail_screen.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/note_management.dart';
 import 'package:fanotifier/features/notes/domain/notes_repository.dart';
+import 'package:fanotifier/features/notes/presentation/archive_screen.dart';
 import 'package:fanotifier/features/notes/presentation/new_message.dart';
 import 'package:fanotifier/features/drawer/presentation/drawer_user_controller.dart';
 import 'package:fanotifier/features/notes/domain/notes_screen_view_state.dart';
@@ -16,6 +18,30 @@ import 'package:fanotifier/features/notes/presentation/notesscreen_inbox.dart';
 import 'package:fanotifier/features/notes/presentation/notesscreen_sent.dart';
 import 'package:fanotifier/features/notes/presentation/notes_screen_controller.dart';
 import 'package:fanotifier/features/notes/presentation/trash_screen.dart';
+
+enum _NotesMenuAction {
+  trash,
+  archive,
+  markUnread,
+}
+
+class _NotesActionCopy {
+  const _NotesActionCopy({
+    required this.title,
+    required this.confirmation,
+    required this.confirmLabel,
+    required this.success,
+    required this.failure,
+    required this.unknown,
+  });
+
+  final String title;
+  final String confirmation;
+  final String confirmLabel;
+  final String success;
+  final String failure;
+  final String unknown;
+}
 
 class NotesScreen extends StatefulWidget {
   final GlobalKey<DrawerUserControllerState> drawerKey;
@@ -44,6 +70,7 @@ class NotesScreenState extends State<NotesScreen>
   AppLifecycleState? _lastLifecycleState;
 
   bool _isDialogOpen = false;
+  bool _isMutating = false;
 
   final ScrollController _inboxScrollController = ScrollController();
   final ScrollController _sentScrollController = ScrollController();
@@ -124,14 +151,17 @@ class NotesScreenState extends State<NotesScreen>
   }
 
   void _enterSelectionModeAndSelect(Message msg) {
+    if (_isMutating) return;
     _notesController.enterSelectionModeAndSelect(msg);
   }
 
   void _toggleSelection(Message msg) {
+    if (_isMutating) return;
     _notesController.toggleSelection(msg);
   }
 
   void _handleTapItem(Message msg) {
+    if (_isMutating) return;
     if (_selectionMode) {
       _toggleSelection(msg);
     } else {
@@ -142,6 +172,7 @@ class NotesScreenState extends State<NotesScreen>
           builder: (_) => MessageDetailScreen(
             messageLink: msg.link,
             folder: 'inbox',
+            sourceFolder: NotesFolder.inbox,
           ),
         ))
             .then((result) {
@@ -156,6 +187,7 @@ class NotesScreenState extends State<NotesScreen>
           builder: (_) => MessageDetailScreen(
             messageLink: msg.link,
             folder: 'sent',
+            sourceFolder: NotesFolder.sent,
           ),
         ))
             .then((result) {
@@ -173,21 +205,67 @@ class NotesScreenState extends State<NotesScreen>
     _refreshSentIfVisibleOrMarkStale();
   }
 
-  Future<void> _trashSelected() async {
-    if (_selectedIds.isEmpty) return;
-    final folder = _tabController.index == 0 ? 'inbox' : 'sent';
-    final ids = _selectedIds.toList();
+  Future<void> _applySelectedAction(_NotesMenuAction menuAction) async {
+    if (_selectedIds.isEmpty || _isMutating) return;
+    final sourceFolder = _tabController.index == 0
+        ? NotesFolder.inbox
+        : NotesFolder.sent;
+    if (sourceFolder == NotesFolder.sent &&
+        menuAction == _NotesMenuAction.markUnread) {
+      return;
+    }
+    final ids = _selectedIds.toList(growable: false);
+    final copy = _notesActionCopy(menuAction, ids.length);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: Text(copy.title, style: const TextStyle(color: Colors.white)),
+        content: Text(
+          copy.confirmation,
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              copy.confirmLabel,
+              style: const TextStyle(
+                color: _accent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isMutating = true);
     try {
-      await _notesController.moveNotesToTrash(ids: ids, folder: folder);
+      await _notesController.applyManagementAction(
+        ids: ids,
+        sourceFolder: sourceFolder,
+        action: switch (menuAction) {
+          _NotesMenuAction.trash => NoteManagementAction.moveToTrash,
+          _NotesMenuAction.archive => NoteManagementAction.moveToArchive,
+          _NotesMenuAction.markUnread => NoteManagementAction.markUnread,
+        },
+      );
       if (!mounted) return;
       _notesController.clearSelection();
-      await _notesController.refreshAfterTrash(folder);
+      await _notesController.refreshAfterManagementAction(sourceFolder);
+      if (mounted) _showManagementSnackBar(copy.success, success: true);
+    } on NoteManagementOutcomeUnknownException {
+      if (mounted) _showManagementSnackBar(copy.unknown, success: false);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to move to Trash: $e')),
-        );
-      }
+      if (mounted) _showManagementSnackBar(copy.failure, success: false);
+    } finally {
+      if (mounted) setState(() => _isMutating = false);
     }
   }
 
@@ -330,36 +408,75 @@ class NotesScreenState extends State<NotesScreen>
     );
   }
 
-  void _onTrashPressed() {
-    if (_selectedIds.isEmpty) return;
-    showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title:
-            const Text('Move to Trash', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Are you sure you want to send selected Notes to Trash folder?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Trash',
-                style: TextStyle(color: _accent, fontWeight: FontWeight.bold)),
-          ),
-        ],
+  void _handleNotesMenuAction(_NotesMenuAction action) {
+    if (_selectionMode) {
+      _applySelectedAction(action);
+      return;
+    }
+    final screen = switch (action) {
+      _NotesMenuAction.trash => const TrashScreen(),
+      _NotesMenuAction.archive => const ArchiveScreen(),
+      _NotesMenuAction.markUnread => null,
+    };
+    if (screen == null) return;
+    final analyticsScreen = action == _NotesMenuAction.trash
+        ? AppScreens.notesTrash
+        : AppScreens.notesArchive;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        settings: AnalyticsRouteSettings(analyticsScreen),
+        builder: (_) => screen,
       ),
-    ).then((confirmed) {
-      if (confirmed == true) _trashSelected();
-    });
+    );
+  }
+
+  _NotesActionCopy _notesActionCopy(_NotesMenuAction action, int count) {
+    final notes = count == 1 ? 'note' : 'notes';
+    final wasWere = count == 1 ? 'was' : 'were';
+    return switch (action) {
+      _NotesMenuAction.trash => _NotesActionCopy(
+          title: 'Move to Trash',
+          confirmation: 'Move $count $notes to Trash?',
+          confirmLabel: 'Trash',
+          success: 'Moved $count $notes to Trash.',
+          failure: 'Failed to move $count $notes to Trash.',
+          unknown:
+              'Could not confirm whether $count $notes $wasWere moved to Trash.',
+        ),
+      _NotesMenuAction.archive => _NotesActionCopy(
+          title: 'Move to Archive',
+          confirmation: 'Move $count $notes to Archive?',
+          confirmLabel: 'Archive',
+          success: 'Moved $count $notes to Archive.',
+          failure: 'Failed to move $count $notes to Archive.',
+          unknown:
+              'Could not confirm whether $count $notes $wasWere moved to Archive.',
+        ),
+      _NotesMenuAction.markUnread => _NotesActionCopy(
+          title: 'Mark as Unread',
+          confirmation: 'Mark $count $notes as unread?',
+          confirmLabel: 'Mark as Unread',
+          success: 'Marked $count $notes as unread.',
+          failure: 'Failed to mark $count $notes as unread.',
+          unknown:
+              'Could not confirm whether $count $notes $wasWere marked as unread.',
+        ),
+    };
+  }
+
+  void _showManagementSnackBar(String message, {required bool success}) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: success ? Colors.green : Colors.red,
+      ),
+    );
   }
 
   void exitSelectionMode() {
+    if (_isMutating) return;
     _notesController.clearSelection();
   }
 
@@ -388,6 +505,78 @@ class NotesScreenState extends State<NotesScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildNotesManagementMenu() {
+    return PopupMenuButton<_NotesMenuAction>(
+      tooltip: 'Manage notes',
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 8),
+      menuPadding: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFF3A3A3A)),
+      ),
+      enabled: !_isMutating,
+      onSelected: _handleNotesMenuAction,
+      icon: Icon(
+        Icons.edit_note,
+        color: _isMutating ? Colors.grey : Colors.white,
+      ),
+      itemBuilder: (context) => [
+        _buildNotesMenuItem(
+          action: _NotesMenuAction.trash,
+          icon: Icons.delete_outline,
+          label: 'Trash',
+        ),
+        _buildNotesMenuDivider(),
+        _buildNotesMenuItem(
+          action: _NotesMenuAction.archive,
+          icon: Icons.archive_outlined,
+          label: 'Archive',
+        ),
+        if (_selectionMode && _tabController.index == 0) ...[
+          _buildNotesMenuDivider(),
+          _buildNotesMenuItem(
+            action: _NotesMenuAction.markUnread,
+            icon: Icons.mark_email_unread_outlined,
+            label: 'Mark as Unread',
+          ),
+        ],
+      ],
+    );
+  }
+
+  PopupMenuItem<_NotesMenuAction> _buildNotesMenuItem({
+    required _NotesMenuAction action,
+    required IconData icon,
+    required String label,
+  }) {
+    return PopupMenuItem<_NotesMenuAction>(
+      value: action,
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white, size: 21),
+          const SizedBox(width: 12),
+          Text(label),
+        ],
+      ),
+    );
+  }
+
+  PopupMenuItem<_NotesMenuAction> _buildNotesMenuDivider() {
+    return const PopupMenuItem<_NotesMenuAction>(
+      enabled: false,
+      height: 1,
+      padding: EdgeInsets.zero,
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        color: Color(0xFF3A3A3A),
       ),
     );
   }
@@ -450,20 +639,8 @@ class NotesScreenState extends State<NotesScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(width: 52),
-                InkResponse(
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        settings:
-                            const AnalyticsRouteSettings(AppScreens.notesTrash),
-                        builder: (_) => const TrashScreen(),
-                      ),
-                    );
-                  },
-                  radius: 18,
-                  child: const Icon(Icons.delete_outline, color: Colors.white),
-                ),
-                const SizedBox(width: 16),
+                _buildNotesManagementMenu(),
+                const SizedBox(width: 2),
               ],
             ),
             _buildNewMessageAppBarButton(),
@@ -494,35 +671,17 @@ class NotesScreenState extends State<NotesScreen>
                     width: 52,
                     child: _selectionMode
                         ? InkResponse(
-                            onTap: exitSelectionMode,
+                            onTap: _isMutating ? null : exitSelectionMode,
                             radius: 18,
-                            child: const Icon(Icons.close, color: Colors.white),
+                            child: Icon(
+                              Icons.close,
+                              color: _isMutating ? Colors.grey : Colors.white,
+                            ),
                           )
                         : const SizedBox.shrink(),
                   ),
-                  InkResponse(
-                    onTap: () {
-                      if (_selectionMode && _selectedIds.isNotEmpty) {
-                        _onTrashPressed();
-                      } else if (!_selectionMode) {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                              settings: const AnalyticsRouteSettings(
-                                AppScreens.notesTrash,
-                              ),
-                              builder: (_) => const TrashScreen()),
-                        );
-                      }
-                    },
-                    radius: 18,
-                    child: Icon(
-                      Icons.delete_outline,
-                      color: _selectionMode && _selectedIds.isEmpty
-                          ? Colors.grey
-                          : Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 18),
+                  _buildNotesManagementMenu(),
+                  const SizedBox(width: 2),
                 ],
               ),
               _buildNewMessageAppBarButton(),
@@ -586,6 +745,7 @@ class NotesScreenState extends State<NotesScreen>
                         builder: (_) => MessageDetailScreen(
                           messageLink: msg.link,
                           folder: 'inbox',
+                          sourceFolder: NotesFolder.inbox,
                         ),
                       ))
                           .then((result) {
@@ -625,6 +785,7 @@ class NotesScreenState extends State<NotesScreen>
                         builder: (_) => MessageDetailScreen(
                           messageLink: msg.link,
                           folder: 'sent',
+                          sourceFolder: NotesFolder.sent,
                         ),
                       ))
                           .then((result) {

@@ -13,7 +13,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 import 'package:fanotifier/features/notes/domain/message_model.dart';
-import 'package:fanotifier/features/notes/domain/notes_trash_repository.dart';
+import 'package:fanotifier/features/notes/data/manual_note_activity_store.dart';
+import 'package:fanotifier/features/notes/domain/managed_notes_repository.dart';
+import 'package:fanotifier/features/notes/domain/note_management.dart';
 import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 import 'package:fanotifier/core/utils/utils.dart';
 import 'package:fanotifier/shared/utils/notes_notifications_text_edit.dart';
@@ -32,7 +34,7 @@ class NotesPageSnapshot {
   final NotificationCounts? topbarCounts;
 }
 
-class NotesApiService implements NotesTrashRepository {
+class NotesApiService implements ManagedNotesRepository {
   NotesApiService({
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ??
@@ -392,90 +394,118 @@ class NotesApiService implements NotesTrashRepository {
     }
   }
 
-  /// Fetches trash notes. Uses folder=trash in cookie with /msg/pms/.
   @override
-  Future<List<Message>> fetchTrashPage({required int page}) async {
-    return fetchNotesPage(folder: 'trash', page: page);
-  }
-
-  /// Restores notes from Trash. POST with move_to=restore, folder=trash in cookie.
-  @override
-  Future<void> restoreNotesFromTrash({required List<String> ids}) async {
-    if (ids.isEmpty) return;
-    await _moveNotesInTrash(ids: ids, moveTo: 'restore');
-  }
-
-  /// Permanently deletes notes from Trash. POST with move_to=delete, folder=trash in cookie.
-  @override
-  Future<void> deleteNotesPermanently({required List<String> ids}) async {
-    if (ids.isEmpty) return;
-    await _moveNotesInTrash(ids: ids, moveTo: 'delete');
-  }
-
-  Future<void> _moveNotesInTrash({
-    required List<String> ids,
-    required String moveTo,
+  Future<List<Message>> fetchFolderPage({
+    required NotesFolder folder,
+    required int page,
   }) async {
+    return fetchNotesPage(folder: _folderValue(folder), page: page);
+  }
+
+  @override
+  Future<void> applyAction({
+    required List<String> ids,
+    required NotesFolder sourceFolder,
+    required NoteManagementAction action,
+  }) async {
+    if (ids.isEmpty) return;
+    if (!_isActionAllowed(sourceFolder, action)) {
+      throw ArgumentError('Action $action is not allowed from $sourceFolder');
+    }
     final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     if (cookieA == null || cookieB == null) {
       throw Exception('No cookies => user not logged in?');
     }
-    final body = 'manage_notes=1&move_to=$moveTo&'
-        '${ids.map((id) => 'items[]=${Uri.encodeComponent(id)}').join('&')}';
-    final resp = await FAHttp.post(
-      Uri.parse('https://www.furaffinity.net/msg/pms/'),
-      headers: {
-        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-          'a=$cookieA; b=$cookieB; folder=trash',
-        ),
-        HttpHeaders.connectionHeader: 'close',
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept':
-            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Referer': 'https://www.furaffinity.net/controls/switchbox/trash/',
-        'Origin': 'https://www.furaffinity.net',
-      },
-      body: body,
-      timeout: const Duration(seconds: 30),
-    );
+    if (sourceFolder == NotesFolder.inbox &&
+        action == NoteManagementAction.markUnread) {
+      final activityStore = ManualNoteActivityStore();
+      for (final id in ids) {
+        await activityStore.registerManualUnread(id);
+      }
+    }
+    final actionField = _actionField(action);
+    final body = [
+      'manage_notes=1',
+      '${actionField.key}=${Uri.encodeComponent(actionField.value)}',
+      ...ids.map((id) => 'items[]=${Uri.encodeComponent(id)}'),
+    ].join('&');
+    late final http.Response resp;
+    try {
+      resp = await FAHttp.post(
+        Uri.parse('https://www.furaffinity.net/msg/pms/'),
+        headers: {
+          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
+            'a=$cookieA; b=$cookieB; folder=${_folderValue(sourceFolder)}',
+          ),
+          HttpHeaders.connectionHeader: 'close',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept':
+              'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Referer': 'https://www.furaffinity.net/msg/pms/',
+          'Origin': 'https://www.furaffinity.net',
+        },
+        body: body,
+        timeout: const Duration(seconds: 30),
+        retryRecoverable: false,
+      );
+    } on TimeoutException {
+      throw const NoteManagementOutcomeUnknownException();
+    } on SocketException {
+      throw const NoteManagementOutcomeUnknownException();
+    } on HandshakeException {
+      throw const NoteManagementOutcomeUnknownException();
+    } on http.ClientException {
+      throw const NoteManagementOutcomeUnknownException();
+    }
     if (resp.statusCode != 200 && resp.statusCode != 302) {
-      throw Exception('$moveTo request failed: ${resp.statusCode}');
+      throw Exception('${actionField.value} request failed: ${resp.statusCode}');
     }
   }
 
-  /// Moves the given note ids to Trash. [folder] is 'inbox' or 'sent'.
-  /// POST to https://www.furaffinity.net/msg/pms/ with manage_notes=1, move_to=trash, items[]=id...
-  Future<void> moveNotesToTrash({
-    required List<String> ids,
-    required String folder,
-  }) async {
-    if (ids.isEmpty) return;
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    if (cookieA == null || cookieB == null) {
-      throw Exception('No cookies => user not logged in?');
-    }
-    final body = 'manage_notes=1&move_to=trash&'
-        '${ids.map((id) => 'items[]=${Uri.encodeComponent(id)}').join('&')}';
-    final resp = await FAHttp.post(
-      Uri.parse('https://www.furaffinity.net/msg/pms/'),
-      headers: {
-        'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-          'a=$cookieA; b=$cookieB; folder=$folder',
-        ),
-        HttpHeaders.connectionHeader: 'close',
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept':
-            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Referer': 'https://www.furaffinity.net/msg/pms/',
-        'Origin': 'https://www.furaffinity.net',
-      },
-      body: body,
-      timeout: const Duration(seconds: 30),
-    );
-    if (resp.statusCode != 200 && resp.statusCode != 302) {
-      throw Exception('Trash request failed: ${resp.statusCode}');
-    }
+  String _folderValue(NotesFolder folder) {
+    return switch (folder) {
+      NotesFolder.inbox => 'inbox',
+      NotesFolder.sent => 'sent',
+      NotesFolder.trash => 'trash',
+      NotesFolder.archive => 'archive',
+    };
+  }
+
+  MapEntry<String, String> _actionField(NoteManagementAction action) {
+    return switch (action) {
+      NoteManagementAction.moveToTrash => const MapEntry('move_to', 'trash'),
+      NoteManagementAction.moveToArchive =>
+        const MapEntry('move_to', 'archive'),
+      NoteManagementAction.restoreFromTrash =>
+        const MapEntry('move_to', 'restore'),
+      NoteManagementAction.restoreFromArchive =>
+        const MapEntry('set_prio', 'none'),
+      NoteManagementAction.deletePermanently =>
+        const MapEntry('move_to', 'delete'),
+      NoteManagementAction.markUnread => const MapEntry('move_to', 'unread'),
+    };
+  }
+
+  bool _isActionAllowed(
+    NotesFolder sourceFolder,
+    NoteManagementAction action,
+  ) {
+    return switch (sourceFolder) {
+      NotesFolder.inbox =>
+        action == NoteManagementAction.moveToTrash ||
+            action == NoteManagementAction.moveToArchive ||
+            action == NoteManagementAction.markUnread,
+      NotesFolder.sent =>
+        action == NoteManagementAction.moveToTrash ||
+            action == NoteManagementAction.moveToArchive,
+      NotesFolder.trash =>
+        action == NoteManagementAction.moveToArchive ||
+            action == NoteManagementAction.restoreFromTrash ||
+            action == NoteManagementAction.deletePermanently,
+      NotesFolder.archive =>
+        action == NoteManagementAction.moveToTrash ||
+            action == NoteManagementAction.restoreFromArchive,
+    };
   }
 }

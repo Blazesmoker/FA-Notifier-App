@@ -1,5 +1,11 @@
-abstract interface class TimeDisplayPreference {
-  Future<bool> loadUse24HourTime();
+import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 
-  Future<void> saveUse24HourTime(bool value);
+abstract interface class TimeDisplayPreference {
+  Future<TimeDisplayPreferences> load();
+
+  Future<void> saveDefaultFormat(TimeDisplayFormat format);
+
+  Future<void> saveOverrides(
+    Map<TimeDisplayOccasion, TimeDisplayFormat> overrides,
+  );
 }

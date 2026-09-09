@@ -6,6 +6,7 @@ import 'package:fanotifier/features/profile/domain/shout.dart';
 import 'package:fanotifier/features/profile/presentation/cached_profile_html.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
 import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:provider/provider.dart';
@@ -39,6 +40,10 @@ class _ShoutWidgetState extends State<ShoutWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final timeFormat =
+        context.select<TimeDisplaySettingsProvider, TimeDisplayFormat>(
+      (settings) => settings.formatFor(TimeDisplayOccasion.profileShout),
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: 0.0),
       child: Container(
@@ -413,9 +418,7 @@ class _ShoutWidgetState extends State<ShoutWidget> {
                         showFullDate
                             ? formatTimeInText(
                                 widget.shout.popupDateFull,
-                                use24HourTime: context
-                                    .watch<TimeDisplaySettingsProvider>()
-                                    .use24HourTime,
+                                format: timeFormat,
                               )
                             : widget.shout.popupDateRelative,
                         style: TextStyle(

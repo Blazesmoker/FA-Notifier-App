@@ -47,6 +47,7 @@ import 'package:fanotifier/features/profile/presentation/user_profile_scraps_sec
 import 'package:fanotifier/features/profile/presentation/user_profile_shout_selection_controller.dart';
 import 'package:fanotifier/features/profile/presentation/profile_animated_media_visibility.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
 import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
@@ -2192,8 +2193,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
     const double marginBetweenAvatarAndText = 0.0;
     final double textLeftPadding =
         avatarLeft + avatarWidth + marginBetweenAvatarAndText;
-    final use24HourTime =
-        context.watch<TimeDisplaySettingsProvider>().use24HourTime;
+    final registrationTimeFormat =
+        context.select<TimeDisplaySettingsProvider, TimeDisplayFormat>(
+      (settings) => settings.formatFor(
+        TimeDisplayOccasion.profileRegistration,
+      ),
+    );
     final platformViews = WidgetsBinding.instance.platformDispatcher.views;
     final baseView =
         platformViews.isNotEmpty ? platformViews.first : View.of(context);
@@ -2608,8 +2613,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                                               .isNotEmpty
                                                                       ? 'Joined ${formatTimeInText(
                                                                           _profileController.registrationDate!,
-                                                                          use24HourTime:
-                                                                              use24HourTime,
+                                                                          format:
+                                                                              registrationTimeFormat,
                                                                         )}'
                                                                       : '',
                                                                   style:

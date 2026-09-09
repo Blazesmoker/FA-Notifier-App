@@ -8,6 +8,7 @@ import 'package:fanotifier/features/journals/domain/journal_publication_time_par
 import 'package:fanotifier/features/journals/domain/openjournal_fetch_result.dart';
 import 'package:fanotifier/features/journals/domain/openjournal_load_result.dart';
 import 'package:fanotifier/features/journals/domain/openjournal_repository.dart';
+import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 
 class OpenJournalController extends ChangeNotifier {
@@ -162,16 +163,16 @@ class OpenJournalController extends ChangeNotifier {
     return _repository.replaceTruncatedLinks(htmlContent);
   }
 
-  String? formattedPublicationTime({required bool use24HourTime}) {
+  String? formattedPublicationTime({required TimeDisplayFormat format}) {
     final raw = _publicationTimeRaw;
     if (raw != null && raw.isNotEmpty) {
-      return formatTimeInText(raw, use24HourTime: use24HourTime);
+      return formatTimeInText(raw, format: format);
     }
     final publicationTime = _publicationTime;
     if (publicationTime == null) return null;
     return formatLocalDateTime(
       publicationTime,
-      use24HourTime: use24HourTime,
+      format: format,
     );
   }
 

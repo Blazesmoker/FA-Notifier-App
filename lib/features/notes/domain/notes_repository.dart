@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/note_management.dart';
 import 'package:fanotifier/features/notes/domain/notes_page_result.dart';
 import 'package:fanotifier/features/notes/domain/notes_unread_notification_result.dart';
 import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
@@ -49,8 +50,9 @@ abstract class NotesRepository {
 
   Future<void> markAsUnreadWithoutRefetch(Message message);
 
-  Future<void> moveNotesToTrash({
+  Future<void> applyManagementAction({
     required List<String> ids,
-    required String folder,
+    required NotesFolder sourceFolder,
+    required NoteManagementAction action,
   });
 }

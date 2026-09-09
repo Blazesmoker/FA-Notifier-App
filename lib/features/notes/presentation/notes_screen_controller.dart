@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:fanotifier/features/notes/domain/inbox_second_page_policy.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/note_management.dart';
 import 'package:fanotifier/features/notes/domain/notes_page_result.dart';
 import 'package:fanotifier/features/notes/domain/notes_repository.dart';
 import 'package:fanotifier/features/notes/domain/notes_screen_view_state.dart';
@@ -151,15 +152,20 @@ class NotesScreenController {
     });
   }
 
-  Future<void> moveNotesToTrash({
+  Future<void> applyManagementAction({
     required List<String> ids,
-    required String folder,
+    required NotesFolder sourceFolder,
+    required NoteManagementAction action,
   }) {
-    return _repository.moveNotesToTrash(ids: ids, folder: folder);
+    return _repository.applyManagementAction(
+      ids: ids,
+      sourceFolder: sourceFolder,
+      action: action,
+    );
   }
 
-  Future<void> refreshAfterTrash(String folder) async {
-    if (folder == 'inbox') {
+  Future<void> refreshAfterManagementAction(NotesFolder folder) async {
+    if (folder == NotesFolder.inbox) {
       resetInboxPagination();
       await fetchInbox(
         page: 1,
@@ -171,7 +177,7 @@ class NotesScreenController {
             await _repository.fetchMessages(folder: 'inbox', page: 2);
         await _repository.markUnreadMessagesAsShown(page2);
       } catch (e) {
-        debugPrint('[_trashSelected] Failed to pre-mark page 2: $e');
+        debugPrint('[Notes management] Failed to pre-mark page 2: $e');
       }
     } else {
       resetSentPagination();

@@ -9,13 +9,13 @@ import 'package:fanotifier/features/notes/data/notes_repository_impl.dart';
 import 'package:fanotifier/features/notes/data/notes_refresh_service.dart';
 import 'package:fanotifier/features/notes/data/notesscreen_api_service.dart';
 import 'package:fanotifier/features/notes/domain/new_message_repository.dart';
+import 'package:fanotifier/features/notes/domain/managed_notes_repository.dart';
 import 'package:fanotifier/features/notes/domain/note_message_repository.dart';
 import 'package:fanotifier/features/notes/domain/note_reply_repository.dart';
 import 'package:fanotifier/features/notes/domain/note_reply_webview_gateway.dart';
 import 'package:fanotifier/features/notes/domain/note_submission_preview_repository.dart';
 import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
 import 'package:fanotifier/features/notes/domain/notes_repository.dart';
-import 'package:fanotifier/features/notes/domain/notes_trash_repository.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/features/submissions/domain/openpost_repository.dart';
 
@@ -42,7 +42,7 @@ class NotesFeature {
     return NoteMessageService();
   }
 
-  static NotesTrashRepository createNotesTrashRepository() {
+  static ManagedNotesRepository createManagedNotesRepository() {
     return NotesApiService();
   }
 

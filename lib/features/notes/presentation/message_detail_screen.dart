@@ -5,6 +5,8 @@ import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:fanotifier/features/notes/domain/note_message_repository.dart';
+import 'package:fanotifier/features/notes/domain/managed_notes_repository.dart';
+import 'package:fanotifier/features/notes/domain/note_management.dart';
 import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
 import 'package:fanotifier/app/navigation/app_navigation.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
@@ -19,6 +21,7 @@ import 'package:fanotifier/shared/utils/utils.dart';
 import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
 import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:provider/provider.dart';
@@ -87,14 +90,24 @@ double _messageActionsFadeAlpha(double stop) {
       .toDouble();
 }
 
+enum _MessageMenuAction {
+  archive,
+  trash,
+  translate,
+}
+
 class MessageDetailScreen extends StatefulWidget {
   final String messageLink;
   final String folder;
+  final bool allowMarkUnread;
+  final NotesFolder sourceFolder;
 
   const MessageDetailScreen({
     super.key,
     required this.messageLink,
     required this.folder,
+    required this.sourceFolder,
+    this.allowMarkUnread = true,
   });
 
   @override
@@ -103,6 +116,7 @@ class MessageDetailScreen extends StatefulWidget {
 
 class _MessageDetailScreenState extends State<MessageDetailScreen> {
   late final NoteMessageRepository _noteMessageRepository;
+  late final ManagedNotesRepository _managedNotesRepository;
   late final NotesRefreshPort _notesRefreshPort;
 
   bool isLoading = true;
@@ -123,12 +137,14 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
   bool isClassic = false;
   bool _shouldShowReplySuccess = false;
   bool _didTriggerRefreshOnExit = false;
+  bool _isMutating = false;
   String _selectedMessageText = '';
 
   @override
   void initState() {
     super.initState();
     _noteMessageRepository = context.read<NoteMessageRepositoryFactory>()();
+    _managedNotesRepository = context.read<ManagedNotesRepositoryFactory>()();
     _notesRefreshPort = context.read<NotesRefreshPort>();
     _fetchMessageDetails();
   }
@@ -262,10 +278,123 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
     );
   }
 
+  Future<void> _moveMessage(_MessageMenuAction menuAction) async {
+    final id = messageId;
+    if (id == null || _isMutating) return;
+    final destination = menuAction == _MessageMenuAction.archive
+        ? 'Archive'
+        : 'Trash';
+    final action = menuAction == _MessageMenuAction.archive
+        ? NoteManagementAction.moveToArchive
+        : NoteManagementAction.moveToTrash;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: Text(
+          'Move to $destination',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Move this note to $destination?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              destination,
+              style: const TextStyle(
+                color: Color(0xFFE09321),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isMutating = true);
+    try {
+      await _managedNotesRepository.applyAction(
+        ids: [id],
+        sourceFolder: widget.sourceFolder,
+        action: action,
+      );
+      if (!mounted) return;
+      setState(() => _isMutating = false);
+      final messenger = ScaffoldMessenger.of(context);
+      _triggerNotesRefreshOnce();
+      Navigator.of(context).pop('refresh');
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Moved 1 note to $destination.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } on NoteManagementOutcomeUnknownException {
+      if (mounted) {
+        _showManagementSnackBar(
+          'Could not confirm whether 1 note was moved to $destination.',
+          success: false,
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        _showManagementSnackBar(
+          'Failed to move 1 note to $destination.',
+          success: false,
+        );
+      }
+    } finally {
+      if (mounted && _isMutating) setState(() => _isMutating = false);
+    }
+  }
+
+  void _showManagementSnackBar(String message, {required bool success}) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: success ? Colors.green : Colors.red,
+      ),
+    );
+  }
+
+  PopupMenuItem<_MessageMenuAction> _buildMessageMenuItem({
+    required _MessageMenuAction action,
+    required IconData icon,
+    required String label,
+    bool enabled = true,
+  }) {
+    return PopupMenuItem<_MessageMenuAction>(
+      value: action,
+      enabled: enabled,
+      child: Row(
+        children: [
+          Icon(icon, color: enabled ? Colors.white : Colors.grey, size: 21),
+          const SizedBox(width: 12),
+          Text(label),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final imagePreviewSettings =
         context.watch<NoteImagePreviewSettingsProvider>();
+    final timeFormat =
+        context.select<TimeDisplaySettingsProvider, TimeDisplayFormat>(
+      (settings) => settings.formatFor(TimeDisplayOccasion.noteDetail),
+    );
     final imagePreviewMode = imagePreviewSettings.loaded
         ? imagePreviewSettings.mode
         : NoteImagePreviewMode.off;
@@ -320,7 +449,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
         }
       },
       child: PopScope(
-        canPop: true,
+        canPop: !_isMutating,
         onPopInvokedWithResult: (bool didPop, Object? result) {
           if (!didPop) return;
           _triggerNotesRefreshOnce();
@@ -336,8 +465,13 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                 Builder(
                   builder: (context) {
                     return IconButton(
-                      icon: const Icon(Icons.more_vert),
-                      onPressed: () async {
+                      icon: Icon(
+                        Icons.more_vert,
+                        color: _isMutating ? Colors.grey : Colors.white,
+                      ),
+                      onPressed: _isMutating
+                          ? null
+                          : () async {
                         final RenderBox button =
                             context.findRenderObject() as RenderBox;
                         final RenderBox overlay = Overlay.of(context)
@@ -359,18 +493,42 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                           Offset.zero & overlay.size,
                         );
 
-                        final selected = await showMenu<String>(
+                        final selected = await showMenu<_MessageMenuAction>(
                           context: context,
                           position: position,
-                          items: const [
-                            PopupMenuItem<String>(
-                              value: 'translate',
-                              child: Text('Translate'),
+                          items: [
+                            _buildMessageMenuItem(
+                              action: _MessageMenuAction.archive,
+                              icon: Icons.archive_outlined,
+                              label: 'Move to Archive',
+                              enabled: messageId != null &&
+                                  widget.sourceFolder != NotesFolder.archive,
+                            ),
+                            _buildMessageMenuItem(
+                              action: _MessageMenuAction.trash,
+                              icon: Icons.delete_outline,
+                              label: 'Move to Trash',
+                              enabled: messageId != null &&
+                                  widget.sourceFolder != NotesFolder.trash,
+                            ),
+                            _buildMessageMenuItem(
+                              action: _MessageMenuAction.translate,
+                              icon: Icons.g_translate,
+                              label: 'Translate',
+                              enabled: messageContent.trim().isNotEmpty,
                             ),
                           ],
                         );
-                        if (selected == 'translate') {
-                          await _openMessageTranslation();
+                        switch (selected) {
+                          case _MessageMenuAction.archive:
+                          case _MessageMenuAction.trash:
+                            await _moveMessage(selected!);
+                            break;
+                          case _MessageMenuAction.translate:
+                            await _openMessageTranslation();
+                            break;
+                          case null:
+                            break;
                         }
                       },
                     );
@@ -499,9 +657,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                             child: Text(
                               'Date: ${formatTimeInText(
                                 sentDate,
-                                use24HourTime: context
-                                    .watch<TimeDisplaySettingsProvider>()
-                                    .use24HourTime,
+                                format: timeFormat,
                               )}',
                               style: const TextStyle(
                                 fontSize: 14,
@@ -640,7 +796,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                             ),
                           ),
                         ),
-                        if (widget.folder != 'sent')
+                        if (widget.allowMarkUnread && widget.folder != 'sent')
                           Align(
                             alignment: Alignment.bottomCenter,
                             child: SizedBox(

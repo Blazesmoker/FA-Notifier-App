@@ -24,6 +24,7 @@ abstract final class AppScreens {
   static const newNote = AppScreen('New Note', 'NewNoteScreen');
   static const noteReply = AppScreen('Reply to Note', 'NoteReplyScreen');
   static const notesTrash = AppScreen('Notes / Trash', 'NotesTrashScreen');
+  static const notesArchive = AppScreen('Notes / Archive', 'NotesArchiveScreen');
   static const profileHome = AppScreen('Profile / Home', 'ProfileHomeScreen');
   static const profileGallery =
       AppScreen('Profile / Gallery', 'ProfileGalleryScreen');

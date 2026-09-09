@@ -13,6 +13,7 @@ import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
 import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:provider/provider.dart';
@@ -137,6 +138,10 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
 
   @override
   Widget build(BuildContext context) {
+    final timeFormat =
+        context.select<TimeDisplaySettingsProvider, TimeDisplayFormat>(
+      (settings) => settings.formatFor(TimeDisplayOccasion.notePreview),
+    );
     if (isLoading) {
       return const Padding(
         padding: EdgeInsets.all(16.0),
@@ -269,9 +274,7 @@ class _PreviewDialogContentState extends State<PreviewDialogContent> {
                           child: Text(
                             'Date: ${formatTimeInText(
                               sentDate,
-                              use24HourTime: context
-                                  .watch<TimeDisplaySettingsProvider>()
-                                  .use24HourTime,
+                              format: timeFormat,
                             )}',
                             style: const TextStyle(
                               fontSize: 14,

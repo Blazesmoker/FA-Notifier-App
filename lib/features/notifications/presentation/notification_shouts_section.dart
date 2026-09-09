@@ -4,6 +4,7 @@ import 'package:fanotifier/features/notifications/domain/fa_notification_models.
 import 'package:fanotifier/features/notifications/presentation/notification_shouts_controller.dart';
 import 'package:fanotifier/features/notifications/domain/notification_removal_outcome.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
 import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:fanotifier/shared/utils/special_text_span_builder.dart';
@@ -17,11 +18,13 @@ import 'package:provider/provider.dart';
 class ToggleableDate extends StatefulWidget {
   final String relativeDate;
   final String absoluteDate;
+  final TimeDisplayOccasion occasion;
 
   const ToggleableDate({
     super.key,
     required this.relativeDate,
     required this.absoluteDate,
+    required this.occasion,
   });
 
   @override
@@ -39,8 +42,10 @@ class _ToggleableDateState extends State<ToggleableDate> {
 
   @override
   Widget build(BuildContext context) {
-    final use24HourTime =
-        context.watch<TimeDisplaySettingsProvider>().use24HourTime;
+    final timeFormat =
+        context.select<TimeDisplaySettingsProvider, TimeDisplayFormat>(
+      (settings) => settings.formatFor(widget.occasion),
+    );
     return GestureDetector(
       onTap: _toggleDate,
       child: Text(
@@ -48,7 +53,7 @@ class _ToggleableDateState extends State<ToggleableDate> {
             ? widget.relativeDate
             : formatTimeInText(
                 widget.absoluteDate,
-                use24HourTime: use24HourTime,
+                format: timeFormat,
               ),
         style: const TextStyle(
           color: Colors.grey,
@@ -445,6 +450,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                       child: ToggleableDate(
                                         relativeDate: s.postedAgo,
                                         absoluteDate: s.postedTitle,
+                                        occasion:
+                                            TimeDisplayOccasion.notificationShout,
                                       ),
                                     ),
                                   ),

@@ -7,6 +7,7 @@ import 'package:fanotifier/features/notes/data/notes_first_run_preference.dart';
 import 'package:fanotifier/features/notes/data/notes_unread_notification_service.dart';
 import 'package:fanotifier/features/notes/data/notesscreen_api_service.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/note_management.dart';
 import 'package:fanotifier/features/notes/domain/notes_page_result.dart';
 import 'package:fanotifier/features/notes/domain/notes_repository.dart';
 import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
@@ -156,10 +157,15 @@ class NotesRepositoryImpl implements NotesRepository {
   }
 
   @override
-  Future<void> moveNotesToTrash({
+  Future<void> applyManagementAction({
     required List<String> ids,
-    required String folder,
+    required NotesFolder sourceFolder,
+    required NoteManagementAction action,
   }) {
-    return _notesApi.moveNotesToTrash(ids: ids, folder: folder);
+    return _notesApi.applyAction(
+      ids: ids,
+      sourceFolder: sourceFolder,
+      action: action,
+    );
   }
 }

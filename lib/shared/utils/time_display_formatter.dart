@@ -1,3 +1,4 @@
+import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:intl/intl.dart';
 
 final RegExp _timeInTextPattern = RegExp(
@@ -5,7 +6,10 @@ final RegExp _timeInTextPattern = RegExp(
   caseSensitive: false,
 );
 
-String formatTimeInText(String value, {required bool use24HourTime}) {
+String formatTimeInText(
+  String value, {
+  required TimeDisplayFormat format,
+}) {
   return value.replaceAllMapped(_timeInTextPattern, (match) {
     final parsedHour = int.tryParse(match.group(1) ?? '');
     final minute = match.group(2);
@@ -22,10 +26,6 @@ String formatTimeInText(String value, {required bool use24HourTime}) {
       return match.group(0) ?? '';
     }
 
-    if (!use24HourTime && period != null) {
-      return match.group(0) ?? '';
-    }
-
     var hour = parsedHour;
     if (period != null) {
       if (hour < 1 || hour > 12) return match.group(0) ?? '';
@@ -36,9 +36,13 @@ String formatTimeInText(String value, {required bool use24HourTime}) {
       }
     }
 
-    final secondsText = second == null ? '' : ':$second';
-    if (use24HourTime) {
+    final secondsText = format.showSeconds && second != null ? ':$second' : '';
+    if (format.use24HourTime) {
       return '${hour.toString().padLeft(2, '0')}:$minute$secondsText';
+    }
+
+    if (period != null) {
+      return '$parsedHour:$minute$secondsText $period';
     }
 
     final displayPeriod = hour >= 12 ? 'PM' : 'AM';
@@ -49,18 +53,29 @@ String formatTimeInText(String value, {required bool use24HourTime}) {
 
 String formatLocalDateTime(
   DateTime value, {
-  required bool use24HourTime,
+  required TimeDisplayFormat format,
 }) {
   final localValue = value.toLocal();
   final date = DateFormat.yMMMd().format(localValue);
-  final time = DateFormat(use24HourTime ? 'HH:mm' : 'h:mm a')
-      .format(localValue);
+  final timePattern = switch ((format.use24HourTime, format.showSeconds)) {
+    (true, true) => 'HH:mm:ss',
+    (true, false) => 'HH:mm',
+    (false, true) => 'h:mm:ss a',
+    (false, false) => 'h:mm a',
+  };
+  final time = DateFormat(timePattern).format(localValue);
   return '$date $time';
 }
 
 String formatCurrentPhoneTime(
   DateTime value, {
-  required bool use24HourTime,
+  required TimeDisplayFormat format,
 }) {
-  return DateFormat(use24HourTime ? 'HH:mm' : 'h:mm a').format(value.toLocal());
+  final timePattern = switch ((format.use24HourTime, format.showSeconds)) {
+    (true, true) => 'HH:mm:ss',
+    (true, false) => 'HH:mm',
+    (false, true) => 'h:mm:ss a',
+    (false, false) => 'h:mm a',
+  };
+  return DateFormat(timePattern).format(value.toLocal());
 }

@@ -8,6 +8,7 @@ import 'package:fanotifier/features/notifications/presentation/notification_acti
 import 'package:fanotifier/features/notifications/presentation/notification_shouts_section.dart';
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
+import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:fanotifier/features/submissions/presentation/openpost.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
@@ -432,6 +433,8 @@ class NotificationSectionWidget extends StatelessWidget {
                                             child: ToggleableDate(
                                               relativeDate: item.date,
                                               absoluteDate: item.fullDate,
+                                              occasion: TimeDisplayOccasion
+                                                  .notificationActivity,
                                             ),
                                           ),
                                       ],
@@ -542,6 +545,8 @@ class NotificationSectionWidget extends StatelessWidget {
                                             child: ToggleableDate(
                                               relativeDate: item.date,
                                               absoluteDate: item.fullDate,
+                                              occasion: TimeDisplayOccasion
+                                                  .notificationActivity,
                                             ),
                                           ),
                                         ],

@@ -4,6 +4,7 @@ import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:fanotifier/shared/widgets/fa_unavailable_screen.dart';
+import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
 import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:provider/provider.dart';
@@ -53,6 +54,13 @@ class MessageList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final occasion = folder == 'sent'
+        ? TimeDisplayOccasion.notesSent
+        : TimeDisplayOccasion.notesInbox;
+    final timeFormat =
+        context.select<TimeDisplaySettingsProvider, TimeDisplayFormat>(
+      (settings) => settings.formatFor(occasion),
+    );
     Future<void> onRefresh() async {
       if (folder == 'inbox') {
         await refreshInbox();
@@ -234,9 +242,7 @@ class MessageList extends StatelessWidget {
                                 child: Text(
                                   'Date: ${formatTimeInText(
                                     msg.date,
-                                    use24HourTime: context
-                                        .watch<TimeDisplaySettingsProvider>()
-                                        .use24HourTime,
+                                    format: timeFormat,
                                   )}',
                                   maxLines: 1,
                                   softWrap: false,

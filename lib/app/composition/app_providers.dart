@@ -45,7 +45,7 @@ import 'package:fanotifier/features/notes/domain/note_reply_webview_gateway.dart
 import 'package:fanotifier/features/notes/domain/note_submission_preview_repository.dart';
 import 'package:fanotifier/features/notes/domain/notes_repository.dart';
 import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
-import 'package:fanotifier/features/notes/domain/notes_trash_repository.dart';
+import 'package:fanotifier/features/notes/domain/managed_notes_repository.dart';
 import 'package:fanotifier/features/notes/notes_feature.dart';
 import 'package:fanotifier/features/notes/presentation/note_image_preview_settings_provider.dart';
 import 'package:fanotifier/features/profile/profile_feature.dart';
@@ -272,8 +272,8 @@ class AppProviders extends StatelessWidget {
         Provider<NoteMessageRepositoryFactory>(
           create: (_) => NotesFeature.createNoteMessageRepository,
         ),
-        Provider<NotesTrashRepositoryFactory>(
-          create: (_) => NotesFeature.createNotesTrashRepository,
+        Provider<ManagedNotesRepositoryFactory>(
+          create: (_) => NotesFeature.createManagedNotesRepository,
         ),
         Provider<NoteReplyRepositoryFactory>(
           create: (_) => NotesFeature.createNoteReplyRepository,

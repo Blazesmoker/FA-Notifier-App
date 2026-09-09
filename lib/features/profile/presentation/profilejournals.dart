@@ -8,6 +8,7 @@ import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:fanotifier/features/journals/presentation/openjournal.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/profile/presentation/cached_profile_html.dart';
+import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
 import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 
@@ -135,6 +136,10 @@ class ProfileJournalsState extends State<ProfileJournals> {
 
   @override
   Widget build(BuildContext context) {
+    final timeFormat =
+        context.select<TimeDisplaySettingsProvider, TimeDisplayFormat>(
+      (settings) => settings.formatFor(TimeDisplayOccasion.profileJournal),
+    );
     if (journals.isEmpty && isLoading) {
       return const SliverFillRemaining(
         child: Center(
@@ -186,9 +191,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
                           Text(
                             'Posted on: ${formatTimeInText(
                               journal['datePosted'] ?? '',
-                              use24HourTime: context
-                                  .watch<TimeDisplaySettingsProvider>()
-                                  .use24HourTime,
+                              format: timeFormat,
                             )}',
                           ),
                           const SizedBox(height: 8.0),

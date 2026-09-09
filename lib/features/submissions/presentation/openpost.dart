@@ -39,6 +39,7 @@ import 'package:fanotifier/features/submissions/presentation/openpost_comments.d
 import 'package:fanotifier/features/submissions/presentation/openpost_submission_content.dart';
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
+import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
 import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
@@ -1518,11 +1519,11 @@ class _OpenPostState extends State<OpenPost>
     }
   }
 
-  String? getFormattedPublicationTime({required bool use24HourTime}) {
+  String? getFormattedPublicationTime({required TimeDisplayFormat format}) {
     if (publicationTime == null) return null;
     return formatLocalDateTime(
       publicationTime!,
-      use24HourTime: use24HourTime,
+      format: format,
     );
   }
 
@@ -2286,10 +2287,14 @@ class _OpenPostState extends State<OpenPost>
   Widget build(BuildContext context) {
     final translatorSettings = context.watch<TranslatorSettingsProvider>();
     final commentSettings = context.watch<CommentSettingsProvider>();
-    final use24HourTime =
-        context.watch<TimeDisplaySettingsProvider>().use24HourTime;
+    final submissionTimeFormat =
+        context.select<TimeDisplaySettingsProvider, TimeDisplayFormat>(
+      (settings) => settings.formatFor(
+        TimeDisplayOccasion.submissionPublication,
+      ),
+    );
     final formattedPublicationTime = getFormattedPublicationTime(
-      use24HourTime: use24HourTime,
+      format: submissionTimeFormat,
     );
     final bool showLoadingIndicator = !_detailsLoaded || !_webViewLoaded;
     final double viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
