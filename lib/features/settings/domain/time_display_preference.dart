@@ -6,6 +6,6 @@ abstract interface class TimeDisplayPreference {
   Future<void> saveDefaultFormat(TimeDisplayFormat format);
 
   Future<void> saveOverrides(
-    Map<TimeDisplayOccasion, TimeDisplayFormat> overrides,
+    Map<TimeDisplayOccasion, bool> overrides,
   );
 }

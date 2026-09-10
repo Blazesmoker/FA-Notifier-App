@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/note_activity_snapshot.dart';
 import 'package:fanotifier/features/notes/domain/note_management.dart';
 import 'package:fanotifier/features/notes/domain/notes_page_result.dart';
 import 'package:fanotifier/features/notes/domain/notes_unread_notification_result.dart';
@@ -49,6 +50,11 @@ abstract class NotesRepository {
   });
 
   Future<void> markAsUnreadWithoutRefetch(Message message);
+
+  Future<void> reconcileManualUnread({
+    required Set<String> noteIds,
+    required NoteActivitySnapshot snapshot,
+  });
 
   Future<void> applyManagementAction({
     required List<String> ids,

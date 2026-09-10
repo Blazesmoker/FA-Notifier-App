@@ -6,6 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fanotifier/features/notes/data/message_storage.dart';
+import 'package:fanotifier/features/notes/data/manual_note_activity_store.dart';
 import 'package:fanotifier/features/notifications/data/pending_navigation_store.dart';
 import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
 import 'package:fanotifier/features/notifications/domain/notification_payloads.dart';
@@ -306,6 +307,8 @@ class NotificationService implements LocalNotificationGateway {
     String type, {
     int? badgeNumber,
     bool Function()? isCancelled,
+    bool validateNoteActivity = false,
+    Set<String>? activityNoteIds,
   }) async {
     final normalizedTitle = title.trim();
     final normalizedBody = body.trim();
@@ -366,16 +369,27 @@ class NotificationService implements LocalNotificationGateway {
 
     final details = NotificationDetails(android: android, iOS: ios);
 
-    if (isCancelled?.call() ?? false) {
-      throw StateError('Notification delivery cancelled before dispatch');
+    Future<void> dispatch() async {
+      if (isCancelled?.call() ?? false) {
+        throw StateError('Notification delivery cancelled before dispatch');
+      }
+      await flutterLocalNotificationsPlugin.show(
+        id: id,
+        title: normalizedTitle,
+        body: normalizedBody,
+        notificationDetails: details,
+        payload: payload,
+      );
     }
-    await flutterLocalNotificationsPlugin.show(
-      id: id,
-      title: normalizedTitle,
-      body: normalizedBody,
-      notificationDetails: details,
-      payload: payload,
-    );
+
+    if (type == 'activities' && validateNoteActivity) {
+      await ManualNoteActivityStore().dispatchActivity(
+        noteIds: activityNoteIds,
+        dispatch: dispatch,
+      );
+    } else {
+      await dispatch();
+    }
 
     appLog('Notification displayed for type=$type');
   }

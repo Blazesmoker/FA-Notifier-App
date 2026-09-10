@@ -38,7 +38,6 @@ enum TimeDisplayOccasion {
   profileRegistration,
   profileShout,
   notificationActivity,
-  notificationShout,
   notesInbox,
   notesSent,
   notesTrash,
@@ -50,9 +49,9 @@ enum TimeDisplayOccasion {
 class TimeDisplayPreferences {
   TimeDisplayPreferences({
     required this.defaultFormat,
-    required Map<TimeDisplayOccasion, TimeDisplayFormat> overrides,
+    required Map<TimeDisplayOccasion, bool> overrides,
   }) : overrides = Map.unmodifiable(overrides);
 
   final TimeDisplayFormat defaultFormat;
-  final Map<TimeDisplayOccasion, TimeDisplayFormat> overrides;
+  final Map<TimeDisplayOccasion, bool> overrides;
 }

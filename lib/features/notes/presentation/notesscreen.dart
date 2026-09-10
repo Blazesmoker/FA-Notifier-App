@@ -266,7 +266,11 @@ class NotesScreenState extends State<NotesScreen>
       );
       if (!mounted) return;
       _notesController.clearSelection();
-      await _notesController.refreshAfterManagementAction(sourceFolder);
+      if (menuAction == _NotesMenuAction.markUnread) {
+        await _notesController.refreshAfterManualUnread(ids);
+      } else {
+        await _notesController.refreshAfterManagementAction(sourceFolder);
+      }
       if (mounted) _showManagementSnackBar(copy.success, success: true);
     } on NoteManagementOutcomeUnknownException {
       if (mounted) _showManagementSnackBar(copy.unknown, success: false);

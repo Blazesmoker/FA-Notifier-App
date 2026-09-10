@@ -514,6 +514,8 @@ class BackgroundNotificationWorker {
                 : 'fa_activity_$activityNotificationId',
             'activities',
             badgeNumber: badgeNumber,
+            validateNoteActivity: displayDecision.increasedBy.notes > 0,
+            activityNoteIds: recordedDiff.noteActivityIds,
           );
           _notificationShownThisRun = true;
           await appAnalytics.logNotificationDisplayed(

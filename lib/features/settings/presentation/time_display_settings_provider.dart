@@ -6,20 +6,26 @@ class TimeDisplaySettingsProvider with ChangeNotifier {
   TimeDisplaySettingsProvider({
     required TimeDisplayPreference preference,
   }) : _preference = preference {
-    _load();
+    _loadFuture = _load();
   }
 
-  final TimeDisplayPreference _preference;
-  TimeDisplayFormat _defaultFormat = const TimeDisplayFormat(
+  static const TimeDisplayFormat _initialFormat = TimeDisplayFormat(
     use24HourTime: false,
     showSeconds: true,
   );
-  Map<TimeDisplayOccasion, TimeDisplayFormat> _overrides = {};
+
+  final TimeDisplayPreference _preference;
+  late final Future<void> _loadFuture;
+  TimeDisplayFormat _defaultFormat = _initialFormat;
+  Map<TimeDisplayOccasion, bool> _overrides = {};
 
   TimeDisplayFormat get defaultFormat => _defaultFormat;
 
   TimeDisplayFormat formatFor(TimeDisplayOccasion occasion) {
-    return _overrides[occasion] ?? _defaultFormat;
+    return TimeDisplayFormat(
+      use24HourTime: _defaultFormat.use24HourTime,
+      showSeconds: _overrides[occasion] ?? _defaultFormat.showSeconds,
+    );
   }
 
   bool usesDefaultFormat(TimeDisplayOccasion occasion) {
@@ -49,47 +55,30 @@ class TimeDisplaySettingsProvider with ChangeNotifier {
     await _preference.saveDefaultFormat(next);
   }
 
-  Future<void> setUsesDefaultFormat(
+  Future<void> setOccasionShowSeconds(
     TimeDisplayOccasion occasion,
     bool value,
   ) async {
-    if (value) {
+    final previous = _overrides[occasion];
+    if (value == _defaultFormat.showSeconds) {
       if (_overrides.remove(occasion) == null) return;
     } else {
-      if (_overrides.containsKey(occasion)) return;
-      _overrides[occasion] = _defaultFormat;
+      if (previous == value) return;
+      _overrides[occasion] = value;
     }
     notifyListeners();
     await _preference.saveOverrides(Map.of(_overrides));
   }
 
-  Future<void> setOccasionUse24HourTime(
-    TimeDisplayOccasion occasion,
-    bool value,
-  ) async {
-    await _setOccasionFormat(
-      occasion,
-      formatFor(occasion).copyWith(use24HourTime: value),
-    );
-  }
-
-  Future<void> setOccasionShowSeconds(
-    TimeDisplayOccasion occasion,
-    bool value,
-  ) async {
-    await _setOccasionFormat(
-      occasion,
-      formatFor(occasion).copyWith(showSeconds: value),
-    );
-  }
-
-  Future<void> _setOccasionFormat(
-    TimeDisplayOccasion occasion,
-    TimeDisplayFormat format,
-  ) async {
-    if (_overrides[occasion] == format) return;
-    _overrides[occasion] = format;
+  Future<void> resetSettings() async {
+    await _loadFuture;
+    if (_defaultFormat == _initialFormat && _overrides.isEmpty) return;
+    _defaultFormat = _initialFormat;
+    _overrides = {};
     notifyListeners();
-    await _preference.saveOverrides(Map.of(_overrides));
+    await Future.wait([
+      _preference.saveDefaultFormat(_initialFormat),
+      _preference.saveOverrides(const {}),
+    ]);
   }
 }

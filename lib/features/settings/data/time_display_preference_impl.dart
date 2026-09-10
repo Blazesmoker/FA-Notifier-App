@@ -18,7 +18,7 @@ class TimeDisplayPreferenceImpl implements TimeDisplayPreference {
       use24HourTime: preferences.getBool(_use24HourTimeKey) ?? false,
       showSeconds: preferences.getBool(_showSecondsKey) ?? true,
     );
-    final overrides = <TimeDisplayOccasion, TimeDisplayFormat>{};
+    final overrides = <TimeDisplayOccasion, bool>{};
     final encodedOverrides = preferences.getString(_overridesKey);
     if (encodedOverrides != null) {
       try {
@@ -27,14 +27,14 @@ class TimeDisplayPreferenceImpl implements TimeDisplayPreference {
           for (final entry in decoded.entries) {
             final occasion = _occasionFromId(entry.key);
             final value = entry.value;
-            if (occasion == null || value is! Map<String, dynamic>) continue;
-            final use24HourTime = value['use24HourTime'];
-            final showSeconds = value['showSeconds'];
-            if (use24HourTime is bool && showSeconds is bool) {
-              overrides[occasion] = TimeDisplayFormat(
-                use24HourTime: use24HourTime,
-                showSeconds: showSeconds,
-              );
+            if (occasion == null) continue;
+            if (value is bool) {
+              overrides[occasion] = value;
+              continue;
+            }
+            if (value is Map<String, dynamic> &&
+                value['showSeconds'] is bool) {
+              overrides[occasion] = value['showSeconds'] as bool;
             }
           }
         }
@@ -60,15 +60,12 @@ class TimeDisplayPreferenceImpl implements TimeDisplayPreference {
 
   @override
   Future<void> saveOverrides(
-    Map<TimeDisplayOccasion, TimeDisplayFormat> overrides,
+    Map<TimeDisplayOccasion, bool> overrides,
   ) async {
     final preferences = await SharedPreferences.getInstance();
-    final encoded = <String, Map<String, bool>>{
+    final encoded = <String, bool>{
       for (final entry in overrides.entries)
-        _occasionId(entry.key): {
-          'use24HourTime': entry.value.use24HourTime,
-          'showSeconds': entry.value.showSeconds,
-        },
+        _occasionId(entry.key): entry.value,
     };
     await preferences.setString(_overridesKey, jsonEncode(encoded));
   }
@@ -84,7 +81,6 @@ String _occasionId(TimeDisplayOccasion occasion) {
     TimeDisplayOccasion.profileRegistration => 'profile_registration',
     TimeDisplayOccasion.profileShout => 'profile_shout',
     TimeDisplayOccasion.notificationActivity => 'notification_activity',
-    TimeDisplayOccasion.notificationShout => 'notification_shout',
     TimeDisplayOccasion.notesInbox => 'notes_inbox',
     TimeDisplayOccasion.notesSent => 'notes_sent',
     TimeDisplayOccasion.notesTrash => 'notes_trash',

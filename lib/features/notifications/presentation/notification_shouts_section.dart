@@ -450,8 +450,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                       child: ToggleableDate(
                                         relativeDate: s.postedAgo,
                                         absoluteDate: s.postedTitle,
-                                        occasion:
-                                            TimeDisplayOccasion.notificationShout,
+                                        occasion: TimeDisplayOccasion
+                                            .notificationActivity,
                                       ),
                                     ),
                                   ),

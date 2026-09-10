@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:fanotifier/features/notes/domain/inbox_second_page_policy.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/note_activity_snapshot.dart';
 import 'package:fanotifier/features/notes/domain/note_management.dart';
 import 'package:fanotifier/features/notes/domain/notes_page_result.dart';
 import 'package:fanotifier/features/notes/domain/notes_repository.dart';
@@ -182,6 +183,15 @@ class NotesScreenController {
     );
   }
 
+  Future<void> refreshAfterManualUnread(List<String> ids) async {
+    resetInboxPagination();
+    await fetchInbox(
+      page: 1,
+      clearOld: false,
+      manuallyMarkedUnreadIds: Set<String>.unmodifiable(ids),
+    );
+  }
+
   Future<void> refreshAfterManagementAction(NotesFolder folder) async {
     if (folder == NotesFolder.inbox) {
       resetInboxPagination();
@@ -234,10 +244,12 @@ class NotesScreenController {
     int page = 1,
     bool clearOld = false,
     bool suppressNewUnreadNotifications = false,
+    Set<String> manuallyMarkedUnreadIds = const <String>{},
   }) {
     final shouldCoalesce = page == 1 &&
         !clearOld &&
-        !suppressNewUnreadNotifications;
+        !suppressNewUnreadNotifications &&
+        manuallyMarkedUnreadIds.isEmpty;
     final inFlight = _inFlightInboxPageOne;
     if (shouldCoalesce && inFlight != null) {
       return inFlight;
@@ -247,6 +259,7 @@ class NotesScreenController {
       page: page,
       clearOld: clearOld,
       suppressNewUnreadNotifications: suppressNewUnreadNotifications,
+      manuallyMarkedUnreadIds: manuallyMarkedUnreadIds,
     );
     if (!shouldCoalesce) return operation;
 
@@ -264,6 +277,7 @@ class NotesScreenController {
     required int page,
     required bool clearOld,
     required bool suppressNewUnreadNotifications,
+    required Set<String> manuallyMarkedUnreadIds,
   }) async {
     if (page == 1) {
       _setState(() {
@@ -278,13 +292,32 @@ class NotesScreenController {
 
     try {
       final NotesPageResult result;
-      if (page == 1 && _pendingFirstRunPage1 != null) {
+      final snapshotStartedAt = DateTime.now().millisecondsSinceEpoch;
+      if (page == 1 &&
+          _pendingFirstRunPage1 != null &&
+          manuallyMarkedUnreadIds.isEmpty) {
         result = _pendingFirstRunPage1!;
         _pendingFirstRunPage1 = null;
       } else {
+        if (page == 1 && manuallyMarkedUnreadIds.isNotEmpty) {
+          _pendingFirstRunPage1 = null;
+        }
         result = await _repository.fetchPage(folder: 'inbox', page: page);
       }
       final newMessages = result.messages;
+
+      if (page == 1 &&
+          manuallyMarkedUnreadIds.isNotEmpty &&
+          result.topbarCounts != null) {
+        await _repository.reconcileManualUnread(
+          noteIds: manuallyMarkedUnreadIds,
+          snapshot: NoteActivitySnapshot(
+            messages: newMessages,
+            startedAtMilliseconds: snapshotStartedAt,
+            unreadCount: result.topbarCounts!.notes,
+          ),
+        );
+      }
 
       if (page == 1) {
         _setState(() {

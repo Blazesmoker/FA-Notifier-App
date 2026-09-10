@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,7 +26,7 @@ class ManualNoteActivityStore {
         .where((id) => id.isNotEmpty)
         .toSet();
     return _serialized(() async {
-      if (!Platform.isIOS || selectedIds.isEmpty) return;
+      if (selectedIds.isEmpty) return;
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
       var state = _read(prefs);
@@ -109,6 +108,25 @@ class ManualNoteActivityStore {
     });
   }
 
+  Future<void> dispatchActivity({
+    required Set<String>? noteIds,
+    required Future<void> Function() dispatch,
+  }) {
+    return _serialized(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final state = _read(prefs);
+      if ((state == null && noteIds != null) ||
+          (state != null &&
+              (noteIds == null ||
+                  noteIds.isEmpty ||
+                  !state.pendingIds.containsAll(noteIds)))) {
+        throw StateError('Note activity decision changed before dispatch');
+      }
+      await dispatch();
+    });
+  }
+
   void _observe(
     _ManualNoteActivityState state,
     NoteActivitySnapshot snapshot, {
@@ -136,7 +154,6 @@ class ManualNoteActivityStore {
   }
 
   _ManualNoteActivityState? _read(SharedPreferences prefs) {
-    if (!Platform.isIOS) return null;
     final encoded = prefs.getString(_key);
     if (encoded == null) return null;
     try {

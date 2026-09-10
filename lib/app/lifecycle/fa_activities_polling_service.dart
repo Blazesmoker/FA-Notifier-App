@@ -675,6 +675,8 @@ class FaActivitiesPollingService
             ? activityPayloadWithCounts('activity_fa_activity', currentCounts)
             : 'activity_fa_activity',
         'activities',
+        validateNoteActivity: enabledIncreases.notes > 0,
+        activityNoteIds: recordedDiff.noteActivityIds,
         isCancelled: Platform.isIOS
             ? () => WidgetsBinding.instance.lifecycleState !=
                 AppLifecycleState.resumed
