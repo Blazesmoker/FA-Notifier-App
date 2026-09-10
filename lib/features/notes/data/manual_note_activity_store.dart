@@ -18,8 +18,16 @@ class ManualNoteActivityStore {
   }
 
   Future<void> registerManualUnread(String noteId) {
+    return registerManualUnreadBatch([noteId]);
+  }
+
+  Future<void> registerManualUnreadBatch(Iterable<String> noteIds) {
+    final selectedIds = noteIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
     return _serialized(() async {
-      if (!Platform.isIOS || noteId.isEmpty) return;
+      if (!Platform.isIOS || selectedIds.isEmpty) return;
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
       var state = _read(prefs);
@@ -36,10 +44,10 @@ class ManualNoteActivityStore {
                   (shown.isNotEmpty || seen.isNotEmpty),
             );
       }
-      state.knownIds.add(noteId);
-      state.pendingIds.remove(noteId);
+      state.knownIds.addAll(selectedIds);
+      state.pendingIds.removeAll(selectedIds);
       await _save(prefs, state);
-      await MessageStorage.addShownNoteIds([noteId]);
+      await MessageStorage.addShownNoteIds(selectedIds.toList());
     });
   }
 

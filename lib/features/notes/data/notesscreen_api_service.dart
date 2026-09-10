@@ -419,10 +419,7 @@ class NotesApiService implements ManagedNotesRepository {
     }
     if (sourceFolder == NotesFolder.inbox &&
         action == NoteManagementAction.markUnread) {
-      final activityStore = ManualNoteActivityStore();
-      for (final id in ids) {
-        await activityStore.registerManualUnread(id);
-      }
+      await ManualNoteActivityStore().registerManualUnreadBatch(ids);
     }
     final actionField = _actionField(action);
     final body = [
