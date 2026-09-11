@@ -1,4 +1,6 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:fanotifier/features/notes/presentation/notes_selection_controls.dart';
+import 'package:fanotifier/features/notes/presentation/notes_selection_layout.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/notes/domain/managed_notes_repository.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
@@ -10,7 +12,7 @@ import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:provider/provider.dart';
 
-const double _selectionOpacity = 0.07;
+const double _selectionOpacity = 0.08;
 
 class ManagedNotesFolderScreen extends StatefulWidget {
   const ManagedNotesFolderScreen({
@@ -393,52 +395,16 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
   Widget _buildSelectionBar() {
     final controlsDisabled = _isSelectAllInProgress || _isMutating;
     final allPagesDisabled = controlsDisabled || _isFetchingMore;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: Colors.black,
-      child: Row(
-        children: [
-          InkResponse(
-            onTap: controlsDisabled ? null : _selectAllLoaded,
-            radius: 18,
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            child: Text(
-              'Select All (${_selectedIds.length})',
-              style: TextStyle(
-                color: controlsDisabled ? Colors.grey : _accent,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          const Spacer(),
-          InkResponse(
-            onTap: allPagesDisabled ? null : _selectAllPages,
-            radius: 18,
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            child: Text(
-              'Select All Pages',
-              style: TextStyle(
-                color: allPagesDisabled ? Colors.grey : _accent,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          InkResponse(
-            onTap: controlsDisabled ? null : _exitSelectionMode,
-            radius: 18,
-            child: Icon(
-              Icons.close,
-              color: controlsDisabled ? Colors.grey : Colors.white,
-            ),
-          ),
-        ],
-      ),
+    return NotesSelectionControls(
+      selectedCount: _selectedIds.length,
+      onSelectAll: controlsDisabled ? null : _selectAllLoaded,
+      onExit: controlsDisabled ? null : _exitSelectionMode,
+      showAllPages: true,
+      onSelectAllPages: allPagesDisabled ? null : _selectAllPages,
+      progressText: _isSelectAllInProgress
+          ? 'Fetching page $_selectAllProgressPage… ($_selectAllRateLimitSeconds s between requests)'
+          : null,
+      onCancelFetching: _cancelSelectAll,
     );
   }
 
@@ -519,75 +485,43 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
         backgroundColor: Colors.black,
         body: SafeArea(
           top: false,
-          child: Column(
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              _selectionMode
-                  ? _buildSelectionBar()
-                  : const SizedBox.shrink(),
-              if (_isSelectAllInProgress)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  color: Colors.grey[850],
-                  child: Row(
-                    children: [
-                      const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(_accent),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Fetching page $_selectAllProgressPage… ($_selectAllRateLimitSeconds s between requests)',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                      InkResponse(
-                        onTap: _cancelSelectAll,
-                        radius: 18,
-                        child: const Icon(
-                          Icons.close,
-                          color: Colors.red,
-                          size: 24,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              Expanded(
-                child: _ManagedNotesMessageList(
-                  folderTitle: _title,
-                  timeDisplayOccasion: _isTrash
-                      ? TimeDisplayOccasion.notesTrash
-                      : TimeDisplayOccasion.notesArchive,
-                  isLoading: _isLoading,
-                  isLoadingMore: _isLoadingMore,
-                  errorMessage: _errorMessage,
-                  messages: _messages,
-                  scrollController: _scrollController,
-                  hasMore: _hasMore,
-                  onRefresh: () async {
-                    _currentPage = 1;
-                    _hasMore = true;
-                    await _fetchFolder(page: 1);
-                  },
-                  isSelectionMode: _selectionMode,
-                  selectedIds: _selectedIds,
-                  onLongPressItem: _enterSelectionModeAndSelect,
-                  onTapItem: _handleTapItem,
-                  selectionOpacity: _selectionOpacity,
-                ),
+              _ManagedNotesMessageList(
+                folderTitle: _title,
+                timeDisplayOccasion: _isTrash
+                    ? TimeDisplayOccasion.notesTrash
+                    : TimeDisplayOccasion.notesArchive,
+                isLoading: _isLoading,
+                isLoadingMore: _isLoadingMore,
+                errorMessage: _errorMessage,
+                messages: _messages,
+                scrollController: _scrollController,
+                hasMore: _hasMore,
+                onRefresh: () async {
+                  _currentPage = 1;
+                  _hasMore = true;
+                  await _fetchFolder(page: 1);
+                },
+                isSelectionMode: _selectionMode,
+                selectedIds: _selectedIds,
+                onLongPressItem: _enterSelectionModeAndSelect,
+                onTapItem: _handleTapItem,
+                selectionOpacity: _selectionOpacity,
+                bottomPadding: !_selectionMode
+                    ? 0
+                    : _isSelectAllInProgress
+                        ? NotesSelectionControls.progressBottomClearance
+                        : NotesSelectionControls.bottomClearance,
               ),
+              if (_selectionMode)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _buildSelectionBar(),
+                ),
             ],
           ),
         ),
@@ -632,6 +566,7 @@ class _ManagedNotesMessageList extends StatelessWidget {
     required this.onLongPressItem,
     required this.onTapItem,
     required this.selectionOpacity,
+    required this.bottomPadding,
   });
 
   final String folderTitle;
@@ -648,6 +583,7 @@ class _ManagedNotesMessageList extends StatelessWidget {
   final void Function(Message message) onLongPressItem;
   final void Function(Message message) onTapItem;
   final double selectionOpacity;
+  final double bottomPadding;
 
   @override
   Widget build(BuildContext context) {
@@ -721,6 +657,7 @@ class _ManagedNotesMessageList extends StatelessWidget {
       backgroundColor: Colors.black,
       onRefresh: onRefresh,
       child: ListView.builder(
+        padding: EdgeInsets.only(bottom: bottomPadding),
         controller: scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         itemCount: messages.length + (hasMore ? 1 : 0),
@@ -761,70 +698,76 @@ class _ManagedNotesMessageList extends StatelessWidget {
                     vertical: 8,
                     horizontal: 16,
                   ),
-                  child: Row(
-                    children: [
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeInOut,
-                        child: isSelectionMode
-                            ? _buildCheckbox(message)
-                            : const SizedBox.shrink(),
-                      ),
-                      if (message.isUnread)
-                        Container(
-                          width: 10,
-                          height: 10,
-                          margin: const EdgeInsets.only(right: 12),
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _accent,
-                          ),
+                  child: NotesSelectionLayout(
+                    isSelectionMode: isSelectionMode,
+                    rowBuilder: (selecting) => Row(
+                      children: [
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeInOut,
+                          child: selecting
+                              ? _buildCheckbox(message)
+                              : const SizedBox.shrink(),
                         ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              message.subject,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                              ),
+                        if (message.isUnread)
+                          Container(
+                            width: 10,
+                            height: 10,
+                            margin: const EdgeInsets.only(right: 12),
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _accent,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'To/From: $otherParty',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            SizedBox(
-                              width: double.infinity,
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  'Date: ${formatTimeInText(
-                                    message.date,
-                                    format: timeFormat,
-                                  )}',
+                          ),
+                        Expanded(
+                          child: NotesSelectionContent(
+                            selecting: selecting,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  message.subject,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'To/From: $otherParty',
                                   maxLines: 1,
-                                  softWrap: false,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                     color: Colors.white70,
                                     fontSize: 14,
                                   ),
                                 ),
-                              ),
+                                const SizedBox(height: 2),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'Date: ${formatTimeInText(
+                                        message.date,
+                                        format: timeFormat,
+                                      )}',
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 const Divider(

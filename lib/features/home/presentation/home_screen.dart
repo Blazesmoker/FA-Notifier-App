@@ -1092,7 +1092,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           type: BottomNavigationBarType.shifting,
                           items: [
                             BottomNavigationBarItem(
-                              icon: const Icon(Icons.home),
+                              icon: const Icon(Icons.home_rounded),
                               label: 'Browse',
                               backgroundColor: AppTheme.background,
                             ),

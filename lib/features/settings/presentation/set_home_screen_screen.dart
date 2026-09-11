@@ -80,7 +80,7 @@ class _SetHomeScreenScreenState extends State<SetHomeScreenScreen> {
           _buildOption(
             preference: HomeStartScreenPreference.browse,
             icon: const Icon(
-              Icons.home,
+              Icons.home_rounded,
               color: _accent,
             ),
           ),

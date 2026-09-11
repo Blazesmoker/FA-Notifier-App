@@ -18,6 +18,7 @@ import 'package:fanotifier/features/notes/presentation/notesscreen_inbox.dart';
 import 'package:fanotifier/features/notes/presentation/notesscreen_sent.dart';
 import 'package:fanotifier/features/notes/presentation/notes_screen_controller.dart';
 import 'package:fanotifier/features/notes/presentation/trash_screen.dart';
+import 'package:fanotifier/features/notes/presentation/notes_selection_controls.dart';
 
 enum _NotesMenuAction {
   trash,
@@ -495,37 +496,10 @@ class NotesScreenState extends State<NotesScreen>
   bool get isInSelectionMode => _selectionMode;
 
   Widget _buildSelectionBar() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: Colors.black,
-      child: Row(
-        children: [
-          InkResponse(
-            onTap: _isMutating ? null : _selectAllLoadedMessages,
-            radius: 18,
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            child: Text(
-              'Select All (${_selectedIds.length})',
-              style: TextStyle(
-                color: _isMutating ? Colors.grey : _accent,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          const Spacer(),
-          InkResponse(
-            onTap: _isMutating ? null : exitSelectionMode,
-            radius: 18,
-            child: Icon(
-              Icons.close,
-              color: _isMutating ? Colors.grey : Colors.white,
-            ),
-          ),
-        ],
-      ),
+    return NotesSelectionControls(
+      selectedCount: _selectedIds.length,
+      onSelectAll: _isMutating ? null : _selectAllLoadedMessages,
+      onExit: _isMutating ? null : exitSelectionMode,
     );
   }
 
@@ -738,13 +712,12 @@ class NotesScreenState extends State<NotesScreen>
               ],
             ),
           ),
-          body: Column(
-            children: [
-              _selectionMode
-                  ? _buildSelectionBar()
-                  : const SizedBox.shrink(),
-              Expanded(
-                child: Padding(
+          body: SafeArea(
+            top: false,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 0.0),
                   child: NotificationListener<OverscrollNotification>(
                     onNotification: (OverscrollNotification notification) {
@@ -847,8 +820,15 @@ class NotesScreenState extends State<NotesScreen>
                     ),
                   ),
                 ),
-              ),
-            ],
+                if (_selectionMode)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _buildSelectionBar(),
+                  ),
+              ],
+            ),
           ),
           backgroundColor: Colors.black,
         ),

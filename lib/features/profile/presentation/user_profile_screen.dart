@@ -1101,7 +1101,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   IconData _getIconForSection(ProfileSection section) {
     switch (section) {
       case ProfileSection.home:
-        return Icons.home;
+        return Icons.home_rounded;
       case ProfileSection.gallery:
         return Icons.photo;
       case ProfileSection.scraps:

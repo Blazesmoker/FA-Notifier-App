@@ -200,7 +200,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
           ),
           ListTile(
             leading: const Icon(
-              Icons.home_sharp,
+              Icons.home_rounded,
               color: Color(0xFFE09321),
             ),
             title: const Text('Set Home Screen'),

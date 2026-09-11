@@ -1,4 +1,6 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:fanotifier/features/notes/presentation/notes_selection_controls.dart';
+import 'package:fanotifier/features/notes/presentation/notes_selection_layout.dart';
 
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
@@ -13,7 +15,7 @@ class MessageList extends StatelessWidget {
   static const Color _accent = Color(0xFFE09321);
 
   /// Regulate selection highlight opacity here (0.0–1.0). Lower = more semi-transparent.
-  static const double selectionOpacity = 0.07;
+  static const double selectionOpacity = 0.08;
 
   final bool isLoading;
   final bool isLoadingMore;
@@ -143,6 +145,9 @@ class MessageList extends StatelessWidget {
       backgroundColor: Colors.black,
       onRefresh: onRefresh,
       child: ListView.builder(
+        padding: EdgeInsets.only(
+          bottom: isSelectionMode ? NotesSelectionControls.bottomClearance : 0,
+        ),
         controller: scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         itemCount: messages.length + (hasMore ? 1 : 0),
@@ -192,80 +197,86 @@ class MessageList extends StatelessWidget {
                     vertical: 8.0,
                     horizontal: 16.0,
                   ),
-                  child: Row(
-                    children: [
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeInOut,
-                        child: isSelectionMode
-                            ? _buildCheckbox(msg)
-                            : const SizedBox.shrink(),
-                      ),
-                      if (msg.isUnread)
-                        Container(
-                          width: 10,
-                          height: 10,
-                          margin: const EdgeInsets.only(right: 12),
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _accent,
-                          ),
+                  child: NotesSelectionLayout(
+                    isSelectionMode: isSelectionMode,
+                    rowBuilder: (selecting) => Row(
+                      children: [
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeInOut,
+                          child: selecting
+                              ? _buildCheckbox(msg)
+                              : const SizedBox.shrink(),
                         ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              msg.subject,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                              ),
+                        if (msg.isUnread)
+                          Container(
+                            width: 10,
+                            height: 10,
+                            margin: const EdgeInsets.only(right: 12),
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _accent,
                             ),
-                            const SizedBox(height: 4),
+                          ),
+                        Expanded(
+                          child: NotesSelectionContent(
+                            selecting: selecting,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  msg.subject,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
 
-                            Text(
-                              toFromLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            SizedBox(
-                              width: double.infinity,
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  'Date: ${formatTimeInText(
-                                    msg.date,
-                                    format: timeFormat,
-                                  )}',
+                                Text(
+                                  toFromLabel,
                                   maxLines: 1,
-                                  softWrap: false,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                     color: Colors.white70,
                                     fontSize: 14,
                                   ),
                                 ),
-                              ),
+                                const SizedBox(height: 2),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'Date: ${formatTimeInText(
+                                        msg.date,
+                                        format: timeFormat,
+                                      )}',
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
-                      if (folder == 'inbox' && onPreviewMessage != null)
-                        IconTheme(
-                          data: const IconThemeData(color: Colors.white),
-                          child: IconButton(
-                            icon: const Icon(Icons.preview, color: Colors.white),
-                            tooltip: 'Preview',
-                            onPressed: () => onPreviewMessage!(msg),
                           ),
                         ),
-                    ],
+                        if (folder == 'inbox' && onPreviewMessage != null)
+                          IconTheme(
+                            data: const IconThemeData(color: Colors.white),
+                            child: IconButton(
+                              icon: const Icon(Icons.preview, color: Colors.white),
+                              tooltip: 'Preview',
+                              onPressed: () => onPreviewMessage!(msg),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 const Divider(
