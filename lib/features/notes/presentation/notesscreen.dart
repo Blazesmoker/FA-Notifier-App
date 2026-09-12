@@ -62,6 +62,7 @@ class NotesScreenState extends State<NotesScreen>
     with RouteAware, WidgetsBindingObserver, SingleTickerProviderStateMixin {
   static const Color _accent = Color(0xFFE09321);
   static const double _notesActionSpacing = 6.0;
+  static const double _notesMenuVerticalPadding = 12.0;
 
   late final NotesScreenController _notesController;
   late final TabController _tabController;
@@ -578,7 +579,10 @@ class NotesScreenState extends State<NotesScreen>
     return PopupMenuItem<_NotesMenuAction>(
       value: action,
       height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: _notesMenuVerticalPadding,
+      ),
       child: Row(
         children: [
           Icon(icon, color: Colors.white, size: 21),

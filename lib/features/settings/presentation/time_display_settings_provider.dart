@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 
 class TimeDisplaySettingsProvider with ChangeNotifier {
   TimeDisplaySettingsProvider({
-    required TimeDisplayPreference preference,
-  }) : _preference = preference {
+    required this._preference,
+  }) {
     _loadFuture = _load();
   }
 

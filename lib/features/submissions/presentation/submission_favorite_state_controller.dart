@@ -6,9 +6,9 @@ import 'package:fanotifier/features/submissions/domain/submission_favorite_repos
 
 class SubmissionFavoriteStateController extends ChangeNotifier {
   SubmissionFavoriteStateController({
-    required SubmissionFavoriteRepository repository,
+    required this._repository,
     this.debounceDuration = const Duration(seconds: 3),
-  }) : _repository = repository;
+  });
 
   final SubmissionFavoriteRepository _repository;
   final Duration debounceDuration;

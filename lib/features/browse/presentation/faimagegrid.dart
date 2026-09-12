@@ -119,7 +119,7 @@ class FAImageGridState extends State<FAImageGrid> {
       child: NotificationListener<ScrollNotification>(
         onNotification: _handleScrollNotification,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+          padding: const EdgeInsets.only(left: 8.0, top: 8.0, right: 8.0),
           child: imageRows.isEmpty
               ? ListView(
                   physics: const AlwaysScrollableScrollPhysics(),

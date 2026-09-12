@@ -28,6 +28,7 @@ import 'package:fanotifier/shared/theme/app_theme.dart';
 import 'package:fanotifier/shared/fa/domain/user_profile.dart';
 import 'package:fanotifier/shared/fa/domain/notifications.dart';
 import 'package:fanotifier/features/home/domain/home_login_webview_support.dart';
+import 'package:fanotifier/features/home/presentation/home_bottom_navigation_bar.dart';
 import 'package:fanotifier/features/home/domain/home_profile_repository.dart';
 import 'package:fanotifier/features/home/domain/home_session_repository.dart';
 import 'package:fanotifier/features/home/domain/home_start_screen_preference.dart';
@@ -1084,12 +1085,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: Color(0xFF111111),
                         thickness: 3.0,
                       ),
-                      Theme(
-                        data: Theme.of(context).copyWith(
-                          splashFactory: NoSplash.splashFactory,
-                        ),
-                        child: BottomNavigationBar(
-                          type: BottomNavigationBarType.shifting,
+                      HomeBottomNavigationBar(
                           items: [
                             BottomNavigationBarItem(
                               icon: const Icon(Icons.home_rounded),
@@ -1179,12 +1175,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ],
                           currentIndex: _selectedIndex,
-                          selectedItemColor: const Color(0xFFE09321),
-                          unselectedItemColor: Colors.grey,
-                          onTap: _onBottomNavigationItemTapped,
-                          showSelectedLabels: true,
-                          showUnselectedLabels: false,
-                        ),
+                          onSelected: _onBottomNavigationItemTapped,
                       ),
                     ],
                         ),

@@ -2184,6 +2184,25 @@ class UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
+  Widget _buildMoveUpFab() {
+    return FloatingActionButton(
+      onPressed: () {
+        _resumeTopMediaForMoveUp();
+        _scrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      },
+      backgroundColor: const Color(0xFFE09321),
+      tooltip: 'Scroll to Top',
+      child: const Icon(
+        Icons.arrow_upward,
+        color: Colors.white,
+      ),
+    );
+  }
+
   /// Builds the main UI of the screen with unified scrolling.
   @override
   Widget build(BuildContext context) {
@@ -3002,22 +3021,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                 ),
                               );
                             },
-                            child: FloatingActionButton(
-                              onPressed: () {
-                                _resumeTopMediaForMoveUp();
-                                _scrollController.animateTo(
-                                  0.0,
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeOut,
-                                );
-                              },
-                              backgroundColor: const Color(0xFFE09321),
-                              tooltip: 'Scroll to Top',
-                              child: const Icon(
-                                Icons.arrow_upward,
-                                color: Colors.white,
-                              ),
-                            ),
+                            child: _buildMoveUpFab(),
                           ),
                         )
                       : null,
