@@ -1056,21 +1056,28 @@ class _HomeScreenState extends State<HomeScreen> {
               ? _buildMainAppScreen(context)
               : _buildWebView(),
       builder: (context, settings, faNotificationService, child) {
-        return PopScope(
-          canPop: false,
-          onPopInvokedWithResult: (bool didPop, dynamic result) {
-            if (didPop) return;
-            // On Notes tab: first back closes selection mode if active
-            if (_selectedIndex == 4) {
-              final notesState = _notesKey.currentState;
-              if (notesState != null && notesState.isInSelectionMode) {
-                notesState.exitSelectionMode();
-                return;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: const SystemUiOverlayStyle(
+            systemNavigationBarColor: Colors.transparent,
+            systemNavigationBarDividerColor: Colors.transparent,
+            systemNavigationBarIconBrightness: Brightness.light,
+            systemNavigationBarContrastEnforced: false,
+          ),
+          child: PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (bool didPop, dynamic result) {
+              if (didPop) return;
+              // On Notes tab: first back closes selection mode if active
+              if (_selectedIndex == 4) {
+                final notesState = _notesKey.currentState;
+                if (notesState != null && notesState.isInSelectionMode) {
+                  notesState.exitSelectionMode();
+                  return;
+                }
               }
-            }
-            _onRequestCloseApp();
-          },
-          child: Scaffold(
+              _onRequestCloseApp();
+            },
+            child: Scaffold(
             body: child,
             bottomNavigationBar:
                 _shouldHoldForStartupProfile || !_privacySettings.consentShown
@@ -1180,6 +1187,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                         ),
                       ),
+            ),
           ),
         );
       },

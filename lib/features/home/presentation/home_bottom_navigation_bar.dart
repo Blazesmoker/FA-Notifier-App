@@ -250,7 +250,7 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
 
                                         // Overall brightness multiplier for the glass lighting/reflections.
                                         // Higher values make the rim/highlights stronger and more obvious.
-                                        lightIntensity: 0.55,
+                                        lightIntensity: 0.8,
 
                                         // Direction the simulated light is coming from, in degrees.
                                         // Changes which sides of the glass receive the strongest highlight.
