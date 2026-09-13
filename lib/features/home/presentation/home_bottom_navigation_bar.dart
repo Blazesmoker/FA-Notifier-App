@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart' as glass;
 
 const _barHeight = 56.0;
+const _navIconSize = 24.0;
 const _selectedColor = Color(0xFFE09321);
 
 class HomeBottomNavigationBar extends StatefulWidget {
@@ -157,13 +158,13 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
         for (final item in widget.items) ...[
           Center(
             child: IconTheme(
-              data: const IconThemeData(color: Colors.grey, size: 24),
+              data: const IconThemeData(color: Colors.grey, size: _navIconSize),
               child: item.icon,
             ),
           ),
           Center(
             child: IconTheme(
-              data: const IconThemeData(color: _selectedColor, size: 24),
+              data: const IconThemeData(color: _selectedColor, size: _navIconSize),
               child: item.activeIcon,
             ),
           ),
@@ -421,9 +422,33 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
   double _tapProgress = 1;
 
   double get unit => width / (count + 0.5);
-  double get position => width <= 0
-      ? _selectedIndex.toDouble()
-      : (x / unit - 0.75).clamp(0.0, (count - 1).toDouble()).toDouble();
+  double get position {
+    if (width <= 0) return _selectedIndex.toDouble();
+    if (count <= 1) return 0;
+    if (count == 2) {
+      return ((x - centerAt(0)) / (centerAt(1) - centerAt(0)))
+          .clamp(0.0, 1.0)
+          .toDouble();
+    }
+    final secondCenter = centerAt(1);
+    if (x <= secondCenter) {
+      return ((x - centerAt(0)) / (secondCenter - centerAt(0)))
+          .clamp(0.0, (count - 1).toDouble())
+          .toDouble();
+    }
+    final lastInteriorCenter = centerAt(count - 2);
+    if (x >= lastInteriorCenter) {
+      final lastCenter = centerAt(count - 1);
+      final edgePosition = count - 2 +
+          (x - lastInteriorCenter) / (lastCenter - lastInteriorCenter);
+      return edgePosition
+          .clamp(0.0, (count - 1).toDouble())
+          .toDouble();
+    }
+    return (x / unit - 0.75)
+        .clamp(0.0, (count - 1).toDouble())
+        .toDouble();
+  }
 
   double activation(int index) {
     final from = _tapFrom;
@@ -437,7 +462,44 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
 
   double itemWidth(int index) => unit * (1 + 0.5 * activation(index));
 
-  double centerAt(int index) => unit * (index + 0.75);
+  double _edgeCenter(
+    int index,
+    double center,
+    double ownWidth,
+    double neighborWidth,
+  ) {
+    final neighborDistance = (ownWidth + neighborWidth) / 2;
+    if (index == 0) {
+      final neighborLeft = center + neighborDistance - _navIconSize / 2;
+      return neighborLeft / 2;
+    }
+    final neighborRight = center - neighborDistance + _navIconSize / 2;
+    return (neighborRight + width) / 2;
+  }
+
+  double centerAt(int index) {
+    if (count <= 1) return width / 2;
+    final center = unit * (index + 0.75);
+    if (index == 0 || index == count - 1) {
+      return _edgeCenter(index, center, unit * 1.5, unit);
+    }
+    return center;
+  }
+
+  double displayCenter(int index, double center, double activation) {
+    if (count <= 1) return center;
+    if (index == 0 || index == count - 1) {
+      final neighbor = index == 0 ? 1 : count - 2;
+      final target = _edgeCenter(
+        index,
+        center,
+        itemWidth(index),
+        itemWidth(neighbor),
+      );
+      return center + (target - center) * activation;
+    }
+    return center;
+  }
 
   void configure(double nextWidth, bool nextReduceMotion) {
     if (nextWidth != width) {
@@ -448,6 +510,11 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
         x *= ratio;
         _targetX *= ratio;
         velocityX *= ratio;
+        if (!_ticker.isActive) {
+          x = _targetX = centerAt(_selectedIndex);
+        } else if (_targetVisibility == 0 || _fadeAfterSettling) {
+          _targetX = centerAt(_selectedIndex);
+        }
       } else {
         x = _targetX = centerAt(_selectedIndex);
       }
@@ -485,7 +552,8 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
     _tapFrom = null;
     _tapProgress = 1;
     _fadeAfterSettling = false;
-    _targetX = targetX.clamp(centerAt(0), centerAt(count - 1)).toDouble();
+    final edgeInset = math.min(width, unit * 1.5 + 8) / 2;
+    _targetX = targetX.clamp(edgeInset, width - edgeInset).toDouble();
     _targetY = (targetY * 0.18).clamp(-8.0, 8.0).toDouble();
     _targetVerticalStretch = (targetY.abs() * 0.08).clamp(0.0, 6.0).toDouble();
     _targetVisibility = 1;
@@ -595,11 +663,10 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
             stretch * 0.35)
         .clamp(0.0, width)
         .toDouble();
-    final bubbleWidth = math.min(
-      desiredBubbleWidth,
-      2.0 * math.min(x, width - x),
-    );
-    final left = x - bubbleWidth / 2;
+    final bubbleWidth = desiredBubbleWidth;
+    final left = (x - bubbleWidth / 2)
+        .clamp(0.0, width - bubbleWidth)
+        .toDouble();
     final bubbleHeight = 58 + 2 * (1 - movingSize) + verticalStretch;
     final top = 28 + y.clamp(-8.0, 8.0).toDouble() - bubbleHeight / 2;
     return Rect.fromLTWH(
@@ -617,7 +684,12 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
     var distance = double.infinity;
     for (var index = 0; index < count; index++) {
       final item = itemWidth(index);
-      final nextDistance = (left + item / 2 - center).abs();
+      final itemCenter = displayCenter(
+        index,
+        left + item / 2,
+        activation(index),
+      );
+      final nextDistance = (itemCenter - center).abs();
       if (nextDistance < distance) {
         nearest = index;
         distance = nextDistance;
@@ -662,7 +734,11 @@ class _NavItemsFlow extends FlowDelegate {
     for (var index = 0; index < motion.count; index++) {
       final activation = motion.activation(index);
       final itemWidth = motion.itemWidth(index);
-      final logicalCenter = left + itemWidth / 2;
+      final logicalCenter = motion.displayCenter(
+        index,
+        left + itemWidth / 2,
+        activation,
+      );
       final center = rtl ? width - logicalCenter : logicalCenter;
       final vertical = motion.y.clamp(-8.0, 8.0).toDouble() *
           activation *
