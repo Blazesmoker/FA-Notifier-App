@@ -340,7 +340,8 @@ class _OpenPostState extends State<OpenPost>
   @override
   void didPushNext() {
     _dismissCommentComposerFocus();
-    if (_suppressNextRouteDetach) {
+    if (_suppressNextRouteDetach ||
+        DetachableWebViewRouteRegistry.routeDetachSuppressed) {
       return;
     }
     _setRouteWebViewDetached(true);

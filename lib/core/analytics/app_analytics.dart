@@ -97,6 +97,7 @@ class AppAnalytics {
     required bool notificationShown,
     required int durationMilliseconds,
   }) {
+    appCrashReporter.recordNotificationCheck(outcome.analyticsValue);
     return _logEvent(
       'notification_check_completed',
       <String, Object>{

@@ -8,6 +8,7 @@ import 'package:fanotifier/app/bootstrap/app_bootstrap.dart';
 import 'package:fanotifier/app/composition/app_providers.dart';
 import 'package:fanotifier/app/navigation/app_navigation.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
+import 'package:fanotifier/core/crash_reporting/app_crash_reporter.dart';
 import 'package:fanotifier/app/navigation/app_notification_navigation.dart';
 import 'package:fanotifier/core/preferences/app_foreground_state_preference.dart';
 import 'package:fanotifier/features/drawer/data/app_update_service.dart';
@@ -79,6 +80,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    if (lifecycleState != null) {
+      appCrashReporter.setLifecycle(lifecycleState);
+    }
     _initDeepLinks();
     _isLifecycleResumed =
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
@@ -133,6 +138,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    appCrashReporter.setLifecycle(state);
     appLog('===============================================');
     appLog('APP LIFECYCLE CHANGED: $state');
     appLog('Time: ${DateTime.now()}');
@@ -186,6 +192,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _initDeepLinks() async {
     _appLinks = AppLinks();
     _linkSub = _appLinks!.uriLinkStream.listen((Uri uri) {
+      appCrashReporter.addBreadcrumb(CrashBreadcrumb.incomingLink);
+      appCrashReporter.addBreadcrumb(
+        navigatorKey.currentContext != null
+            ? CrashBreadcrumb.navigationReady
+            : CrashBreadcrumb.navigationNotReady,
+      );
       if (navigatorKey.currentContext != null) {
         handleFALink(navigatorKey.currentContext!, uri.toString());
       }

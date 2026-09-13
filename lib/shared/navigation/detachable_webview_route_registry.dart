@@ -5,6 +5,20 @@ abstract interface class DetachableWebViewRouteOwner {
 }
 
 class DetachableWebViewRouteRegistry {
+  static bool _routeDetachSuppressed = false;
+
+  static bool get routeDetachSuppressed => _routeDetachSuppressed;
+
+  static T withoutRouteDetach<T>(T Function() pushRoute) {
+    final wasSuppressed = _routeDetachSuppressed;
+    _routeDetachSuppressed = true;
+    try {
+      return pushRoute();
+    } finally {
+      _routeDetachSuppressed = wasSuppressed;
+    }
+  }
+
   static final List<DetachableWebViewRouteOwner> _owners =
       <DetachableWebViewRouteOwner>[];
 

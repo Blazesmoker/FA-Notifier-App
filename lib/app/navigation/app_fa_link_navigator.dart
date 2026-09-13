@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/features/journals/presentation/openjournal.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
+import 'package:fanotifier/core/crash_reporting/app_crash_reporter.dart';
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/features/submissions/presentation/openpost.dart';
@@ -16,6 +17,7 @@ class AppFaLinkNavigator extends FaLinkNavigator {
     FALinkTarget target,
     String resolvedUrl,
   ) async {
+    appCrashReporter.recordNavigation(target.type.name);
     switch (target.type) {
       case FALinkTargetType.gallery:
         Navigator.push(

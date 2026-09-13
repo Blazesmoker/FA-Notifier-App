@@ -486,7 +486,7 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
     _tapProgress = 1;
     _fadeAfterSettling = false;
     _targetX = targetX.clamp(centerAt(0), centerAt(count - 1)).toDouble();
-    _targetY = (targetY * 0.18).clamp(-8.0, 1.0).toDouble();
+    _targetY = (targetY * 0.18).clamp(-8.0, 8.0).toDouble();
     _targetVerticalStretch = (targetY.abs() * 0.08).clamp(0.0, 6.0).toDouble();
     _targetVisibility = 1;
     _wake();
@@ -601,10 +601,7 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
     );
     final left = x - bubbleWidth / 2;
     final bubbleHeight = 58 + 2 * (1 - movingSize) + verticalStretch;
-    final top = math.min(
-      28 + y.clamp(-8.0, 1.0).toDouble() - bubbleHeight / 2,
-      _barHeight - bubbleHeight,
-    );
+    final top = 28 + y.clamp(-8.0, 8.0).toDouble() - bubbleHeight / 2;
     return Rect.fromLTWH(
       left,
       top,
@@ -667,7 +664,7 @@ class _NavItemsFlow extends FlowDelegate {
       final itemWidth = motion.itemWidth(index);
       final logicalCenter = left + itemWidth / 2;
       final center = rtl ? width - logicalCenter : logicalCenter;
-      final vertical = motion.y.clamp(-8.0, 1.0).toDouble() *
+      final vertical = motion.y.clamp(-8.0, 8.0).toDouble() *
           activation *
           motion.visibility;
       final iconTransform = Matrix4.translationValues(

@@ -568,6 +568,7 @@ class BackgroundNotificationWorker {
       await appCrashReporter.initializeBackgroundIsolate(
         collectionEnabled: crashlyticsEnabled,
       );
+      appCrashReporter.addBreadcrumb(CrashBreadcrumb.backgroundWorkerStarted);
     } catch (error, stackTrace) {
       try {
         await appCrashReporter.recordNonFatal(
