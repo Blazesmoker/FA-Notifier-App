@@ -245,6 +245,7 @@ class _UserProfileFavoritesSectionState
                 ProfileFavsSliver(
                   key: _favsKey,
                   username: widget.sanitizedUsername,
+                  isOwnProfile: widget.isOwnProfile,
                   selectionMode: _selectionMode,
                   onSelectionCountChanged: _onSelectionCountChanged,
                 ),
