@@ -11,6 +11,9 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
+/Payload/
+/background_logs.txt
+/et --hard main
 
 # IDEs
 *.iml
@@ -41,12 +44,14 @@ app.*.map.json
 
 # Android build output
 /android/.gradle/
+/android/app/.gradle/
 /android/captures/
 /android/app/debug
 /android/app/profile
 /android/app/release
 /android/key.properties
 /android/local.properties
+/android/app/local.properties
 /android/app/google-services.json
 
 # iOS/macOS

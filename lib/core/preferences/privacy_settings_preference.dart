@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class PrivacySettingsPreference {
   const PrivacySettingsPreference();
 
+  static const analyticsEpochKey = 'backgroundAnalyticsConsentEpoch';
+  static const crashlyticsEpochKey = 'backgroundCrashlyticsConsentEpoch';
   static const analyticsEnabledKey = 'firebaseAnalyticsEnabled';
   static const crashlyticsEnabledKey = 'firebaseCrashlyticsEnabled';
   static const consentShownKey = 'privacyConsentShown';
@@ -24,11 +26,17 @@ class PrivacySettingsPreference {
 
   Future<void> saveAnalyticsEnabled(bool value) async {
     final prefs = await SharedPreferences.getInstance();
+    if (!value) {
+      await prefs.setInt(analyticsEpochKey, (prefs.getInt(analyticsEpochKey) ?? 0) + 1);
+    }
     await prefs.setBool(analyticsEnabledKey, value);
   }
 
   Future<void> saveCrashlyticsEnabled(bool value) async {
     final prefs = await SharedPreferences.getInstance();
+    if (!value) {
+      await prefs.setInt(crashlyticsEpochKey, (prefs.getInt(crashlyticsEpochKey) ?? 0) + 1);
+    }
     await prefs.setBool(crashlyticsEnabledKey, value);
   }
 

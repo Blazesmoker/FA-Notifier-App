@@ -198,7 +198,7 @@ class BackgroundNoteUnreadService {
       );
 
       final confirmed =
-          (statusCode == 200 || statusCode == 302) && !cloudflareChallenge;
+          statusCode == 302 && !cloudflareChallenge;
       if (confirmed) {
         return _result(
           stopwatch,

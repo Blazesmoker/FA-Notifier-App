@@ -16,11 +16,13 @@ const double _profileSelectionBorderWidth = 2.0;
 
 class ProfileFavsSliver extends StatefulWidget {
   final String username;
+  final bool isOwnProfile;
   final bool selectionMode;
   final ValueChanged<int> onSelectionCountChanged;
 
   const ProfileFavsSliver({
     required this.username,
+    required this.isOwnProfile,
     required this.selectionMode,
     required this.onSelectionCountChanged,
     super.key,
@@ -300,6 +302,7 @@ class ProfileFavsSliverState extends State<ProfileFavsSliver> {
         height: height,
         imageUrl: imageUrl,
         submissionId: uniqueNumber,
+        fallbackIsFavorite: widget.isOwnProfile,
         rating: im['rating'] as String?,
         title: im['title'] as String?,
         author: im['author'] as String?,
@@ -383,6 +386,7 @@ class _FavImageTileFavs extends StatefulWidget {
   final double height;
   final String imageUrl;
   final String submissionId;
+  final bool fallbackIsFavorite;
   final String? rating;
   final String? title;
   final String? author;
@@ -397,6 +401,7 @@ class _FavImageTileFavs extends StatefulWidget {
     required this.height,
     required this.imageUrl,
     required this.submissionId,
+    required this.fallbackIsFavorite,
     required this.rating,
     required this.title,
     required this.author,
@@ -422,7 +427,10 @@ class _FavImageTileFavsState extends State<_FavImageTileFavs> {
   @override
   Widget build(BuildContext context) {
     final isFavorite = context.select<SubmissionFavoriteStateController, bool>(
-      (controller) => controller.valueFor(widget.submissionId, true),
+      (controller) => controller.valueFor(
+        widget.submissionId,
+        widget.fallbackIsFavorite,
+      ),
     );
     final thumbnail = FaThumbnailOutline(
       rating: widget.rating,
@@ -511,7 +519,7 @@ class _FavImageTileFavsState extends State<_FavImageTileFavs> {
             ? widget.onSelectionToggle
             : () => context.read<SubmissionFavoriteStateController>().toggle(
                   submissionId: widget.submissionId,
-                  fallbackIsFavorite: true,
+                  fallbackIsFavorite: widget.fallbackIsFavorite,
                 ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

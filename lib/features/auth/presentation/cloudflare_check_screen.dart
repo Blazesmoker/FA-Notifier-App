@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
@@ -23,6 +26,11 @@ class CloudflareCheckScreen extends StatefulWidget {
 class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
   InAppWebViewController? _controller;
   bool _didComplete = false;
+  bool _isChecking = false;
+  Timer? _completionTimer;
+  int _navigationGeneration = 0;
+  int _verificationPasses = 0;
+  DateTime? _nextVerificationAt;
   late final CloudflareCheckGateway _gateway;
 
   @override
@@ -45,74 +53,79 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
     );
   }
 
-  Future<bool> _verifyHttpAccess(String url) async {
-    return _gateway.verifyHttpAccess(
-      url: url,
-      beforeRetryAttempt: _saveCookiesToSecureStorage,
-    );
+  Future<void> _completeIfChallengePassed() async {
+    final controller = _controller;
+    if (_didComplete || _isChecking || controller == null || !mounted) return;
+
+    final generation = _navigationGeneration;
+    bool isCurrent() =>
+        mounted && !_didComplete && generation == _navigationGeneration;
+
+    _isChecking = true;
+    try {
+      final currentUrl = (await controller.getUrl())?.toString() ?? '';
+      if (!isCurrent() || !_gateway.isFaUrl(currentUrl)) return;
+
+      final html = await controller.evaluateJavascript(
+        source: "document.readyState === 'loading' ? null : "
+            '$faDocumentOuterHtmlScript',
+      );
+      if (!isCurrent() || html == null) return;
+      final body = html.toString();
+      if (body.trim().isEmpty ||
+          _gateway.isChallengePage(url: currentUrl, body: body)) {
+        return;
+      }
+
+      if (_verificationPasses >= 3 ||
+          (_nextVerificationAt != null &&
+              DateTime.now().isBefore(_nextVerificationAt!))) {
+        return;
+      }
+      _verificationPasses++;
+      await _saveCookiesToSecureStorage();
+      if (!isCurrent()) return;
+      final verified = await _gateway.verifyHttpAccess(
+        url: currentUrl,
+        beforeRetryAttempt: () async {
+          if (!isCurrent()) throw StateError('Cloudflare check ended');
+          await _saveCookiesToSecureStorage();
+        },
+      );
+      if (!isCurrent()) return;
+      if (!verified) {
+        _nextVerificationAt = DateTime.now().add(const Duration(seconds: 3));
+        return;
+      }
+      if ((await controller.getUrl())?.toString() != currentUrl || !isCurrent()) {
+        return;
+      }
+
+      _finish(CloudflareCheckResult(
+        passed: true,
+        pageHtml: widget.returnPageHtml ? body : null,
+        finalUrl: widget.returnPageHtml ? currentUrl : null,
+      ));
+    } catch (_) {
+      if (isCurrent()) {
+        _nextVerificationAt = DateTime.now().add(const Duration(seconds: 3));
+        debugPrint('[Cloudflare] Completion check could not finish.');
+      }
+    } finally {
+      _isChecking = false;
+    }
   }
 
-  Future<void> _completeIfChallengePassed({String? urlOverride}) async {
-    if (_didComplete || _controller == null || !mounted) return;
-
-    final currentUrl =
-        urlOverride ?? (await _controller!.getUrl())?.toString() ?? '';
-    if (currentUrl.isEmpty ||
-        currentUrl == 'about:blank' ||
-        !_gateway.isFaUrl(currentUrl)) {
-      return;
-    }
-
-    String body = '';
-    try {
-      final html = await _controller!.evaluateJavascript(
-        source: faDocumentOuterHtmlScript,
-      );
-      body = (html ?? '').toString();
-    } catch (_) {
-      return;
-    }
-
-    final isChallenge = _gateway.isChallengePage(
-      url: currentUrl,
-      body: body,
-    );
-
-    if (isChallenge) {
-      debugPrint('[Cloudflare] WebView is still on a challenge page: $currentUrl');
-      return;
-    }
-
-    final verified = await _verifyHttpAccess(currentUrl);
-    if (!verified || !mounted) {
-      debugPrint(
-        '[Cloudflare] WebView loaded a normal page but HTTP verification is still failing.',
-      );
-      return;
-    }
-
-    if (widget.returnPageHtml) {
-      _didComplete = true;
-      if (mounted) {
-        Navigator.of(context).pop(
-          CloudflareCheckResult(
-            passed: true,
-            pageHtml: body,
-            finalUrl: currentUrl,
-          ),
-        );
-      }
-      return;
-    }
-
+  void _finish(CloudflareCheckResult result) {
+    if (_didComplete || !mounted) return;
     _didComplete = true;
-    if (mounted) {
-      Navigator.of(context).pop(const CloudflareCheckResult(passed: true));
-    }
+    _completionTimer?.cancel();
+    Navigator.of(context).pop(result);
   }
 
   @override
   void dispose() {
+    _completionTimer?.cancel();
     _controller = null;
     super.dispose();
   }
@@ -129,9 +142,7 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop(
-                  const CloudflareCheckResult(passed: false),
-                );
+                _finish(const CloudflareCheckResult(passed: false));
               },
               child: const Text(
                 'Close',
@@ -145,6 +156,9 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
             url: WebUri('about:blank'),
           ),
           initialSettings: InAppWebViewSettings(
+            transparentBackground: defaultTargetPlatform == TargetPlatform.iOS,
+            underPageBackgroundColor:
+                defaultTargetPlatform == TargetPlatform.iOS ? Colors.black : null,
             javaScriptEnabled: true,
             useShouldOverrideUrlLoading: true,
             supportZoom: true,
@@ -156,20 +170,27 @@ class _CloudflareCheckScreenState extends State<CloudflareCheckScreen> {
           onWebViewCreated: (controller) async {
             _controller = controller;
             await _setCookiesFromSecureStorage();
+            if (!mounted || _didComplete) return;
+            _completionTimer = Timer.periodic(
+              const Duration(milliseconds: 500),
+              (_) => unawaited(_completeIfChallengePassed()),
+            );
             await controller.loadUrl(
               urlRequest: URLRequest(
                 url: WebUri(widget.initialUrl),
               ),
             );
           },
+          onLoadStart: (controller, url) {
+            _navigationGeneration++;
+            _verificationPasses = 0;
+            _nextVerificationAt = null;
+          },
+          onPageCommitVisible: (controller, url) {
+            unawaited(_completeIfChallengePassed());
+          },
           onLoadStop: (controller, url) async {
-            final currentUrl = url?.toString() ?? '';
-            if (!_gateway.isFaUrl(currentUrl)) {
-              return;
-            }
-            await _saveCookiesToSecureStorage();
-            await Future.delayed(const Duration(milliseconds: 250));
-            await _completeIfChallengePassed(urlOverride: currentUrl);
+            await _completeIfChallengePassed();
           },
         ),
       ),

@@ -19,17 +19,14 @@ class NotesUnreadNotificationService {
   final NotesApiService _notesApi;
   final LocalNotificationGateway _notificationGateway;
 
-  Future<bool> _restorePendingUnreadNote(
-    PendingNoteUnreadRestore pending,
-  ) async {
+  Future<bool> _restorePendingUnreadNotes(Set<String> noteIds) async {
     for (var attempt = 1; attempt <= _unreadRestoreMaxAttempts; attempt++) {
       try {
-        final result = await restoreBackgroundNoteAsUnread(
-          noteId: pending.noteId,
-          link: pending.link,
+        final result = await restoreBackgroundNotesAsUnread(
+          noteIds: noteIds,
         );
         if (result.success) {
-          await MessageStorage.removePendingUnreadRestore(pending.noteId);
+          await MessageStorage.removePendingUnreadRestores(noteIds);
           return true;
         }
         if (!result.shouldRetryImmediately ||
@@ -103,42 +100,49 @@ class NotesUnreadNotificationService {
             .toList();
       }
 
-      var shownCount = 0;
+      final pendingRestoreIds = <String>{};
+      final preparedNotes = <({Message message, String content})>[];
       for (final msg in newUnread) {
-        PendingNoteUnreadRestore? pendingRestore;
-        var restorationAttempted = false;
-        var claimed = false;
-        var notificationShown = false;
         try {
-          pendingRestore = await MessageStorage.addPendingUnreadRestore(
+          await MessageStorage.queueNoteDelivery(noteId: msg.id, link: msg.link);
+          await MessageStorage.addPendingUnreadRestore(
             noteId: msg.id,
             link: msg.link,
           );
+          pendingRestoreIds.add(msg.id);
           final content = await _notesApi.fetchMessageContent(msg.link);
-          await Future<void>.delayed(_unreadRestoreAfterReadDelay);
-          restorationAttempted = true;
-          await _restorePendingUnreadNote(pendingRestore);
+          preparedNotes.add((message: msg, content: content));
+        } catch (_) {}
+      }
+
+      if (pendingRestoreIds.isNotEmpty) {
+        await Future<void>.delayed(_unreadRestoreAfterReadDelay);
+        await _restorePendingUnreadNotes(pendingRestoreIds);
+      }
+
+      var shownCount = 0;
+      for (final prepared in preparedNotes) {
+        final msg = prepared.message;
+        var claimed = false;
+        var notificationShown = false;
+        try {
           claimed = await MessageStorage.claimUnshownNoteId(msg.id);
           if (!claimed) continue;
           await _notificationGateway.showNotification(
             stableNotificationIdFromString(msg.id),
             'New Note from ${msg.sender}',
-            content,
+            prepared.content,
             'note_${msg.id}',
             'notes',
           );
           notificationShown = true;
           shownCount++;
+          await MessageStorage.commitNoteDelivery(msg.id);
         } catch (_) {
           if (claimed && !notificationShown) {
             try {
               await MessageStorage.releaseClaimedNoteId(msg.id);
             } catch (_) {}
-          }
-          final pending = pendingRestore;
-          if (pending != null && !restorationAttempted) {
-            await Future<void>.delayed(_unreadRestoreAfterReadDelay);
-            await _restorePendingUnreadNote(pending);
           }
         }
       }

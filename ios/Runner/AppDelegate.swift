@@ -5,10 +5,15 @@ import Translation
 import workmanager_apple
 import BackgroundTasks
 import flutter_local_notifications
+import shared_preferences_foundation
+import flutter_secure_storage_darwin
+import package_info_plus
+import app_badge_plus
 
 private let adaptiveBackgroundTaskIdentifier = "com.blazesmoker.FANotifier.refresh"
 private let adaptiveBackgroundIntervalKey = "flutter.backgroundFetchIntervalMinutes"
 private let adaptiveBackgroundEmptyStreakKey = "flutter.backgroundFetchNoNotificationStreak"
+private var pendingColdBackgroundLaunch = false
 private let iOSBackgroundFetchIntervalMinutes = 15
 private let iOSBackgroundFetchIntervalSeconds: TimeInterval = 15 * 60
 
@@ -44,18 +49,51 @@ final class AdaptiveBackgroundFetchPlugin: NSObject, FlutterPlugin {
     private static var executionLeaseIssuedAt: Date?
     private static let executionLeaseMaxAge: TimeInterval = 2 * 60
 
+    private var channel: FlutterMethodChannel?
+    private var deadline: TimeInterval?
+    private var cancellationTimer: Timer?
+    private var launchContext = "foreground_engine"
+
     static func register(with registrar: FlutterPluginRegistrar) {
+        register(with: registrar, startedAt: nil, launchContext: "foreground_engine")
+    }
+
+    static func register(
+        with registrar: FlutterPluginRegistrar,
+        startedAt: TimeInterval?,
+        launchContext: String
+    ) {
         let channel = FlutterMethodChannel(
             name: "app.background_fetch",
             binaryMessenger: registrar.messenger()
         )
-        registrar.addMethodCallDelegate(AdaptiveBackgroundFetchPlugin(), channel: channel)
+        let instance = AdaptiveBackgroundFetchPlugin()
+        instance.channel = channel
+        instance.launchContext = launchContext
+        if let startedAt = startedAt {
+            instance.deadline = startedAt + 25
+            let remaining = max(0, startedAt + 25 - ProcessInfo.processInfo.systemUptime)
+            instance.cancellationTimer = Timer.scheduledTimer(withTimeInterval: remaining, repeats: false) { [weak instance] _ in
+                instance?.channel?.invokeMethod("cancelRun", arguments: nil)
+            }
+        }
+        registrar.addMethodCallDelegate(instance, channel: channel)
     }
 
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
+        case "executionContext":
+            var context: [String: Any] = ["launch_context": launchContext]
+            if let deadline = deadline {
+                context["remaining_ms"] = Int(max(0, deadline - ProcessInfo.processInfo.systemUptime) * 1000)
+            }
+            result(context)
         case "acquireExecution":
-            result(Self.acquireExecutionLease())
+            if let deadline = deadline, ProcessInfo.processInfo.systemUptime >= deadline {
+                result(nil)
+            } else {
+                result(Self.acquireExecutionLease())
+            }
         case "releaseExecution":
             guard let arguments = call.arguments as? [String: Any],
                   let token = arguments["token"] as? String
@@ -63,6 +101,8 @@ final class AdaptiveBackgroundFetchPlugin: NSObject, FlutterPlugin {
                 result(false)
                 return
             }
+            cancellationTimer?.invalidate()
+            cancellationTimer = nil
             result(Self.releaseExecutionLease(token: token))
         case "reschedule":
             UserDefaults.standard.set(
@@ -81,7 +121,11 @@ final class AdaptiveBackgroundFetchPlugin: NSObject, FlutterPlugin {
         executionLeaseLock.lock()
         defer { executionLeaseLock.unlock() }
 
-        if UserDefaults.standard.bool(forKey: "flutter.isAppActive") {
+        let defaults = UserDefaults.standard
+        let activeAt = defaults.double(forKey: "flutter.isAppActiveAtMs")
+        let activeAge = Date().timeIntervalSince1970 * 1000 - activeAt
+        if defaults.bool(forKey: "flutter.isAppActive"),
+           activeAt > 0, activeAge >= 0, activeAge <= 120000 {
             return nil
         }
         if executionLeaseToken != nil {
@@ -120,8 +164,33 @@ func registerAdaptiveBackgroundFetchPlugin(registry: FlutterPluginRegistry) {
 }
 
 func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
-    GeneratedPluginRegistrant.register(with: registry)
-    registerAdaptiveBackgroundFetchPlugin(registry: registry)
+    let startedAt = ProcessInfo.processInfo.systemUptime
+    let launchContext = pendingColdBackgroundLaunch
+        ? "cold_background_launch" : "existing_process_background"
+    pendingColdBackgroundLaunch = false
+    if let registrar = registry.registrar(forPlugin: "SharedPreferencesPlugin") {
+        SharedPreferencesPlugin.register(with: registrar)
+    }
+    if let registrar = registry.registrar(forPlugin: "FlutterSecureStorageDarwinPlugin") {
+        FlutterSecureStorageDarwinPlugin.register(with: registrar)
+    }
+    if let registrar = registry.registrar(forPlugin: "FPPPackageInfoPlusPlugin") {
+        FPPPackageInfoPlusPlugin.register(with: registrar)
+    }
+    if let registrar = registry.registrar(forPlugin: "FlutterLocalNotificationsPlugin") {
+        FlutterLocalNotificationsPlugin.register(with: registrar)
+    }
+    if let registrar = registry.registrar(forPlugin: "AppBadgePlusPlugin") {
+        AppBadgePlusPlugin.register(with: registrar)
+    }
+    if let registrar = registry.registrar(forPlugin: "WorkmanagerPlugin") {
+        WorkmanagerPlugin.register(with: registrar)
+    }
+    if let registrar = registry.registrar(forPlugin: "AdaptiveBackgroundFetchPlugin") {
+        AdaptiveBackgroundFetchPlugin.register(
+            with: registrar, startedAt: startedAt, launchContext: launchContext
+        )
+    }
     NSLog("[AppDelegate] Background isolate plugins registered")
 }
 
@@ -141,6 +210,16 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 
     private func setFlutterSharedBool(_ value: Bool, forKey key: String) {
         UserDefaults.standard.set(value, forKey: "flutter.\(key)")
+        if key == "isAppActive" {
+            if value {
+                UserDefaults.standard.set(
+                    Int64(Date().timeIntervalSince1970 * 1000),
+                    forKey: "flutter.isAppActiveAtMs"
+                )
+            } else {
+                UserDefaults.standard.removeObject(forKey: "flutter.isAppActiveAtMs")
+            }
+        }
         UserDefaults.standard.synchronize()
     }
 
@@ -317,6 +396,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
 
         fLog("Application launching...")
 
+        pendingColdBackgroundLaunch = application.applicationState == .background
         if application.applicationState == .background {
             fLog("Background launch detected - skipping FlutterEngine.run for UI entrypoint")
             setFlutterSharedBool(false, forKey: "isAppActive")
@@ -379,6 +459,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
     }
 
     func handleDidBecomeActive(source: String) {
+        pendingColdBackgroundLaunch = false
         fLog("App became active (\(source))")
         setFlutterSharedBool(true, forKey: "isAppActive")
         UserDefaults.standard.set(0, forKey: adaptiveBackgroundEmptyStreakKey)

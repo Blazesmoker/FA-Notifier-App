@@ -507,6 +507,9 @@ class _HomeScreenState extends State<HomeScreen> {
         baseUrl: WebUri('about:blank'),
       ),
       initialSettings: InAppWebViewSettings(
+        transparentBackground: defaultTargetPlatform == TargetPlatform.iOS,
+        underPageBackgroundColor:
+            defaultTargetPlatform == TargetPlatform.iOS ? Colors.black : null,
         javaScriptEnabled: true,
         useShouldOverrideUrlLoading: true,
         mediaPlaybackRequiresUserGesture: false,

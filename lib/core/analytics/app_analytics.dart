@@ -7,29 +7,8 @@ import 'package:flutter/widgets.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/core/crash_reporting/app_crash_reporter.dart';
 
-enum NotificationExecutionContext {
-  backgroundPeriodic('background_periodic'),
-  foregroundPeriodic('foreground_periodic'),
-  foregroundResume('foreground_resume'),
-  foregroundImmediate('foreground_immediate');
-
-  const NotificationExecutionContext(this.analyticsValue);
-
-  final String analyticsValue;
-}
-
-enum NotificationCheckOutcome {
-  contentFound('content_found'),
-  empty('empty'),
-  skippedAppActive('skipped_app_active'),
-  failed('failed'),
-  cancelled('cancelled'),
-  timedOut('timed_out');
-
-  const NotificationCheckOutcome(this.analyticsValue);
-
-  final String analyticsValue;
-}
+import 'notification_analytics_models.dart';
+export 'notification_analytics_models.dart';
 
 class AppAnalytics {
   AppAnalytics({FirebaseAnalytics? analytics})

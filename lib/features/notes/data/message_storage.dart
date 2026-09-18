@@ -21,6 +21,8 @@ class MessageStorage {
   static const String _seenNoteIdsKey = 'seen_note_ids';
   static const String _pendingUnreadRestoresKey =
       'pending_note_unread_restores';
+  static const String _pendingDeliveriesKey = 'pending_note_deliveries_v1';
+  static const Duration notificationClaimLease = Duration(minutes: 2);
   static Future<void> _mutationQueue = Future<void>.value();
 
   static Set<String> _readIds(SharedPreferences prefs, String key) {
@@ -106,6 +108,104 @@ class MessageStorage {
     return operation;
   }
 
+  static Map<String, dynamic> _readDeliveries(SharedPreferences prefs) {
+    final encoded = prefs.getString(_pendingDeliveriesKey);
+    if (encoded == null) return {};
+    return Map<String, dynamic>.from(jsonDecode(encoded) as Map);
+  }
+
+  static Future<void> _saveDeliveries(
+    SharedPreferences prefs,
+    Map<String, dynamic> deliveries,
+  ) async {
+    if (!await prefs.setString(_pendingDeliveriesKey, jsonEncode(deliveries))) {
+      throw StateError('Failed to persist pending note deliveries');
+    }
+  }
+
+  static Future<void> queueNoteDelivery({
+    required String noteId,
+    required String link,
+  }) {
+    return _enqueueMutation(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      if (_readIds(prefs, _shownNoteIdsKey).contains(noteId)) return;
+      final deliveries = _readDeliveries(prefs);
+      deliveries.putIfAbsent(noteId, () => <String, dynamic>{
+        'link': link,
+        'createdAt': DateTime.now().millisecondsSinceEpoch,
+      });
+      await _saveDeliveries(prefs, deliveries);
+    });
+  }
+
+  static Future<Map<String, String>> getPendingNoteDeliveries() async {
+    await _mutationQueue;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    return _readDeliveries(prefs).map((id, value) =>
+        MapEntry(id, (value as Map)['link'] as String));
+  }
+
+  static Future<Map<String, String>> recoverPendingNoteDeliveries({
+    required Set<String> deliveredNoteIds,
+    bool recoverExpiredClaims = true,
+  }) {
+    return _enqueueMutation(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final deliveries = _readDeliveries(prefs);
+      final shown = _readIds(prefs, _shownNoteIdsKey);
+      final result = <String, String>{};
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (final id in deliveries.keys.toList()) {
+        final entry = Map<String, dynamic>.from(deliveries[id] as Map);
+        final claimedAt = entry['claimedAt'] as int?;
+        if (deliveredNoteIds.contains(id) || entry['submitted'] == true) {
+          shown.add(id);
+          deliveries.remove(id);
+        } else if (claimedAt != null) {
+          if (!recoverExpiredClaims ||
+              now - claimedAt < notificationClaimLease.inMilliseconds) continue;
+          shown.remove(id);
+          entry.remove('claimedAt');
+          deliveries[id] = entry;
+          result[id] = entry['link'] as String;
+        } else if (shown.contains(id)) {
+          deliveries.remove(id);
+        } else {
+          result[id] = entry['link'] as String;
+        }
+      }
+      if (!await prefs.setStringList(_shownNoteIdsKey, shown.toList())) {
+        throw StateError('Failed to recover notification claims');
+      }
+      await _saveDeliveries(prefs, deliveries);
+      return result;
+    });
+  }
+
+  static Future<void> commitNoteDelivery(String noteId) {
+    return _enqueueMutation(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final deliveries = _readDeliveries(prefs);
+      final value = deliveries[noteId];
+      if (value == null) return;
+      final entry = Map<String, dynamic>.from(value as Map);
+      entry['submitted'] = true;
+      deliveries[noteId] = entry;
+      await _saveDeliveries(prefs, deliveries);
+      final shown = _readIds(prefs, _shownNoteIdsKey)..add(noteId);
+      if (!await prefs.setStringList(_shownNoteIdsKey, shown.toList())) {
+        throw StateError('Failed to commit note delivery');
+      }
+      deliveries.remove(noteId);
+      await _saveDeliveries(prefs, deliveries);
+    });
+  }
+
   static Future<bool> claimUnshownNoteId(String noteId) {
     final cleaned = noteId.trim();
     if (cleaned.isEmpty) return Future<bool>.value(false);
@@ -116,6 +216,16 @@ class MessageStorage {
       final shownIds = _readIds(prefs, _shownNoteIdsKey);
       if (shownIds.contains(cleaned)) return false;
 
+      final deliveries = _readDeliveries(prefs);
+      final value = deliveries[cleaned];
+      if (value != null) {
+        final entry = Map<String, dynamic>.from(value as Map);
+        final claimedAt = entry['claimedAt'] as int?;
+        if (claimedAt != null) return false;
+        entry['claimedAt'] = DateTime.now().millisecondsSinceEpoch;
+        deliveries[cleaned] = entry;
+        await _saveDeliveries(prefs, deliveries);
+      }
       final seenIds = _readIds(prefs, _seenNoteIdsKey);
       shownIds.add(cleaned);
       seenIds.add(cleaned);
@@ -133,11 +243,18 @@ class MessageStorage {
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
       final shownIds = _readIds(prefs, _shownNoteIdsKey);
-      if (!shownIds.remove(cleaned)) return;
+      shownIds.remove(cleaned);
       final saved =
           await prefs.setStringList(_shownNoteIdsKey, shownIds.toList());
       if (!saved) {
         throw StateError('Failed to release claimed note ID');
+      }
+      final deliveries = _readDeliveries(prefs);
+      final value = deliveries[cleaned];
+      if (value != null) {
+        final entry = Map<String, dynamic>.from(value as Map)..remove('claimedAt');
+        deliveries[cleaned] = entry;
+        await _saveDeliveries(prefs, deliveries);
       }
     });
   }
@@ -240,6 +357,9 @@ class MessageStorage {
     return _enqueueMutation(() async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
+      final deliveries = _readDeliveries(prefs);
+      deliveries.removeWhere((id, _) => cleaned.contains(id));
+      await _saveDeliveries(prefs, deliveries);
       final shownIds = _readIds(prefs, _shownNoteIdsKey)..addAll(cleaned);
       final seenIds = _readIds(prefs, _seenNoteIdsKey)..addAll(cleaned);
       await prefs.setStringList(_shownNoteIdsKey, shownIds.toList());
@@ -266,6 +386,7 @@ class MessageStorage {
       await prefs.remove(_shownNoteIdsKey);
       await prefs.remove(_seenNoteIdsKey);
       await prefs.remove(_pendingUnreadRestoresKey);
+      await prefs.remove(_pendingDeliveriesKey);
     });
   }
 }

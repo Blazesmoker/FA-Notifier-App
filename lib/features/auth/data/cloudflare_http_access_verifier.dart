@@ -63,7 +63,10 @@ class CloudflareHttpAccessVerifier {
           '[Cloudflare] HTTP verification attempt ${attempt + 1} for $url => '
           'status=${response.statusCode}, challenge=$isChallenge',
         );
-        if (!isChallenge) {
+        if (!isChallenge &&
+            response.statusCode >= 200 &&
+            response.statusCode < 300 &&
+            response.body.trim().isNotEmpty) {
           return true;
         }
       } catch (e) {

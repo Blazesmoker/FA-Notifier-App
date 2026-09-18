@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:fanotifier/app/background/background_telemetry_upload.dart';
+
 import 'package:app_links/app_links.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -90,6 +92,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (_isLifecycleResumed) {
       _setAppActive(true);
       _startActiveHeartbeat();
+      unawaited(BackgroundTelemetryUpload.flush());
     }
     _checkForUpdateOnAppStart();
   }
@@ -127,6 +130,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _activeHeartbeatTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (_isLifecycleResumed) {
         _setAppActive(true, resetBadge: false);
+        unawaited(BackgroundTelemetryUpload.flush());
       }
     });
   }
@@ -148,6 +152,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         _isLifecycleResumed = true;
         _setAppActive(true);
         _startActiveHeartbeat();
+        unawaited(BackgroundTelemetryUpload.flush());
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           await appNotificationNavigation.processPending(
             from: 'app_lifecycle_resumed',

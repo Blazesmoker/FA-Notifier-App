@@ -2,18 +2,16 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'package:fanotifier/core/logging/app_logging.dart';
-import 'package:fanotifier/core/analytics/app_analytics.dart';
-import 'package:fanotifier/core/crash_reporting/app_crash_reporter.dart';
+import 'package:fanotifier/core/analytics/notification_analytics_models.dart';
+import 'package:fanotifier/core/analytics/background_run_telemetry.dart';
 import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 import 'package:fanotifier/core/network/fresh_http_overrides.dart';
 import 'package:fanotifier/core/preferences/app_foreground_state_preference.dart';
-import 'package:fanotifier/core/preferences/privacy_settings_preference.dart';
 import 'package:fanotifier/features/drawer/data/app_update_service.dart';
 import 'package:fanotifier/features/notes/data/background_inbox_service.dart';
 import 'package:fanotifier/features/notes/data/background_note_content_service.dart';
@@ -72,14 +70,13 @@ class BackgroundNotificationExecutionCancellation {
     final cancelToken = CancelToken();
     _dioCancelTokens.add(cancelToken);
     try {
-      final future = operation(cancelToken);
-      if (finishBy == null) return await future;
+      if (finishBy == null) return await operation(cancelToken);
       final timeout = finishBy.difference(DateTime.now());
       if (timeout <= Duration.zero) {
         if (!cancelToken.isCancelled) cancelToken.cancel(timeoutReason);
         throw TimeoutException(timeoutReason);
       }
-      return await future.timeout(
+      return await operation(cancelToken).timeout(
         timeout,
         onTimeout: () {
           if (!cancelToken.isCancelled) cancelToken.cancel(timeoutReason);
@@ -107,11 +104,11 @@ class _BackgroundNotificationRunResult {
 class _NoteDeliveryWindow {
   const _NoteDeliveryWindow(this.taskDeadline);
 
-  static const Duration _closingAllowance = Duration(milliseconds: 900);
-  static const Duration _noticeBaseAllowance = Duration(milliseconds: 500);
-  static const int _noticeAllowanceMilliseconds = 250;
+  static const Duration _closingAllowance = Duration(seconds: 2);
+  static const Duration _noticeBaseAllowance = Duration(seconds: 1);
+  static const int _noticeAllowanceMilliseconds = 500;
   static const Duration _contentAttemptAllowance = Duration(seconds: 4);
-  static const Duration _unreadWorkAllowance = Duration(seconds: 4);
+  static const Duration _unreadWorkAllowance = Duration(seconds: 7);
 
   final DateTime? taskDeadline;
 
@@ -129,6 +126,13 @@ class _NoteDeliveryWindow {
 
   DateTime? contentFinishBy(int noticesWaiting) {
     return unreadFinishBy(noticesWaiting)?.subtract(_unreadWorkAllowance);
+  }
+
+  DateTime? contentAttemptFinishBy(int noticesWaiting) {
+    final phaseDeadline = contentFinishBy(noticesWaiting);
+    if (phaseDeadline == null) return null;
+    final attemptDeadline = DateTime.now().add(_contentAttemptAllowance);
+    return attemptDeadline.isBefore(phaseDeadline) ? attemptDeadline : phaseDeadline;
   }
 
   bool canFetchFullNote(
@@ -177,7 +181,7 @@ class BackgroundNotificationWorker {
       ActivityCountChangePolicy();
   static const Duration _backgroundUpdatePreflightTimeout =
       Duration(seconds: 5);
-  static const Duration _iosTaskCompletionTimeout = Duration(seconds: 29);
+  static const Duration _iosTaskCompletionTimeout = Duration(seconds: 25);
   static const MethodChannel _backgroundFetchChannel =
       MethodChannel('app.background_fetch');
 
@@ -190,7 +194,7 @@ class BackgroundNotificationWorker {
   final background_scheduler.AdaptiveBackgroundFetchScheduler
       adaptiveBackgroundFetchScheduler;
   final AppForegroundStatePreference appForegroundStatePreference;
-  bool _notificationShownThisRun = false;
+  late BackgroundRunTelemetry _telemetry;
 
   Future<bool> _restorePendingUnreadBatch({
     required BackgroundNotificationExecutionCancellation cancellation,
@@ -207,6 +211,8 @@ class BackgroundNotificationWorker {
         .toList(growable: false);
     if (noteIds.isEmpty) return true;
 
+    _telemetry.setValue('unread_attempted', noteIds.length);
+    await _telemetry.stage('unread_restore');
     appLog(
       '[BG_NOTE_UNREAD] phase=bulk_attempt_start count=${noteIds.length}',
     );
@@ -226,7 +232,12 @@ class BackgroundNotificationWorker {
         'outcome=${result.outcome.name} '
         'durationMs=${result.duration.inMilliseconds}',
       );
-      if (!result.success) return false;
+      _telemetry.setValue('unread_status', result.statusCode ?? 0);
+      if (!result.success) {
+        await _telemetry.error(StateError('Unread restoration failed'), StackTrace.current);
+        return false;
+      }
+      _telemetry.setValue('unread_restored', noteIds.length);
       try {
         await MessageStorage.removePendingUnreadRestores(noteIds);
         appLog(
@@ -234,15 +245,17 @@ class BackgroundNotificationWorker {
           'count=${noteIds.length}',
         );
         return true;
-      } catch (error) {
+      } catch (error, stack) {
+        await _telemetry.error(error, stack);
         appLog(
           '[BG_NOTE_UNREAD] phase=bulk_pending_clear_failed '
           'count=${noteIds.length} error=${error.runtimeType}',
         );
         return false;
       }
-    } catch (error) {
+    } catch (error, stack) {
       cancellation.throwIfCancelled();
+      await _telemetry.error(error, stack);
       appLog(
         '[BG_NOTE_UNREAD] phase=bulk_attempt_end count=${noteIds.length} '
         'confirmed=false status=none outcome=${error.runtimeType} '
@@ -258,6 +271,12 @@ class BackgroundNotificationWorker {
       return subject;
     }
     return 'Open FA Notifier to read this note.';
+  }
+
+  Future<void> _completeNotificationSubmission(Future<void> submission) {
+    return Platform.isIOS
+        ? submission.timeout(const Duration(seconds: 1))
+        : submission;
   }
 
   Future<bool> _deliverPreparedNoteAlert({
@@ -292,20 +311,19 @@ class BackgroundNotificationWorker {
       final sender = alert.message.sender.trim();
       final titleSender = sender.isEmpty ? 'Unknown sender' : sender;
       final notificationStopwatch = Stopwatch()..start();
-      await notificationService.showNotification(
+      await _completeNotificationSubmission(notificationService.showNotification(
         notificationId,
         'New Note from $titleSender',
         hasRichBody ? richBody : _fallbackNoteBody(alert),
         'note_$noteId',
         'notes',
         badgeNumber: badgeNumber,
-      );
+        isCancelled: () => cancellation.isCancelled,
+      ));
       notificationShown = true;
-      _notificationShownThisRun = true;
-      await appAnalytics.logNotificationDisplayed(
-        executionContext: NotificationExecutionContext.backgroundPeriodic,
-        notificationType: 'note',
-      );
+      await MessageStorage.commitNoteDelivery(noteId);
+      cancellation.throwIfCancelled();
+      await _telemetry.submitted('note');
       notificationStopwatch.stop();
       await notification_badge.commitIOSNoteBadgeNumber(badgeNumber);
       appLog(
@@ -315,8 +333,9 @@ class BackgroundNotificationWorker {
       );
       cancellation.throwIfCancelled();
       return true;
-    } catch (error) {
-      if (claimed && !notificationShown) {
+    } catch (error, stack) {
+      await _telemetry.error(error, stack);
+      if (claimed && !notificationShown && error is! TimeoutException) {
         try {
           await MessageStorage.releaseClaimedNoteId(noteId);
           appLog(
@@ -504,7 +523,7 @@ class BackgroundNotificationWorker {
           );
           final badgeNumber = await notification_badge
               .nextIOSActivityBadgeNumberForNotification();
-          await notificationService.showNotification(
+          await _completeNotificationSubmission(notificationService.showNotification(
             activityNotificationId,
             'New FA Activity',
             messageBody,
@@ -516,12 +535,9 @@ class BackgroundNotificationWorker {
             badgeNumber: badgeNumber,
             validateNoteActivity: displayDecision.increasedBy.notes > 0,
             activityNoteIds: recordedDiff.noteActivityIds,
-          );
-          _notificationShownThisRun = true;
-          await appAnalytics.logNotificationDisplayed(
-            executionContext: NotificationExecutionContext.backgroundPeriodic,
-            notificationType: 'activity',
-          );
+            isCancelled: () => cancellation.isCancelled,
+          ));
+          await _telemetry.submitted('activity');
           await activitiesStateStore.markActivityNotificationShown(
             currentCounts: counts,
             body: messageBody,
@@ -550,150 +566,103 @@ class BackgroundNotificationWorker {
     );
   }
 
-  Future<bool> execute(
-    String task,
-    Map<String, dynamic>? _,
-  ) async {
-    final taskStartedAt = DateTime.now();
-    _notificationShownThisRun = false;
-    try {
-      if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp();
-      }
-      final crashlyticsEnabled =
-          (await SharedPreferences.getInstance()).getBool(
-        PrivacySettingsPreference.crashlyticsEnabledKey,
-      ) ??
-              false;
-      await appCrashReporter.initializeBackgroundIsolate(
-        collectionEnabled: crashlyticsEnabled,
-      );
-      appCrashReporter.addBreadcrumb(CrashBreadcrumb.backgroundWorkerStarted);
-    } catch (error, stackTrace) {
-      try {
-        await appCrashReporter.recordNonFatal(
-          error,
-          stackTrace,
-          reason: 'background_worker_initialization_failed',
-          executionContext: 'background_periodic',
-        );
-      } catch (_) {}
-      return false;
-    }
-    final taskDeadline = Platform.isIOS
-        ? taskStartedAt.add(_iosTaskCompletionTimeout)
-        : null;
+  Future<bool> execute(String task, Map<String, dynamic>? _) async {
+    final startedAt = DateTime.now();
+    var deadline = Platform.isIOS ? startedAt.add(_iosTaskCompletionTimeout) : null;
     final cancellation = BackgroundNotificationExecutionCancellation();
-    String? executionLeaseToken;
+    final expired = Completer<bool>();
+    Timer? timer;
+    String? lease;
+    var outcome = 'failed';
+    _telemetry = BackgroundRunTelemetry();
 
-    Future<void> releaseExecutionLease() async {
-      final token = executionLeaseToken;
-      if (token == null) return;
-      executionLeaseToken = null;
-      try {
-        await _backgroundFetchChannel.invokeMethod<void>(
-          'releaseExecution',
-          <String, Object>{
-            'token': token,
-          },
-        );
-      } catch (_) {}
+    void expire() {
+      outcome = 'timed_out';
+      cancellation.cancel();
+      if (!expired.isCompleted) expired.complete(false);
     }
 
-    Future<bool> runTask() async {
+    if (Platform.isIOS) timer = Timer(_iosTaskCompletionTimeout, expire);
+
+    Future<bool> run() async {
+      await _telemetry.start().timeout(
+        const Duration(milliseconds: 500), onTimeout: () {},
+      );
+      cancellation.throwIfCancelled();
       if (Platform.isIOS) {
+        _backgroundFetchChannel.setMethodCallHandler((call) async {
+          if (call.method == 'cancelRun') expire();
+        });
+        final context = await _backgroundFetchChannel
+            .invokeMapMethod<String, dynamic>('executionContext')
+            .timeout(const Duration(seconds: 1));
+        cancellation.throwIfCancelled();
+        if (context != null) {
+          _telemetry.setValue('launch_context', context['launch_context'] as String? ?? 'unknown');
+          final remaining = context['remaining_ms'] as int?;
+          if (remaining != null) {
+            final nativeDeadline = DateTime.now().add(Duration(milliseconds: remaining));
+            if (nativeDeadline.isBefore(deadline!)) deadline = nativeDeadline;
+            timer?.cancel();
+            final budget = deadline!.difference(DateTime.now());
+            timer = Timer(budget > Duration.zero ? budget : Duration.zero, expire);
+            if (budget <= Duration.zero) {
+              expire();
+              cancellation.throwIfCancelled();
+            }
+          }
+        }
+        lease = await _backgroundFetchChannel.invokeMethod<String>('acquireExecution')
+            .timeout(const Duration(seconds: 1));
+        cancellation.throwIfCancelled();
+        if (lease == null) {
+          outcome = 'skipped_lease';
+          return true;
+        }
+      }
+      final result = await _executeInternal(task,
+        cancellation: cancellation, taskDeadline: deadline);
+      cancellation.throwIfCancelled();
+      outcome = result.analyticsOutcome?.analyticsValue ?? switch (result.contentOutcome) {
+        background_scheduler.BackgroundContentFetchOutcome.newContent => 'content_found',
+        background_scheduler.BackgroundContentFetchOutcome.emptySuccess => 'empty',
+        background_scheduler.BackgroundContentFetchOutcome.failed => 'failed',
+        null => 'skipped',
+      };
+      if (result.contentOutcome != null) {
         try {
-          executionLeaseToken = await _backgroundFetchChannel
-              .invokeMethod<String>('acquireExecution');
-          if (executionLeaseToken == null) {
-            appLog('[BG] iOS execution lease unavailable; task skipped.');
-            return true;
-          }
-        } catch (error) {
-          appLog(
-            '[BG] iOS execution lease channel unavailable; continuing with '
-            'the standard Workmanager task: ${error.runtimeType}',
-          );
+          await adaptiveBackgroundFetchScheduler.recordContentFetchOutcome(result.contentOutcome!)
+              .timeout(const Duration(milliseconds: 500));
+        } catch (error, stack) {
+          await _telemetry.error(error, stack);
         }
       }
-
-      try {
-        final runResult = await _executeInternal(
-          task,
-          cancellation: cancellation,
-          taskDeadline: taskDeadline,
-        );
-        final contentOutcome = runResult.contentOutcome;
-        if (contentOutcome != null) {
-          try {
-            await adaptiveBackgroundFetchScheduler
-                .recordContentFetchOutcome(contentOutcome);
-          } catch (error) {
-            appLog(
-              '[BG] Failed to persist background cadence outcome: '
-              '${error.runtimeType}',
-            );
-          }
-        }
-        final contentAnalyticsOutcome = switch (contentOutcome) {
-          background_scheduler.BackgroundContentFetchOutcome.newContent =>
-            NotificationCheckOutcome.contentFound,
-          background_scheduler.BackgroundContentFetchOutcome.emptySuccess =>
-            NotificationCheckOutcome.empty,
-          background_scheduler.BackgroundContentFetchOutcome.failed =>
-            NotificationCheckOutcome.failed,
-          null => _notificationShownThisRun
-              ? NotificationCheckOutcome.contentFound
-              : NotificationCheckOutcome.empty,
-        };
-        final analyticsOutcome =
-            runResult.analyticsOutcome ?? contentAnalyticsOutcome;
-        await appAnalytics.logNotificationCheckCompleted(
-          executionContext: NotificationExecutionContext.backgroundPeriodic,
-          triggerSource: 'workmanager',
-          outcome: analyticsOutcome,
-          notificationShown: _notificationShownThisRun,
-          durationMilliseconds:
-              DateTime.now().difference(taskStartedAt).inMilliseconds,
-        );
-        return runResult.success;
-      } on BackgroundNotificationExecutionCancelled {
-        await appAnalytics.logNotificationCheckCompleted(
-          executionContext: NotificationExecutionContext.backgroundPeriodic,
-          triggerSource: 'workmanager',
-          outcome: NotificationCheckOutcome.cancelled,
-          notificationShown: _notificationShownThisRun,
-          durationMilliseconds:
-              DateTime.now().difference(taskStartedAt).inMilliseconds,
-        );
-        return false;
-      } finally {
-        await releaseExecutionLease();
-      }
+      return result.success;
     }
 
-    final taskFuture = runTask();
-    if (!Platform.isIOS) return taskFuture;
-    return taskFuture.timeout(
-      _iosTaskCompletionTimeout,
-      onTimeout: () async {
-        appLog(
-          '[BG] iOS task reached the 29s completion limit; '
-          'cancelling work and completing successfully.',
-        );
-        cancellation.cancel();
-        await releaseExecutionLease();
-        await appAnalytics.logNotificationCheckCompleted(
-          executionContext: NotificationExecutionContext.backgroundPeriodic,
-          triggerSource: 'workmanager',
-          outcome: NotificationCheckOutcome.timedOut,
-          notificationShown: _notificationShownThisRun,
-          durationMilliseconds:
-              DateTime.now().difference(taskStartedAt).inMilliseconds,
-        );
-        return true;
-      },
-    );
+    final work = run().catchError((Object error, StackTrace stack) async {
+      if (!cancellation.isCancelled) {
+        await _telemetry.error(error, stack);
+        outcome = 'failed';
+      }
+      return false;
+    });
+    try {
+      return Platform.isIOS ? await Future.any([work, expired.future]) : await work;
+    } finally {
+      timer?.cancel();
+      cancellation.cancel();
+      await _telemetry.finish(outcome);
+      if (Platform.isIOS) {
+        _backgroundFetchChannel.setMethodCallHandler(null);
+        if (lease != null) {
+          try {
+            await _backgroundFetchChannel.invokeMethod<void>('releaseExecution', {'token': lease})
+                .timeout(const Duration(milliseconds: 500));
+          } catch (_) {}
+        }
+      }
+    }
   }
 
   Future<_BackgroundNotificationRunResult> _executeInternal(
@@ -723,10 +692,12 @@ class BackgroundNotificationWorker {
         await prefs.reload();
         appLog('[BG] SharedPreferences loaded successfully');
         await FAHttp.initFromPrefs(prefs: prefs);
+        _telemetry.setValue('source_app_version', FAHttp.appVersion);
         cancellation.throwIfCancelled();
         HttpOverrides.global = FreshHttpOverrides();
-      } catch (e) {
+      } catch (e, stack) {
         cancellation.throwIfCancelled();
+        await _telemetry.error(e, stack);
         appLog('[BG ERROR] Failed to load SharedPreferences: $e');
         return const _BackgroundNotificationRunResult(
           success: false,
@@ -754,16 +725,13 @@ class BackgroundNotificationWorker {
         kDebugPrint('[BG] Headless background worker is running.');
         try {
           cancellation.throwIfCancelled();
-          final backgroundUpdateInfo = await _loadBackgroundUpdateInfo(
-            cancellation,
-          );
+          await _telemetry.stage('github_preflight');
+          final backgroundUpdateInfo = await _loadBackgroundUpdateInfo(cancellation);
           cancellation.throwIfCancelled();
           if (backgroundUpdateInfo?.currentVersionAllowed == false) {
-            appLog('[BG] Current app version is not allowed - skipping fetch');
+            await _telemetry.stage('blocked_version');
             await _showBackgroundUpdateNotificationIfNeeded(
-              notificationService,
-              prefs,
-              cancellation,
+              notificationService, prefs, cancellation,
               updateInfo: backgroundUpdateInfo,
             );
             return const _BackgroundNotificationRunResult(success: true);
@@ -771,6 +739,7 @@ class BackgroundNotificationWorker {
           bool didFirstRunSkip = prefs.getBool('did_first_run_skip') ?? false;
           appLog('[BG] First run skip status: $didFirstRunSkip');
           if (!didFirstRunSkip) {
+            await _telemetry.stage('first_run_skip');
             appLog('[BG] First run not complete - skipping notifications');
             return const _BackgroundNotificationRunResult(success: true);
           }
@@ -784,6 +753,25 @@ class BackgroundNotificationWorker {
                 analyticsOutcome: NotificationCheckOutcome.skippedAppActive,
               );
             }
+            final pendingDeliveries = await MessageStorage.getPendingNoteDeliveries();
+            var activeIds = <int>{};
+            var canRecoverClaims = true;
+            if (pendingDeliveries.isNotEmpty) {
+              try {
+                activeIds = await notificationService.getActiveNotificationIds()
+                    .timeout(const Duration(seconds: 1));
+              } catch (error, stack) {
+                canRecoverClaims = false;
+                await _telemetry.error(error, stack);
+              }
+            }
+            final recoveredDeliveries = await MessageStorage.recoverPendingNoteDeliveries(
+              recoverExpiredClaims: canRecoverClaims,
+              deliveredNoteIds: pendingDeliveries.keys.where((id) =>
+                  activeIds.contains(stableNotificationIdFromString(id))).toSet(),
+            );
+            cancellation.throwIfCancelled();
+            await _telemetry.stage('inbox');
             final Set<String> shownSet = await MessageStorage.getShownNoteIds();
             final Set<String> seenSet = await MessageStorage.getSeenNoteIds();
             cancellation.throwIfCancelled();
@@ -794,12 +782,19 @@ class BackgroundNotificationWorker {
                 : <String>{};
             final inboxStopwatch = Stopwatch()..start();
             final inboxStartedAt = DateTime.now().millisecondsSinceEpoch;
-            final BackgroundInboxSnapshot snapshot =
-                await fetchBackgroundInboxSnapshot(
+            var inboxCancelled = false;
+            final snapshotFuture = fetchBackgroundInboxSnapshot(
               shownNoteIds: shownSet,
               seenNoteIds: seenSet,
-              isCancelled: () => cancellation.isCancelled,
+              isCancelled: () => cancellation.isCancelled || inboxCancelled,
             );
+            final BackgroundInboxSnapshot snapshot = Platform.isIOS
+                ? await snapshotFuture.timeout(const Duration(seconds: 8), onTimeout: () {
+                    inboxCancelled = true;
+                    FAHttp.reset();
+                    throw TimeoutException('Background inbox budget expired');
+                  })
+                : await snapshotFuture;
             cancellation.throwIfCancelled();
             inboxStopwatch.stop();
             final List<Message> fetchedInbox = snapshot.messages;
@@ -825,36 +820,40 @@ class BackgroundNotificationWorker {
               appLog('[BG] Page 1 topbar counts unavailable.');
             }
 
-            appLog('[BG] === Starting NOTIFICATION COUNTS CHECK ===');
-            try {
-              final activityResult = await _processActivitySnapshot(
-                counts: currentCounts,
-                noteActivitySnapshot: NoteActivitySnapshot(
-                  messages: fetchedInbox,
-                  startedAtMilliseconds: inboxStartedAt,
-                  unreadCount: currentCounts?.notes ?? 0,
-                ),
-                preserveUnreadNotes: pendingUnreadNoteIds.isNotEmpty,
-                temporarilyReadNotes: fetchedInbox
-                    .where((message) => !message.isUnread &&
-                        pendingUnreadNoteIds.contains(message.id))
-                    .map((message) => message.id)
-                    .toSet()
-                    .length,
-                notificationService: notificationService,
-                prefs: prefs,
-                cancellation: cancellation,
-              );
-              didCompleteActivitiesCheck = activityResult.completed;
-              if (activityResult.foundNewContent) {
-                didFindNewNotificationContent = true;
+            if (deliveryWindow.canShowUpdateNotification) {
+              await _telemetry.stage('activity');
+              appLog('[BG] === Starting NOTIFICATION COUNTS CHECK ===');
+              try {
+                final activityResult = await _processActivitySnapshot(
+                  counts: currentCounts,
+                  noteActivitySnapshot: NoteActivitySnapshot(
+                    messages: fetchedInbox,
+                    startedAtMilliseconds: inboxStartedAt,
+                    unreadCount: currentCounts?.notes ?? 0,
+                  ),
+                  preserveUnreadNotes: pendingUnreadNoteIds.isNotEmpty,
+                  temporarilyReadNotes: fetchedInbox
+                      .where((message) => !message.isUnread &&
+                          pendingUnreadNoteIds.contains(message.id))
+                      .map((message) => message.id)
+                      .toSet()
+                      .length,
+                  notificationService: notificationService,
+                  prefs: prefs,
+                  cancellation: cancellation,
+                );
+                didCompleteActivitiesCheck = activityResult.completed;
+                if (activityResult.foundNewContent) {
+                  didFindNewNotificationContent = true;
+                }
+              } on BackgroundNotificationExecutionCancelled {
+                rethrow;
+              } catch (error, stack) {
+                await _telemetry.error(error, stack);
+                appLog(
+                  '[BG ERROR] Notification counts check failed: $error',
+                );
               }
-            } on BackgroundNotificationExecutionCancelled {
-              rethrow;
-            } catch (error) {
-              appLog(
-                '[BG ERROR] Notification counts check failed: $error',
-              );
             }
 
             await prefs.reload();
@@ -877,6 +876,22 @@ class BackgroundNotificationWorker {
               didFindNewNotificationContent = true;
             }
             kDebugPrint('[BG] New unread messages: ${newNotes.length}');
+            final selectedIds = newNotes.map((message) => message.id).toSet();
+            for (final entry in recoveredDeliveries.entries) {
+              if (!selectedIds.add(entry.key)) continue;
+              final matches = fetchedInbox.where((message) => message.id == entry.key);
+              newNotes.add(matches.isNotEmpty ? matches.first : Message(
+                id: entry.key, link: entry.value, subject: '', sender: '',
+                recipient: '', date: '', isUnread: false,
+              ));
+            }
+            for (final message in newNotes) {
+              cancellation.throwIfCancelled();
+              await MessageStorage.queueNoteDelivery(noteId: message.id, link: message.link);
+            }
+            if (newNotes.isNotEmpty) didFindNewNotificationContent = true;
+            _telemetry.setValue('notes_detected', newNotes.length);
+            await _telemetry.stage('note_content');
             final alerts = newNotes
                 .map((message) => _PreparedNoteAlert(message: message))
                 .toList(growable: false);
@@ -898,6 +913,7 @@ class BackgroundNotificationWorker {
               }
 
               final message = alert.message;
+              if (!message.isUnread) continue;
               kDebugPrint(
                 '[BG] Fetching message content: ${message.id} '
                 'from ${message.sender}',
@@ -911,7 +927,8 @@ class BackgroundNotificationWorker {
                   '[BG_NOTE_UNREAD] noteId=${message.id} source=new_note '
                   'phase=pending_persisted',
                 );
-              } catch (error) {
+              } catch (error, stack) {
+                await _telemetry.error(error, stack);
                 appLog(
                   '[BG_NOTE_CONTENT] noteId=${message.id} '
                   'phase=prepare_failed error=${error.runtimeType}',
@@ -926,7 +943,7 @@ class BackgroundNotificationWorker {
                     message.link,
                     cancelToken: cancelToken,
                   ),
-                  finishBy: deliveryWindow.contentFinishBy(alerts.length),
+                  finishBy: deliveryWindow.contentAttemptFinishBy(alerts.length),
                   timeoutReason: 'Note content budget expired',
                 );
                 cancellation.throwIfCancelled();
@@ -941,8 +958,9 @@ class BackgroundNotificationWorker {
                   'bodyLength=${fetchedContent.length}',
                 );
                 if (trimmedContent.isEmpty) break;
-              } catch (error) {
+              } catch (error, stack) {
                 cancellation.throwIfCancelled();
+                await _telemetry.error(error, stack);
                 contentStopwatch.stop();
                 appLog(
                   '[BG_NOTE_CONTENT] noteId=${message.id} success=false '
@@ -969,6 +987,7 @@ class BackgroundNotificationWorker {
               );
             }
 
+            await _telemetry.stage('note_delivery');
             final allNotesDelivered = await _deliverPreparedNoteAlerts(
               alerts: alerts,
               deliveryWindow: deliveryWindow,
@@ -991,8 +1010,15 @@ class BackgroundNotificationWorker {
             didCompleteNotesCheck = !noteProcessingFailed;
           } on BackgroundNotificationExecutionCancelled {
             rethrow;
-          } catch (e) {
+          } catch (e, stack) {
+            await _telemetry.error(e, stack);
             appLog('[BG ERROR] Notes check failed: $e');
+            if (!didCompleteUnreadRestoration) {
+              didCompleteUnreadRestoration = await _restorePendingUnreadBatch(
+                cancellation: cancellation,
+                finishBy: deliveryWindow.unreadFinishBy(0),
+              );
+            }
           }
           cancellation.throwIfCancelled();
           final didCompleteContentFetch = didCompleteNotesCheck &&
@@ -1007,6 +1033,7 @@ class BackgroundNotificationWorker {
               : background_scheduler.BackgroundContentFetchOutcome.failed;
           if (deliveryWindow.canShowUpdateNotification) {
             try {
+              cancellation.throwIfCancelled();
               await _showBackgroundUpdateNotificationIfNeeded(
                 notificationService,
                 prefs,
@@ -1029,12 +1056,7 @@ class BackgroundNotificationWorker {
         } catch (e, stackTrace) {
           appLog('[BG ERROR] Task failed: $e');
           kDebugPrint('[BG ERROR] Stack: $stackTrace');
-          await appCrashReporter.recordNonFatal(
-            e,
-            stackTrace,
-            reason: 'background_notification_task_failed',
-            executionContext: 'background_periodic',
-          );
+          await _telemetry.error(e, stackTrace);
           if (e.toString().contains('network') ||
               e.toString().contains('timeout') ||
               e.toString().contains('connection') ||
@@ -1058,7 +1080,8 @@ class BackgroundNotificationWorker {
       return const _BackgroundNotificationRunResult(success: true);
     } on BackgroundNotificationExecutionCancelled {
       rethrow;
-    } catch (e) {
+    } catch (e, stack) {
+      await _telemetry.error(e, stack);
       appLog('[BG FATAL ERROR] Callback dispatcher crash: $e');
       return const _BackgroundNotificationRunResult(
         success: false,
@@ -1071,24 +1094,14 @@ class BackgroundNotificationWorker {
   Future<AppUpdateInfo?> _loadBackgroundUpdateInfo(
     BackgroundNotificationExecutionCancellation cancellation,
   ) async {
-    final githubCancelToken = CancelToken();
     try {
-      cancellation.throwIfCancelled();
-      final updateInfo = await fetchLatestAppUpdateInfo(
-        forceRefresh: true,
-        cancelToken: githubCancelToken,
-      ).timeout(
-        _backgroundUpdatePreflightTimeout,
-        onTimeout: () {
-          if (!githubCancelToken.isCancelled) {
-            githubCancelToken.cancel('Background update preflight timed out');
-          }
-          appLog(
-            '[BG] GitHub version preflight exceeded 5s; '
-            'continuing with the FA fetch.',
-          );
-          return null;
-        },
+      final updateInfo = await cancellation.runDioOperation(
+        (cancelToken) => fetchLatestAppUpdateInfo(
+          forceRefresh: true,
+          cancelToken: cancelToken,
+        ),
+        finishBy: DateTime.now().add(_backgroundUpdatePreflightTimeout),
+        timeoutReason: 'Background update check timed out',
       );
       cancellation.throwIfCancelled();
       return updateInfo;
@@ -1096,10 +1109,7 @@ class BackgroundNotificationWorker {
       rethrow;
     } catch (error) {
       cancellation.throwIfCancelled();
-      appLog(
-        '[BG] GitHub version preflight failed; continuing with the FA fetch: '
-        '${error.runtimeType}',
-      );
+      appLog('[BG] GitHub preflight unavailable; continuing with FA fetch: ${error.runtimeType}');
       return null;
     }
   }
@@ -1121,18 +1131,15 @@ class BackgroundNotificationWorker {
       if (prefs.getBool(shownKey) ?? false) return;
       if (appForegroundStatePreference.isAppForegroundActive(prefs)) return;
 
-      await notificationService.showNotification(
+      await _completeNotificationSubmission(notificationService.showNotification(
         NotificationService.appUpdateNotificationId,
         'New Update Available!',
         'Tap to open FA Notifier.',
         NotificationService.appUpdatePayload,
         'updates',
-      );
-      _notificationShownThisRun = true;
-      await appAnalytics.logNotificationDisplayed(
-        executionContext: NotificationExecutionContext.backgroundPeriodic,
-        notificationType: 'update',
-      );
+        isCancelled: () => cancellation.isCancelled,
+      ));
+      await _telemetry.submitted('update');
       cancellation.throwIfCancelled();
       await prefs.setBool(shownKey, true);
       appLog(
@@ -1142,6 +1149,7 @@ class BackgroundNotificationWorker {
     } on BackgroundNotificationExecutionCancelled {
       rethrow;
     } catch (e, st) {
+      await _telemetry.error(e, st);
       appLog('[BG ERROR] Update notification check failed: $e');
       kDebugPrint('[BG ERROR] Update notification stack: $st');
     }

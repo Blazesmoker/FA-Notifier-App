@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:fanotifier/core/analytics/background_run_telemetry.dart';
 
 import 'package:fanotifier/core/analytics/app_analytics.dart';
 import 'package:fanotifier/core/crash_reporting/app_crash_reporter.dart';
@@ -48,6 +49,7 @@ class PrivacySettingsProvider extends ChangeNotifier {
 
   Future<void> setAnalyticsEnabled(bool enabled) async {
     await _preference.saveAnalyticsEnabled(enabled);
+    if (!enabled) await BackgroundRunTelemetry.revoke(analytics: true);
     _analyticsEnabled = enabled;
     notifyListeners();
     await _analytics.applyPrivacyConsent(enabled);
@@ -55,6 +57,7 @@ class PrivacySettingsProvider extends ChangeNotifier {
 
   Future<void> setCrashlyticsEnabled(bool enabled) async {
     await _preference.saveCrashlyticsEnabled(enabled);
+    if (!enabled) await BackgroundRunTelemetry.revoke(analytics: false);
     _crashlyticsEnabled = enabled;
     notifyListeners();
     await _crashReporter.setCollectionEnabled(enabled);
@@ -67,6 +70,8 @@ class PrivacySettingsProvider extends ChangeNotifier {
     await _preference.saveAnalyticsEnabled(analyticsEnabled);
     await _preference.saveCrashlyticsEnabled(crashlyticsEnabled);
     await _preference.saveConsentShown(true);
+    if (!analyticsEnabled) await BackgroundRunTelemetry.revoke(analytics: true);
+    if (!crashlyticsEnabled) await BackgroundRunTelemetry.revoke(analytics: false);
     _analyticsEnabled = analyticsEnabled;
     _crashlyticsEnabled = crashlyticsEnabled;
     _consentShown = true;

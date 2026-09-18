@@ -68,8 +68,8 @@ class FaCookieHelper {
       return true;
     }
     return lower.contains('<title>just a moment...</title>') ||
-        lower.contains('cf-turnstile-response') ||
-        lower.contains('/cdn-cgi/challenge-platform') ||
+        lower.contains('id="challenge-form"') ||
+        lower.contains("id='challenge-form'") ||
         lower.contains('verify you are human') ||
         lower.contains('needs to review the security of your connection');
   }
