@@ -34,7 +34,7 @@ dependencies:
 
   http: ^1.6.0
   http_parser: ^4.1.2
-  html: 0.15.7
+  html: 0.15.6
 
   #cached_network_image: ^3.4.1
 
