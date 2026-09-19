@@ -6,7 +6,7 @@ import 'package:fanotifier/features/notes/data/manual_note_activity_store.dart';
 import 'package:fanotifier/features/notes/data/note_unread_service.dart';
 import 'package:fanotifier/features/notes/data/notes_first_run_preference.dart';
 import 'package:fanotifier/features/notes/data/notes_unread_notification_service.dart';
-import 'package:fanotifier/features/notes/data/notesscreen_api_service.dart';
+import 'package:fanotifier/features/notes/data/notes_api_service.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/features/notes/domain/note_activity_snapshot.dart';
 import 'package:fanotifier/features/notes/domain/note_management.dart';

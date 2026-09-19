@@ -1,5 +1,5 @@
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
-import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
 import 'package:fanotifier/features/notifications/domain/notification_section_kind.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_tab_badge_value.dart';
@@ -11,7 +11,7 @@ class NotificationActivitiesController {
     required this._pollingService,
   });
 
-  FANotificationService _service;
+  FaNotificationsController _service;
   final FaActivitiesPollingPort _pollingService;
   bool _didAutoRefetch = false;
 
@@ -20,7 +20,7 @@ class NotificationActivitiesController {
   bool get showInitialLoading => !hasFetched && sections.isEmpty;
   String? get currentUsernameFromLink => _service.currentUsernameFromLink;
 
-  void updateService(FANotificationService service) {
+  void updateService(FaNotificationsController service) {
     _service = service;
   }
 

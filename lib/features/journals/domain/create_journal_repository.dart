@@ -1,7 +1,7 @@
 abstract interface class CreateJournalRepository {
   Future<void> prepareWebViewSession();
 
-  String buildInitialUrl(String? uniqueNumber);
+  String buildInitialUrl(String? journalId);
 
   bool isJournalFinalizeUrl(String? url);
 

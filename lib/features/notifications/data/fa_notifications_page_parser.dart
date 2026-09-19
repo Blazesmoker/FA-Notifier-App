@@ -50,25 +50,25 @@ FaNotificationsPageSnapshot parseFaNotificationsPage(
   int registeredUsersOnline = 0;
   if (isClassic) {
     final center = document.querySelector('div.footer center');
-    final txt = center?.text ?? '';
-    final m = RegExp(
+    final onlineStatsText = center?.text ?? '';
+    final registeredUsersMatch = RegExp(
       r'(\d+)\s+registered',
       caseSensitive: false,
-    ).firstMatch(txt);
-    if (m != null) {
+    ).firstMatch(onlineStatsText);
+    if (registeredUsersMatch != null) {
       registeredUsersOnline =
-          int.tryParse(m.group(1)!.replaceAll(',', '')) ?? 0;
+          int.tryParse(registeredUsersMatch.group(1)!.replaceAll(',', '')) ?? 0;
     }
   } else {
     final statsDiv = document.querySelector('div.online-stats');
-    final txt = statsDiv?.text ?? '';
-    final m = RegExp(
+    final onlineStatsText = statsDiv?.text ?? '';
+    final registeredUsersMatch = RegExp(
       r'(\d+)\s+registered',
       caseSensitive: false,
-    ).firstMatch(txt);
-    if (m != null) {
+    ).firstMatch(onlineStatsText);
+    if (registeredUsersMatch != null) {
       registeredUsersOnline =
-          int.tryParse(m.group(1)!.replaceAll(',', '')) ?? 0;
+          int.tryParse(registeredUsersMatch.group(1)!.replaceAll(',', '')) ?? 0;
     }
   }
 

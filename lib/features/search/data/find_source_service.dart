@@ -33,13 +33,13 @@ class FindSourceService {
     final postIds = <int>{};
     double? bestScore;
 
-    void collectE621(dynamic v) {
-      if (v is Map) {
-        if (v['score'] != null && bestScore == null) {
-          bestScore = double.tryParse(v['score'].toString());
+    void collectE621(dynamic node) {
+      if (node is Map) {
+        if (node['score'] != null && bestScore == null) {
+          bestScore = double.tryParse(node['score'].toString());
         }
 
-        final source = v['source'] ?? v['post']?['posts']?['source'];
+        final source = node['source'] ?? node['post']?['posts']?['source'];
         if (source is String) {
           for (final line in source.split('\n')) {
             final link = line.trim();
@@ -51,7 +51,7 @@ class FindSourceService {
           }
         }
 
-        final postId = v['post']?['posts']?['id'];
+        final postId = node['post']?['posts']?['id'];
         if (postId != null) {
           try {
             postIds.add(int.parse(postId.toString()));
@@ -59,10 +59,10 @@ class FindSourceService {
           } catch (_) {}
         }
 
-        v.values.forEach(collectE621);
-      } else if (v is List) {
-        for (final e in v) {
-          collectE621(e);
+        node.values.forEach(collectE621);
+      } else if (node is List) {
+        for (final childNode in node) {
+          collectE621(childNode);
         }
       }
     }
@@ -124,8 +124,8 @@ class FindSourceService {
     debugPrint('Total raw sources collected: ${rawSources.length}');
     debugPrint('Total e621 post IDs: ${postIds.length}');
 
-    final hasDisallowedSource = rawSources.any((s) {
-      final uri = Uri.tryParse(s);
+    final hasDisallowedSource = rawSources.any((sourceUrl) {
+      final uri = Uri.tryParse(sourceUrl);
       if (uri == null) return true;
       final host = uri.host.toLowerCase();
       if (host.contains('e621.net')) return false;
@@ -136,15 +136,15 @@ class FindSourceService {
     final faPosts = <String>{};
     final e621Posts = <String>{};
 
-    for (final s in rawSources) {
-      if (!_isAllowed(s)) continue;
-      if (s.contains('furaffinity.net')) {
-        if (s.contains('/user/') || s.contains('/profile/')) {
-          faAuthor.add(s);
-          debugPrint('FA Author link added: $s');
+    for (final sourceUrl in rawSources) {
+      if (!_isAllowed(sourceUrl)) continue;
+      if (sourceUrl.contains('furaffinity.net')) {
+        if (sourceUrl.contains('/user/') || sourceUrl.contains('/profile/')) {
+          faAuthor.add(sourceUrl);
+          debugPrint('FA Author link added: $sourceUrl');
         } else {
-          faPosts.add(s);
-          debugPrint('FA Post link added: $s');
+          faPosts.add(sourceUrl);
+          debugPrint('FA Post link added: $sourceUrl');
         }
       }
     }

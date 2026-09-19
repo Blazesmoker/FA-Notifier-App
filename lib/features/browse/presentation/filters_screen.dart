@@ -24,10 +24,8 @@ class FiltersScreen extends StatefulWidget {
 class _FiltersScreenState extends State<FiltersScreen> {
   late Map<String, String> currentFilters;
 
-  // Tracks if filter options are loading.
   bool _isLoadingFilters = true;
 
-  // Stores the fetched filter options.
   Map<String, List<Map<String, String>>> _filterOptions = {};
 
   static const Color applyButtonColor = Color(0xFFE09321);
@@ -56,7 +54,6 @@ class _FiltersScreenState extends State<FiltersScreen> {
         selectedFilters[ContentRatingFilters.ratingMatureKey] == '1';
     _ratingAdult = selectedFilters[ContentRatingFilters.ratingAdultKey] == '1';
 
-    // Start fetching filter options.
     _fetchFilterData();
   }
 
@@ -116,7 +113,6 @@ class _FiltersScreenState extends State<FiltersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // While filters are loading, shows a loading indicator.
     if (_isLoadingFilters) {
       return Scaffold(
           appBar: AppBar(
@@ -210,7 +206,6 @@ class _FiltersScreenState extends State<FiltersScreen> {
                   const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Row(
                 children: [
-                  // Reset Button
                   Expanded(
                     child: Container(
                       height: 48,
@@ -259,7 +254,6 @@ class _FiltersScreenState extends State<FiltersScreen> {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  // Apply Button
                   Expanded(
                     child: Container(
                       height: 48,

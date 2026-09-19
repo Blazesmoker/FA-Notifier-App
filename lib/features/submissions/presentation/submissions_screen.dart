@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
-import 'package:fanotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_details_screen.dart';
 import 'package:fanotifier/features/submissions/domain/submission_list_item.dart';
 import 'package:fanotifier/features/submissions/domain/submissions_repository.dart';
 import 'package:fanotifier/features/submissions/presentation/submissions_controller.dart';
@@ -359,7 +359,6 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       itemCount: _listItems.length + (_isLoading ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == _listItems.length) {
-          // loading indicator at the bottom
           return const Padding(
             padding: EdgeInsets.only(top: 168.0),
             child: Center(
@@ -588,20 +587,20 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     );
   }
 
-  void _toggleSelection(String uniqueNumber) {
-    _controller.toggleSelection(uniqueNumber);
+  void _toggleSelection(String submissionId) {
+    _controller.toggleSelection(submissionId);
   }
 
   void _openSubmission(Map<String, dynamic> item) {
     _controller.setDetailFetchesActive(false);
     Navigator.push(
       context,
-      OpenPost.route(
+      SubmissionDetailsScreen.route(
         imageUrl:
             (item['hqUrl'] != null && (item['hqUrl'] as String).isNotEmpty)
                 ? item['hqUrl'] as String
                 : item['thumbnailUrl'] as String,
-        uniqueNumber: item['uniqueNumber'] as String,
+        submissionId: item['uniqueNumber'] as String,
       ),
     ).whenComplete(() {
       if (mounted) {

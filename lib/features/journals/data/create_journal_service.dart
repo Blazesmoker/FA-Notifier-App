@@ -3,9 +3,9 @@ class CreateJournalService {
 
   static const String finalizeUrlPrefix = 'https://www.furaffinity.net/journal/';
 
-  String buildInitialUrl(String? uniqueNumber) {
-    if (uniqueNumber != null) {
-      return 'https://www.furaffinity.net/controls/journal/1/$uniqueNumber/';
+  String buildInitialUrl(String? journalId) {
+    if (journalId != null) {
+      return 'https://www.furaffinity.net/controls/journal/1/$journalId/';
     }
     return 'https://www.furaffinity.net/controls/journal/';
   }

@@ -1,0 +1,18 @@
+import 'package:fanotifier/shared/fa/parsing_utils.dart';
+
+String? normalizeSubmissionUrl(String? value) {
+  final normalized = normalizeFaUrl(value);
+  if (normalized == null || !isTrustedSubmissionUrl(normalized)) {
+    return null;
+  }
+  return normalized;
+}
+
+bool isTrustedSubmissionUrl(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null || uri.scheme != 'https' || !uri.hasAuthority) {
+    return false;
+  }
+  final host = uri.host.toLowerCase();
+  return host == 'furaffinity.net' || host.endsWith('.furaffinity.net');
+}

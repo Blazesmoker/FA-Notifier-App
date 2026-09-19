@@ -1,10 +1,10 @@
 import 'package:material_ui/material_ui.dart';
-import 'package:fanotifier/features/journals/presentation/openjournal.dart';
+import 'package:fanotifier/features/journals/presentation/journal_details_screen.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/core/crash_reporting/app_crash_reporter.dart';
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:fanotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_details_screen.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
 
@@ -77,8 +77,8 @@ class AppFaLinkNavigator extends FaLinkNavigator {
           MaterialPageRoute(
             settings:
                 const AnalyticsRouteSettings(AppScreens.journalDetails),
-            builder: (context) => OpenJournal(
-              uniqueNumber: target.journalId!,
+            builder: (context) => JournalDetailsScreen(
+              journalId: target.journalId!,
             ),
           ),
         );
@@ -86,8 +86,8 @@ class AppFaLinkNavigator extends FaLinkNavigator {
       case FALinkTargetType.submission:
         Navigator.push(
           context,
-          OpenPost.route(
-            uniqueNumber: target.submissionId!,
+          SubmissionDetailsScreen.route(
+            submissionId: target.submissionId!,
             imageUrl: '',
           ),
         );

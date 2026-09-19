@@ -228,9 +228,6 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
                               child: CustomSingleChildLayout(
                                 delegate: _GlassLensLayout(_motion, rtl),
                                 child: FadeTransition(
-                                  // Controls the opacity of the entire glass lens.
-                                  // 0.0 = fully invisible
-                                  // 1.0 = fully visible
                                   opacity: _lensOpacity,
 
                                   child: ValueListenableBuilder<bool>(
@@ -239,109 +236,42 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
                                         glass.LiquidGlassLens(
                                       style: glass.LiquidGlassStyle(
                                         shape: glass.LiquidGlassShape.continuousRoundedRectangle(
-                                        // Corner radius of the glass shape, in logical pixels.
                                         cornerRadius: 24,
 
-                                        // Thickness of the glass rim/border in logical pixels.
-                                        // This affects the region where the border/reflection is rendered.
                                         borderWidth: 0.5,
 
-                                        // Color used for the main illuminated/reflection part of the rim.
                                         lightColor: Color(0x807A7A7A),
 
-                                        // Overall brightness multiplier for the glass lighting/reflections.
-                                        // Higher values make the rim/highlights stronger and more obvious.
                                         lightIntensity: 0.8,
 
-                                        // Direction the simulated light is coming from, in degrees.
-                                        // Changes which sides of the glass receive the strongest highlight.
                                         lightDirection: 30,
 
-                                        // Uses the Apple-style optical/SDF rim rather than a simple
-                                        // directly-colored classic border.
-                                        //
-                                        // OpticalBorder reacts to the content behind the glass and creates
-                                        // the border as part of the simulated glass surface.
                                         borderType: glass.OpticalBorder(
-                                          // Controls how broadly the directional highlight spreads
-                                          // around the perimeter.
-                                          //
-                                          // Lower = narrow/localized highlight.
-                                          // Higher = highlight extends farther around the border.
                                           lightSpread: 0.50,
 
-                                          // Adds general illumination around the whole optical rim,
-                                          // including areas that are not directly facing the light.
-                                          //
-                                          // Higher values make the entire border easier to see.
-                                          // This is useful when you want a persistent subtle outline.
                                           ambientIntensity: 0.25,
 
-                                          // Controls how "solid"/opaque the optical rim is allowed to become
-                                          // as lightIntensity increases.
-                                          //
-                                          // 0.0 = very translucent/glass-like rim.
-                                          // Higher values = more border-like, defined and opaque.
                                           borderSolidity: 0.0,
 
-                                          // Controls saturation of colors picked up from the background.
-                                          //
-                                          // 0.0 = grayscale border.
-                                          // 1.0 = preserve background saturation.
-                                          // >1.0 = boost background colors.
-                                          //
                                           // 0.0 is useful here because you want a neutral greyish rim.
                                           borderSaturation: 0.0,
                                         ),
                                       ),
 
                                       appearance: glass.LiquidGlassAppearance(
-                                        // Base tint/fill color of the glass surface.
-                                        //
-                                        // Colors.transparent means the lens itself adds no colored overlay.
-                                        // A semi-transparent color would tint the entire glass area.
                                         color: Colors.transparent,
 
-                                        // Makes the inner, non-distorted center of the lens transparent.
-                                        //
-                                        // true:
-                                        //   center stays visually untouched while edge/refraction effects
-                                        //   can still appear around the perimeter.
-                                        //
-                                        // false:
-                                        //   the appearance/tint can affect more of the full lens surface.
                                         enableInnerRadiusTransparent: true,
                                       ),
 
                                       refraction: glass.LiquidGlassRefraction(
-                                        // Strength of the background bending/distortion.
-                                        //
-                                        // 0.0 = no distortion.
-                                        // Higher values = stronger warping/refraction.
-                                        //
                                         // 0.01 is intentionally extremely subtle.
                                         distortion: distortionEnabled ? 0.03 : 0.0,
 
-                                        // Width, in logical pixels, of the distortion/refraction zone
-                                        // extending inward from the lens perimeter.
-                                        //
-                                        // This controls HOW MUCH AREA is affected,
-                                        // not how strongly it is distorted.
                                         distortionWidth: 8,
 
-                                        // Zoom/magnification of the content seen through the glass.
-                                        //
-                                        // 1.0 = original size / no magnification.
-                                        // >1.0 = zoom in.
-                                        // <1.0 = shrink.
                                         magnification: 1,
 
-                                        // Amount of RGB channel separation around refracted edges.
-                                        // Simulates chromatic dispersion / prism-like coloration.
-                                        //
-                                        // 0.0 = completely disabled.
-                                        // Higher values = more visible red/green/blue fringes.
-                                        //
                                         // 0.001 is extremely subtle.
                                         chromaticAberration:
                                             distortionEnabled ? 0.002 : 0.0,

@@ -2,7 +2,7 @@
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
-import 'package:fanotifier/features/search/presentation/fasearchimage.dart';
+import 'package:fanotifier/features/search/presentation/search_results_grid.dart';
 import 'package:fanotifier/features/search/presentation/search_filters_screen.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
 
@@ -26,8 +26,8 @@ class SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
   String _currentSearchQuery = '';
-  final GlobalKey<FASearchImageState> _resultsKey =
-      GlobalKey<FASearchImageState>();
+  final GlobalKey<SearchResultsGridState> _resultsKey =
+      GlobalKey<SearchResultsGridState>();
 
   @override
   void initState() {
@@ -144,7 +144,7 @@ class SearchScreenState extends State<SearchScreen> {
           ? const Center(
               child: Text('Enter a search query and apply filters.'),
             )
-          : FASearchImage(
+          : SearchResultsGrid(
               key: _resultsKey,
               selectedFilters: widget.searchFilters,
               searchQuery: _currentSearchQuery,

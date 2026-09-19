@@ -36,7 +36,6 @@ class _ProgressiveBlurHashImageState extends State<ProgressiveBlurHashImage> {
   Future<void> _generateNextBlur() async {
     if (_isNetworkImageLoaded || _currentResolution > 128) return;
     try {
-      // 1) Decode
       final decodedPixels = await fb.blurHashDecode(
         blurHash: widget.blurHash,
         width: _currentResolution,
@@ -60,7 +59,6 @@ class _ProgressiveBlurHashImageState extends State<ProgressiveBlurHashImage> {
         buffer[offset + 3] = a;
       }
 
-      // 3) Update placeholder
       setState(() {
         _currentPlaceholder = MemoryImage(buffer);
       });

@@ -51,14 +51,12 @@ class _PostShoutScreenState extends State<PostShoutScreen> {
   }
 
   Future<void> _postShout() async {
-    // Check for empty shout
     if (_shoutController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a shout.')),
       );
       return;
     }
-    // Check if text length exceeds the limit before posting.
     if (_shoutController.text.trim().length > _maxLength) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cannot send more than 222 characters!')),

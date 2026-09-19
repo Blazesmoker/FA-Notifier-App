@@ -1,4 +1,4 @@
-import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_shouts_controller.dart';
@@ -101,7 +101,7 @@ class AvatarWidget extends StatelessWidget {
 
 /// A stateful widget for the Shouts section.
 class ShoutsSectionWidget extends StatefulWidget {
-  final FANotificationService service;
+  final FaNotificationsController service;
   final FaActivitiesPollingPort pollingService;
   final bool isActive;
 
@@ -184,9 +184,9 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
       _controller.nukeSection();
 
   /// Called when the checkbox is toggled
-  void _onCheckboxChanged(Shout s, bool? val) {
+  void _onCheckboxChanged(Shout shout, bool? val) {
     if (val == null) return;
-    _controller.setChecked(s, val);
+    _controller.setChecked(shout, val);
   }
 
   @override
@@ -266,11 +266,10 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                   physics: const AlwaysScrollableScrollPhysics(),
                   itemCount: shouts.length,
                   itemBuilder: (ctx2, index) {
-                    final s = shouts[index];
+                    final shout = shouts[index];
 
-                    // The container for each Shout
                     return Padding(
-                      key: ValueKey(s.id),
+                      key: ValueKey(shout.id),
                       padding: EdgeInsets.only(
                         top: index == 0 ? 8.0 : 0.0,
                         left: 0.0,
@@ -295,7 +294,6 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  // Checkbox area
                                   Material(
                                     type: MaterialType.transparency,
                                     child: ConstrainedBox(
@@ -307,7 +305,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                         builder: (context, constraints) {
                                           return InkWell(
                                             onTap: () => _onCheckboxChanged(
-                                                s, !s.isChecked),
+                                                shout, !shout.isChecked),
                                             splashColor: Colors.grey[800],
                                             highlightColor: Colors.grey[600],
                                             child: Container(
@@ -318,10 +316,10 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                                 child: Checkbox(
                                                   activeColor:
                                                       const Color(0xFFE09321),
-                                                  value: s.isChecked,
+                                                  value: shout.isChecked,
                                                   onChanged: (bool? val) =>
                                                       _onCheckboxChanged(
-                                                          s, val),
+                                                          shout, val),
                                                 ),
                                               ),
                                             ),
@@ -330,7 +328,6 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                       ),
                                     ),
                                   ),
-                                  // Vertical divider line
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(4),
                                     child: Container(
@@ -342,7 +339,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                     ),
                                   ),
 
-                                  if (!s.textContent
+                                  if (!shout.textContent
                                       .toLowerCase()
                                       .contains("shout has been removed"))
                                     GestureDetector(
@@ -350,7 +347,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                         Navigator.push(
                                           context,
                                           UserProfileScreen.route(
-                                            nickname: s.nicknameLink,
+                                            nickname: shout.nicknameLink,
                                           ),
                                         );
                                       },
@@ -358,7 +355,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                         padding: const EdgeInsets.only(
                                             left: 10.0, right: 6),
                                         child: AvatarWidget(
-                                          imageUrl: s.avatarUrl,
+                                          imageUrl: shout.avatarUrl,
                                           fallbackAsset:
                                               'assets/images/defaultpic.gif',
                                           radius: 24,
@@ -376,8 +373,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          // Nickname line
-                                          if (!s.textContent
+                                          if (!shout.textContent
                                               .toLowerCase()
                                               .contains(
                                                   "shout has been removed"))
@@ -385,7 +381,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                               text: TextSpan(
                                                 children: [
                                                   TextSpan(
-                                                    text: s.nickname,
+                                                    text: shout.nickname,
                                                     style: const TextStyle(
                                                       color: Color(0xFFE09321),
                                                       fontSize: 14,
@@ -399,7 +395,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                                               context,
                                                               UserProfileScreen
                                                                   .route(
-                                                                nickname: s
+                                                                nickname: shout
                                                                     .nicknameLink,
                                                               ),
                                                             );
@@ -415,9 +411,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                                 ],
                                               ),
                                             ),
-                                          // The shout text
                                           ExtendedText(
-                                            preprocessFAEmojis(s.textContent),
+                                            preprocessFAEmojis(shout.textContent),
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
@@ -427,7 +422,6 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                             specialTextSpanBuilder:
                                                 EmojiSpecialTextSpanBuilder(
                                               onTapLink: (String tappedUrl) {
-                                                // Handle link taps
                                               },
                                             ),
                                           ),
@@ -437,7 +431,6 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                   ),
                                 ],
                               ),
-                              // The date row
                               GestureDetector(
                                 onTap: () {},
                                 child: Transform.translate(
@@ -448,8 +441,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                       padding:
                                           const EdgeInsets.only(right: 8.0),
                                       child: ToggleableDate(
-                                        relativeDate: s.postedAgo,
-                                        absoluteDate: s.postedTitle,
+                                        relativeDate: shout.postedAgo,
+                                        absoluteDate: shout.postedTitle,
                                         occasion: TimeDisplayOccasion
                                             .notificationActivity,
                                       ),

@@ -5,9 +5,9 @@ import 'package:fanotifier/features/settings/domain/settings_app_info_repository
 import 'package:fanotifier/shared/utils/external_link_launcher.dart';
 import 'package:provider/provider.dart';
 
-import 'package:fanotifier/features/settings/presentation/site_settings.dart';
+import 'package:fanotifier/features/settings/presentation/fur_affinity_settings_screen.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
-import 'package:fanotifier/features/settings/presentation/app_settings.dart';
+import 'package:fanotifier/features/settings/presentation/app_settings_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   final Function onLogout;

@@ -364,12 +364,12 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
             ?? windowScenes.first
     }
 
-    private lazy var timeFmt: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .none
-        f.timeStyle = .medium
-        f.timeZone  = .current
-        return f
+    private lazy var fetchTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .medium
+        formatter.timeZone  = .current
+        return formatter
     }()
 
     private func logApproxNextFetch(_ tag: String) {
@@ -385,7 +385,7 @@ func registerPluginsForBackgroundIsolate(registry: FlutterPluginRegistry) {
             relFmt.allowedUnits = [.hour, .minute, .second]
             relFmt.unitsStyle = .short
             let rel = relFmt.string(from: TimeInterval(secs)) ?? "now"
-            self.fLog("[\(tag)] Next approx system fetch: \(self.timeFmt.string(from: when)) (~\(rel))")
+            self.fLog("[\(tag)] Next approx system fetch: \(self.fetchTimeFormatter.string(from: when)) (~\(rel))")
         }
     }
 

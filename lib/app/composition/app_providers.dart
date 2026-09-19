@@ -25,7 +25,7 @@ import 'package:fanotifier/features/notifications/notifications_feature.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/features/notifications/domain/notification_refresh_port.dart';
 import 'package:fanotifier/features/notifications/domain/notification_platform_settings_repository.dart';
-import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_navigation_provider.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_settings_provider.dart';
 import 'package:fanotifier/features/comments/comments_feature.dart';
@@ -36,7 +36,7 @@ import 'package:fanotifier/features/drawer/domain/app_update_repository.dart';
 import 'package:fanotifier/features/drawer/domain/nsfw_confirmation_repository.dart';
 import 'package:fanotifier/features/drawer/drawer_feature.dart';
 import 'package:fanotifier/features/journals/domain/create_journal_repository.dart';
-import 'package:fanotifier/features/journals/domain/openjournal_repository.dart';
+import 'package:fanotifier/features/journals/domain/journal_details_repository.dart';
 import 'package:fanotifier/features/journals/journals_feature.dart';
 import 'package:fanotifier/features/notes/domain/new_message_repository.dart';
 import 'package:fanotifier/features/notes/domain/note_message_repository.dart';
@@ -71,7 +71,7 @@ import 'package:fanotifier/features/settings/presentation/time_display_settings_
 import 'package:fanotifier/features/settings/settings_feature.dart';
 import 'package:fanotifier/features/submissions/domain/edit_submission_page_repository.dart';
 import 'package:fanotifier/features/submissions/domain/finalize_submission_repository.dart';
-import 'package:fanotifier/features/submissions/domain/openpost_repository.dart';
+import 'package:fanotifier/features/submissions/domain/submission_details_repository.dart';
 import 'package:fanotifier/features/submissions/domain/submission_description_repository.dart';
 import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
 import 'package:fanotifier/features/submissions/domain/submission_folder_color_repository.dart';
@@ -251,8 +251,8 @@ class AppProviders extends StatelessWidget {
         Provider<UploadWebViewSessionGateway>(
           create: (_) => UploadFeature.createWebViewSessionGateway(),
         ),
-        Provider<OpenJournalRepository>(
-          create: (_) => JournalsFeature.createOpenJournalRepository(),
+        Provider<JournalDetailsRepository>(
+          create: (_) => JournalsFeature.createJournalDetailsRepository(),
         ),
         Provider<CreateJournalRepository>(
           create: (_) => JournalsFeature.createCreateJournalRepository(),
@@ -288,15 +288,15 @@ class AppProviders extends StatelessWidget {
         Provider<CommentEditRepositoryFactory>(
           create: (_) => CommentsFeature.createCommentEditRepository,
         ),
-        Provider<OpenPostRepository>(
-          create: (context) => SubmissionsFeature.createOpenPostRepository(
+        Provider<SubmissionDetailsRepository>(
+          create: (context) => SubmissionsFeature.createSubmissionDetailsRepository(
             submissionCommentRepository:
                 context.read<SubmissionCommentRepository>(),
           ),
         ),
         Provider<NoteSubmissionPreviewRepository>(
           create: (context) => NotesFeature.createSubmissionPreviewRepository(
-            openPostRepository: context.read<OpenPostRepository>(),
+            submissionDetailsRepository: context.read<SubmissionDetailsRepository>(),
           ),
         ),
         ChangeNotifierProvider<TimezoneProvider>.value(
@@ -328,7 +328,7 @@ class AppProviders extends StatelessWidget {
         ChangeNotifierProvider<CommentSettingsProvider>(
           create: (_) => CommentSettingsProvider(),
         ),
-        ChangeNotifierProvider<FANotificationService>(
+        ChangeNotifierProvider<FaNotificationsController>(
           create: (_) => NotificationsFeature.createNotificationService(),
         ),
       ],

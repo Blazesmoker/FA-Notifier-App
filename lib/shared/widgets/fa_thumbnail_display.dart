@@ -76,22 +76,22 @@ class FaThumbnailCaption extends StatelessWidget {
     );
     if (!showText) return const SizedBox.shrink();
 
-    final t = (title ?? '').trim();
-    final a = (author ?? '').trim();
-    if (t.isEmpty && a.isEmpty) return const SizedBox.shrink();
+    final trimmedTitle = (title ?? '').trim();
+    final trimmedAuthor = (author ?? '').trim();
+    if (trimmedTitle.isEmpty && trimmedAuthor.isEmpty) return const SizedBox.shrink();
 
-    final bool hasAuthor = a.isNotEmpty;
+    final bool hasAuthor = trimmedAuthor.isNotEmpty;
     final int titleMaxLines = hasAuthor ? 2 : 3; // total max lines = 3
 
     final titleStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
           color: Colors.white70,
           fontSize: 12,
         );
-    final byStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+    final authorPrefixStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
           color: Colors.white54,
           fontSize: 11,
         );
-    final authorStyle = byStyle?.copyWith(color: const Color(0xFFE09321));
+    final authorStyle = authorPrefixStyle?.copyWith(color: const Color(0xFFE09321));
     final authorTapHandler = onAuthorTap ??
         (String authorName) async {
           final profileUrl = authorProfileUrl?.trim();
@@ -118,9 +118,9 @@ class FaThumbnailCaption extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            if (t.isNotEmpty)
+            if (trimmedTitle.isNotEmpty)
               Text(
-                t,
+                trimmedTitle,
                 textAlign: TextAlign.center,
                 maxLines: titleMaxLines,
                 overflow: TextOverflow.ellipsis,
@@ -130,13 +130,13 @@ class FaThumbnailCaption extends StatelessWidget {
               Text.rich(
                 TextSpan(
                   children: [
-                    TextSpan(text: 'by ', style: byStyle),
+                    TextSpan(text: 'by ', style: authorPrefixStyle),
                     TextSpan(
-                      text: a,
+                      text: trimmedAuthor,
                       style: authorStyle,
                       recognizer: TapGestureRecognizer()
                         ..onTap = () {
-                          authorTapHandler(a);
+                          authorTapHandler(trimmedAuthor);
                         },
                     ),
                   ],

@@ -2,7 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:material_ui/material_ui.dart';
 
-import 'package:fanotifier/features/profile/presentation/profilejournals.dart';
+import 'package:fanotifier/features/profile/presentation/profile_journals.dart';
 
 class UserProfileJournalsSection extends StatefulWidget {
   const UserProfileJournalsSection({

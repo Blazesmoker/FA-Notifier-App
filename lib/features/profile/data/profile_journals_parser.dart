@@ -21,8 +21,8 @@ ProfileJournalsParseResult parseProfileJournalsHtml(String html) {
 
   for (final element in journalElements) {
     final sectionId = element.attributes['id'];
-    final uniqueNumber = sectionId?.replaceFirst('jid:', '');
-    final journalId = uniqueNumber;
+    final parsedJournalId = sectionId?.replaceFirst('jid:', '');
+    final journalId = parsedJournalId;
 
     var title = element.querySelector('div.section-header > h2')?.text.trim();
     if (title == null || title.isEmpty) {
@@ -65,14 +65,14 @@ ProfileJournalsParseResult parseProfileJournalsHtml(String html) {
     }
     final commentsCount = int.tryParse(commentsText ?? '0') ?? 0;
 
-    if (uniqueNumber != null &&
+    if (parsedJournalId != null &&
         journalId != null &&
         title != null &&
         datePosted != null &&
         contentHtml != null) {
       journalMetadata.add({
         'journalId': journalId,
-        'uniqueNumber': uniqueNumber,
+        'uniqueNumber': parsedJournalId,
         'title': title,
         'datePosted': datePosted,
         'contentHtml': contentHtml,

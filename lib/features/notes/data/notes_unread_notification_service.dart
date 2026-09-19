@@ -1,7 +1,7 @@
 import 'package:fanotifier/core/notifications/domain/local_notification_gateway.dart';
 import 'package:fanotifier/features/notes/data/background_note_unread_service.dart';
 import 'package:fanotifier/features/notes/data/message_storage.dart';
-import 'package:fanotifier/features/notes/data/notesscreen_api_service.dart';
+import 'package:fanotifier/features/notes/data/notes_api_service.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/features/notes/domain/notes_unread_notification_result.dart';
 import 'package:fanotifier/features/notifications/domain/stable_notification_id.dart';

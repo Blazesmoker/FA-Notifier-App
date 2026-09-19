@@ -8,10 +8,10 @@ class TemplateSelectValue {
 
   static TemplateSelectValue? fromJson(dynamic json) {
     if (json is! Map<String, dynamic>) return null;
-    final v = json['value'];
-    final l = json['label'];
-    if (v is! String || l is! String) return null;
-    return TemplateSelectValue(value: v, label: l);
+    final value = json['value'];
+    final label = json['label'];
+    if (value is! String || label is! String) return null;
+    return TemplateSelectValue(value: value, label: label);
   }
 }
 
@@ -55,12 +55,12 @@ class SubmissionTemplateFields {
     List<TemplateSelectValue>? folders;
     final foldersRaw = json['folders'];
     if (foldersRaw is List) {
-      final out = <TemplateSelectValue>[];
-      for (final x in foldersRaw) {
-        final v = TemplateSelectValue.fromJson(x);
-        if (v != null) out.add(v);
+      final parsedFolders = <TemplateSelectValue>[];
+      for (final folderJson in foldersRaw) {
+        final folder = TemplateSelectValue.fromJson(folderJson);
+        if (folder != null) parsedFolders.add(folder);
       }
-      folders = out.isEmpty ? null : out;
+      folders = parsedFolders.isEmpty ? null : parsedFolders;
     }
 
     return SubmissionTemplateFields(

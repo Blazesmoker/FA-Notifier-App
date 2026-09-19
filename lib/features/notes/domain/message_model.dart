@@ -1,5 +1,3 @@
-// lib/message_model.dart
-
 class Message {
   late final String id;
   final String subject;

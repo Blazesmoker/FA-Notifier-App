@@ -2,7 +2,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:fanotifier/features/profile/presentation/profile_bulk_selection_bar.dart';
-import 'package:fanotifier/features/profile/presentation/profilescraps.dart';
+import 'package:fanotifier/features/profile/presentation/profile_scraps_sliver.dart';
 
 class UserProfileScrapsSection extends StatefulWidget {
   const UserProfileScrapsSection({

@@ -1,6 +1,6 @@
 import 'package:fanotifier/features/journals/data/journal_action_service.dart';
 import 'package:fanotifier/features/journals/data/journal_link_parser.dart';
-import 'package:fanotifier/features/journals/data/openjournal_api_service.dart';
+import 'package:fanotifier/features/journals/data/journal_api_service.dart';
 import 'package:fanotifier/features/journals/domain/journal_deletion_result.dart';
 import 'package:flutter/foundation.dart';
 
@@ -10,7 +10,7 @@ class JournalDeletionCoordinator {
     required this._actionService,
   });
 
-  final OpenJournalApiService _api;
+  final JournalApiService _api;
   final JournalActionService _actionService;
 
   Future<JournalDeletionResult> delete({

@@ -25,7 +25,7 @@ class SubmissionFavoriteImageTile extends StatelessWidget {
   final double height;
   final bool selectionMode;
   final bool isSelected;
-  final Function(String uniqueNumber) onToggleSelection;
+  final Function(String submissionId) onToggleSelection;
   final Function(Map<String, dynamic> item) onOpenSubmission;
   final Function(int flatListIndex, bool isVisible) onVisibilityChanged;
 
@@ -35,9 +35,9 @@ class SubmissionFavoriteImageTile extends StatelessWidget {
     final hqUrl = item['hqUrl'] as String? ?? '';
     final fallbackIsFav = item['isFav'] as bool? ?? false;
     final bool wasInitiallyFav = item['initialIsFav'] as bool? ?? false;
-    final uniqueNumber = item['uniqueNumber'] as String;
+    final submissionId = item['uniqueNumber'] as String;
     final isFav = context.select<SubmissionFavoriteStateController, bool>(
-      (controller) => controller.valueFor(uniqueNumber, fallbackIsFav),
+      (controller) => controller.valueFor(submissionId, fallbackIsFav),
     );
     final int flatIndex = item['flatIndex'] as int? ?? -1;
     final displayUrl = hqUrl.isNotEmpty ? hqUrl : thumbnailUrl;
@@ -47,21 +47,21 @@ class SubmissionFavoriteImageTile extends StatelessWidget {
     final String? authorProfileUrl = item['authorProfileUrl'] as String?;
 
     return VisibilityDetector(
-      key: Key('visible-$uniqueNumber'),
+      key: Key('visible-$submissionId'),
       onVisibilityChanged: (info) {
         onVisibilityChanged(flatIndex, info.visibleFraction > 0.2);
       },
       child: GestureDetector(
         onTap: () {
           if (selectionMode) {
-            onToggleSelection(uniqueNumber);
+            onToggleSelection(submissionId);
           } else {
             onOpenSubmission(item);
           }
         },
         onLongPress: () {
           context.read<SubmissionFavoriteStateController>().toggle(
-                submissionId: uniqueNumber,
+                submissionId: submissionId,
                 fallbackIsFavorite: fallbackIsFav,
                 favUrl: item['favUrl'] as String?,
                 unfavUrl: item['unfavUrl'] as String?,

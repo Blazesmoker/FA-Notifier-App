@@ -1,4 +1,9 @@
-// user_profile_screen.dart
+import 'package:fanotifier/features/profile/presentation/user_profile_details_header.dart';
+import 'package:fanotifier/features/profile/presentation/profile_tab_scroll_scope.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_edit_dialog.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_delete_shouts_dialog.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_avatar.dart';
+import 'package:fanotifier/features/profile/presentation/user_profile_header_name.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math';
@@ -7,8 +12,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:fanotifier/app/navigation/app_navigation.dart';
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
@@ -18,21 +21,17 @@ import 'package:fanotifier/features/profile/domain/user_profile_shout_deletion_r
 import 'package:fanotifier/features/profile/domain/user_profile_repository.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
-import 'package:fanotifier/features/profile/presentation/user_profile_styles.dart';
-import 'package:fanotifier/features/profile/presentation/user_profile_components.dart';
-import 'package:fanotifier/features/journals/presentation/create_journal.dart';
-import 'package:fanotifier/features/notes/presentation/new_message.dart';
-import 'package:fanotifier/features/journals/presentation/openjournal.dart';
-import 'package:fanotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/features/journals/presentation/create_journal_screen.dart';
+import 'package:fanotifier/features/journals/presentation/journal_details_screen.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_details_screen.dart';
 import 'package:fanotifier/features/profile/presentation/post_shout.dart';
-import 'package:fanotifier/features/profile/presentation/profilejournals.dart';
+import 'package:fanotifier/features/profile/presentation/profile_journals.dart';
 import 'package:fanotifier/features/settings/presentation/contacts_and_media_screen.dart';
 import 'package:fanotifier/features/settings/presentation/profile_info_screen.dart';
 import 'package:fanotifier/features/settings/presentation/profile_banner_screen.dart';
 import 'package:fanotifier/features/settings/presentation/avatar_management_screen.dart';
-import 'package:fanotifier/features/settings/presentation/fur_affinity_settings_widgets.dart';
 import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
-import 'package:fanotifier/shared/utils/utils.dart';
+import 'package:fanotifier/shared/utils/app_snack_bar.dart';
 import 'package:fanotifier/shared/navigation/detachable_webview_route_registry.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_action_key.dart';
 import 'package:fanotifier/features/profile/presentation/profile_banner_header.dart';
@@ -49,7 +48,6 @@ import 'package:fanotifier/features/profile/presentation/profile_animated_media_
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
 import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
-import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:fanotifier/shared/translation/ios_scroll_recovery.dart';
 import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
 import 'package:fanotifier/shared/translation/translation_service.dart';
@@ -57,185 +55,6 @@ import 'package:fanotifier/shared/navigation/transparent_slide_page_route.dart';
 import 'package:provider/provider.dart';
 import 'package:fanotifier/core/analytics/app_analytics.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
-
-class _ProfileTabScrollScope extends StatefulWidget {
-  const _ProfileTabScrollScope({
-    super.key,
-    required this.tabController,
-    required this.tabIndex,
-    required this.recoveryKey,
-    required this.child,
-    this.onActiveChanged,
-    this.onMediaVisibilityChanged,
-  });
-
-  final TabController tabController;
-  final int tabIndex;
-  final int recoveryKey;
-  final Widget child;
-  final ValueChanged<bool>? onActiveChanged;
-  final ValueChanged<bool>? onMediaVisibilityChanged;
-
-  @override
-  State<_ProfileTabScrollScope> createState() =>
-      _ProfileTabScrollScopeState();
-}
-
-class _ProfileTabScrollScopeState extends State<_ProfileTabScrollScope>
-    with AutomaticKeepAliveClientMixin<_ProfileTabScrollScope> {
-  late final ScrollController _inactiveScrollController;
-  late bool _isActive;
-  late bool _isMediaVisible;
-
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
-  void initState() {
-    super.initState();
-    _inactiveScrollController = ScrollController();
-    _isActive = widget.tabController.index == widget.tabIndex;
-    _isMediaVisible = _calculateMediaVisibility();
-    widget.tabController.addListener(_handleTabChanged);
-    widget.tabController.animation?.addListener(_handleTabChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        widget.onActiveChanged?.call(_isActive);
-        widget.onMediaVisibilityChanged?.call(_isMediaVisible);
-      }
-    });
-  }
-
-  @override
-  void didUpdateWidget(_ProfileTabScrollScope oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.tabController != widget.tabController) {
-      oldWidget.tabController.removeListener(_handleTabChanged);
-      oldWidget.tabController.animation?.removeListener(_handleTabChanged);
-      widget.tabController.addListener(_handleTabChanged);
-      widget.tabController.animation?.addListener(_handleTabChanged);
-    }
-    _handleTabChanged();
-  }
-
-  bool _calculateMediaVisibility() {
-    final animationValue =
-        widget.tabController.animation?.value ?? widget.tabController.index;
-    final distance = (animationValue - widget.tabIndex).abs();
-    return distance < 1.0 ||
-        (widget.tabController.indexIsChanging &&
-            widget.tabController.index == widget.tabIndex);
-  }
-
-  void _handleTabChanged() {
-    final isActive = widget.tabController.index == widget.tabIndex;
-    final isMediaVisible = _calculateMediaVisibility();
-    if (!mounted ||
-        (_isActive == isActive && _isMediaVisible == isMediaVisible)) {
-      return;
-    }
-    final activeChanged = _isActive != isActive;
-    final mediaVisibilityChanged = _isMediaVisible != isMediaVisible;
-    setState(() {
-      _isActive = isActive;
-      _isMediaVisible = isMediaVisible;
-    });
-    if (activeChanged) {
-      widget.onActiveChanged?.call(isActive);
-    }
-    if (mediaVisibilityChanged) {
-      widget.onMediaVisibilityChanged?.call(isMediaVisible);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.tabController.removeListener(_handleTabChanged);
-    widget.tabController.animation?.removeListener(_handleTabChanged);
-    _inactiveScrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    final nestedScrollController = PrimaryScrollController.of(context);
-    final scrollController =
-        _isActive ? nestedScrollController : _inactiveScrollController;
-    return TickerMode(
-      enabled: TickerMode.valuesOf(context).enabled && _isMediaVisible,
-      child: PrimaryScrollController(
-        controller: scrollController,
-        child: KeyedSubtree(
-          key: ValueKey<(ScrollController, int)>(
-            (scrollController, widget.recoveryKey),
-          ),
-          child: widget.child,
-        ),
-      ),
-    );
-  }
-}
-
-class _EditProfileOption extends StatelessWidget {
-  const _EditProfileOption({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: furAffinitySettingsGroup,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            border: Border.all(color: furAffinitySettingsDivider),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: furAffinitySettingsAccent.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: furAffinitySettingsAccent, size: 23),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: Color(0xFF8A8A8A),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class UserProfileScreen extends StatefulWidget {
   final String nickname;
@@ -438,13 +257,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   static const double sliverAppBarMinHeight = kToolbarHeight - 80.0; // 56.0
   static const double collapsibleHeaderMaxHeight = 110.0;
   static const double navigationSliderHeight = 64.0;
-  static const double _profileAvatarLeft = 16.0;
-  static const double _profileAvatarSize = 90.0;
-  static const double _profileAvatarBorderWidth = 2.0;
 
-  static const double _profileAvatarMinScale = 0.53;
-  static const double _profileAvatarScrollDownDistance = 16.0;
-  static const double _profileAvatarScrollDownEnd = 64.0;
   static const double _profileAvatarBehindBannerStart = 63.0;
 
   static const double _edgeBackSwipeDetectorWidth = 25.0;
@@ -1256,137 +1069,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
   Future<bool> _showDeleteShoutsDialog(
     List<Shout> shoutsToDelete, {
     bool ownShoutOnOtherProfile = false,
-  }) async {
-    final bool isSingle = shoutsToDelete.length == 1;
-    final String title =
-        isSingle ? 'Confirm deletion' : 'Delete selected shouts';
-    final String message = ownShoutOnOtherProfile
-        ? 'Are you sure you want to delete your shout from this profile?'
-        : isSingle
-            ? 'Are you sure you want to delete shout from ${shoutsToDelete.first.username}?'
-            : 'Are you sure you want to delete ${shoutsToDelete.length} selected shouts?';
-
-    final confirmed = await showDialog<bool>(
+  }) {
+    return showProfileDeleteShoutsDialog(
+      shoutsToDelete,
       context: context,
-      builder: (context) {
-        final maxHeight = MediaQuery.of(context).size.height * 0.55;
-        final dialogHeight = isSingle ? min(maxHeight, 320.0) : maxHeight;
-        return AlertDialog(
-          title: Text(title),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: dialogHeight,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  message,
-                  style: const TextStyle(color: Colors.white),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: Scrollbar(
-                    thumbVisibility: shoutsToDelete.length > 2,
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: shoutsToDelete.length,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final shout = shoutsToDelete[index];
-                        return Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1F1F1F),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.white10),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: FaNetworkImage(
-                                      shout.avatarUrl,
-                                      width: 42,
-                                      height: 42,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) {
-                                        return Image.asset(
-                                          'assets/images/defaultpic.gif',
-                                          width: 42,
-                                          height: 42,
-                                          fit: BoxFit.cover,
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          shout.username,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        if ((shout.symbol?.isNotEmpty ??
-                                                false) ||
-                                            shout.profileNickname.isNotEmpty)
-                                          Text(
-                                            '${shout.symbol ?? '~'} ${shout.profileNickname}'
-                                                .trim(),
-                                            style: const TextStyle(
-                                              color: Color(0xFFE09321),
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              html_pkg.Html(
-                                data: shout.text,
-                                style: userProfileHtmlStyles(),
-                                extensions: buildUserProfileBBCodeExtensions(),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: Text(isSingle ? 'Delete' : 'Delete Selected'),
-            ),
-          ],
-        );
-      },
+      ownShoutOnOtherProfile: ownShoutOnOtherProfile,
     );
-
-    return confirmed ?? false;
   }
 
   Future<void> _confirmDeleteSelectedShouts() async {
@@ -1643,15 +1331,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
           MaterialPageRoute(
             settings:
                 const AnalyticsRouteSettings(AppScreens.journalDetails),
-            builder: (context) => OpenJournal(uniqueNumber: target.journalId!),
+            builder: (context) => JournalDetailsScreen(journalId: target.journalId!),
           ),
         );
         return;
       case FALinkTargetType.submission:
         Navigator.push(
           context,
-          OpenPost.route(
-            uniqueNumber: target.submissionId!,
+          SubmissionDetailsScreen.route(
+            submissionId: target.submissionId!,
             imageUrl: '',
           ),
         );
@@ -1772,28 +1460,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
     Widget avatarChild, {
     required bool animationEnabled,
   }) {
-    final double scaleProgress =
-        (offset / _profileAvatarScrollDownEnd).clamp(0.0, 1.0).toDouble();
-    final double scale = 1.0 - ((1.0 - _profileAvatarMinScale) * scaleProgress);
-    final double scrollPastShrink =
-        max(0.0, offset - _profileAvatarScrollDownEnd);
-    final double translateY =
-        (_profileAvatarScrollDownDistance * scaleProgress) - scrollPastShrink;
-
-    return Positioned(
-      key: const ValueKey<String>('profileAvatar'),
-      bottom: -_profileAvatarSize / 1.5 - _profileAvatarBorderWidth,
-      left: _profileAvatarLeft - _profileAvatarBorderWidth,
-      child: TickerMode(
-        enabled: TickerMode.valuesOf(context).enabled && animationEnabled,
-        child: Transform.translate(
-          offset: Offset(0.0, translateY),
-          child: Transform.scale(
-            scale: scale,
-            child: avatarChild,
-          ),
-        ),
-      ),
+    return buildProfileAnimatedAvatar(
+      offset,
+      avatarChild,
+      animationEnabled: animationEnabled,
+      context: context,
     );
   }
 
@@ -1856,87 +1527,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Widget buildAvatarImage() {
-    final double outerAvatarSize =
-        _profileAvatarSize + (_profileAvatarBorderWidth * 2.0);
-    final profileImageUrl = _profileController.profileImageUrl;
-    final Widget avatarImage = profileImageUrl == null || profileImageUrl.isEmpty
-            ? Image.asset(
-                'assets/images/defaultpic.gif',
-                width: _profileAvatarSize,
-                height: _profileAvatarSize,
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-              )
-            : FaNetworkImage(
-                profileImageUrl,
-                key: ValueKey(
-                  'profile-avatar-$profileImageUrl-$_profileMediaRevision',
-                ),
-                width: _profileAvatarSize,
-                height: _profileAvatarSize,
-                fit: BoxFit.cover,
-                filterQuality: FilterQuality.low,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return SizedBox(
-                    width: _profileAvatarSize / 2,
-                    height: _profileAvatarSize / 2,
-                    child: const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2.0),
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return Image.asset(
-                    'assets/images/defaultpic.gif',
-                    width: _profileAvatarSize,
-                    height: _profileAvatarSize,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                  );
-                },
-              );
-
-    return ProfileAnimatedMediaVisibility(
-      key: _avatarMediaVisibilityKey,
-      lookAhead: 90.0,
-      child: RepaintBoundary(
-        child: GestureDetector(
-          onTap: () {},
-          child: SizedBox(
-            width: outerAvatarSize,
-            height: outerAvatarSize,
-            child: ValueListenableBuilder<bool>(
-              valueListenable: _profileAvatarBorderVisible,
-              child: Positioned(
-                left: _profileAvatarBorderWidth,
-                top: _profileAvatarBorderWidth,
-                child: avatarImage,
-              ),
-              builder: (context, showBorder, child) {
-                return Stack(
-                  children: [
-                    child!,
-                    if (showBorder)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: const Color(0xFF111111),
-                                width: _profileAvatarBorderWidth,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ),
-      ),
+    return buildProfileAvatarImage(
+      profileImageUrl: _profileController.profileImageUrl,
+      profileMediaRevision: _profileMediaRevision,
+      avatarMediaVisibilityKey: _avatarMediaVisibilityKey,
+      profileAvatarBorderVisible: _profileAvatarBorderVisible,
     );
   }
 
@@ -1963,63 +1558,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Widget _buildProfileHeaderNameRow(GlobalKey profileNameRowKey) {
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onTapDown: (TapDownDetails details) {
-        final RenderBox? renderBox =
-            profileNameRowKey.currentContext?.findRenderObject() as RenderBox?;
-        if (renderBox != null) {
-          final Offset localPosition =
-              renderBox.globalToLocal(details.globalPosition);
-          if (!renderBox.size.contains(localPosition)) {
-            _clearProfileNameSelection();
-          }
-        } else {
-          _clearProfileNameSelection();
-        }
-      },
-      child: Container(
-        key: profileNameRowKey,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            if (_profileController.userIconBeforeUrls.isNotEmpty)
-              ..._profileController.userIconBeforeUrls.map(
-                (url) => Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: FaNetworkImage(url, width: 20, height: 20),
-                ),
-              ),
-            SelectableLinkify(
-              text: _profileController.profileDisplayName ?? '',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20.0,
-                fontWeight: FontWeight.bold,
-              ),
-              onOpen: (link) async {},
-              selectionControls: MaterialTextSelectionControls(),
-            ),
-            const SizedBox(width: 4),
-            if (_profileController.userIconAfterUrls.isNotEmpty)
-              ..._profileController.userIconAfterUrls.map(
-                (url) => Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: FaNetworkImage(url, width: 20, height: 20),
-                ),
-              ),
-            SelectableLinkify(
-              text: _profileController.profileUserNamePart ?? '',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20.0,
-              ),
-              onOpen: (link) async {},
-              selectionControls: MaterialTextSelectionControls(),
-            ),
-          ],
-        ),
-      ),
+    return buildProfileHeaderNameRow(
+      profileNameRowKey,
+      profileController: _profileController,
+      clearProfileNameSelection: _clearProfileNameSelection,
     );
   }
 
@@ -2206,7 +1748,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
   /// Builds the main UI of the screen with unified scrolling.
   @override
   Widget build(BuildContext context) {
-    // Define constants for the avatar and text alignment.
     const double avatarLeft = 16.0;
     const double avatarWidth = 90.0;
     const double marginBetweenAvatarAndText = 0.0;
@@ -2494,409 +2035,17 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                     },
                                   ),
                                 ),
-                                SliverPersistentHeader(
-                                  delegate: FixedSliverPersistentHeaderDelegate(
-                                    height: 160,
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        const Divider(
-                                          height: 4.0,
-                                          color: Color(0xFF111111),
-                                          thickness: 3.0,
-                                        ),
-                                        const Divider(
-                                          height: 2.0,
-                                          color: Colors.black,
-                                          thickness: 1.0,
-                                        ),
-                                        Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Container(
-                                              width: double.infinity,
-                                              color: const Color(0xFF111111),
-                                              child: Padding(
-                                                padding:
-                                                    const EdgeInsets.fromLTRB(
-                                                        8.0, 0.0, 8.0, 8.0),
-                                                child: Row(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.center,
-                                                  children: [
-                                                    MediaQuery(
-                                                      data:
-                                                          fixedTextScaleMediaQuery,
-                                                      child: Expanded(
-                                                        child: Column(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .start,
-                                                          children: [
-                                                            SizedBox(
-                                                              height: 30.0,
-                                                              child: Padding(
-                                                                padding: EdgeInsets
-                                                                    .only(
-                                                                        left:
-                                                                            textLeftPadding),
-                                                                child:
-                                                                    FittedBox(
-                                                                  fit: BoxFit
-                                                                      .scaleDown,
-                                                                  alignment:
-                                                                      Alignment
-                                                                          .centerLeft,
-                                                                  child: ValueListenableBuilder<
-                                                                      GlobalKey>(
-                                                                    valueListenable:
-                                                                        _profileNameRowKey,
-                                                                    builder: (context,
-                                                                        profileNameRowKey,
-                                                                        child) {
-                                                                      return _buildProfileHeaderNameRow(
-                                                                        profileNameRowKey,
-                                                                      );
-                                                                    },
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            SizedBox(
-                                                              height: 24.0,
-                                                              child: Visibility(
-                                                                visible: true,
-                                                                maintainSize:
-                                                                    true,
-                                                                maintainAnimation:
-                                                                    true,
-                                                                maintainState:
-                                                                    true,
-                                                                child: Padding(
-                                                                  padding:
-                                                                      EdgeInsets
-                                                                          .only(
-                                                                    top: 0.0,
-                                                                    left:
-                                                                        textLeftPadding,
-                                                                  ),
-                                                                  child:
-                                                                      FittedBox(
-                                                                    fit: BoxFit
-                                                                        .scaleDown,
-                                                                    alignment:
-                                                                        Alignment
-                                                                            .center,
-                                                                    child: Text(
-                                                                      (_profileController
-                                                                                  .userTitle
-                                                                                  ?.isNotEmpty ??
-                                                                              false)
-                                                                          ? _profileController
-                                                                              .userTitle!
-                                                                          : " ",
-                                                                      style:
-                                                                          const TextStyle(
-                                                                        color: Colors
-                                                                            .white70,
-                                                                        fontSize:
-                                                                            16.0,
-                                                                      ),
-                                                                      maxLines:
-                                                                          1,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            Padding(
-                                                              padding:
-                                                                  const EdgeInsets
-                                                                      .only(
-                                                                top: 8.0,
-                                                                left: 0.0,
-                                                              ),
-                                                              child: FittedBox(
-                                                                fit: BoxFit
-                                                                    .scaleDown,
-                                                                alignment: Alignment
-                                                                    .centerLeft,
-                                                                child: Text(
-                                                                  _profileController
-                                                                              .registrationDate !=
-                                                                          null &&
-                                                                          _profileController
-                                                                              .registrationDate!
-                                                                              .isNotEmpty
-                                                                      ? 'Joined ${formatTimeInText(
-                                                                          _profileController.registrationDate!,
-                                                                          format:
-                                                                              registrationTimeFormat,
-                                                                        )}'
-                                                                      : '',
-                                                                  style:
-                                                                      const TextStyle(
-                                                                    color: Colors
-                                                                        .white70,
-                                                                    fontSize:
-                                                                        14.0,
-                                                                  ),
-                                                                  maxLines: 1,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    if (_profileController
-                                                        .isOwnProfile)
-                                                      SizedBox(
-                                                        width: 100,
-                                                        height: 38,
-                                                        child: ElevatedButton(
-                                                          onPressed:
-                                                              _showEditProfileDialog,
-                                                          style: ElevatedButton
-                                                              .styleFrom(
-                                                            backgroundColor:
-                                                                Colors.black,
-                                                            shape:
-                                                                RoundedRectangleBorder(
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                          2),
-                                                            ),
-                                                            side:
-                                                                const BorderSide(
-                                                              color: Color(
-                                                                  0xFFE09321),
-                                                            ),
-                                                          ),
-                                                          child:
-                                                              const FittedBox(
-                                                            fit: BoxFit
-                                                                .scaleDown,
-                                                            child: Text(
-                                                              "Edit Profile",
-                                                              style: TextStyle(
-                                                                color: Colors
-                                                                    .white,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      )
-                                                      else
-                                                      Transform.translate(
-                                                      offset: const Offset(0, 4),
-                                                  child: Column(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    children: [
-                                                          SizedBox(
-                                                            width: 100,
-                                                            height: 38,
-                                                            child: ValueListenableBuilder<
-                                                                bool>(
-                                                              valueListenable:
-                                                                  _watchRequestInFlight,
-                                                              builder: (context,
-                                                                  isWatchRequestInFlight,
-                                                                  child) {
-                                                                return isWatchRequestInFlight
-                                                                    ? const Center(
-                                                                        child:
-                                                                            SizedBox(
-                                                                          width:
-                                                                              18,
-                                                                          height:
-                                                                              18,
-                                                                          child:
-                                                                              CircularProgressIndicator(
-                                                                            strokeWidth:
-                                                                                2,
-                                                                            color:
-                                                                                Color(
-                                                                                    0xFFE09321),
-                                                                          ),
-                                                                        ),
-                                                                      )
-                                                                    : ElevatedButton(
-                                                                        onPressed:
-                                                                            _handleWatchButtonPressed,
-                                                                        style:
-                                                                            ElevatedButton
-                                                                                .styleFrom(
-                                                                          backgroundColor:
-                                                                              Colors
-                                                                                  .black,
-                                                                          shape:
-                                                                              RoundedRectangleBorder(
-                                                                            borderRadius:
-                                                                                BorderRadius
-                                                                                    .circular(
-                                                                                        2),
-                                                                          ),
-                                                                          side:
-                                                                              const BorderSide(
-                                                                            color:
-                                                                                Color(
-                                                                                    0xFFE09321),
-                                                                          ),
-                                                                        ),
-                                                                        child:
-                                                                            FittedBox(
-                                                                          fit: BoxFit
-                                                                              .scaleDown,
-                                                                          child:
-                                                                              Text(
-                                                                            _profileController
-                                                                                    .isWatching
-                                                                                ? "-Watch"
-                                                                                : "+Watch",
-                                                                            style:
-                                                                                const TextStyle(
-                                                                              color:
-                                                                                  Colors
-                                                                                      .white,
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                      );
-                                                              },
-                                                            ),
-                                                          ),
-                                                          const SizedBox(
-                                                              height: 5),
-                                                          SizedBox(
-                                                            width: 100,
-                                                            height: 38,
-                                                            child:
-                                                                ElevatedButton(
-                                                              onPressed: () {
-                                                                Navigator.push(
-                                                                  context,
-                                                                  MaterialPageRoute(
-                                                                    settings:
-                                                                        const AnalyticsRouteSettings(
-                                                                      AppScreens
-                                                                          .newNote,
-                                                                    ),
-                                                                    builder:
-                                                                        (context) =>
-                                                                            NewMessageScreen(
-                                                                      recipient:
-                                                                          _profileController
-                                                                              .sanitizedUsername,
-                                                                    ),
-                                                                  ),
-                                                                );
-                                                              },
-                                                              style:
-                                                                  ElevatedButton
-                                                                      .styleFrom(
-                                                                backgroundColor:
-                                                                    const Color(
-                                                                        0xFFE09321),
-                                                                shape:
-                                                                    RoundedRectangleBorder(
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              2),
-                                                                ),
-                                                              ),
-                                                              child:
-                                                                  const FittedBox(
-                                                                fit: BoxFit
-                                                                    .scaleDown,
-                                                                child: Text(
-                                                                  "Note",
-                                                                  style:
-                                                                      TextStyle(
-                                                                    color: Colors
-                                                                        .white,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                            const Divider(
-                                              height: 3.0,
-                                              color: Colors.black,
-                                              thickness: 3.0,
-                                            ),
-                                            const Divider(
-                                              height: 4.0,
-                                              color: Color(0xFF111111),
-                                              thickness: 4.0,
-                                            ),
-                                          ],
-                                        ),
-                                        MediaQuery(
-                                          data: fixedTextScaleMediaQuery,
-                                          child: Padding(
-                                            padding:
-                                                const EdgeInsets.only(top: 8.0),
-                                            child: Table(
-                                              columnWidths: const {
-                                                0: FlexColumnWidth(1),
-                                                1: FlexColumnWidth(1),
-                                                2: FlexColumnWidth(1),
-                                                3: FlexColumnWidth(1),
-                                              },
-                                              defaultVerticalAlignment:
-                                                  TableCellVerticalAlignment
-                                                      .middle,
-                                              children: [
-                                                TableRow(
-                                                  children: [
-                                                    ProfileStatItem(
-                                                        count:
-                                                            _profileController
-                                                                    .views
-                                                                    ?.toString() ??
-                                                                '0',
-                                                        label: 'Views'),
-                                                    ProfileStatItem(
-                                                        count: _profileController
-                                                                .submissions
-                                                                ?.toString() ??
-                                                            '0',
-                                                        label: 'Submissions'),
-                                                    ProfileStatItem(
-                                                        count:
-                                                            _profileController
-                                                                    .favs
-                                                                    ?.toString() ??
-                                                                '0',
-                                                        label: 'Favs'),
-                                                    ProfileStatItem(
-                                                        count:
-                                                            _profileController
-                                                                .recentWatchersCount
-                                                                .toString(),
-                                                        label: 'Watched'),
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  pinned: false,
+                                buildProfileDetailsHeader(
+                                  context: context,
+                                  profileController: _profileController,
+                                  fixedTextScaleMediaQuery: fixedTextScaleMediaQuery,
+                                  textLeftPadding: textLeftPadding,
+                                  registrationTimeFormat: registrationTimeFormat,
+                                  profileNameRowKey: _profileNameRowKey,
+                                  buildHeaderNameRow: _buildProfileHeaderNameRow,
+                                  watchRequestInFlight: _watchRequestInFlight,
+                                  onEditProfile: _showEditProfileDialog,
+                                  onWatch: _handleWatchButtonPressed,
                                 ),
                                 SliverOverlapAbsorber(
                                   handle: NestedScrollView
@@ -2931,7 +2080,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                               body: TabBarView(
                                 controller: _tabController,
                                 children: ProfileSection.values.map((section) {
-                                  return _ProfileTabScrollScope(
+                                  return ProfileTabScrollScope(
                                     key: ValueKey(section),
                                     tabController: _tabController,
                                     tabIndex: section.index,
@@ -3080,65 +2229,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.74),
       builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF191919),
-          surfaceTintColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-          actionsPadding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: const BorderSide(color: Color(0xFF3D3D3D)),
-          ),
-          title: const Text(
-            'Edit Profile',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _EditProfileOption(
-                icon: Icons.person_outline_rounded,
-                title: 'Profile Info',
-                onTap: () => Navigator.pop(context, 'profile_info'),
-              ),
-              const SizedBox(height: 8),
-              _EditProfileOption(
-                icon: Icons.panorama_outlined,
-                title: 'Profile Banner',
-                onTap: () => Navigator.pop(context, 'profile_banner'),
-              ),
-              const SizedBox(height: 8),
-              _EditProfileOption(
-                icon: Icons.alternate_email_rounded,
-                title: 'Contacts & Social Media',
-                onTap: () => Navigator.pop(context, 'contacts'),
-              ),
-              const SizedBox(height: 8),
-              _EditProfileOption(
-                icon: Icons.account_circle_outlined,
-                title: 'Avatar Management',
-                onTap: () => Navigator.pop(context, 'avatar'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'Close',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
+        return buildEditProfileDialog(
+          context: context,
         );
       },
     ).whenComplete(() {
@@ -3235,12 +2327,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
       featuredImageUrl: _profileController.featuredImageUrl,
       featuredImageTitle: _profileController.featuredImageTitle,
       featuredPostNumber: _profileController.featuredPostNumber,
-      onOpenPost: (context, imageUrl, uniqueNumber) {
+      onOpenSubmission: (context, imageUrl, submissionId) {
         Navigator.push(
           context,
-          OpenPost.route(
+          SubmissionDetailsScreen.route(
             imageUrl: imageUrl,
-            uniqueNumber: uniqueNumber,
+            submissionId: submissionId,
           ),
         );
       },

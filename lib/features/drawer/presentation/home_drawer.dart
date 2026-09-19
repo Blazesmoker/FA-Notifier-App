@@ -1,8 +1,11 @@
+import 'widgets/home_drawer_row.dart';
+import 'widgets/home_drawer_dialogs.dart';
+import 'widgets/home_drawer_profile_header.dart';
+import 'widgets/home_drawer_update_button.dart';
+import 'widgets/home_drawer_footer.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_switch/flutter_switch.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:fanotifier/features/drawer/domain/app_update_repository.dart';
 import 'package:fanotifier/features/drawer/domain/nsfw_confirmation_repository.dart';
@@ -13,12 +16,10 @@ import 'package:fanotifier/features/search/presentation/find_source_screen.dart'
 import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/settings/presentation/settings_screen.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
 import 'package:fanotifier/features/drawer/presentation/drawer_list.dart';
 import 'package:fanotifier/features/drawer/domain/drawer_index.dart';
 import 'package:fanotifier/core/links/app_external_links.dart';
-import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
-import 'package:fanotifier/shared/widgets/star_burst_animation.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_badge.dart';
 import 'dart:async';
 import 'package:fanotifier/shared/theme/app_theme.dart';
@@ -28,7 +29,7 @@ import 'package:provider/provider.dart';
 class HomeDrawer extends StatefulWidget {
   const HomeDrawer({
     super.key,
-    this.screenIndex,
+    this.selectedDrawerItem,
     this.iconAnimationController,
     this.callBackIndex,
     required this.onLogout,
@@ -42,7 +43,7 @@ class HomeDrawer extends StatefulWidget {
   });
 
   final AnimationController? iconAnimationController;
-  final DrawerIndex? screenIndex;
+  final DrawerIndex? selectedDrawerItem;
   final Function(DrawerIndex)? callBackIndex;
   final Function onLogout;
   final UserProfile? userProfile;
@@ -71,7 +72,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
     registeredUsersOnline: '0',
   );
 
-  FANotificationService? _faNotificationService;
+  FaNotificationsController? _faNotificationService;
   final SfwModePreference _sfwModePreference = SfwModePreference();
   late final AppUpdateRepository _appUpdateRepository;
   late final NsfwConfirmationRepository _nsfwConfirmationRepository;
@@ -94,7 +95,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
     setDrawerListArray();
     _loadSfwEnabled();
     _faNotificationService =
-        Provider.of<FANotificationService>(context, listen: false);
+        Provider.of<FaNotificationsController>(context, listen: false);
     _faNotificationService?.addListener(_onFaNotificationServiceChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -220,155 +221,40 @@ class _HomeDrawerState extends State<HomeDrawer> {
 
   Widget inkwell(DrawerList listData) {
     final isKoFi = listData.labelName == 'Support us on Ko-Fi!';
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        splashColor: isKoFi ? Colors.transparent : Colors.grey.withValues(alpha: 0.1),
-        highlightColor: isKoFi ? Colors.transparent : Colors.transparent,
-        splashFactory: isKoFi ? NoSplash.splashFactory : null,
-        onTap: () {
-          if (listData.labelName == 'Settings') {
-            navigationtoScreen(listData.index!);
-          } else if (listData.labelName == 'Open Link') {
-            _showOpenLinkDialog(context);
-          } else if (listData.labelName == 'Support us on Ko-Fi!') {
-          } else if (listData.labelName == 'Find Source') {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                settings: const AnalyticsRouteSettings(AppScreens.findSource),
-                builder: (context) => const FindSourceScreen(),
-              ),
-            );
-          } else {
-            navigationtoScreen(listData.index!);
-          }
-        },
-        child: Stack(
-          children: <Widget>[
-            if (listData.labelName == 'Support us on Ko-Fi!')
-              GestureDetector(
-                key: _kofiKey,
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (TapDownDetails details) {
-                  _onKofiPressed(details.globalPosition);
-                },
-                child: Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(
-                      left: 8, right: 16, top: 9, bottom: 9),
-                  padding: const EdgeInsets.only(
-                      left: 8, right: 16, top: 9, bottom: 9),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.max,
-                        children: [
-                          SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: Image.asset(listData.imageName),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            listData.labelName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 16,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (showStars && _starOrigins != null)
-                        Positioned.fill(
-                          child: StarBurstAnimation(
-                            origins: _starOrigins!,
-                            onCompleted: () {
-                              setState(() {
-                                showStars = false;
-                                _starOrigins = null;
-                              });
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              Container(
-                height: 54.0,
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  children: <Widget>[
-                    const SizedBox(width: 6.0, height: 46.0),
-                    const Padding(padding: EdgeInsets.all(4.0)),
-                    listData.isAssetsImage
-                        ? SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: Image.asset(
-                              listData.imageName,
-                              color: widget.screenIndex == listData.index
-                                  ? Colors.white
-                                  : Colors.grey.shade300,
-                            ),
-                          )
-                        : Icon(
-                            listData.icon?.icon,
-                            color: widget.screenIndex == listData.index
-                                ? Colors.grey
-                                : Colors.grey,
-                          ),
-                    const Padding(padding: EdgeInsets.all(4.0)),
-                    Text(
-                      listData.labelName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 16,
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.left,
-                    ),
-                  ],
-                ),
-              ),
-            if (widget.screenIndex == listData.index &&
-                listData.labelName != 'Support us on Ko-Fi!')
-              AnimatedBuilder(
-                animation: widget.iconAnimationController!,
-                builder: (BuildContext context, Widget? child) {
-                  final drawerContentWidth =
-                      MediaQuery.sizeOf(context).width * 0.75 - 64;
-                  return Transform(
-                    transform: Matrix4.translationValues(
-                      drawerContentWidth *
-                          (1.0 - widget.iconAnimationController!.value - 1.0),
-                      0.0,
-                      0.0,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: Container(
-                        width: drawerContentWidth,
-                        height: 46,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: const BorderRadius.only(
-                            topRight: Radius.circular(28),
-                            bottomRight: Radius.circular(28),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-          ],
-        ),
-      ),
+    return buildHomeDrawerRow(
+      context,
+      listData: listData,
+      isKoFi: isKoFi,
+      selectedDrawerItem: widget.selectedDrawerItem,
+      animationController: () => widget.iconAnimationController,
+      kofiKey: _kofiKey,
+      showStars: showStars,
+      starOrigins: _starOrigins,
+      onKofiPressed: _onKofiPressed,
+      onStarsCompleted: () {
+        setState(() {
+          showStars = false;
+          _starOrigins = null;
+        });
+      },
+      onTap: () {
+        if (listData.labelName == 'Settings') {
+          navigationtoScreen(listData.index!);
+        } else if (listData.labelName == 'Open Link') {
+          _showOpenLinkDialog(context);
+        } else if (listData.labelName == 'Support us on Ko-Fi!') {
+        } else if (listData.labelName == 'Find Source') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              settings: const AnalyticsRouteSettings(AppScreens.findSource),
+              builder: (context) => const FindSourceScreen(),
+            ),
+          );
+        } else {
+          navigationtoScreen(listData.index!);
+        }
+      },
     );
   }
 
@@ -378,40 +264,10 @@ class _HomeDrawerState extends State<HomeDrawer> {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Open Link'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(labelText: 'Enter link'),
-          ),
-          actions: [
-            TextButton(
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-              ),
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              style: TextButton.styleFrom(
-                backgroundColor: const Color(0xFFE09321),
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () {
-                final String url = controller.text.trim();
-                if (url.isNotEmpty) {
-                  // Close dialog first, then handle the link
-                  Navigator.of(context).pop();
-
-                  _handleFALink(context, url);
-                } else {
-                  Navigator.of(context).pop();
-                }
-              },
-              child: const Text('Ok'),
-            ),
-          ],
+        return buildDrawerOpenLinkDialog(
+          context,
+          controller: controller,
+          onOpen: _handleFALink,
         );
       },
     );
@@ -462,81 +318,16 @@ class _HomeDrawerState extends State<HomeDrawer> {
       builder: (BuildContext dialogContext) {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
-            return Dialog(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16.0)),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text("Confirm Mode Switch",
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
-                    Text(dialogMessage, style: const TextStyle(fontSize: 16)),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () =>
-                              Navigator.of(dialogContext).pop(false),
-                          style: TextButton.styleFrom(
-                              backgroundColor: Colors.white),
-                          child: const Text("No",
-                              style: TextStyle(color: Colors.black)),
-                        ),
-                        const SizedBox(width: 8),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(dialogContext).pop(true);
-                          },
-                          style: TextButton.styleFrom(
-                              backgroundColor: const Color(0xFFE09321)),
-                          child: Text("Yes", style: TextStyle(color: yesColor)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-
-                    // Compact checkbox layout
-                    Row(
-                      children: [
-                        CheckboxTheme(
-                          data: CheckboxThemeData(
-                            visualDensity: VisualDensity.compact,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            side:
-                                const BorderSide(width: 1, color: Colors.white),
-                            fillColor: WidgetStateProperty.resolveWith<Color>(
-                                (Set<WidgetState> states) {
-                              if (states.contains(WidgetState.selected)) {
-                                return const Color(0xFFE09321);
-                              }
-                              return Colors.transparent;
-                            }),
-                            checkColor: WidgetStateProperty.all(Colors.white),
-                          ),
-                          child: Checkbox(
-                            value: dontAskAgain,
-                            onChanged: (bool? value) {
-                              setStateDialog(() {
-                                dontAskAgain = value ?? false;
-                              });
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 1),
-                        const Text("Don't ask anymore",
-                            style: TextStyle(fontSize: 14)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+            return buildDrawerModeConfirmationDialog(
+              dialogContext,
+              dialogMessage: dialogMessage,
+              yesColor: yesColor,
+              dontAskAgain: dontAskAgain,
+              onChanged: (bool? value) {
+                setStateDialog(() {
+                  dontAskAgain = value ?? false;
+                });
+              },
             );
           },
         );
@@ -706,191 +497,35 @@ class _HomeDrawerState extends State<HomeDrawer> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisAlignment: MainAxisAlignment.start,
             children: <Widget>[
-              // User Profile Section with avatar
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.only(top: 0.0),
-                color: Color(0xFF111111),
-                child: Container(
-                  padding: const EdgeInsets.only(
-                      right: 0.0, left: 0.0, top: 4.0, bottom: 4.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: <Widget>[
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // Avatar widget
-                          GestureDetector(
-                            onTap: () {
-                              final profile = widget.userProfile;
-                              final lowercaseNickname = profile == null
-                                  ? null
-                                  : userProfileRouteNickname(profile);
-                              if (lowercaseNickname != null) {
-                                debugPrint(
-                                    "Extracted nickname: $lowercaseNickname");
-                                Navigator.push(
-                                  context,
-                                  UserProfileScreen.route(
-                                    nickname: lowercaseNickname,
-                                    onProfileChanged:
-                                        widget.onUserProfileChanged,
-                                  ),
-                                );
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('User profile not available'),
-                                  ),
-                                );
-                              }
-                            },
-                            child: widget.isUserProfileLoading &&
-                                    (widget.userProfile == null ||
-                                        widget.userProfile!.profileImageUrl
-                                            .isEmpty)
-                                ? const SizedBox(
-                                    width: 120,
-                                    height: 120,
-                                    child: Center(
-                                      child: PulsatingLoadingIndicator(
-                                        size: 58.0,
-                                        assetPath:
-                                            'assets/icons/fathemed.png',
-                                      ),
-                                    ),
-                                  )
-                                : widget.userProfile != null &&
-                                        widget.userProfile!.profileImageUrl
-                                            .isNotEmpty
-                                ? AnimatedBuilder(
-                                    animation: widget.iconAnimationController!,
-                                    builder:
-                                        (BuildContext context, Widget? child) {
-                                      return ScaleTransition(
-                                        scale: AlwaysStoppedAnimation<double>(
-                                          1.0 -
-                                              (widget.iconAnimationController!
-                                                      .value) *
-                                                  0.2,
-                                        ),
-                                        child: RotationTransition(
-                                          turns: const AlwaysStoppedAnimation<
-                                              double>(0.0),
-                                          child: Container(
-                                            height: 110,
-                                            width: 110,
-                                            decoration: BoxDecoration(
-                                              borderRadius:
-                                                  BorderRadius.circular(12.0),
-                                              boxShadow: <BoxShadow>[
-                                                BoxShadow(
-                                                  color: AppTheme.grey
-                                                      .withValues(alpha: 0.0),
-                                                  offset:
-                                                      const Offset(2.0, 4.0),
-                                                  blurRadius: 8,
-                                                ),
-                                              ],
-                                            ),
-                                            child: FaNetworkImage(
-                                              widget
-                                                  .userProfile!.profileImageUrl,
-                                              key: ValueKey(
-                                                'drawer-avatar-${widget.userProfile!.profileImageUrl}-$_avatarRevision',
-                                              ),
-                                              fit: BoxFit.cover,
-                                              loadingBuilder: (context, child,
-                                                  loadingProgress) {
-                                                if (loadingProgress == null) {
-                                                  return child;
-                                                }
-                                                return const Center(
-                                                  child:
-                                                      PulsatingLoadingIndicator(
-                                                    size: 58.0,
-                                                    assetPath:
-                                                        'assets/icons/fathemed.png',
-                                                  ),
-                                                );
-                                              },
-                                              errorBuilder:
-                                                  (context, error, stackTrace) {
-                                                if (error
-                                                    .toString()
-                                                    .contains('404')) {
-                                                  return Image.asset(
-                                                    'assets/images/defaultpic.gif',
-                                                    fit: BoxFit.cover,
-                                                  );
-                                                } else {
-                                                  return const Icon(
-                                                    Icons.person,
-                                                    size: 60,
-                                                    color: Colors.white,
-                                                  );
-                                                }
-                                              },
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  )
-                                : ClipRRect(
-                                    borderRadius: const BorderRadius.all(
-                                      Radius.circular(60.0),
-                                    ),
-                                    child: Image.asset(
-                                      'assets/images/defaultpic.gif',
-                                      width: 120,
-                                      height: 120,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                          ),
-                        ],
+              buildHomeDrawerProfileHeader(
+                userProfile: widget.userProfile,
+                isUserProfileLoading: widget.isUserProfileLoading,
+                animationController: () => widget.iconAnimationController,
+                avatarRevision: _avatarRevision,
+                badgesWithSpacing: badgesWithSpacing,
+                onProfileTap: () {
+                  final profile = widget.userProfile;
+                  final lowercaseNickname = profile == null
+                      ? null
+                      : userProfileRouteNickname(profile);
+                  if (lowercaseNickname != null) {
+                    debugPrint("Extracted nickname: $lowercaseNickname");
+                    Navigator.push(
+                      context,
+                      UserProfileScreen.route(
+                        nickname: lowercaseNickname,
+                        onProfileChanged: widget.onUserProfileChanged,
                       ),
-                      const SizedBox(height: 4),
-                      const Divider(
-                        height: 4.0,
-                        color: Colors.black,
-                        thickness: 4.0,
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('User profile not available'),
                       ),
-                      const SizedBox(height: 8),
-                      // Username
-                      Text(
-                        widget.userProfile?.username ?? 'Username',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                          fontSize: 19,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Divider(
-                        height: 3.0,
-                        color: Colors.black,
-                        thickness: 3.0,
-                      ),
-                      const SizedBox(height: 6),
-                      // Notifications Row
-                      Container(
-                        color: Colors.black,
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 8, horizontal: 16.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: badgesWithSpacing,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                    );
+                  }
+                },
               ),
-              // Drawer Items
               Expanded(
                 child: Container(
                   color: AppTheme.background,
@@ -904,48 +539,10 @@ class _HomeDrawerState extends State<HomeDrawer> {
                               drawerList!.length + (showUpdateButton ? 1 : 0),
                           itemBuilder: (context, index) {
                             if (showUpdateButton && index == 0) {
-                              return Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                    16.0, 14.0, 16.0, 4.0),
-                                child: Center(
-                                  child: ConstrainedBox(
-                                    constraints:
-                                        const BoxConstraints(maxWidth: 200),
-                                    child: Material(
-                                      color: const Color(0xFFE09321),
-                                      borderRadius: BorderRadius.circular(26),
-                                      clipBehavior: Clip.antiAlias,
-                                      child: InkWell(
-                                        onTap: () => launchUrlString(
-                                          AppExternalLinks.telegramUrl,
-                                          mode: LaunchMode.externalApplication,
-                                        ),
-                                        child: const SizedBox(
-                                          height: 44,
-                                          child: Center(
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(Icons.cached,
-                                                    color: Colors.white),
-                                                SizedBox(width: 6),
-                                                Text(
-                                                  'Update Available!',
-                                                  style: TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.w600,
-                                                    fontSize: 16,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                              return buildHomeDrawerUpdateButton(
+                                onTap: () => launchUrlString(
+                                  AppExternalLinks.telegramUrl,
+                                  mode: LaunchMode.externalApplication,
                                 ),
                               );
                             }
@@ -957,67 +554,21 @@ class _HomeDrawerState extends State<HomeDrawer> {
                         ),
                       ),
 
-                      // NSFW Toggle
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: 10.0,
-                          top: 6.0,
-                          right: 16.0,
-                          left: 16.0,
-                        ),
-                        child: Row(
-                          children: [
-                            FlutterSwitch(
-                              width: 68.0,
-                              height: 30.0,
-                              toggleSize: 20.0,
-                              value: !_sfwEnabled,
-                              borderRadius: 18.0,
-                              padding: 3,
-                              activeText: 'NSFW',
-                              inactiveText: ' SFW',
-                              valueFontSize: 11.6,
-                              activeTextColor: Colors.black,
-                              activeToggleColor: Colors.black,
-                              inactiveTextColor: Colors.white,
-                              activeColor: const Color(0xFFE09321),
-                              inactiveColor: const Color(0xFF111111),
-                              showOnOff: true,
-                              onToggle: (val) async {
-                                bool confirmationDisabled =
-                                    await _nsfwConfirmationRepository
-                                        .loadDisabled();
-                                if (confirmationDisabled) {
-                                  await _toggleNsfwMode();
-                                } else {
-                                  await _showNsfwConfirmationDialog();
-                                }
-                              },
-                            ),
-                          ],
-                        ),
+                      ...buildHomeDrawerFooter(
+                        context,
+                        sfwEnabled: _sfwEnabled,
+                        registeredUsersOnline:
+                            _notifications.registeredUsersOnline,
+                        onToggle: (val) async {
+                          bool confirmationDisabled =
+                              await _nsfwConfirmationRepository.loadDisabled();
+                          if (confirmationDisabled) {
+                            await _toggleNsfwMode();
+                          } else {
+                            await _showNsfwConfirmationDialog();
+                          }
+                        },
                       ),
-
-                      const Divider(
-                        height: 1.0,
-                        color: Color(0xFF111111),
-                        thickness: 3.0,
-                      ),
-
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 8.0,
-                          horizontal: 16.0,
-                        ),
-                        child: Text(
-                          'Registered users online: ${_notifications.registeredUsersOnline}',
-                          style: const TextStyle(
-                              fontSize: 14, color: Colors.white),
-                          textAlign: TextAlign.left,
-                        ),
-                      ),
-
-                      SizedBox(height: MediaQuery.paddingOf(context).bottom),
                     ],
                   ),
                 ),

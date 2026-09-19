@@ -129,11 +129,11 @@ class SubmissionsController extends ChangeNotifier {
     _notifyChanged();
   }
 
-  void toggleSelection(String uniqueNumber) {
-    if (_selectedSubmissions.contains(uniqueNumber)) {
-      _selectedSubmissions.remove(uniqueNumber);
+  void toggleSelection(String submissionId) {
+    if (_selectedSubmissions.contains(submissionId)) {
+      _selectedSubmissions.remove(submissionId);
     } else {
-      _selectedSubmissions.add(uniqueNumber);
+      _selectedSubmissions.add(submissionId);
     }
     _notifyChanged();
   }
@@ -236,7 +236,7 @@ class SubmissionsController extends ChangeNotifier {
 
   void _clearPendingDetailFetches() {
     for (final queueItem in _submissionQueue) {
-      final index = _indexOfSubmission(queueItem.uniqueNumber);
+      final index = _indexOfSubmission(queueItem.submissionId);
       if (index >= 0) {
         _flatSubmissionsList[index]['detailFetchQueued'] = false;
       }
@@ -270,14 +270,14 @@ class SubmissionsController extends ChangeNotifier {
     item['detailFetchQueued'] = true;
     _submissionQueue.add(SubmissionQueueItem(
       indexInFlatList: flatListIndex,
-      uniqueNumber: item['uniqueNumber'] as String,
+      submissionId: item['uniqueNumber'] as String,
       postUrl: item['postUrl'] as String,
     ));
   }
 
-  int _indexOfSubmission(String uniqueNumber) {
+  int _indexOfSubmission(String submissionId) {
     return _flatSubmissionsList.indexWhere(
-      (item) => item['uniqueNumber'] == uniqueNumber,
+      (item) => item['uniqueNumber'] == submissionId,
     );
   }
 
@@ -291,7 +291,7 @@ class SubmissionsController extends ChangeNotifier {
         detailFetchGeneration != _detailFetchGeneration) {
       return true;
     }
-    final index = _indexOfSubmission(queueItem.uniqueNumber);
+    final index = _indexOfSubmission(queueItem.submissionId);
     if (index < 0 || !_visibleTileIndices.contains(index)) return true;
     final item = _flatSubmissionsList[index];
     return (item['detailFetchVisibilityGeneration'] as int? ?? 0) !=
@@ -373,7 +373,7 @@ class SubmissionsController extends ChangeNotifier {
         _submissionQueue.isNotEmpty) {
       final queueItem = _submissionQueue.removeFirst();
       final postUrl = queueItem.postUrl;
-      final currentIndex = _indexOfSubmission(queueItem.uniqueNumber);
+      final currentIndex = _indexOfSubmission(queueItem.submissionId);
       if (currentIndex < 0 ||
           !_visibleTileIndices.contains(currentIndex)) {
         continue;
@@ -405,7 +405,7 @@ class SubmissionsController extends ChangeNotifier {
           .then((data) {
         debugPrint('[Submissions] Fetched detail => $postUrl');
         if (_disposed) return;
-        final index = _indexOfSubmission(queueItem.uniqueNumber);
+        final index = _indexOfSubmission(queueItem.submissionId);
         if (index >= 0) {
           final item = _flatSubmissionsList[index];
           item['hqUrl'] = data.hqUrl;
@@ -422,7 +422,7 @@ class SubmissionsController extends ChangeNotifier {
         }
       }).whenComplete(() {
         if (_disposed) return;
-        final index = _indexOfSubmission(queueItem.uniqueNumber);
+        final index = _indexOfSubmission(queueItem.submissionId);
         if (index >= 0) {
           final item = _flatSubmissionsList[index];
           item['detailFetchInProgress'] = false;

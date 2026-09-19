@@ -31,7 +31,7 @@ class UserProfileHomeSection extends StatelessWidget {
     required this.featuredImageUrl,
     required this.featuredImageTitle,
     required this.featuredPostNumber,
-    required this.onOpenPost,
+    required this.onOpenSubmission,
     required this.userProfileImageUrl,
     required this.userProfilePostNumber,
     required this.userProfileTexts,
@@ -74,7 +74,7 @@ class UserProfileHomeSection extends StatelessWidget {
   final String? featuredImageTitle;
   final String? featuredPostNumber;
   final void Function(
-      BuildContext context, String imageUrl, String uniqueNumber) onOpenPost;
+      BuildContext context, String imageUrl, String submissionId) onOpenSubmission;
 
   final String? userProfileImageUrl;
   final String? userProfilePostNumber;
@@ -172,7 +172,7 @@ class UserProfileHomeSection extends StatelessWidget {
                     imageUrl: featuredImageUrl!,
                     title: featuredImageTitle!,
                     onTap: () {
-                      onOpenPost(
+                      onOpenSubmission(
                         context,
                         featuredImageUrl!,
                         featuredPostNumber!,
@@ -199,7 +199,7 @@ class UserProfileHomeSection extends StatelessWidget {
                     isClassicMarkup: isClassicMarkup,
                     acceptingTrades: acceptingTrades,
                     acceptingCommissions: acceptingCommissions,
-                    onOpenPost: onOpenPost,
+                    onOpenSubmission: onOpenSubmission,
                     onHandleFALink: onHandleFALink,
                   ),
                 ),
@@ -272,7 +272,7 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
     required this.isClassicMarkup,
     required this.acceptingTrades,
     required this.acceptingCommissions,
-    required this.onOpenPost,
+    required this.onOpenSubmission,
     required this.onHandleFALink,
   });
 
@@ -283,7 +283,7 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
   final bool acceptingTrades;
   final bool acceptingCommissions;
   final void Function(
-      BuildContext context, String imageUrl, String uniqueNumber) onOpenPost;
+      BuildContext context, String imageUrl, String submissionId) onOpenSubmission;
   final Future<void> Function(BuildContext context, String url) onHandleFALink;
 
   @override
@@ -311,7 +311,7 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
               GestureDetector(
                 onTap: () {
                   if (userProfilePostNumber != null) {
-                    onOpenPost(
+                    onOpenSubmission(
                         context, userProfileImageUrl!, userProfilePostNumber!);
                   }
                 },

@@ -2,7 +2,7 @@ import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
 import 'package:fanotifier/features/notifications/domain/notification_section_kind.dart';
 import 'package:fanotifier/features/notifications/domain/notification_shout_mapper.dart';
-import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
 import 'package:fanotifier/features/notifications/domain/notification_removal_outcome.dart';
 
 class NotificationShoutsCoordinator {
@@ -11,7 +11,7 @@ class NotificationShoutsCoordinator {
     this._pollingService,
   );
 
-  final FANotificationService _service;
+  final FaNotificationsController _service;
   final FaActivitiesPollingPort _pollingService;
 
   List<Shout> currentShouts() {

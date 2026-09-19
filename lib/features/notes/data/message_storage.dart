@@ -1,5 +1,3 @@
-// lib/utils/message_storage.dart
-
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -167,7 +165,9 @@ class MessageStorage {
           deliveries.remove(id);
         } else if (claimedAt != null) {
           if (!recoverExpiredClaims ||
-              now - claimedAt < notificationClaimLease.inMilliseconds) continue;
+              now - claimedAt < notificationClaimLease.inMilliseconds) {
+            continue;
+          }
           shown.remove(id);
           entry.remove('claimedAt');
           deliveries[id] = entry;

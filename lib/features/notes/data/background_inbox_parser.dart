@@ -1,6 +1,6 @@
 import 'package:html/dom.dart' as dom;
 
-import 'package:fanotifier/core/utils/utils.dart';
+import 'package:fanotifier/core/utils/note_link_parser.dart';
 import 'package:fanotifier/features/notes/domain/background_inbox_models.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
@@ -134,14 +134,14 @@ String? _backgroundTopbarTypeKey({
   required String href,
   required String title,
 }) {
-  final h = href.toLowerCase();
-  final t = title.toLowerCase();
-  if (h.contains('msg/submissions') || t.contains('submission')) return 'S';
-  if (h.contains('#watches') || t.contains('watch')) return 'W';
-  if (h.contains('#comments') || t.contains('comment')) return 'C';
-  if (h.contains('#favorites') || t.contains('favorite')) return 'F';
-  if (h.contains('#journals') || t.contains('journal')) return 'J';
-  if (h.contains('msg/pms') || t.contains('note')) return 'N';
+  final normalizedHref = href.toLowerCase();
+  final normalizedTitle = title.toLowerCase();
+  if (normalizedHref.contains('msg/submissions') || normalizedTitle.contains('submission')) return 'S';
+  if (normalizedHref.contains('#watches') || normalizedTitle.contains('watch')) return 'W';
+  if (normalizedHref.contains('#comments') || normalizedTitle.contains('comment')) return 'C';
+  if (normalizedHref.contains('#favorites') || normalizedTitle.contains('favorite')) return 'F';
+  if (normalizedHref.contains('#journals') || normalizedTitle.contains('journal')) return 'J';
+  if (normalizedHref.contains('msg/pms') || normalizedTitle.contains('note')) return 'N';
   return null;
 }
 

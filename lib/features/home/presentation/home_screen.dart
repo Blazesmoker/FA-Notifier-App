@@ -1,17 +1,17 @@
 import 'dart:async';
 import 'package:fanotifier/features/notifications/presentation/notification_navigation_provider.dart';
-import 'package:fanotifier/features/browse/presentation/faimagegrid.dart';
+import 'package:fanotifier/features/browse/presentation/browse_image_grid.dart';
 import 'package:fanotifier/features/browse/presentation/filters_screen.dart';
 import 'package:fanotifier/features/notes/domain/notes_repository.dart';
-import 'package:fanotifier/features/notes/presentation/notesscreen.dart';
+import 'package:fanotifier/features/notes/presentation/notes_screen.dart';
 import 'package:fanotifier/features/notifications/presentation/notifications_screen.dart';
 import 'package:fanotifier/features/search/presentation/search_screen.dart';
 import 'package:fanotifier/features/submissions/presentation/submissions_screen.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
-import 'package:fanotifier/features/upload/presentation/upload_submission.dart';
+import 'package:fanotifier/features/upload/presentation/upload_submission_screen.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
-import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:flutter/foundation.dart';
@@ -23,7 +23,7 @@ import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:fanotifier/shared/utils/content_rating_filters.dart';
 import 'package:fanotifier/shared/utils/external_link_launcher.dart';
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:fanotifier/features/drawer/presentation/drawer_user_controller.dart';
+import 'package:fanotifier/features/drawer/presentation/home_drawer_shell.dart';
 import 'package:fanotifier/shared/theme/app_theme.dart';
 import 'package:fanotifier/shared/fa/domain/user_profile.dart';
 import 'package:fanotifier/shared/fa/domain/notifications.dart';
@@ -90,8 +90,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _elementCheckTimer;
   DateTime? _firstTimeElementFound;
 
-  final GlobalKey<DrawerUserControllerState> _drawerKey =
-      GlobalKey<DrawerUserControllerState>();
+  final GlobalKey<HomeDrawerShellState> _drawerKey =
+      GlobalKey<HomeDrawerShellState>();
 
   Map<String, String> browseFilters =
       ContentRatingFilters.defaultBrowseFilters(sfwEnabled: true);
@@ -114,7 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final GlobalKey<SubmissionsScreenState> _submissionsKey =
       GlobalKey<SubmissionsScreenState>();
-  final GlobalKey<FAImageGridState> _browseKey = GlobalKey<FAImageGridState>();
+  final GlobalKey<BrowseImageGridState> _browseKey = GlobalKey<BrowseImageGridState>();
   final GlobalKey<SearchScreenState> _searchKey =
       GlobalKey<SearchScreenState>();
   final GlobalKey<NotesScreenState> _notesKey = GlobalKey<NotesScreenState>();
@@ -273,7 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _startActivitiesPolling({required bool triggerImmediate}) {
     try {
-      final svc = Provider.of<FANotificationService>(context, listen: false);
+      final svc = Provider.of<FaNotificationsController>(context, listen: false);
       _activitiesPolling.start(faNotificationService: svc);
       if (triggerImmediate) {
         unawaited(_activitiesPolling.triggerNow(
@@ -357,7 +357,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   int _getNotificationsEnabledSum(
     NotificationSettingsProvider settings,
-    FANotificationService faNotificationService,
+    FaNotificationsController faNotificationService,
   ) {
     return enabledNotificationItemsCount(
       sections: faNotificationService.sections,
@@ -774,12 +774,12 @@ class _HomeScreenState extends State<HomeScreen> {
           username: 'Username',
           profileImageUrl: '',
         );
-    return DrawerUserController(
+    return HomeDrawerShell(
       key: _drawerKey,
-      screenIndex: drawerIndex,
+      selectedDrawerItem: drawerIndex,
       drawerWidth: MediaQuery.sizeOf(context).width * 0.75,
-      onDrawerCall: (DrawerIndex drawerIndexdata) {
-        _changeIndex(drawerIndexdata);
+      onDrawerItemSelected: (DrawerIndex selectedItem) {
+        _changeIndex(selectedItem);
       },
       screenView: _buildSelectedScreen(),
       onLogout: _logout,
@@ -853,7 +853,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-            body: FAImageGrid(
+            body: BrowseImageGrid(
               key: _browseKey,
               selectedFilters: browseFilters,
             ),
@@ -978,7 +978,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
       final faNotificationService =
-          Provider.of<FANotificationService>(context, listen: false);
+          Provider.of<FaNotificationsController>(context, listen: false);
       faNotificationService.clearAllNotifications();
       _unreadCount.value = 0;
 
@@ -1045,7 +1045,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<NotificationSettingsProvider, FANotificationService>(
+    return Consumer2<NotificationSettingsProvider, FaNotificationsController>(
       child: isCheckingLoginStatus
           ? const SafeArea(
               child: Center(

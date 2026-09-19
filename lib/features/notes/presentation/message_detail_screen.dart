@@ -1,7 +1,11 @@
+import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'widgets/message_detail_actions.dart';
+import 'widgets/message_detail_header.dart';
+import 'widgets/message_detail_menu_item.dart';
+import 'widgets/message_detail_status.dart';
 import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
-import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:fanotifier/features/notes/domain/note_message_repository.dart';
@@ -9,7 +13,6 @@ import 'package:fanotifier/features/notes/domain/managed_notes_repository.dart';
 import 'package:fanotifier/features/notes/domain/note_management.dart';
 import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
 import 'package:fanotifier/app/navigation/app_navigation.dart';
-import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/notes/presentation/note_reply_screen.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/notes/domain/note_image_preview_mode.dart';
@@ -17,78 +20,13 @@ import 'package:fanotifier/features/notes/domain/note_submission_preview_reposit
 import 'package:fanotifier/features/notes/presentation/note_body_with_previews.dart';
 import 'package:fanotifier/features/notes/presentation/note_image_preview_settings_provider.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
-import 'package:fanotifier/shared/utils/utils.dart';
+import 'package:fanotifier/shared/utils/app_snack_bar.dart';
 import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:fanotifier/shared/translation/native_translate_launcher.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
 import 'package:fanotifier/features/settings/domain/time_display_models.dart';
 import 'package:fanotifier/features/settings/presentation/time_display_settings_provider.dart';
-import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:provider/provider.dart';
-
-const double _messageActionsFadeCeilingAboveButtons = 0.0;
-const double _messageActionsFadeTransitionStart = 0.0;
-const double _messageActionsFadeBlackStop = 1.00;
-const double _messageActionsFadePosition = 0.35;
-const double _messageActionsFadeSmoothness = 1.0;
-const int _messageActionsFadeSteps = 64;
-const double _messageActionsFadeBottomOffset = 18.0;
-const double _messageActionsButtonsBottomOffset = 8.0;
-const double _messageActionsScrollClearance = 96.0;
-
-List<double> get _messageActionsFadeStops => List<double>.generate(
-      _messageActionsFadeSteps + 1,
-      (index) => index / _messageActionsFadeSteps,
-    );
-
-List<Color> get _messageActionsFadeColors => List<Color>.generate(
-      _messageActionsFadeSteps + 1,
-      (index) => Color.fromARGB(
-        (_messageActionsFadeAlpha(index / _messageActionsFadeSteps) * 255)
-            .round(),
-        0,
-        0,
-        0,
-      ),
-    );
-
-double _messageActionsFadeAlpha(double stop) {
-  final transitionStart =
-      _messageActionsFadeTransitionStart.clamp(0.0, 0.99).toDouble();
-  final blackStop = _messageActionsFadeBlackStop
-      .clamp(transitionStart + 0.01, 1.0)
-      .toDouble();
-  if (stop <= transitionStart) return 0.0;
-  if (stop >= blackStop) return 1.0;
-
-  final progress =
-      (stop - transitionStart) / (blackStop - transitionStart);
-  final position =
-      _messageActionsFadePosition.clamp(0.01, 0.99).toDouble();
-  final smoothness =
-      _messageActionsFadeSmoothness.clamp(0.0, 1.0).toDouble();
-  final steepness = 14.0 - (smoothness * 12.0);
-  final shiftedProgress = (progress * (1.0 - position)) /
-      (position + (progress * (1.0 - (2.0 * position))));
-
-  double sigmoid(double value) {
-    return 1.0 /
-        (1.0 + math.exp(-steepness * (value - 0.5)));
-  }
-
-  final minimum = sigmoid(0.0);
-  final maximum = sigmoid(1.0);
-  final normalizedAlpha =
-      ((sigmoid(shiftedProgress) - minimum) / (maximum - minimum))
-      .clamp(0.0, 1.0)
-      .toDouble();
-  final edgeSmoothedAlpha =
-      normalizedAlpha * normalizedAlpha * (3.0 - (2.0 * normalizedAlpha));
-  return (normalizedAlpha +
-          ((edgeSmoothedAlpha - normalizedAlpha) * smoothness))
-      .clamp(0.0, 1.0)
-      .toDouble();
-}
 
 enum _MessageMenuAction {
   archive,
@@ -368,25 +306,6 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
     );
   }
 
-  PopupMenuItem<_MessageMenuAction> _buildMessageMenuItem({
-    required _MessageMenuAction action,
-    required IconData icon,
-    required String label,
-    bool enabled = true,
-  }) {
-    return PopupMenuItem<_MessageMenuAction>(
-      value: action,
-      enabled: enabled,
-      child: Row(
-        children: [
-          Icon(icon, color: enabled ? Colors.white : Colors.grey, size: 21),
-          const SizedBox(width: 12),
-          Text(label),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final imagePreviewSettings =
@@ -411,9 +330,9 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
         : null;
     final bottomSafeInset = MediaQuery.paddingOf(context).bottom;
     final messageActionsFadeBottomInset =
-        bottomSafeInset + _messageActionsFadeBottomOffset;
+        bottomSafeInset + messageActionsFadeBottomOffset;
     final messageActionsButtonsBottomInset =
-        bottomSafeInset + _messageActionsButtonsBottomOffset;
+        bottomSafeInset + messageActionsButtonsBottomOffset;
     final messageActionsContentBottomInset = math.max(
       messageActionsFadeBottomInset,
       messageActionsButtonsBottomInset,
@@ -497,25 +416,31 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                           context: context,
                           position: position,
                           items: [
-                            _buildMessageMenuItem(
+                            buildMessageDetailMenuItem(
                               action: _MessageMenuAction.archive,
                               icon: Icons.archive_outlined,
                               label: 'Move to Archive',
-                              enabled: messageId != null &&
-                                  widget.sourceFolder != NotesFolder.archive,
+                              enabled:
+                                  messageId != null &&
+                                  widget.sourceFolder !=
+                                      NotesFolder.archive,
                             ),
-                            _buildMessageMenuItem(
+                            buildMessageDetailMenuItem(
                               action: _MessageMenuAction.trash,
                               icon: Icons.delete_outline,
                               label: 'Move to Trash',
-                              enabled: messageId != null &&
-                                  widget.sourceFolder != NotesFolder.trash,
+                              enabled:
+                                  messageId != null &&
+                                  widget.sourceFolder !=
+                                      NotesFolder.trash,
                             ),
-                            _buildMessageMenuItem(
+                            buildMessageDetailMenuItem(
                               action: _MessageMenuAction.translate,
                               icon: Icons.g_translate,
                               label: 'Translate',
-                              enabled: messageContent.trim().isNotEmpty,
+                              enabled: messageContent
+                                  .trim()
+                                  .isNotEmpty,
                             ),
                           ],
                         );
@@ -538,20 +463,9 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
             ),
             backgroundColor: Colors.black,
             body: isLoading
-                ? const Center(
-              child: PulsatingLoadingIndicator(
-                size: 108.0,
-                assetPath: 'assets/icons/fathemed.png',
-              ),
-            )
+                ? buildMessageDetailLoading()
                 : errorMessage.isNotEmpty
-                ? Center(
-              child: Text(
-                errorMessage,
-                style: const TextStyle(color: Colors.red, fontSize: 16),
-                textAlign: TextAlign.center,
-              ),
-            )
+                ? buildMessageDetailError(errorMessage)
                 : Padding(
               padding: const EdgeInsets.only(
                 left: 16.0,
@@ -561,115 +475,27 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      if (!isClassic)
-                        GestureDetector(
-                          onTap: () {
-                            final link = widget.folder == 'sent' ? recipientLink : senderLink;
-                            if (link.isNotEmpty) {
-                              handleFALink(context, link);
-                            }
-                          },
-                          child: Container(
-                            width: 60,
-                            height: 60,
-                            color: Colors.transparent,
-                            child: FaNetworkImage(
-                              'https:$avatarUrl',
-                              fit: BoxFit.cover,
-                              alignment: Alignment.center,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Transform.scale(
-                                  scale: 1.05,
-                                  child: Image.asset(
-                                    'assets/images/defaultpic.gif',
-                                    fit: BoxFit.cover,
-                                  ),
-                                );
-                              },
-                            ),
-
-                          ),
-                        )
-                      else
-                        const SizedBox.shrink(),
-                      const SizedBox(width: 16),
-                      Expanded(child:
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text(
-                                'Sent by: ',
-                                style: TextStyle(fontSize: 16, color: Colors.white),
-                              ),
-                              widget.folder == 'sent'
-                                  ? Text(
-                                      sender.isNotEmpty ? sender : 'Unknown sender',
-                                      style: const TextStyle(fontSize: 16, color: Colors.white),
-                                    )
-                                  : InkWell(
-                                      onTap: senderLink.isNotEmpty
-                                          ? () => handleFALink(context, senderLink)
-                                          : null,
-                                      child: Text(
-                                        sender.isNotEmpty ? sender : 'Unknown sender',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          color: Color(0xFFE09321),
-                                          decoration: TextDecoration.none,
-                                        ),
-                                      ),
-                                    ),
-                            ],
-                          ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text(
-                                'To: ',
-                                style: TextStyle(fontSize: 16, color: Colors.white),
-                              ),
-                              widget.folder == 'sent' && recipientLink.isNotEmpty
-                                  ? InkWell(
-                                      onTap: () => handleFALink(context, recipientLink),
-                                      child: Text(
-                                        recipient.isNotEmpty ? recipient : 'Unknown recipient',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          color: Color(0xFFE09321),
-                                          decoration: TextDecoration.none,
-                                        ),
-                                      ),
-                                    )
-                                  : Text(
-                                      recipient.isNotEmpty ? recipient : 'Unknown recipient',
-                                      style: const TextStyle(fontSize: 16, color: Colors.white),
-                                    ),
-                            ],
-                          ),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Date: ${formatTimeInText(
-                                sentDate,
-                                format: timeFormat,
-                              )}',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-
-                        ],
-                      ),
-                      ),
-                    ],
+                  buildMessageDetailHeader(
+                    isClassic: isClassic,
+                    avatarUrl: avatarUrl,
+                    sender: sender,
+                    recipient: recipient,
+                    senderLink: senderLink,
+                    recipientLink: recipientLink,
+                    sentDate: sentDate,
+                    timeFormat: timeFormat,
+                    folder: widget.folder,
+                    onAvatarTap: () {
+                      final link = widget.folder == 'sent'
+                          ? recipientLink
+                          : senderLink;
+                      if (link.isNotEmpty) {
+                        handleFALink(context, link);
+                      }
+                    },
+                    onSenderTap: () => handleFALink(context, senderLink),
+                    onRecipientTap: () =>
+                        handleFALink(context, recipientLink),
                   ),
                   const Divider(height: 20, thickness: 1, color: Colors.white54),
                   Expanded(
@@ -679,7 +505,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                           child: SingleChildScrollView(
                             padding: EdgeInsets.only(
                               bottom: widget.folder != 'sent'
-                                  ? _messageActionsScrollClearance +
+                                  ? messageActionsScrollClearance +
                                       messageActionsContentBottomInset
                                   : messageActionsFadeBottomInset,
                             ),
@@ -797,146 +623,50 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                           ),
                         ),
                         if (widget.allowMarkUnread && widget.folder != 'sent')
-                          Align(
-                            alignment: Alignment.bottomCenter,
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: Stack(
-                                alignment: Alignment.bottomCenter,
-                                clipBehavior: Clip.none,
-                                children: [
-                                  Positioned.fill(
-                                    child: IgnorePointer(
-                                      child: LayoutBuilder(
-                                        builder: (context, constraints) {
-                                          final totalHeight =
-                                              constraints.maxHeight;
-                                          final fadeHeight = math.max(
-                                            0.0,
-                                            totalHeight -
-                                                messageActionsFadeBottomInset,
-                                          );
-                                          final fadeEnd = totalHeight <= 0
-                                              ? 1.0
-                                              : (fadeHeight / totalHeight)
-                                                  .clamp(0.0, 1.0)
-                                                  .toDouble();
-                                          return DecoratedBox(
-                                            decoration: BoxDecoration(
-                                              gradient: LinearGradient(
-                                                begin: Alignment.topCenter,
-                                                end: Alignment.bottomCenter,
-                                                colors: [
-                                                  ..._messageActionsFadeColors,
-                                                  Colors.black,
-                                                ],
-                                                stops: [
-                                                  ..._messageActionsFadeStops
-                                                      .map(
-                                                    (stop) => stop * fadeEnd,
-                                                  ),
-                                                  1.0,
-                                                ],
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
+                          buildMessageDetailActions(
+                            messageActionsFadeBottomInset:
+                                messageActionsFadeBottomInset,
+                            onMarkUnread: _markAsUnread,
+                            onReply: () {
+                              final replyToUsername =
+                                  widget.folder == 'sent'
+                                  ? recipientUsername
+                                  : senderUsername;
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  settings: const AnalyticsRouteSettings(
+                                    AppScreens.noteReply,
                                   ),
-                                  Padding(
-                                    padding: EdgeInsets.only(
-                                      top: _messageActionsFadeCeilingAboveButtons,
-                                      bottom: messageActionsFadeBottomInset,
-                                    ),
-                                    child: Transform.translate(
-                                      offset: const Offset(
-                                        0,
-                                        _messageActionsFadeBottomOffset -
-                                            _messageActionsButtonsBottomOffset,
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
-                                          OutlinedButton(
-                                            onPressed: _markAsUnread,
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor:
-                                                  const Color(0xFFE09321),
-                                              side: const BorderSide(
-                                                color: Color(0xFFE09321),
-                                              ),
-                                              tapTargetSize:
-                                                  MaterialTapTargetSize.padded,
-                                            ),
-                                            child: const Text('Mark Unread'),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          ElevatedButton(
-                                            onPressed: () {
-                                              final replyToUsername =
-                                                  widget.folder == 'sent'
-                                                      ? recipientUsername
-                                                      : senderUsername;
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  settings:
-                                                      const AnalyticsRouteSettings(
-                                                    AppScreens.noteReply,
-                                                  ),
-                                                  builder: (context) =>
-                                                      NoteReplyScreen(
-                                                    subject: subject,
-                                                    originalContent:
-                                                        messageContent,
-                                                    originalContentHtml:
-                                                        messageContentHtml
-                                                                .isNotEmpty
-                                                            ? messageContentHtml
-                                                            : null,
-                                                    username: replyToUsername
-                                                            .isNotEmpty
-                                                        ? replyToUsername
-                                                        : senderUsername,
-                                                    messageId: messageId ?? '',
-                                                    messageLink:
-                                                        widget.messageLink,
-                                                    imagePreviewMode:
-                                                        imagePreviewMode,
-                                                  ),
-                                                ),
-                                              ).then((result) {
-                                                if (result == true) {
-                                                  rootMessengerKey.currentState
-                                                      ?.showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                        'Reply sent successfully!',
-                                                      ),
-                                                      backgroundColor:
-                                                          Colors.green,
-                                                    ),
-                                                  );
-                                                }
-                                              });
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  const Color(0xFFE09321),
-                                              tapTargetSize:
-                                                  MaterialTapTargetSize.padded,
-                                            ),
-                                            child: const Text('Reply'),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                  builder: (context) => NoteReplyScreen(
+                                    subject: subject,
+                                    originalContent: messageContent,
+                                    originalContentHtml:
+                                        messageContentHtml.isNotEmpty
+                                        ? messageContentHtml
+                                        : null,
+                                    username: replyToUsername.isNotEmpty
+                                        ? replyToUsername
+                                        : senderUsername,
+                                    messageId: messageId ?? '',
+                                    messageLink: widget.messageLink,
+                                    imagePreviewMode: imagePreviewMode,
                                   ),
-                                ],
-                              ),
-                            ),
+                                ),
+                              ).then((result) {
+                                if (result == true) {
+                                  rootMessengerKey.currentState
+                                      ?.showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Reply sent successfully!',
+                                          ),
+                                          backgroundColor: Colors.green,
+                                        ),
+                                      );
+                                }
+                              });
+                            },
                           ),
                       ],
                     ),

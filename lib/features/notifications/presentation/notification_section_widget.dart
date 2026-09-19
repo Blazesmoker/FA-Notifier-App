@@ -1,7 +1,7 @@
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
-import 'package:fanotifier/features/journals/presentation/openjournal.dart';
+import 'package:fanotifier/features/journals/presentation/journal_details_screen.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
-import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
 import 'package:fanotifier/features/notifications/domain/notification_message_formatter.dart';
 import 'package:fanotifier/features/notifications/domain/notification_section_kind.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_activities_controller.dart';
@@ -9,7 +9,7 @@ import 'package:fanotifier/features/notifications/presentation/notification_shou
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/features/settings/domain/time_display_models.dart';
-import 'package:fanotifier/features/submissions/presentation/openpost.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_details_screen.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
@@ -36,7 +36,7 @@ class NotificationSectionWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<FANotificationService>(
+    return Consumer<FaNotificationsController>(
       builder: (context, service, child) {
         final section = controller.sections[sectionIndex];
         return RefreshIndicator(
@@ -183,8 +183,8 @@ class NotificationSectionWidget extends StatelessWidget {
                                       if (item.submissionId != null) {
                                         Navigator.push(
                                           context,
-                                          OpenPost.route(
-                                            uniqueNumber: item.submissionId!,
+                                          SubmissionDetailsScreen.route(
+                                            submissionId: item.submissionId!,
                                             imageUrl: '',
                                           ),
                                         );
@@ -200,8 +200,8 @@ class NotificationSectionWidget extends StatelessWidget {
                                                 const AnalyticsRouteSettings(
                                               AppScreens.journalDetails,
                                             ),
-                                            builder: (context) => OpenJournal(
-                                                uniqueNumber: item.journalId!),
+                                            builder: (context) => JournalDetailsScreen(
+                                                journalId: item.journalId!),
                                           ),
                                         );
                                       }
@@ -228,8 +228,8 @@ class NotificationSectionWidget extends StatelessWidget {
                                                 const AnalyticsRouteSettings(
                                               AppScreens.journalDetails,
                                             ),
-                                            builder: (context) => OpenJournal(
-                                                uniqueNumber: item.journalId!),
+                                            builder: (context) => JournalDetailsScreen(
+                                                journalId: item.journalId!),
                                           ),
                                         );
                                       }
@@ -381,8 +381,8 @@ class NotificationSectionWidget extends StatelessWidget {
                                                               .journalDetails,
                                                         ),
                                                         builder: (context) =>
-                                                            OpenJournal(
-                                                          uniqueNumber:
+                                                            JournalDetailsScreen(
+                                                          journalId:
                                                               target.journalId!,
                                                         ),
                                                       ),
@@ -392,8 +392,8 @@ class NotificationSectionWidget extends StatelessWidget {
                                                         .submission:
                                                     Navigator.push(
                                                       context,
-                                                      OpenPost.route(
-                                                        uniqueNumber: target
+                                                      SubmissionDetailsScreen.route(
+                                                        submissionId: target
                                                             .submissionId!,
                                                         imageUrl: '',
                                                       ),
@@ -472,8 +472,8 @@ class NotificationSectionWidget extends StatelessWidget {
                                               if (item.submissionId != null) {
                                                 Navigator.push(
                                                   context,
-                                                  OpenPost.route(
-                                                    uniqueNumber:
+                                                  SubmissionDetailsScreen.route(
+                                                    submissionId:
                                                         item.submissionId!,
                                                     imageUrl: '',
                                                   ),

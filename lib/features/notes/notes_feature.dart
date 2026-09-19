@@ -7,7 +7,7 @@ import 'package:fanotifier/features/notes/data/note_reply_service.dart';
 import 'package:fanotifier/features/notes/data/note_reply_webview_gateway_impl.dart';
 import 'package:fanotifier/features/notes/data/notes_repository_impl.dart';
 import 'package:fanotifier/features/notes/data/notes_refresh_service.dart';
-import 'package:fanotifier/features/notes/data/notesscreen_api_service.dart';
+import 'package:fanotifier/features/notes/data/notes_api_service.dart';
 import 'package:fanotifier/features/notes/domain/new_message_repository.dart';
 import 'package:fanotifier/features/notes/domain/managed_notes_repository.dart';
 import 'package:fanotifier/features/notes/domain/note_message_repository.dart';
@@ -17,7 +17,7 @@ import 'package:fanotifier/features/notes/domain/note_submission_preview_reposit
 import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
 import 'package:fanotifier/features/notes/domain/notes_repository.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
-import 'package:fanotifier/features/submissions/domain/openpost_repository.dart';
+import 'package:fanotifier/features/submissions/domain/submission_details_repository.dart';
 
 class NotesFeature {
   NotesFeature._();
@@ -55,10 +55,10 @@ class NotesFeature {
   }
 
   static NoteSubmissionPreviewRepository createSubmissionPreviewRepository({
-    required OpenPostRepository openPostRepository,
+    required SubmissionDetailsRepository submissionDetailsRepository,
   }) {
     return NoteSubmissionPreviewRepositoryImpl(
-      openPostRepository: openPostRepository,
+      submissionDetailsRepository: submissionDetailsRepository,
       googleImageResolver: GoogleImagesWebViewResolver(),
     );
   }

@@ -6,7 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'package:fanotifier/core/utils/utils.dart';
+import 'package:fanotifier/core/utils/note_link_parser.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';

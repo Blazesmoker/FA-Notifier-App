@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:fanotifier/features/profile/presentation/profile_bulk_selection_bar.dart';
-import 'package:fanotifier/features/profile/presentation/profilefavs.dart';
+import 'package:fanotifier/features/profile/presentation/profile_favorites_sliver.dart';
 
 class UserProfileFavoritesSection extends StatefulWidget {
   const UserProfileFavoritesSection({
@@ -23,8 +23,8 @@ class UserProfileFavoritesSection extends StatefulWidget {
 class _UserProfileFavoritesSectionState
     extends State<UserProfileFavoritesSection>
     with AutomaticKeepAliveClientMixin<UserProfileFavoritesSection> {
-  final GlobalKey<ProfileFavsSliverState> _favsKey =
-      GlobalKey<ProfileFavsSliverState>();
+  final GlobalKey<ProfileFavoritesSliverState> _favsKey =
+      GlobalKey<ProfileFavoritesSliverState>();
   final GlobalKey _bulkSelectionBarKey = GlobalKey();
   bool _selectionMode = false;
   bool _isApplying = false;
@@ -242,7 +242,7 @@ class _UserProfileFavoritesSectionState
                     ),
                   ),
                 ),
-                ProfileFavsSliver(
+                ProfileFavoritesSliver(
                   key: _favsKey,
                   username: widget.sanitizedUsername,
                   isOwnProfile: widget.isOwnProfile,

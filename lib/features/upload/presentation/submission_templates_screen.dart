@@ -1,5 +1,3 @@
-// lib/screens/submission_templates_screen.dart
-
 import 'dart:ui';
 
 import 'package:material_ui/material_ui.dart';

@@ -1,7 +1,7 @@
 bool isWideProfileImage(Map<String, dynamic> image) {
-  final w = image['width'] as double;
-  final h = image['height'] as double;
-  return (w / h) > 1.5;
+  final width = image['width'] as double;
+  final height = image['height'] as double;
+  return (width / height) > 1.5;
 }
 
 void appendProfileImagesIntoRows({

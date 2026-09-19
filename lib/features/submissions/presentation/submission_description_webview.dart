@@ -11,7 +11,7 @@ import 'package:fanotifier/shared/fa/fa_webview_document_scripts.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
-import 'package:fanotifier/shared/utils/utils.dart';
+import 'package:fanotifier/shared/utils/app_snack_bar.dart';
 
 class SubmissionDescriptionWebView extends StatefulWidget {
   final String submissionId;
@@ -313,8 +313,6 @@ class SubmissionDescriptionWebViewState
                 verticalScrollBarEnabled: false,
                 horizontalScrollBarEnabled: false,
                 supportMultipleWindows: true,
-                // useWideViewPort: true,
-                // loadWithOverviewMode: true,
                 useHybridComposition: widget.forceHybridComposition,
                 transparentBackground: Platform.isIOS,
                 textZoom: 100,

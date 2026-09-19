@@ -1,5 +1,3 @@
-// lib/widgets/heart_animation.dart
-
 import 'dart:math';
 import 'package:material_ui/material_ui.dart';
 
@@ -93,11 +91,9 @@ class _HeartAnimationWidgetState extends State<HeartAnimationWidget>
       _showSmallBrokenHeart = false;
 
       if (newFav) {
-        // Fav -> show big heart & small heart
         _showBigHeart = true;
         _showSmallHeart = true;
       } else {
-        // Unfav -> show big broken heart & small broken heart
         _showBigBrokenHeart = true;
         _showSmallBrokenHeart = true;
         _showSmallHeart = false;
@@ -126,7 +122,6 @@ class _HeartAnimationWidgetState extends State<HeartAnimationWidget>
     return Stack(
       children: [
         widget.child,
-        // Big heart or broken heart in the center
         Positioned.fill(
           child: AnimatedBuilder(
             animation: _controller,
@@ -154,7 +149,6 @@ class _HeartAnimationWidgetState extends State<HeartAnimationWidget>
           ),
         ),
 
-        // Small heart
         Positioned(
           top: 8,
           right: 8,
@@ -165,7 +159,6 @@ class _HeartAnimationWidgetState extends State<HeartAnimationWidget>
           ),
         ),
 
-        // Small broken heart
         Positioned(
           top: 8,
           right: 8,

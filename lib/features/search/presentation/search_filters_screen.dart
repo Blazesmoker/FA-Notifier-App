@@ -38,8 +38,8 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
         currentSearchFilters['mode']!.isEmpty) {
       currentSearchFilters['mode'] = 'extended';
     }
-    for (final g in searchGenderOptions) {
-      currentSearchFilters['gender-${g['key']}'] ??= '0';
+    for (final genderOption in searchGenderOptions) {
+      currentSearchFilters['gender-${genderOption['key']}'] ??= '0';
     }
 
     if (currentSearchFilters['range'] == 'manual') {
@@ -473,7 +473,6 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         children: [
-          // Reset Button
           Expanded(
             child: Container(
               height: 48,
@@ -516,7 +515,6 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
             ),
           ),
           const SizedBox(width: 16),
-          // Apply Button
           Expanded(
             child: Container(
               height: 48,

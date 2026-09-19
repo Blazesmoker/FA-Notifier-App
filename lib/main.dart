@@ -14,7 +14,7 @@ import 'package:fanotifier/core/crash_reporting/app_crash_reporter.dart';
 import 'package:fanotifier/app/navigation/app_notification_navigation.dart';
 import 'package:fanotifier/core/preferences/app_foreground_state_preference.dart';
 import 'package:fanotifier/features/drawer/data/app_update_service.dart';
-import 'package:fanotifier/features/drawer/presentation/drawer_user_controller.dart';
+import 'package:fanotifier/features/drawer/presentation/home_drawer_shell.dart';
 import 'package:fanotifier/features/drawer/presentation/update_screen.dart';
 import 'package:fanotifier/features/home/presentation/home_screen.dart';
 import 'package:fanotifier/features/notifications/data/notification_badge_state.dart'
@@ -23,8 +23,8 @@ import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 
 import 'core/logging/app_logging.dart';
 
-final GlobalKey<DrawerUserControllerState> drawerKey =
-    GlobalKey<DrawerUserControllerState>();
+final GlobalKey<HomeDrawerShellState> drawerKey =
+    GlobalKey<HomeDrawerShellState>();
 
 const bool _forceShowUpdateScreen = false;
 

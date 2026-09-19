@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
 import 'package:fanotifier/features/notifications/domain/notification_shout_mapper.dart';
@@ -20,7 +20,7 @@ class NotificationShoutsController extends ChangeNotifier {
     _shoutsFuture = Future.value(cached);
   }
 
-  final FANotificationService _service;
+  final FaNotificationsController _service;
   final NotificationShoutsCoordinator _coordinator;
 
   late Future<List<Shout>> _shoutsFuture;

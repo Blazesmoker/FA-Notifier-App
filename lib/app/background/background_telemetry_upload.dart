@@ -84,7 +84,9 @@ class BackgroundTelemetryUpload {
           await prefs.reload();
           if (!_foreground) return;
           if (!(prefs.getBool(PrivacySettingsPreference.analyticsEnabledKey) ?? false) ||
-              record['analytics_epoch'] != (prefs.getInt(PrivacySettingsPreference.analyticsEpochKey) ?? 0)) break;
+              record['analytics_epoch'] != (prefs.getInt(PrivacySettingsPreference.analyticsEpochKey) ?? 0)) {
+            break;
+          }
           final event = events[cursor];
           await FirebaseAnalytics.instance.logEvent(name: event.$1, parameters: event.$2)
               .timeout(const Duration(seconds: 2));
@@ -99,7 +101,9 @@ class BackgroundTelemetryUpload {
         await prefs.reload();
         if (!_foreground) return;
         if (!(prefs.getBool(PrivacySettingsPreference.crashlyticsEnabledKey) ?? false) ||
-            record['crashlytics_epoch'] != (prefs.getInt(PrivacySettingsPreference.crashlyticsEpochKey) ?? 0)) break;
+            record['crashlytics_epoch'] != (prefs.getInt(PrivacySettingsPreference.crashlyticsEpochKey) ?? 0)) {
+          break;
+        }
         final error = errors[errorCursor] as Map;
         await FirebaseCrashlytics.instance.recordError(
           error['type'] as String,

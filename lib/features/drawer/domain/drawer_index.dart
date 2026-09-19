@@ -1,5 +1,3 @@
-// lib/enums/drawer_index.dart
-
 enum DrawerIndex {
   home,
   feedBack,

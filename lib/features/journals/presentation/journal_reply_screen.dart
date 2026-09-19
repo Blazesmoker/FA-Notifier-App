@@ -3,7 +3,7 @@ import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html;
 import 'package:provider/provider.dart';
 
-import 'package:fanotifier/features/journals/domain/openjournal_repository.dart';
+import 'package:fanotifier/features/journals/domain/journal_details_repository.dart';
 import 'package:fanotifier/shared/utils/bbcode_context_menu.dart';
 import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
 
@@ -20,7 +20,7 @@ class JournalReplyScreen extends StatefulWidget {
   final String? commentHtml;
 
   final Function(String) onSendReply;
-  final OpenJournalRepository? repository;
+  final JournalDetailsRepository? repository;
 
   const JournalReplyScreen({
     required this.submissionId,
@@ -82,7 +82,7 @@ class _JournalReplyScreenState extends State<JournalReplyScreen> {
 
     try {
       final repository =
-          widget.repository ?? context.read<OpenJournalRepository>();
+          widget.repository ?? context.read<JournalDetailsRepository>();
       final success = await repository.submitReplyToComment(
         message: replyText,
         journalId: widget.submissionId,

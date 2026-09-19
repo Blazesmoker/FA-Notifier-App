@@ -10,14 +10,14 @@ import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
 class ReplyScreen extends StatefulWidget {
   final Map<String, dynamic> comment;
   final Function(String) onSendReply;
-  final String uniqueNumber;
+  final String submissionId;
   final bool isClassic;
   final SubmissionCommentRepository? commentRepository;
 
   const ReplyScreen({
     required this.comment,
     required this.onSendReply,
-    required this.uniqueNumber,
+    required this.submissionId,
     required this.isClassic,
     this.commentRepository,
     super.key,
@@ -67,7 +67,7 @@ class _ReplyScreenState extends State<ReplyScreen> {
       final success = await _commentRepository.submitReply(
         message: replyText,
         commentId: replyId,
-        submissionId: widget.uniqueNumber,
+        submissionId: widget.submissionId,
         isClassic: widget.isClassic,
       );
 

@@ -1,5 +1,3 @@
-// lib/model/user_profile.dart
-
 class UserProfile {
   final String username;
   final String profileImageUrl;

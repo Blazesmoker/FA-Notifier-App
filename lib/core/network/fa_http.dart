@@ -36,9 +36,9 @@ class FAHttp {
   static Future<void> init() async {
     try {
       final info = await PackageInfo.fromPlatform();
-      final v = info.version.trim();
-      if (v.isNotEmpty) {
-        appVersion = v;
+      final version = info.version.trim();
+      if (version.isNotEmpty) {
+        appVersion = version;
         userAgent = '$appName v$appVersion';
         reset();
         final prefs = await SharedPreferences.getInstance();
@@ -50,12 +50,12 @@ class FAHttp {
 
   static Future<void> initFromPrefs({SharedPreferences? prefs}) async {
     try {
-      final p = prefs ?? await SharedPreferences.getInstance();
-      final v = (p.getString(_prefsAppVersionKey) ?? '').trim();
-      final ua = (p.getString(_prefsUserAgentKey) ?? '').trim();
-      if (v.isNotEmpty) appVersion = v;
-      if (ua.isNotEmpty) {
-        userAgent = ua;
+      final preferences = prefs ?? await SharedPreferences.getInstance();
+      final version = (preferences.getString(_prefsAppVersionKey) ?? '').trim();
+      final storedUserAgent = (preferences.getString(_prefsUserAgentKey) ?? '').trim();
+      if (version.isNotEmpty) appVersion = version;
+      if (storedUserAgent.isNotEmpty) {
+        userAgent = storedUserAgent;
       } else {
         userAgent = '$appName v$appVersion';
       }
@@ -75,24 +75,24 @@ class FAHttp {
   }
 
   static IOClient _ensureClient({Duration? timeout}) {
-    final t = timeout ?? defaultTimeout;
+    final requestTimeout = timeout ?? defaultTimeout;
 
     if (_client != null) {
       try {
-        _http?.connectionTimeout = t;
+        _http?.connectionTimeout = requestTimeout;
       } catch (_) {}
       return _client!;
     }
 
-    final c = HttpClient()
-      ..connectionTimeout = t
+    final client = HttpClient()
+      ..connectionTimeout = requestTimeout
       ..idleTimeout = const Duration(seconds: 10)
       ..autoUncompress = true
       ..maxConnectionsPerHost = 8
       ..userAgent = userAgent;
 
-    _http = c;
-    _client = IOClient(c);
+    _http = client;
+    _client = IOClient(client);
     return _client!;
   }
 
@@ -104,23 +104,23 @@ class FAHttp {
     if (e is HandshakeException) return true;
 
     if (e is HttpException) {
-      final m = e.message.toLowerCase();
-      return m.contains('connection') ||
-          m.contains('closed') ||
-          m.contains('reset') ||
-          m.contains('broken pipe') ||
-          m.contains('timed out');
+      final message = e.message.toLowerCase();
+      return message.contains('connection') ||
+          message.contains('closed') ||
+          message.contains('reset') ||
+          message.contains('broken pipe') ||
+          message.contains('timed out');
     }
 
-    final s = e.toString().toLowerCase();
-    return s.contains('broken pipe') ||
-        s.contains('connection reset') ||
-        s.contains('timed out') ||
-        s.contains('connection closed before full header was received') ||
-        s.contains('connection closed while receiving') ||
-        s.contains('connection terminated') ||
-        s.contains('network is unreachable') ||
-        s.contains('software caused connection abort');
+    final errorText = e.toString().toLowerCase();
+    return errorText.contains('broken pipe') ||
+        errorText.contains('connection reset') ||
+        errorText.contains('timed out') ||
+        errorText.contains('connection closed before full header was received') ||
+        errorText.contains('connection closed while receiving') ||
+        errorText.contains('connection terminated') ||
+        errorText.contains('network is unreachable') ||
+        errorText.contains('software caused connection abort');
   }
 
   static Map<String, String> _mergeHeaders(Map<String, String>? headers) {
@@ -161,7 +161,7 @@ class FAHttp {
         bool retryRecoverable = true,
         String? coordinatorLabel,
       }) async {
-    final t = timeout ?? defaultTimeout;
+    final requestTimeout = timeout ?? defaultTimeout;
     Future<http.Response> send() async {
       await FaRequestCoordinator.instance.waitForTurn(
         label: coordinatorLabel ?? 'GET $uri',
@@ -170,9 +170,9 @@ class FAHttp {
       if (isCancelled?.call() ?? false) {
         throw StateError('Background fetch cancelled');
       }
-      final c = _ensureClient(timeout: t);
+      final client = _ensureClient(timeout: requestTimeout);
       final response =
-          await c.get(uri, headers: _mergeHeaders(headers)).timeout(t);
+          await client.get(uri, headers: _mergeHeaders(headers)).timeout(requestTimeout);
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,
         headers: response.headers,
@@ -200,16 +200,16 @@ class FAHttp {
         Map<String, String>? headers,
         Duration? timeout,
       }) async {
-    final t = timeout ?? defaultTimeout;
+    final requestTimeout = timeout ?? defaultTimeout;
     return _withOneRetry(() async {
       await FaRequestCoordinator.instance.waitForTurn(
         label: 'GET $uri',
       );
-      final c = _ensureClient(timeout: t);
+      final client = _ensureClient(timeout: requestTimeout);
       return (() async {
         final request = http.Request('GET', uri)
           ..headers.addAll(_mergeHeaders(headers));
-        final streamedResponse = await c.send(request);
+        final streamedResponse = await client.send(request);
         final resolvedUri =
             streamedResponse is http.BaseResponseWithUrl
                 ? (streamedResponse as http.BaseResponseWithUrl).url
@@ -226,7 +226,7 @@ class FAHttp {
           resolvedUri: resolvedUri,
         );
       })()
-          .timeout(t);
+          .timeout(requestTimeout);
     });
   }
 
@@ -235,11 +235,11 @@ class FAHttp {
         Map<String, String>? headers,
         Duration? timeout,
       }) async {
-    final t = timeout ?? defaultTimeout;
+    final requestTimeout = timeout ?? defaultTimeout;
     return _withOneRetry(
       () async {
-        final c = _ensureClient(timeout: t);
-        return c.get(uri, headers: _mergeHeaders(headers)).timeout(t);
+        final client = _ensureClient(timeout: requestTimeout);
+        return client.get(uri, headers: _mergeHeaders(headers)).timeout(requestTimeout);
       },
       recordRecoverableFailure: false,
     );
@@ -253,15 +253,15 @@ class FAHttp {
         Duration? timeout,
         bool retryRecoverable = true,
       }) async {
-    final t = timeout ?? defaultTimeout;
+    final requestTimeout = timeout ?? defaultTimeout;
     Future<http.Response> send() async {
       await FaRequestCoordinator.instance.waitForTurn(
         label: 'POST $uri',
       );
-      final c = _ensureClient(timeout: t);
-      final response = await c
+      final client = _ensureClient(timeout: requestTimeout);
+      final response = await client
           .post(uri, headers: _mergeHeaders(headers), body: body, encoding: encoding)
-          .timeout(t);
+          .timeout(requestTimeout);
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,
         headers: response.headers,

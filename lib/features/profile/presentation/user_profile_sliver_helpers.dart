@@ -76,13 +76,11 @@ class CollapsibleSliverPersistentHeader extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    // Calculate the current height based on shrinkOffset
     double currentHeight = maxExtent - shrinkOffset;
     if (currentHeight < minExtent) {
       currentHeight = minExtent;
     }
 
-    // Calculate opacity based on shrinkOffset
     double opacity = (currentHeight - minExtent) / (maxExtent - minExtent);
     if (opacity < 0.0) opacity = 0.0;
     if (opacity > 1.0) opacity = 1.0;

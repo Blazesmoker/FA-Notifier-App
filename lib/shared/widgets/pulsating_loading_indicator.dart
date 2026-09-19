@@ -26,7 +26,6 @@ class _PulsatingLoadingIndicatorState extends State<PulsatingLoadingIndicator>
   @override
   void initState() {
     super.initState();
-    // Define the total duration for one heartbeat cycle.
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1250),

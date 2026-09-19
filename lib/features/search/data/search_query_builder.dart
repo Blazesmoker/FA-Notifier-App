@@ -3,19 +3,19 @@ Uri buildFaSearchUri({
   required Map<String, String> selectedFilters,
   required String searchQuery,
 }) {
-  final baseQ = searchQuery.trim();
+  final baseQuery = searchQuery.trim();
 
-  final genderQ = _buildGenderQuery(
+  final genderQuery = _buildGenderQuery(
     selectedFilters,
     useOr: (selectedFilters['mode'] ?? 'extended') == 'any',
   );
 
-  final needsExtended = genderQ.contains('|') || genderQ.contains('"');
-  final q = [baseQ, genderQ].where((s) => s.isNotEmpty).join(' ').trim();
+  final needsExtended = genderQuery.contains('|') || genderQuery.contains('"');
+  final combinedQuery = [baseQuery, genderQuery].where((s) => s.isNotEmpty).join(' ').trim();
 
   final queryParams = {
     'page': pageNumber.toString(),
-    'q': q,
+    'q': combinedQuery,
     'order-by': selectedFilters['order-by'] ?? 'relevancy',
     'order-direction': selectedFilters['order-direction'] ?? 'desc',
     'range': selectedFilters['range'] ?? '5years',
@@ -56,6 +56,6 @@ String _buildGenderQuery(Map<String, String> filters, {required bool useOr}) {
   });
   if (selected.isEmpty) return '';
 
-  final glue = useOr ? ' | ' : ' ';
-  return selected.join(glue);
+  final separator = useOr ? ' | ' : ' ';
+  return selected.join(separator);
 }

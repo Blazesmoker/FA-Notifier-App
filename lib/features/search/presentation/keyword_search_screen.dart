@@ -1,6 +1,5 @@
-// keyword_search_screen.dart
 import 'package:material_ui/material_ui.dart';
-import 'package:fanotifier/features/search/presentation/fasearchimage.dart';
+import 'package:fanotifier/features/search/presentation/search_results_grid.dart';
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/shared/utils/content_rating_filters.dart';
 import 'package:fanotifier/features/search/presentation/search_filters_screen.dart';
@@ -133,7 +132,7 @@ class _KeywordSearchScreenState extends State<KeywordSearchScreen> {
           ],
         ),
       ),
-      body: FASearchImage(
+      body: SearchResultsGrid(
         selectedFilters: _currentSearchFilters,
         searchQuery: _currentSearchQuery,
       ),

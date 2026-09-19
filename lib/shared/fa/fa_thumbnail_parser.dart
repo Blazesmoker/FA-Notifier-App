@@ -35,24 +35,24 @@ class FaThumbnailParser {
   }
 
   static String? extractTitle(dom.Element figure) {
-    final a = figure.querySelector('figcaption p a[href*="/view/"]') ??
+    final titleLink = figure.querySelector('figcaption p a[href*="/view/"]') ??
         figure.querySelector('figcaption p a') ??
         figure.querySelector('figcaption a');
-    final t = a?.text.trim();
-    return (t != null && t.isNotEmpty) ? t : null;
+    final title = titleLink?.text.trim();
+    return (title != null && title.isNotEmpty) ? title : null;
   }
 
   static String? extractAuthor(dom.Element figure) {
-    final a = figure.querySelector('figcaption a[href^="/user/"]') ??
+    final authorLink = figure.querySelector('figcaption a[href^="/user/"]') ??
         figure.querySelector('figcaption p a[href^="/user/"]') ??
         figure.querySelector('a[href^="/user/"]');
-    final name = a?.text.trim();
+    final name = authorLink?.text.trim();
     if (name != null && name.isNotEmpty) return name;
 
     // Fallback: figure class often includes `u-username`
     try {
-      final uClass = figure.classes.firstWhere((c) => c.startsWith('u-'));
-      final fallback = uClass.substring(2).trim();
+      final usernameClass = figure.classes.firstWhere((c) => c.startsWith('u-'));
+      final fallback = usernameClass.substring(2).trim();
       return fallback.isNotEmpty ? fallback : null;
     } catch (_) {
       return null;
@@ -60,10 +60,10 @@ class FaThumbnailParser {
   }
 
   static String? extractAuthorProfileUrl(dom.Element figure) {
-    final a = figure.querySelector('figcaption a[href^="/user/"]') ??
+    final authorLink = figure.querySelector('figcaption a[href^="/user/"]') ??
         figure.querySelector('figcaption p a[href^="/user/"]') ??
         figure.querySelector('a[href^="/user/"]');
-    final href = a?.attributes['href']?.trim();
+    final href = authorLink?.attributes['href']?.trim();
     if (href == null || href.isEmpty) return null;
     if (href.startsWith('http://') || href.startsWith('https://')) {
       return href;
@@ -73,34 +73,34 @@ class FaThumbnailParser {
   }
 
   static String? extractPostUrl(dom.Element figure) {
-    final a = figure.querySelector('a[href*="/view/"]');
-    final href = a?.attributes['href']?.trim();
+    final submissionLink = figure.querySelector('a[href*="/view/"]');
+    final href = submissionLink?.attributes['href']?.trim();
     return (href != null && href.isNotEmpty) ? href : null;
   }
 
-  static String extractUniqueNumber(String postUrlOrHref) {
+  static String extractSubmissionId(String postUrlOrHref) {
     final match = RegExp(r'/view/(\d+)/').firstMatch(postUrlOrHref);
     return match?.group(1) ?? '';
   }
 
   static String? extractThumbnailUrl(dom.Element figure) {
-    final img = figure.querySelector(_thumbSelector);
-    final src = img?.attributes['src']?.trim();
+    final thumbnailImage = figure.querySelector(_thumbSelector);
+    final src = thumbnailImage?.attributes['src']?.trim();
     if (src == null || src.isEmpty) return null;
     if (src.startsWith('//')) return 'https:$src';
     return src;
   }
 
   static double? extractDataWidth(dom.Element figure) {
-    final img = figure.querySelector(_thumbSelector);
-    final w = img?.attributes['data-width'];
-    return w == null ? null : double.tryParse(w);
+    final thumbnailImage = figure.querySelector(_thumbSelector);
+    final width = thumbnailImage?.attributes['data-width'];
+    return width == null ? null : double.tryParse(width);
   }
 
   static double? extractDataHeight(dom.Element figure) {
-    final img = figure.querySelector(_thumbSelector);
-    final h = img?.attributes['data-height'];
-    return h == null ? null : double.tryParse(h);
+    final thumbnailImage = figure.querySelector(_thumbSelector);
+    final height = thumbnailImage?.attributes['data-height'];
+    return height == null ? null : double.tryParse(height);
   }
 
   /// Extract a normalized map for use by the various grids.
@@ -117,20 +117,20 @@ class FaThumbnailParser {
   /// - authorProfileUrl (String?)
   static Map<String, dynamic>? extract(dom.Element figure) {
     final postUrl = extractPostUrl(figure);
-    final thumbUrl = extractThumbnailUrl(figure);
-    final w = extractDataWidth(figure);
-    final h = extractDataHeight(figure);
-    if (postUrl == null || thumbUrl == null || w == null || h == null) return null;
+    final thumbnailUrl = extractThumbnailUrl(figure);
+    final width = extractDataWidth(figure);
+    final height = extractDataHeight(figure);
+    if (postUrl == null || thumbnailUrl == null || width == null || height == null) return null;
 
-    final unique = extractUniqueNumber(postUrl);
-    if (unique.isEmpty) return null;
+    final submissionId = extractSubmissionId(postUrl);
+    if (submissionId.isEmpty) return null;
 
     return {
       'postUrl': postUrl,
-      'uniqueNumber': unique,
-      'thumbnailUrl': thumbUrl,
-      'width': w,
-      'height': h,
+      'uniqueNumber': submissionId,
+      'thumbnailUrl': thumbnailUrl,
+      'width': width,
+      'height': height,
       'rating': extractRating(figure),
       'title': extractTitle(figure),
       'author': extractAuthor(figure),

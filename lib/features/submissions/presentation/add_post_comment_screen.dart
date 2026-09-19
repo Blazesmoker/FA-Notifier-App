@@ -8,13 +8,13 @@ import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
 class AddPostCommentScreen extends StatefulWidget {
   final String submissionTitle;
   final Function(String) onSendComment;
-  final String uniqueNumber;
+  final String submissionId;
   final SubmissionCommentRepository? commentRepository;
 
   const AddPostCommentScreen({
     required this.submissionTitle,
     required this.onSendComment,
-    required this.uniqueNumber,
+    required this.submissionId,
     this.commentRepository,
     super.key,
   });
@@ -52,7 +52,7 @@ class _AddPostCommentScreenState extends State<AddPostCommentScreen>
           context.read<SubmissionCommentRepository>();
       final success = await commentRepository.submitComment(
         message: commentText,
-        submissionId: widget.uniqueNumber,
+        submissionId: widget.submissionId,
       );
 
       if (!mounted) return;

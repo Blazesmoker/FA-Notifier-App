@@ -5,8 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:fanotifier/features/profile/domain/fa_folder.dart';
 import 'package:fanotifier/features/profile/domain/profile_gallery_repository.dart';
 import 'package:fanotifier/features/profile/domain/profile_folder_selection_resolver.dart';
-import 'package:fanotifier/features/profile/presentation/profilegallery.dart';
-import 'package:fanotifier/features/submissions/presentation/manage_submissions.dart';
+import 'package:fanotifier/features/profile/presentation/profile_gallery_sliver.dart';
+import 'package:fanotifier/features/submissions/presentation/manage_submissions_screen.dart';
 
 class UserProfileGallerySection extends StatefulWidget {
   const UserProfileGallerySection({

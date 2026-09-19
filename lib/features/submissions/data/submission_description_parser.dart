@@ -1,6 +1,6 @@
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:fanotifier/features/submissions/data/openpost_html_link_normalizer.dart';
+import 'package:fanotifier/features/submissions/data/submission_html_link_normalizer.dart';
 
 String extractSubmissionDescriptionHtml(
   String html, {
@@ -27,14 +27,14 @@ String extractSubmissionDescriptionHtml(
     return '<p>No submission description found.</p>';
   }
 
-  for (final a in submissionDesc.querySelectorAll('a[href]')) {
-    final href = a.attributes['href']!;
+  for (final link in submissionDesc.querySelectorAll('a[href]')) {
+    final href = link.attributes['href']!;
     if (href.startsWith('/https://') || href.startsWith('/http://')) {
-      a.attributes['href'] = href.substring(1);
+      link.attributes['href'] = href.substring(1);
     }
   }
 
-  return normalizeOpenPostTruncatedLinks(submissionDesc.outerHtml);
+  return normalizeSubmissionTruncatedLinks(submissionDesc.outerHtml);
 }
 
 String extractSubmissionDescriptionHtmlDefault(String html) {

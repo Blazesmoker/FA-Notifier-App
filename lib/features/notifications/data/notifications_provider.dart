@@ -394,12 +394,12 @@ class NotificationsProvider with ChangeNotifier {
       debugPrint("[_fetchProfileShouts] Found ${shoutTables.length} shout table(s).");
 
       final List<NotificationItem> profileShouts = [];
-      for (var t in shoutTables) {
-        final tableId = t.attributes['id'] ?? '';
+      for (var shoutTable in shoutTables) {
+        final tableId = shoutTable.attributes['id'] ?? '';
         if (!tableId.startsWith('shout-')) continue;
 
         String? avatar;
-        final avatarImg = t.querySelector('td.alt1 a img.avatar');
+        final avatarImg = shoutTable.querySelector('td.alt1 a img.avatar');
         if (avatarImg != null) {
           avatar = avatarImg.attributes['src'];
           if (avatar != null && avatar.startsWith('//')) {
@@ -410,7 +410,7 @@ class NotificationsProvider with ChangeNotifier {
         String? uname;
         String? link;
         final unameLink =
-        t.querySelector('div.c-usernameBlock a.c-usernameBlock__displayName');
+        shoutTable.querySelector('div.c-usernameBlock a.c-usernameBlock__displayName');
         if (unameLink != null) {
           uname = unameLink.text.trim();
           link = unameLink.attributes['href'];
@@ -418,14 +418,14 @@ class NotificationsProvider with ChangeNotifier {
 
         String dt = '';
         String dtFull = '';
-        final dateElem = t.querySelector('span.popup_date');
+        final dateElem = shoutTable.querySelector('span.popup_date');
         if (dateElem != null) {
           dt = dateElem.text.trim();
           dtFull = dateElem.attributes['title'] ?? dt;
         }
 
         String text = '';
-        final contentDiv = t.querySelector('td.alt1.addpad div.no_overflow');
+        final contentDiv = shoutTable.querySelector('td.alt1.addpad div.no_overflow');
         if (contentDiv != null) {
           text = contentDiv.text.trim();
         }

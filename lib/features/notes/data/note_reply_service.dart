@@ -4,7 +4,7 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:fanotifier/core/utils/utils.dart';
+import 'package:fanotifier/core/utils/note_link_parser.dart';
 import 'package:fanotifier/features/notes/domain/note_reply_models.dart';
 import 'package:fanotifier/features/notes/domain/note_reply_repository.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';

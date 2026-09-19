@@ -19,8 +19,8 @@ class CreateJournalRepositoryImpl implements CreateJournalRepository {
   }
 
   @override
-  String buildInitialUrl(String? uniqueNumber) {
-    return _service.buildInitialUrl(uniqueNumber);
+  String buildInitialUrl(String? journalId) {
+    return _service.buildInitialUrl(journalId);
   }
 
   @override

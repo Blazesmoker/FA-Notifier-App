@@ -8,18 +8,18 @@ import 'package:fanotifier/features/notes/domain/note_google_image_resolver.dart
 import 'package:fanotifier/features/notes/domain/note_image_preview_link.dart';
 import 'package:fanotifier/features/notes/domain/note_submission_preview.dart';
 import 'package:fanotifier/features/notes/domain/note_submission_preview_repository.dart';
-import 'package:fanotifier/features/submissions/domain/openpost_repository.dart';
+import 'package:fanotifier/features/submissions/domain/submission_details_repository.dart';
 import 'package:flutter/foundation.dart';
 
 class NoteSubmissionPreviewRepositoryImpl
     implements NoteSubmissionPreviewRepository {
   NoteSubmissionPreviewRepositoryImpl({
-    required this._openPostRepository,
+    required this._submissionDetailsRepository,
     required this._googleImageResolver,
     this._sfwModePreference = const SfwModePreference(),
   });
 
-  final OpenPostRepository _openPostRepository;
+  final SubmissionDetailsRepository _submissionDetailsRepository;
   final NoteGoogleImageResolver _googleImageResolver;
   final SfwModePreference _sfwModePreference;
   final Map<String, NoteSubmissionPreview> _cache = {};
@@ -102,7 +102,7 @@ class NoteSubmissionPreviewRepositoryImpl
     }
 
     final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
-    var page = await _openPostRepository.fetchPage(
+    var page = await _submissionDetailsRepository.fetchPage(
       url: link.url,
       sfwEnabled: sfwEnabled,
       nsfwAllowed: false,
@@ -113,7 +113,7 @@ class NoteSubmissionPreviewRepositoryImpl
         _logPreview('FA NSFW confirmation declined url=${link.url}');
         return null;
       }
-      page = await _openPostRepository.fetchPage(
+      page = await _submissionDetailsRepository.fetchPage(
         url: link.url,
         sfwEnabled: sfwEnabled,
         nsfwAllowed: true,

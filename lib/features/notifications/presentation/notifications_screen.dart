@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:fanotifier/features/drawer/presentation/drawer_user_controller.dart';
-import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/features/drawer/presentation/home_drawer_shell.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
 import 'package:fanotifier/core/analytics/app_analytics.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
@@ -20,7 +20,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 /// The main Notifications Screen widget.
 class NotificationsScreen extends StatefulWidget {
   final String? initialSection;
-  final GlobalKey<DrawerUserControllerState> drawerKey;
+  final GlobalKey<HomeDrawerShellState> drawerKey;
 
   const NotificationsScreen(
       {super.key, required this.drawerKey, this.initialSection})
@@ -70,7 +70,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final service = Provider.of<FANotificationService>(context, listen: false);
+    final service = Provider.of<FaNotificationsController>(context, listen: false);
     if (!_activitiesControllerInitialized) {
       _activitiesPollingPort = context.read<FaActivitiesPollingPort>();
       _activitiesController = NotificationActivitiesController(
@@ -541,7 +541,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           activeIndex: _tabController?.index,
         );
       },
-      child: Consumer<FANotificationService>(
+      child: Consumer<FaNotificationsController>(
         builder: (context, service, child) {
           _activitiesController.updateService(service);
           final sections = _activitiesController.sections;
@@ -662,7 +662,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                     decoration: const BoxDecoration(color: Color(0xFF111111)),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 0.0),
-                      child: Consumer<FANotificationService>(
+                      child: Consumer<FaNotificationsController>(
                         builder: (context, _, child) {
                           return TabBar(
                             controller: _tabController,

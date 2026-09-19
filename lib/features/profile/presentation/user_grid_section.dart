@@ -1,5 +1,3 @@
-// user_grid_section.dart
-
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/fa/domain/user_link.dart';

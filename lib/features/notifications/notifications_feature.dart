@@ -7,7 +7,7 @@ import 'package:fanotifier/features/notifications/data/pending_navigation_store.
 import 'package:fanotifier/features/notifications/data/shared_preferences_notification_settings_repository.dart';
 import 'package:fanotifier/features/notifications/domain/notification_refresh_port.dart';
 import 'package:fanotifier/features/notifications/domain/pending_navigation_repository.dart';
-import 'package:fanotifier/features/notifications/presentation/fa_notification_service.dart';
+import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_settings_provider.dart';
 import 'package:fanotifier/features/notifications/domain/notification_platform_settings_repository.dart';
 
@@ -21,8 +21,8 @@ class NotificationsFeature {
     );
   }
 
-  static FANotificationService createNotificationService() {
-    return FANotificationService(
+  static FaNotificationsController createNotificationService() {
+    return FaNotificationsController(
       repository: FaNotificationsRepositoryImpl(),
     );
   }

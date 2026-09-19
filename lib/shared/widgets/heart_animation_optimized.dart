@@ -1,4 +1,3 @@
-// heart_animation_optimized.dart
 import 'dart:math';
 import 'package:material_ui/material_ui.dart';
 
@@ -126,7 +125,6 @@ class HeartAnimationOptimizedState extends State<HeartAnimationOptimized>
         }
       } else {
         if (!_localFav && widget.isFavorite) {
-          // Toggled from unfav->fav
           setState(() {
             _showBigHeart = true;
             _showBigBrokenHeart = false;
@@ -137,7 +135,6 @@ class HeartAnimationOptimizedState extends State<HeartAnimationOptimized>
             _localFav = true;
           });
         } else if (_localFav && !widget.isFavorite) {
-          // Toggled from fav->unfav
           setState(() {
             _showBigHeart = false;
             _showBigBrokenHeart = true;
@@ -180,10 +177,8 @@ class HeartAnimationOptimizedState extends State<HeartAnimationOptimized>
 
     return Stack(
       children: [
-        // Underlying child (the image)
         widget.child,
 
-        // Big heart or big broken-heart
         Positioned.fill(
           child: AnimatedBuilder(
             animation: _controller,
@@ -217,7 +212,6 @@ class HeartAnimationOptimizedState extends State<HeartAnimationOptimized>
           ),
         ),
 
-        // Small heart in the corner
         Positioned(
           top: 8,
           right: 8,
@@ -232,7 +226,6 @@ class HeartAnimationOptimizedState extends State<HeartAnimationOptimized>
           ),
         ),
 
-        // Small broken heart in the corner
         Positioned(
           top: 8,
           right: 8,
