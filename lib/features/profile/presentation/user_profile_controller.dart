@@ -12,17 +12,21 @@ class UserProfileController {
     SfwModePreference? sfwModePreference,
     required String nickname,
   })  : _sfwModePreference = sfwModePreference ?? SfwModePreference(),
-        sanitizedUsername = sanitizeFAUsername(nickname);
+        _sanitizedUsername = sanitizeFAUsername(nickname);
 
   final UserProfileRepository _repository;
   final SfwModePreference _sfwModePreference;
 
-  bool sfwEnabled = true;
+  bool _sfwEnabled = true;
   UserProfileParsed? _parsed;
-  String sanitizedUsername;
-  bool isLoading = true;
-  String errorMessage = '';
+  String _sanitizedUsername;
+  bool _isLoading = true;
+  String _errorMessage = '';
 
+  bool get sfwEnabled => _sfwEnabled;
+  String get sanitizedUsername => _sanitizedUsername;
+  bool get isLoading => _isLoading;
+  String get errorMessage => _errorMessage;
   String? get profileBannerUrl => _parsed?.profileBannerUrl;
   String? get profileImageUrl => _parsed?.profileImageUrl;
   String? get profileDisplayName => _parsed?.profileDisplayName;
@@ -75,7 +79,7 @@ class UserProfileController {
   bool get isOwnProfile => _parsed?.isOwnProfile ?? false;
 
   Future<void> loadSfwEnabled() async {
-    sfwEnabled = await _sfwModePreference.loadSfwEnabled();
+    _sfwEnabled = await _sfwModePreference.loadSfwEnabled();
   }
 
   Future<UserProfileLoadResult> loadProfile(String nickname) async {
@@ -84,17 +88,17 @@ class UserProfileController {
         nickname: nickname,
         sfwEnabled: sfwEnabled,
       );
-      sanitizedUsername = result.sanitizedUsername;
+      _sanitizedUsername = result.sanitizedUsername;
       _parsed = result.parsed;
-      isLoading = false;
+      _isLoading = false;
       return result;
     } on StateError catch (error) {
-      errorMessage = error.message;
-      isLoading = false;
+      _errorMessage = error.message;
+      _isLoading = false;
       rethrow;
     } catch (error) {
-      errorMessage = 'An error occurred: $error';
-      isLoading = false;
+      _errorMessage = 'An error occurred: $error';
+      _isLoading = false;
       rethrow;
     }
   }

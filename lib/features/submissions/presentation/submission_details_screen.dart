@@ -36,7 +36,7 @@ import 'package:fanotifier/features/comments/presentation/comment_settings_provi
 import 'package:fanotifier/features/search/presentation/keyword_search_screen.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/features/journals/presentation/journal_details_screen.dart';
-import 'package:fanotifier/features/submissions/presentation/submission_comment_widget.dart';
+import 'package:fanotifier/features/comments/presentation/fa_comment_widget.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_content.dart';
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
@@ -2978,7 +2978,10 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
             final index = item.index;
             final comment = item.comment;
             final selectionId = _commentSelectionId(comment, index);
-            return SubmissionCommentWidget(
+            return FaCommentWidget(
+                timeDisplayOccasion: TimeDisplayOccasion.submissionComment,
+                htmlCachePolicy: CommentHtmlCachePolicy.onWidgetUpdate,
+                showUnhide: comment['hideLink'] != null,
                 key: ValueKey(comment['commentId'] ?? index),
                 comment: comment,
                 treeLevels: item.treeLevels,

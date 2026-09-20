@@ -1,7 +1,6 @@
 import 'widgets/journal_body.dart';
 import 'widgets/journal_author_header.dart';
-import 'widgets/journal_delete_dialog.dart';
-import 'widgets/journal_action_menu.dart';
+import 'widgets/journal_actions.dart';
 import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
@@ -16,7 +15,7 @@ import 'package:fanotifier/features/comments/presentation/inline_comment_compose
 import 'package:fanotifier/features/comments/presentation/threaded_comments.dart';
 import 'package:fanotifier/features/comments/presentation/comment_settings_provider.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
-import 'package:fanotifier/features/journals/presentation/journal_comment_widget.dart';
+import 'package:fanotifier/features/comments/presentation/fa_comment_widget.dart';
 import 'package:fanotifier/features/journals/domain/journal_deletion_result.dart';
 import 'package:fanotifier/features/journals/domain/journal_load_failure.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
@@ -928,7 +927,13 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
                                   final comment = item.comment;
                                   final selectionId =
                                       _commentSelectionId(comment, index);
-                                  return JournalCommentWidget(
+                                  return FaCommentWidget(
+                                      timeDisplayOccasion:
+                                          TimeDisplayOccasion.journalComment,
+                                      htmlCachePolicy:
+                                          CommentHtmlCachePolicy.onBodyBuild,
+                                      showUnhide: comment['deleted'] == true &&
+                                          comment['unhideLink'] != null,
                                       key: ValueKey(
                                           comment['commentId'] ?? index),
                                       comment: comment,

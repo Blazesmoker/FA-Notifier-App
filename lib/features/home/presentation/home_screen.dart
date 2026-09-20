@@ -44,6 +44,7 @@ import 'package:fanotifier/core/preferences/privacy_settings_provider.dart';
 import 'package:fanotifier/features/settings/presentation/privacy_consent_screen.dart';
 
 import '../../auth/domain/cloudflare_check_result.dart';
+import 'home_profile_controller.dart';
 
 class HomeScreen extends StatefulWidget {
   final String? initialSearchQuery;
@@ -59,8 +60,9 @@ class _HomeScreenState extends State<HomeScreen> {
       AssetImage('assets/icons/submissions.png');
   static Future<void> _loginWebViewLoadQueue = Future<void>.value();
 
-  UserProfile? _userProfile;
-  bool isLoadingProfile = true;
+  late final HomeProfileController _profileController;
+  UserProfile? get _userProfile => _profileController.userProfile;
+  bool get isLoadingProfile => _profileController.isLoadingProfile;
   DrawerIndex drawerIndex = DrawerIndex.home;
   int _selectedIndex = 0;
   bool isCheckingLoginStatus = true;
@@ -68,7 +70,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _sfwEnabled = true;
   final SfwModePreference _sfwModePreference = SfwModePreference();
   late final HomeSessionRepository _homeSessionRepository;
-  late final HomeProfileRepository _homeProfileRepository;
   late final HomeLoginWebViewSupport _homeLoginWebViewSupport;
   late final HomeStartScreenPreferenceRepository
       _homeStartScreenPreferenceRepository;
@@ -81,7 +82,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _homeStartPreferenceLoaded = false;
   bool _didOpenStartupProfile = false;
   bool _isOpeningStartupProfile = false;
-  String? _startupHomeHtml;
   final Set<int> _loadedHomeIndexes = <int>{};
   bool _startupWarmupScheduled = false;
 
@@ -128,7 +128,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _homeSessionRepository = context.read<HomeSessionRepository>();
-    _homeProfileRepository = context.read<HomeProfileRepository>();
+    _profileController = HomeProfileController(
+      profileRepository: context.read<HomeProfileRepository>(),
+      sessionRepository: _homeSessionRepository,
+      isMounted: () => mounted,
+      updateState: (update) => setState(update),
+      onProfileLoaded: _maybeOpenStartupProfile,
+    );
     _homeLoginWebViewSupport = context.read<HomeLoginWebViewSupport>();
     _homeStartScreenPreferenceRepository =
         context.read<HomeStartScreenPreferenceRepository>();
@@ -208,7 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadLoginState();
     await (_homeStartPreferenceFuture ?? Future<void>.value());
     if (isLoggedIn) {
-      await _loadCachedUserProfile();
+      await _profileController.loadCachedUserProfile();
     }
     final canProceed = await _runStartupCloudflareCheck();
     if (!canProceed) {
@@ -231,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!_profileFetched) {
         _profileFetched = true;
-        final profileFuture = _fetchUserProfile();
+        final profileFuture = _profileController.fetchUserProfile();
         if (_homeStartScreenPreference == HomeStartScreenPreference.profile &&
             _userProfile == null) {
           await profileFuture;
@@ -249,7 +255,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<bool> _runStartupCloudflareCheck() async {
     final check = await _startupCloudflareChecker.checkHome();
-    _startupHomeHtml = isLoggedIn ? check.homeHtml : null;
+    _profileController.setStartupHomeHtml(isLoggedIn ? check.homeHtml : null);
     if (!check.needsChallenge) {
       return true;
     }
@@ -282,43 +288,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ));
       }
     } catch (_) {}
-  }
-
-  Future<void> _loadCachedUserProfile() async {
-    final cachedProfile = await _homeSessionRepository.loadCachedUserProfile();
-    if (!mounted || cachedProfile == null) return;
-    setState(() {
-      _userProfile = cachedProfile;
-      isLoadingProfile = false;
-    });
-    _maybeOpenStartupProfile();
-  }
-
-  Future<void> _fetchUserProfile() async {
-    try {
-      final startupHomeHtml = _startupHomeHtml;
-      _startupHomeHtml = null;
-      UserProfile? profile = await _homeProfileRepository.fetchUserProfile(
-        homeHtml: startupHomeHtml,
-      );
-      if (profile != null) {
-        await _homeSessionRepository.saveCachedUserProfile(profile);
-      }
-      if (!mounted) return;
-      setState(() {
-        if (profile != null) {
-          _userProfile = profile;
-        }
-        isLoadingProfile = false;
-      });
-      _maybeOpenStartupProfile();
-    } catch (e) {
-      debugPrint("Error fetching user profile: $e");
-      if (!mounted) return;
-      setState(() {
-        isLoadingProfile = false;
-      });
-    }
   }
 
   Future<void> _saveLoginState(bool value) async {
@@ -565,7 +534,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             if (!_profileFetched) {
               _profileFetched = true;
-              unawaited(_fetchUserProfile());
+              unawaited(_profileController.fetchUserProfile());
             }
 
             if (!wasLoggedIn && !_loginSnackShownThisRun && mounted) {
@@ -664,7 +633,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             if (!_profileFetched) {
               _profileFetched = true;
-              unawaited(_fetchUserProfile());
+              unawaited(_profileController.fetchUserProfile());
             }
 
             if (!wasLoggedIn && !_loginSnackShownThisRun && mounted) {
@@ -792,7 +761,7 @@ class _HomeScreenState extends State<HomeScreen> {
       onNotificationsUpdated: _onNotificationsUpdated,
       onBadgeTap: openNotificationsWithSection,
       onUserProfileChanged: () {
-        unawaited(_fetchUserProfile());
+        unawaited(_profileController.fetchUserProfile());
       },
       isUserProfileLoading: isLoadingProfile,
       enableSwipe: _selectedIndex != 9,
@@ -984,8 +953,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         isLoggedIn = false;
-        _userProfile = null;
-        isLoadingProfile = false;
+        _profileController.clearProfile();
         drawerIndex = DrawerIndex.home;
         _selectedIndex = 0;
         _loadedHomeIndexes

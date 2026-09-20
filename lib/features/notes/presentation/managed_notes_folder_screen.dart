@@ -11,6 +11,7 @@ import 'package:fanotifier/features/settings/presentation/time_display_settings_
 import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:provider/provider.dart';
+import 'managed_notes_folder_controller.dart';
 
 const double _selectionOpacity = 0.08;
 
@@ -31,25 +32,21 @@ class ManagedNotesFolderScreen extends StatefulWidget {
 
 class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
   static const Color _accent = Color(0xFFE09321);
-  static const int _selectAllRateLimitSeconds = 1;
 
-  late final ManagedNotesRepository _repository;
+  late final ManagedNotesFolderController _folderController;
   final ScrollController _scrollController = ScrollController();
 
-  bool _isLoading = true;
-  bool _isLoadingMore = false;
-  String _errorMessage = '';
-  List<Message> _messages = [];
-  bool _isFetchingMore = false;
-  int _currentPage = 1;
-  bool _hasMore = true;
-
-  bool _selectionMode = false;
-  final Set<String> _selectedIds = {};
-  bool _isSelectAllInProgress = false;
-  int _selectAllProgressPage = 0;
-  bool _selectAllCancelled = false;
-  bool _isMutating = false;
+  bool get _isLoading => _folderController.isLoading;
+  bool get _isLoadingMore => _folderController.isLoadingMore;
+  String get _errorMessage => _folderController.errorMessage;
+  bool get _isFetchingMore => _folderController.isFetchingMore;
+  bool get _hasMore => _folderController.hasMore;
+  bool get _selectionMode => _folderController.selectionMode;
+  bool get _isSelectAllInProgress => _folderController.isSelectAllInProgress;
+  int get _selectAllProgressPage => _folderController.selectAllProgressPage;
+  bool get _isMutating => _folderController.isMutating;
+  List<Message> get _messages => _folderController.messages;
+  Set<String> get _selectedIds => _folderController.selectedIds;
 
   bool get _isTrash => widget.folder == NotesFolder.trash;
   String get _title => _isTrash ? 'Trash' : 'Archive';
@@ -57,9 +54,15 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
   @override
   void initState() {
     super.initState();
-    _repository = context.read<ManagedNotesRepositoryFactory>()();
+    _folderController = ManagedNotesFolderController(
+      repository: context.read<ManagedNotesRepositoryFactory>()(),
+      folder: () => widget.folder,
+      isMounted: () => mounted,
+      updateState: (update) => setState(update),
+      showSnackBar: _showSnackBar,
+    );
     _scrollController.addListener(_onScroll);
-    _fetchFolder(page: 1);
+    _folderController.fetchFolder(page: 1);
   }
 
   @override
@@ -75,84 +78,13 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
         !_isFetchingMore &&
         !_isSelectAllInProgress &&
         _hasMore) {
-      _loadMore();
+      _folderController.loadMore();
     }
-  }
-
-  Future<void> _fetchFolder({int page = 1, bool clearOld = false}) async {
-    if (page == 1 && mounted) {
-      setState(() {
-        if (clearOld) _messages.clear();
-        _isLoading = true;
-        _errorMessage = '';
-        _hasMore = true;
-      });
-    }
-
-    try {
-      final newMessages = await _repository.fetchFolderPage(
-        folder: widget.folder,
-        page: page,
-      );
-      if (!mounted) return;
-      setState(() {
-        if (page == 1) {
-          _messages = newMessages;
-        } else {
-          _messages.addAll(newMessages);
-        }
-        _isLoading = false;
-        if (newMessages.isEmpty) _hasMore = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = '$e';
-        _isLoading = false;
-        _hasMore = false;
-      });
-    }
-  }
-
-  Future<void> _loadMore() async {
-    _isFetchingMore = true;
-    if (mounted) {
-      setState(() {
-        _isLoadingMore = true;
-        _currentPage++;
-      });
-    }
-    try {
-      await _fetchFolder(page: _currentPage);
-    } finally {
-      _isFetchingMore = false;
-      if (mounted) setState(() => _isLoadingMore = false);
-    }
-  }
-
-  void _enterSelectionModeAndSelect(Message message) {
-    if (_isMutating) return;
-    setState(() {
-      _selectionMode = true;
-      _selectedIds.add(message.id);
-    });
-  }
-
-  void _toggleSelection(Message message) {
-    if (_isMutating) return;
-    setState(() {
-      if (_selectedIds.contains(message.id)) {
-        _selectedIds.remove(message.id);
-        if (_selectedIds.isEmpty) _selectionMode = false;
-      } else {
-        _selectedIds.add(message.id);
-      }
-    });
   }
 
   void _handleTapItem(Message message) {
     if (_selectionMode) {
-      _toggleSelection(message);
+      _folderController.toggleSelection(message);
       return;
     }
     Navigator.of(context)
@@ -169,78 +101,10 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
     )
         .then((result) {
       if (result == 'refresh' && mounted) {
-        _currentPage = 1;
-        _hasMore = true;
-        _fetchFolder(page: 1);
+        _folderController.resetPagination();
+        _folderController.fetchFolder(page: 1);
       }
     });
-  }
-
-  void _selectAllLoaded() {
-    if (_isSelectAllInProgress || _isMutating) return;
-    setState(() {
-      final loadedIds = _messages.map((message) => message.id).toSet();
-      final allLoadedSelected = loadedIds.isNotEmpty &&
-          loadedIds.every(_selectedIds.contains);
-      if (allLoadedSelected) {
-        _selectedIds.removeAll(loadedIds);
-      } else {
-        _selectedIds.addAll(loadedIds);
-      }
-    });
-  }
-
-  Future<void> _selectAllPages() async {
-    if (_isSelectAllInProgress || _isMutating || _isFetchingMore) return;
-    setState(() {
-      _isSelectAllInProgress = true;
-      _selectionMode = true;
-      _selectedIds.clear();
-      _selectAllProgressPage = 0;
-      _selectAllCancelled = false;
-    });
-
-    final loadedIds = _messages.map((message) => message.id).toSet();
-    var page = 1;
-    while (mounted && !_selectAllCancelled) {
-      setState(() => _selectAllProgressPage = page);
-      List<Message> messages;
-      try {
-        messages = await _repository.fetchFolderPage(
-          folder: widget.folder,
-          page: page,
-        );
-      } catch (e) {
-        if (mounted) {
-          setState(() => _isSelectAllInProgress = false);
-          _showSnackBar('Failed to fetch page $page.', success: false);
-        }
-        return;
-      }
-
-      if (messages.isEmpty) {
-        if (mounted) setState(() => _hasMore = false);
-        break;
-      }
-      if (!mounted) return;
-      setState(() {
-        for (final message in messages) {
-          _selectedIds.add(message.id);
-          if (loadedIds.add(message.id)) _messages.add(message);
-        }
-        if (page > _currentPage) _currentPage = page;
-      });
-      page++;
-      await Future.delayed(
-        const Duration(seconds: _selectAllRateLimitSeconds),
-      );
-    }
-
-    if (mounted) setState(() => _isSelectAllInProgress = false);
-  }
-
-  void _cancelSelectAll() {
-    _selectAllCancelled = true;
   }
 
   Future<void> _applySelectedAction(NoteManagementAction action) async {
@@ -276,29 +140,13 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _isMutating = true);
-    try {
-      await _repository.applyAction(
-        ids: ids,
-        sourceFolder: widget.folder,
-        action: action,
-      );
-      if (!mounted) return;
-      setState(() {
-        _selectionMode = false;
-        _selectedIds.clear();
-        _currentPage = 1;
-        _hasMore = true;
-      });
-      await _fetchFolder(page: 1);
-      if (mounted) _showSnackBar(copy.success, success: true);
-    } on NoteManagementOutcomeUnknownException {
-      if (mounted) _showSnackBar(copy.unknown, success: false);
-    } catch (e) {
-      if (mounted) _showSnackBar(copy.failure, success: false);
-    } finally {
-      if (mounted) setState(() => _isMutating = false);
-    }
+    await _folderController.applyAction(
+      ids: ids,
+      action: action,
+      successMessage: copy.success,
+      unknownMessage: copy.unknown,
+      failureMessage: copy.failure,
+    );
   }
 
   _ManagedActionCopy _actionCopy(
@@ -369,14 +217,6 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
     );
   }
 
-  void _exitSelectionMode() {
-    if (_isSelectAllInProgress || _isMutating) return;
-    setState(() {
-      _selectionMode = false;
-      _selectedIds.clear();
-    });
-  }
-
   Widget _buildActionIcon({
     required IconData icon,
     required Color enabledColor,
@@ -397,14 +237,14 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
     final allPagesDisabled = controlsDisabled || _isFetchingMore;
     return NotesSelectionControls(
       selectedCount: _selectedIds.length,
-      onSelectAll: controlsDisabled ? null : _selectAllLoaded,
-      onExit: controlsDisabled ? null : _exitSelectionMode,
+      onSelectAll: controlsDisabled ? null : _folderController.selectAllLoaded,
+      onExit: controlsDisabled ? null : _folderController.exitSelectionMode,
       showAllPages: true,
-      onSelectAllPages: allPagesDisabled ? null : _selectAllPages,
+      onSelectAllPages: allPagesDisabled ? null : _folderController.selectAllPages,
       progressText: _isSelectAllInProgress
-          ? 'Fetching page $_selectAllProgressPage… ($_selectAllRateLimitSeconds s between requests)'
+          ? 'Fetching page $_selectAllProgressPage… (${ManagedNotesFolderController.selectAllRateLimitSeconds} s between requests)'
           : null,
-      onCancelFetching: _cancelSelectAll,
+      onCancelFetching: _folderController.cancelSelectAll,
     );
   }
 
@@ -467,7 +307,7 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
       canPop: !_selectionMode && !_isMutating,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && _selectionMode && !_isSelectAllInProgress) {
-          _exitSelectionMode();
+          _folderController.exitSelectionMode();
         }
       },
       child: Scaffold(
@@ -500,13 +340,12 @@ class _ManagedNotesFolderScreenState extends State<ManagedNotesFolderScreen> {
                 scrollController: _scrollController,
                 hasMore: _hasMore,
                 onRefresh: () async {
-                  _currentPage = 1;
-                  _hasMore = true;
-                  await _fetchFolder(page: 1);
+                  _folderController.resetPagination();
+                  await _folderController.fetchFolder(page: 1);
                 },
                 isSelectionMode: _selectionMode,
                 selectedIds: _selectedIds,
-                onLongPressItem: _enterSelectionModeAndSelect,
+                onLongPressItem: _folderController.enterSelectionModeAndSelect,
                 onTapItem: _handleTapItem,
                 selectionOpacity: _selectionOpacity,
                 bottomPadding: !_selectionMode

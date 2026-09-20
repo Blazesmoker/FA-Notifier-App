@@ -19,56 +19,104 @@ class SubmissionDetailsController {
   final String submissionId;
   final SubmissionDetailsRepository _repository;
 
-  String? profileImageUrl;
-  String? username;
-  String? linkUsername;
-  String? submissionTitle;
-  String? fullViewImageUrl;
-  String? submissionDescription;
-  DateTime? publicationTime;
-  String? rating;
-  int favoritesCount = 0;
-  int viewCount = 0;
-  int commentsCount = 0;
-  List<Map<String, dynamic>> comments = <Map<String, dynamic>>[];
-  String? userTimezoneIanaName;
-  String? currentUsername;
-  bool isDstCorrectionApplied = false;
-  String? favLink;
-  String? unfavLink;
-  bool isFavorited = false;
-  String? watchLink;
-  String? unwatchLink;
-  String? blockLink;
-  String? unblockLink;
-  bool isWatching = false;
-  bool watchLinksLoading = false;
-  bool watchRequestInFlight = false;
-  bool isBlocked = false;
-  String? category;
-  String? type;
-  String? species;
-  String? gender;
-  String? size;
-  String? fileSize;
-  List<SubmissionFolderLink> folders = <SubmissionFolderLink>[];
-  List<String> keywords = <String>[];
-  List<FaPostTag> keywordTags = <FaPostTag>[];
-  List<FaPostTag> metaKeywordTags = <FaPostTag>[];
-  String? tagBlocklistNonce;
-  String? blockKey;
-  String? unblockKey;
-  bool isClassicUserPage = false;
-  double? imageWidth;
-  double? imageHeight;
-  SubmissionAttachment? submissionAttachment;
-  bool isLoading = true;
-  bool detailsLoaded = false;
-  bool sfwEnabled = true;
-  bool nsfwAllowed = false;
+  String? _profileImageUrl;
+  String? _username;
+  String? _linkUsername;
+  String? _submissionTitle;
+  String? _fullViewImageUrl;
+  String? _submissionDescription;
+  DateTime? _publicationTime;
+  String? _rating;
+  int _favoritesCount = 0;
+  int _viewCount = 0;
+  int _commentsCount = 0;
+  List<Map<String, dynamic>> _comments = <Map<String, dynamic>>[];
+  String? _userTimezoneIanaName;
+  String? _currentUsername;
+  final bool _isDstCorrectionApplied = false;
+  String? _favLink;
+  String? _unfavLink;
+  bool _isFavorited = false;
+  String? _watchLink;
+  String? _unwatchLink;
+  String? _blockLink;
+  String? _unblockLink;
+  bool _isWatching = false;
+  bool _watchLinksLoading = false;
+  bool _watchRequestInFlight = false;
+  bool _isBlocked = false;
+  String? _category;
+  String? _type;
+  String? _species;
+  String? _gender;
+  String? _size;
+  String? _fileSize;
+  List<SubmissionFolderLink> _folders = <SubmissionFolderLink>[];
+  List<String> _keywords = <String>[];
+  List<FaPostTag> _keywordTags = <FaPostTag>[];
+  List<FaPostTag> _metaKeywordTags = <FaPostTag>[];
+  String? _tagBlocklistNonce;
+  String? _blockKey;
+  String? _unblockKey;
+  bool _isClassicUserPage = false;
+  double? _imageWidth;
+  double? _imageHeight;
+  SubmissionAttachment? _submissionAttachment;
+  bool _isLoading = true;
+  bool _detailsLoaded = false;
+  bool _sfwEnabled = true;
+  bool _nsfwAllowed = false;
+
+  String? get profileImageUrl => _profileImageUrl;
+  String? get username => _username;
+  String? get linkUsername => _linkUsername;
+  String? get submissionTitle => _submissionTitle;
+  String? get fullViewImageUrl => _fullViewImageUrl;
+  String? get submissionDescription => _submissionDescription;
+  DateTime? get publicationTime => _publicationTime;
+  String? get rating => _rating;
+  int get favoritesCount => _favoritesCount;
+  int get viewCount => _viewCount;
+  int get commentsCount => _commentsCount;
+  List<Map<String, dynamic>> get comments => _comments;
+  String? get userTimezoneIanaName => _userTimezoneIanaName;
+  String? get currentUsername => _currentUsername;
+  bool get isDstCorrectionApplied => _isDstCorrectionApplied;
+  String? get favLink => _favLink;
+  String? get unfavLink => _unfavLink;
+  bool get isFavorited => _isFavorited;
+  String? get watchLink => _watchLink;
+  String? get unwatchLink => _unwatchLink;
+  String? get blockLink => _blockLink;
+  String? get unblockLink => _unblockLink;
+  bool get isWatching => _isWatching;
+  bool get watchLinksLoading => _watchLinksLoading;
+  bool get watchRequestInFlight => _watchRequestInFlight;
+  bool get isBlocked => _isBlocked;
+  String? get category => _category;
+  String? get type => _type;
+  String? get species => _species;
+  String? get gender => _gender;
+  String? get size => _size;
+  String? get fileSize => _fileSize;
+  List<SubmissionFolderLink> get folders => _folders;
+  List<String> get keywords => _keywords;
+  List<FaPostTag> get keywordTags => _keywordTags;
+  List<FaPostTag> get metaKeywordTags => _metaKeywordTags;
+  String? get tagBlocklistNonce => _tagBlocklistNonce;
+  String? get blockKey => _blockKey;
+  String? get unblockKey => _unblockKey;
+  bool get isClassicUserPage => _isClassicUserPage;
+  double? get imageWidth => _imageWidth;
+  double? get imageHeight => _imageHeight;
+  SubmissionAttachment? get submissionAttachment => _submissionAttachment;
+  bool get isLoading => _isLoading;
+  bool get detailsLoaded => _detailsLoaded;
+  bool get sfwEnabled => _sfwEnabled;
+  bool get nsfwAllowed => _nsfwAllowed;
 
   Future<void> loadSfwEnabled() async {
-    sfwEnabled = await _repository.loadSfwEnabled();
+    _sfwEnabled = await _repository.loadSfwEnabled();
   }
 
   Future<SubmissionPageResponse> getWithSfwCookie(
@@ -103,7 +151,7 @@ class SubmissionDetailsController {
           debugPrint('User response: $userAgreed');
 
           if (userAgreed) {
-            nsfwAllowed = true;
+            _nsfwAllowed = true;
             onNsfwAllowed();
             debugPrint('Retrying request with NSFW allowed');
             final retryResponse = await getWithSfwCookie(
@@ -125,7 +173,7 @@ class SubmissionDetailsController {
           debugPrint('DETECTED: Old style mature error - showing dialog');
           final userAgreed = await confirmNsfw();
           if (userAgreed) {
-            nsfwAllowed = true;
+            _nsfwAllowed = true;
             onNsfwAllowed();
             return getWithSfwCookie(
               url,
@@ -164,20 +212,20 @@ class SubmissionDetailsController {
       return false;
     }
 
-    watchLink = actions.watchLink;
-    unwatchLink = actions.unwatchLink;
-    blockLink = actions.blockLink;
-    unblockLink = actions.unblockLink;
-    blockKey = actions.blockKey;
-    unblockKey = actions.unblockKey;
-    isClassicUserPage = actions.isClassic;
-    isWatching = actions.isWatching;
-    isBlocked = actions.isBlocked;
+    _watchLink = actions.watchLink;
+    _unwatchLink = actions.unwatchLink;
+    _blockLink = actions.blockLink;
+    _unblockLink = actions.unblockLink;
+    _blockKey = actions.blockKey;
+    _unblockKey = actions.unblockKey;
+    _isClassicUserPage = actions.isClassic;
+    _isWatching = actions.isWatching;
+    _isBlocked = actions.isBlocked;
     return true;
   }
 
   void startLoading() {
-    isLoading = true;
+    _isLoading = true;
   }
 
   Future<bool> hasAuthCookies() {
@@ -185,7 +233,7 @@ class SubmissionDetailsController {
   }
 
   void stopLoading() {
-    isLoading = false;
+    _isLoading = false;
   }
 
   Future<SubmissionDetailsLoadResult> loadDetails({
@@ -203,14 +251,14 @@ class SubmissionDetailsController {
       );
 
       if (result.status != SubmissionDetailsLoadStatus.success) {
-        isLoading = false;
+        _isLoading = false;
         return result;
       }
 
       _applyLoadedDetails(result.parsedPost!, result.comments!);
       return result;
     } catch (_) {
-      isLoading = false;
+      _isLoading = false;
       rethrow;
     }
   }
@@ -219,44 +267,44 @@ class SubmissionDetailsController {
     SubmissionParseResult parsedPost,
     List<Map<String, dynamic>> parsedComments,
   ) {
-    currentUsername = parsedPost.currentUsername;
-    username = parsedPost.username;
-    linkUsername = parsedPost.linkUsername;
-    profileImageUrl = parsedPost.profileImageUrl;
-    submissionTitle = parsedPost.submissionTitle;
-    fullViewImageUrl = parsedPost.fullViewImageUrl;
-    submissionDescription = parsedPost.submissionDescription;
-    rating = parsedPost.rating;
+    _currentUsername = parsedPost.currentUsername;
+    _username = parsedPost.username;
+    _linkUsername = parsedPost.linkUsername;
+    _profileImageUrl = parsedPost.profileImageUrl;
+    _submissionTitle = parsedPost.submissionTitle;
+    _fullViewImageUrl = parsedPost.fullViewImageUrl;
+    _submissionDescription = parsedPost.submissionDescription;
+    _rating = parsedPost.rating;
 
     final publicationTimeRaw = parsedPost.publicationTimeRaw;
     if (publicationTimeRaw != null && publicationTimeRaw.isNotEmpty) {
       _parsePublicationTime(publicationTimeRaw);
     }
 
-    favoritesCount = parsedPost.favoritesCount;
-    viewCount = parsedPost.viewCount;
-    commentsCount = parsedPost.commentsCount;
-    favLink = parsedPost.favLink;
-    unfavLink = parsedPost.unfavLink;
-    isFavorited = parsedPost.isFavorited;
-    category = parsedPost.category;
-    type = parsedPost.type;
-    species = parsedPost.species;
-    gender = parsedPost.gender;
-    size = parsedPost.size;
-    fileSize = parsedPost.fileSize;
-    folders = parsedPost.folders;
-    keywords = parsedPost.keywords;
-    keywordTags = parsedPost.keywordTags;
-    metaKeywordTags = parsedPost.metaKeywordTags;
-    tagBlocklistNonce = parsedPost.tagBlocklistNonce;
-    imageWidth = parsedPost.imageWidth;
-    imageHeight = parsedPost.imageHeight;
-    submissionAttachment = parsedPost.submissionAttachment;
-    comments = parsedComments;
-    commentsCount = parsedComments.length;
-    detailsLoaded = true;
-    isLoading = false;
+    _favoritesCount = parsedPost.favoritesCount;
+    _viewCount = parsedPost.viewCount;
+    _commentsCount = parsedPost.commentsCount;
+    _favLink = parsedPost.favLink;
+    _unfavLink = parsedPost.unfavLink;
+    _isFavorited = parsedPost.isFavorited;
+    _category = parsedPost.category;
+    _type = parsedPost.type;
+    _species = parsedPost.species;
+    _gender = parsedPost.gender;
+    _size = parsedPost.size;
+    _fileSize = parsedPost.fileSize;
+    _folders = parsedPost.folders;
+    _keywords = parsedPost.keywords;
+    _keywordTags = parsedPost.keywordTags;
+    _metaKeywordTags = parsedPost.metaKeywordTags;
+    _tagBlocklistNonce = parsedPost.tagBlocklistNonce;
+    _imageWidth = parsedPost.imageWidth;
+    _imageHeight = parsedPost.imageHeight;
+    _submissionAttachment = parsedPost.submissionAttachment;
+    _comments = parsedComments;
+    _commentsCount = parsedComments.length;
+    _detailsLoaded = true;
+    _isLoading = false;
   }
 
   void _parsePublicationTime(String rawTime) {
@@ -266,7 +314,7 @@ class SubmissionDetailsController {
         applyDstCorrection: isDstCorrectionApplied,
       );
       if (parsed != null) {
-        publicationTime = parsed;
+        _publicationTime = parsed;
         debugPrint('Successfully parsed FA date: $publicationTime');
         return;
       }
@@ -291,8 +339,8 @@ class SubmissionDetailsController {
       isBlocked: isBlocked,
     );
     if (!result.updated) return false;
-    keywordTags = result.keywordTags;
-    metaKeywordTags = result.metaKeywordTags;
+    _keywordTags = result.keywordTags;
+    _metaKeywordTags = result.metaKeywordTags;
     return true;
   }
 
@@ -367,15 +415,15 @@ class SubmissionDetailsController {
   }
 
   void setWatchLinksLoading(bool value) {
-    watchLinksLoading = value;
+    _watchLinksLoading = value;
   }
 
   void setWatchRequestInFlight(bool value) {
-    watchRequestInFlight = value;
+    _watchRequestInFlight = value;
   }
 
   void addComment(String commentText) {
-    comments = <Map<String, dynamic>>[
+    _comments = <Map<String, dynamic>>[
       ...comments,
       <String, dynamic>{
         'profileImage': null,
@@ -385,7 +433,7 @@ class SubmissionDetailsController {
         'isOP': false,
       },
     ];
-    commentsCount += 1;
+    _commentsCount += 1;
   }
 
   Future<bool> submitComment(String commentText) {

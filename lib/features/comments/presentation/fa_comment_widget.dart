@@ -13,7 +13,12 @@ import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:provider/provider.dart';
 
-class SubmissionCommentWidget extends StatefulWidget {
+enum CommentHtmlCachePolicy { onWidgetUpdate, onBodyBuild }
+
+class FaCommentWidget extends StatefulWidget {
+  final TimeDisplayOccasion timeDisplayOccasion;
+  final bool showUnhide;
+  final CommentHtmlCachePolicy htmlCachePolicy;
   final Map<String, dynamic> comment;
   final ValueListenable<CommentTreeLevels> treeLevels;
   final ValueListenable<bool> collapsed;
@@ -33,9 +38,12 @@ class SubmissionCommentWidget extends StatefulWidget {
   final bool showTranslateButton;
   final VoidCallback? onTranslateToggle;
 
-  const SubmissionCommentWidget({
+  const FaCommentWidget({
     super.key,
     required this.comment,
+    required this.timeDisplayOccasion,
+    required this.showUnhide,
+    required this.htmlCachePolicy,
     required this.treeLevels,
     required this.collapsed,
     required this.onToggleCollapse,
@@ -55,10 +63,10 @@ class SubmissionCommentWidget extends StatefulWidget {
   });
 
   @override
-  State<SubmissionCommentWidget> createState() => _SubmissionCommentWidgetState();
+  State<FaCommentWidget> createState() => _FaCommentWidgetState();
 }
 
-class _SubmissionCommentWidgetState extends State<SubmissionCommentWidget> {
+class _FaCommentWidgetState extends State<FaCommentWidget> {
   bool _showFullDate = false;
   String? _lastCommentHtml;
   bool _hasHtml = false;
@@ -69,13 +77,17 @@ class _SubmissionCommentWidgetState extends State<SubmissionCommentWidget> {
   @override
   void initState() {
     super.initState();
-    _syncHtmlCache();
+    if (widget.htmlCachePolicy == CommentHtmlCachePolicy.onWidgetUpdate) {
+      _syncHtmlCache();
+    }
   }
 
   @override
-  void didUpdateWidget(covariant SubmissionCommentWidget oldWidget) {
+  void didUpdateWidget(covariant FaCommentWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _syncHtmlCache();
+    if (widget.htmlCachePolicy == CommentHtmlCachePolicy.onWidgetUpdate) {
+      _syncHtmlCache();
+    }
   }
 
   void _syncHtmlCache() {
@@ -111,6 +123,17 @@ class _SubmissionCommentWidgetState extends State<SubmissionCommentWidget> {
   }
 
   Widget _buildCommentBody(BuildContext context) {
+    final String? commentHtml = widget.comment['commentHtml'];
+    final useCache =
+        widget.htmlCachePolicy == CommentHtmlCachePolicy.onWidgetUpdate;
+    final hasHtml = useCache
+        ? _hasHtml
+        : commentHtml != null && commentHtml.trim().isNotEmpty;
+    final normalizedCommentHtml = useCache
+        ? _normalizedCommentHtml
+        : hasHtml
+            ? normalizeSmilieTokensToHtml(commentHtml!)
+            : '';
     return Padding(
       padding: const EdgeInsets.only(
           left: 0.0, right: 0.0, top: 8.0, bottom: 1.0),
@@ -129,9 +152,9 @@ class _SubmissionCommentWidgetState extends State<SubmissionCommentWidget> {
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onTap: _handleCollapseTap,
-            child: _hasHtml
+            child: hasHtml
                 ? Html(
-                  data: _normalizedCommentHtml,
+                  data: normalizedCommentHtml,
                   onLinkTap: (url, _, _) {
                     if (url != null) {
                       widget.handleLink?.call(url);
@@ -255,7 +278,7 @@ class _SubmissionCommentWidgetState extends State<SubmissionCommentWidget> {
     final timeFormat =
         context.select<TimeDisplaySettingsProvider, TimeDisplayFormat>(
       (settings) => settings.formatFor(
-        TimeDisplayOccasion.submissionComment,
+        widget.timeDisplayOccasion,
       ),
     );
     final double widthPercent = (widget.comment['width'] ?? 100).toDouble();
@@ -320,7 +343,7 @@ class _SubmissionCommentWidgetState extends State<SubmissionCommentWidget> {
                       ),
                     ),
                   ),
-                  if (widget.comment['hideLink'] != null)
+                  if (widget.showUnhide)
                     TextButton(
                       style: TextButton.styleFrom(
                         padding: EdgeInsets.zero,

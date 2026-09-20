@@ -1,7 +1,6 @@
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'widgets/message_detail_actions.dart';
 import 'widgets/message_detail_header.dart';
-import 'widgets/message_detail_menu_item.dart';
 import 'widgets/message_detail_status.dart';
 import 'dart:math' as math;
 

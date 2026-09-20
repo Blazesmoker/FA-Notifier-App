@@ -55,6 +55,7 @@ import 'package:fanotifier/shared/navigation/transparent_slide_page_route.dart';
 import 'package:provider/provider.dart';
 import 'package:fanotifier/core/analytics/app_analytics.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
+import 'profile_tab_loading_controller.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String nickname;
@@ -123,7 +124,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   @override
   void dispose() {
-    _tabSettleTimer?.cancel();
+    _tabLoadingController.dispose();
     _scrollWebViewResumeTimer?.cancel();
     _moveUpMediaProactiveTimer?.cancel();
     if (_webViewScrollOptimizationEnabled) {
@@ -282,12 +283,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   late TabController _tabController;
 
-  static const Duration _tabSettleDelay = Duration(milliseconds: 100);
   static const Duration _scrollWebViewResumeDelay = Duration(milliseconds: 50);
-  Timer? _tabSettleTimer;
+  late final ProfileTabLoadingController _tabLoadingController;
   Timer? _scrollWebViewResumeTimer;
   Timer? _moveUpMediaProactiveTimer;
-  final Set<ProfileSection> _lazyLoadedSections = <ProfileSection>{};
   final Set<ProfileSection> _bulkSelectionActiveSections = <ProfileSection>{};
   final Map<ProfileSection, double> _bulkSelectionBarHeights =
       <ProfileSection, double>{};
@@ -354,6 +353,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
       vsync: this,
       initialIndex: widget.initialSection.index,
     );
+    _tabLoadingController = ProfileTabLoadingController(
+      isMounted: () => mounted,
+      currentIndex: () => _tabController.index,
+      updateState: (update) => setState(update),
+    );
     _isHomeTabMediaVisible = widget.initialSection == ProfileSection.home;
     _isGalleryTabActive = widget.initialSection == ProfileSection.gallery;
     _galleryDetailFetchesActive = ValueNotifier<bool>(_isGalleryTabActive);
@@ -367,17 +371,19 @@ class UserProfileScreenState extends State<UserProfileScreen>
       ..addStatusListener(_onBackSwipeAnimationStatusChanged);
 
     // Load only the initial tab immediately; others will load after "settling".
-    _lazyLoadedSections.add(ProfileSection.values[_tabController.index]);
+    _tabLoadingController.loadInitialSection(
+      ProfileSection.values[_tabController.index],
+    );
 
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) {
         // Cancel any pending lazy-load while the tab is still animating/dragging.
-        _tabSettleTimer?.cancel();
+        _tabLoadingController.cancelPendingLoad();
         return;
       }
 
       // Tab finished changing; schedule lazy-load for the final tab.
-      _scheduleLazyLoadForIndex(_tabController.index);
+      _tabLoadingController.scheduleLoad(_tabController.index);
       _updateMoveUpFabLift();
 
       if (_previousIndex != _tabController.index) {
@@ -444,19 +450,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
     if (mounted) {
       setState(() {});
     }
-  }
-
-  void _scheduleLazyLoadForIndex(int index) {
-    _tabSettleTimer?.cancel();
-    _tabSettleTimer = Timer(_tabSettleDelay, () {
-      if (!mounted) return;
-      if (_tabController.index != index) return;
-      final section = ProfileSection.values[index];
-      if (_lazyLoadedSections.contains(section)) return;
-      setState(() {
-        _lazyLoadedSections.add(section);
-      });
-    });
   }
 
   void _onProfileScroll() {
@@ -2185,7 +2178,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Widget _buildLazySection(ProfileSection section) {
-    if (!_lazyLoadedSections.contains(section)) {
+    if (!_tabLoadingController.isLoaded(section)) {
       return Builder(
         builder: (context) {
           return CustomScrollView(
