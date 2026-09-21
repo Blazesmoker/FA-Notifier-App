@@ -218,3 +218,65 @@ class _AlwaysDisabledFocusNode extends FocusNode {
   @override
   bool get hasFocus => false;
 }
+
+List<PopupMenuEntry<String>> buildSubmissionActionMenu({
+  required String? currentUsername,
+  required String? username,
+  required bool isBlocked,
+}) {
+  List<PopupMenuEntry<String>> menuItems = [
+    const PopupMenuItem<String>(
+      value: 'report',
+      child: Text('Report'),
+    ),
+    if (currentUsername == null ||
+        currentUsername != username)
+      PopupMenuItem<String>(
+        value: 'block_unblock',
+        child: Text(isBlocked
+            ? 'Unblock author'
+            : 'Block author'),
+      ),
+    const PopupMenuItem<String>(
+      value: 'info',
+      child: Text('Info'),
+    ),
+    const PopupMenuItem<String>(
+      value: 'copy_link',
+      child: Text('Copy link'),
+    ),
+  ];
+
+  if (currentUsername != null &&
+      currentUsername == username) {
+    menuItems.add(
+      const PopupMenuItem<String>(
+        value: 'manage',
+        child: Text('Manage'),
+      ),
+    );
+    menuItems.add(
+      const PopupMenuItem<String>(
+        value: 'edit',
+        child: Text('Edit'),
+      ),
+    );
+    menuItems.add(
+      PopupMenuItem<String>(
+        value: 'delete',
+        child: Text(
+          'Delete',
+          style: TextStyle(color: Colors.red),
+        ),
+      ),
+    );
+  }
+  menuItems.add(
+    const PopupMenuItem<String>(
+      value: 'translate',
+      child: Text('Translate'),
+    ),
+  );
+
+  return menuItems;
+}

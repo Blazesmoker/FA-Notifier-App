@@ -1,3 +1,5 @@
+import 'widgets/submission_management_dialogs.dart';
+import 'manage_submissions_controller.dart';
 import 'dart:math' as math;
 
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
@@ -10,7 +12,6 @@ import 'package:fanotifier/features/submissions/domain/submission_management_mod
 import 'package:fanotifier/features/submissions/domain/submission_management_repository.dart';
 import 'package:fanotifier/features/submissions/presentation/manage_submission_folders_screen.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/manage_submissions_bottom_overlay.dart';
-import 'package:fanotifier/features/submissions/presentation/widgets/submission_action_dialog_body.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_image_preview.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_management_shrinkable_text.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_management_styles.dart';
@@ -53,17 +54,17 @@ class ManageSubmissionsScreen extends StatefulWidget {
 
 class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
   late final SubmissionManagementRepository _repository;
-  late final SubmissionFolderColorRepository _folderColorRepository;
-  final Set<String> _selectedIds = <String>{};
-  Map<String, Color> _folderColors = const <String, Color>{};
+  late final ManageSubmissionsController _controller;
+  Set<String> get _selectedIds => _controller.selectedIds;
+  Map<String, Color> get _folderColors => _controller.folderColors;
 
-  FaSubmissionManagementPage? _page;
-  Object? _loadError;
-  bool _loading = true;
-  bool _mutating = false;
+  FaSubmissionManagementPage? get _page => _controller.page;
+  Object? get _loadError => _controller.loadError;
+  bool get _loading => _controller.loading;
+  bool get _mutating => _controller.mutating;
   bool _allowPop = false;
   bool _titlesEnabled = true;
-  bool _changed = false;
+  bool get _changed => _controller.changed;
   bool _openingFolder = false;
   bool _preparingPreview = false;
 
@@ -73,66 +74,18 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
   void initState() {
     super.initState();
     _repository = context.read<SubmissionManagementRepository>();
-    _folderColorRepository = context.read<SubmissionFolderColorRepository>();
-    _load(
+    _controller = ManageSubmissionsController(
+      repository: _repository,
+      folderColorRepository: context.read<SubmissionFolderColorRepository>(),
+      isMounted: () => mounted,
+      updateState: (update) => setState(update),
+      confirmDelete: _confirmDelete,
+      showMessage: _showMessage,
+    );
+    _controller.load(
       navigationAction: widget.initialNavigationAction,
       resetDrafts: true,
     );
-  }
-
-  Future<void> _load({
-    Uri? uri,
-    FaManagementFormAction? navigationAction,
-    bool resetDrafts = false,
-  }) async {
-    if (_loading && _page != null) return;
-    setState(() {
-      _loading = true;
-      _loadError = null;
-    });
-    try {
-      final page = await _repository.loadSubmissions(
-        uri: uri,
-        navigationAction: navigationAction,
-      );
-      final folderColors = await _loadFolderColors(page);
-      if (!mounted) return;
-      _setPage(
-        page,
-        folderColors: folderColors,
-        resetDrafts: resetDrafts,
-      );
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _loadError = error;
-      });
-      if (_page != null) _showMessage('$error', error: true);
-    }
-  }
-
-  void _setPage(
-    FaSubmissionManagementPage page, {
-    required Map<String, Color> folderColors,
-    required bool resetDrafts,
-  }) {
-    setState(() {
-      _page = page;
-      _folderColors = folderColors;
-      _loading = false;
-      _loadError = null;
-      if (resetDrafts) {
-        _selectedIds.clear();
-      } else {
-        final visibleIds = page.submissions.map((item) => item.id).toSet();
-        _selectedIds.removeWhere((id) => !visibleIds.contains(id));
-      }
-    });
-  }
-
-  void _clearDrafts() {
-    setState(_selectedIds.clear);
   }
 
   Future<void> _requestClose() async {
@@ -168,7 +121,7 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
     if (uri == null || _mutating || _loading) return;
     final discard = await _confirmDiscardForNavigation('this page');
     if (!mounted || !discard) return;
-    await _load(uri: uri, resetDrafts: true);
+    await _controller.load(uri: uri, resetDrafts: true);
   }
 
   Future<void> _openFolders() async {
@@ -183,138 +136,10 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
         'the selected folder',
       );
       if (!mounted || !discard) return;
-      await _load(navigationAction: action, resetDrafts: true);
+      await _controller.load(navigationAction: action, resetDrafts: true);
       return;
     }
-    await _load(uri: _page?.sourceUri, resetDrafts: false);
-  }
-
-  void _toggleSubmission(String id) {
-    if (_mutating) return;
-    setState(() {
-      if (!_selectedIds.add(id)) _selectedIds.remove(id);
-    });
-  }
-
-  void _selectAll() {
-    final page = _page;
-    if (page == null || _mutating) return;
-    final allIds = page.submissions.map((item) => item.id).toSet();
-    setState(() {
-      _selectedIds.addAll(allIds);
-    });
-  }
-
-  void _deselectAll() {
-    if (_mutating) return;
-    setState(_selectedIds.clear);
-  }
-
-  bool _allSelected(FaSubmissionManagementPage page) {
-    if (page.submissions.isEmpty) return false;
-    final allIds = page.submissions.map((submission) => submission.id);
-    return _selectedIds.length == page.submissions.length &&
-        allIds.every(_selectedIds.contains);
-  }
-
-  List<FaManagedSubmission> _selectedSubmissions(
-    FaSubmissionManagementPage page,
-  ) {
-    return page.submissions
-        .where((submission) => _selectedIds.contains(submission.id))
-        .toList(growable: false);
-  }
-
-  Future<Map<String, Color>> _loadFolderColors(
-    FaSubmissionManagementPage page,
-  ) async {
-    final names = page.submissions.expand(
-      (submission) => submission.assignedFolders,
-    );
-    try {
-      final storedColors = await _folderColorRepository.colorsFor(names);
-      return <String, Color>{
-        for (final entry in storedColors.entries)
-          entry.key: Color(entry.value),
-      };
-    } catch (_) {
-      return <String, Color>{
-        for (final name in names) name: fallbackFolderColor,
-      };
-    }
-  }
-
-  Future<void> _applyAction(
-    SubmissionManagementActionType actionType, {
-    String? folderId,
-    String? newFolderName,
-  }) async {
-    final page = _page;
-    if (page == null || _mutating) return;
-    if (actionType == SubmissionManagementActionType.deleteSubmissions) {
-      final confirmed = await _confirmDelete(page);
-      if (!mounted || !confirmed) return;
-    }
-    setState(() => _mutating = true);
-    FaContentManagementResult result;
-    try {
-      result = await _repository.applySubmissionAction(
-        page: page,
-        actionType: actionType,
-        submissionIds: Set<String>.from(_selectedIds),
-        folderId: folderId,
-        newFolderName: newFolderName,
-      );
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _mutating = false);
-      _showMessage('$error', error: true);
-      return;
-    }
-    if (!mounted) return;
-    setState(() => _mutating = false);
-    if (result.changed) _changed = true;
-    if (result.success) {
-      _clearDrafts();
-      final refreshed = result.submissionPage;
-      if (refreshed != null) {
-        final folderColors = await _loadFolderColors(refreshed);
-        if (!mounted) return;
-        _setPage(
-          refreshed,
-          folderColors: folderColors,
-          resetDrafts: true,
-        );
-      } else {
-        await _load(uri: page.sourceUri, resetDrafts: true);
-      }
-    } else if (result.partial || result.indeterminate) {
-      final refreshed = result.submissionPage;
-      if (refreshed != null) {
-        final folderColors = await _loadFolderColors(refreshed);
-        if (!mounted) return;
-        _setPage(
-          refreshed,
-          folderColors: folderColors,
-          resetDrafts: false,
-        );
-      } else {
-        await _load(uri: page.sourceUri, resetDrafts: false);
-      }
-      if (!mounted) return;
-      final remaining = result.remainingSubmissionIds;
-      if (remaining.isNotEmpty) {
-        setState(() {
-          _selectedIds
-            ..clear()
-            ..addAll(remaining.where(
-              (id) => _page?.submissions.any((item) => item.id == id) ?? false,
-            ));
-        });
-      }
-    }
-    if (!mounted) return;
-    _showResult(result);
+    await _controller.load(uri: _page?.sourceUri, resetDrafts: false);
   }
 
   Future<void> _openActionDialog(_SubmissionActionDialog action) async {
@@ -339,226 +164,59 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
   Future<void> _showAssignExistingDialog(
     FaSubmissionManagementPage page,
   ) async {
-    String? selectedFolderId = page.selectedFolderId;
-    if (selectedFolderId != null &&
-        !page.folders.any((folder) => folder.id == selectedFolderId)) {
-      selectedFolderId = null;
-    }
-    final selected = _selectedSubmissions(page);
-    final folderId = await showDialog<String>(
+    final selected = _controller.selectedSubmissions(page);
+    final folderId = await showAssignExistingSubmissionFolderDialog(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              scrollable: true,
-              title: const Text('Assign to Existing Folder'),
-              content: SubmissionActionDialogBody(
-                submissions: selected,
-                folderColors: _folderColors,
-                description:
-                    'Assign the selected submissions to an existing folder.',
-                controls: DropdownButtonFormField<String>(
-                  key: ValueKey(selectedFolderId),
-                  initialValue: selectedFolderId,
-                  isExpanded: true,
-                  hint: const SubmissionManagementShrinkableText(
-                    '-- select folder --',
-                  ),
-                  items: [
-                    for (final folder in page.folders)
-                      DropdownMenuItem<String>(
-                        value: folder.id,
-                        child: SubmissionManagementShrinkableText(
-                          folder.label,
-                          maxLines: 2,
-                        ),
-                      ),
-                  ],
-                  onChanged: (value) {
-                    setDialogState(() => selectedFolderId = value);
-                  },
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: selectedFolderId == null
-                      ? null
-                      : () => Navigator.of(dialogContext).pop(
-                            selectedFolderId,
-                          ),
-                  style: TextButton.styleFrom(
-                    foregroundColor: managementAccent,
-                  ),
-                  child: const Text('Assign to Folder'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      page: page,
+      selected: selected,
+      folderColors: () => _folderColors,
     );
     if (!mounted || folderId == null) return;
-    await _applyAction(
+    await _controller.applyAction(
       SubmissionManagementActionType.assignToFolder,
       folderId: folderId,
     );
   }
 
   Future<void> _showAssignNewDialog(FaSubmissionManagementPage page) async {
-    var folderName = '';
-    final selected = _selectedSubmissions(page);
-    final newFolderName = await showDialog<String>(
+    final selected = _controller.selectedSubmissions(page);
+    final newFolderName = await showAssignNewSubmissionFolderDialog(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              scrollable: true,
-              title: const Text('Assign to New Folder'),
-              content: SubmissionActionDialogBody(
-                submissions: selected,
-                folderColors: _folderColors,
-                description:
-                    'Create a new folder and assign the selected submissions to it.',
-                controls: TextField(
-                  autofocus: true,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
-                    label: SubmissionManagementShrinkableText('Folder'),
-                    hint: SubmissionManagementShrinkableText(
-                      'Enter a new folder name',
-                    ),
-                  ),
-                  onChanged: (value) {
-                    folderName = value;
-                    setDialogState(() {});
-                  },
-                  onSubmitted: (value) {
-                    final trimmed = value.trim();
-                    if (trimmed.isNotEmpty) {
-                      Navigator.of(dialogContext).pop(trimmed);
-                    }
-                  },
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: folderName.trim().isEmpty
-                      ? null
-                      : () => Navigator.of(dialogContext).pop(
-                            folderName.trim(),
-                          ),
-                  style: TextButton.styleFrom(
-                    foregroundColor: managementAccent,
-                  ),
-                  child: const Text('Create New Folder'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      page: page,
+      selected: selected,
+      folderColors: () => _folderColors,
     );
     if (!mounted || newFolderName == null) return;
-    await _applyAction(
+    await _controller.applyAction(
       SubmissionManagementActionType.createFolder,
       newFolderName: newFolderName,
     );
   }
 
   Future<void> _showUnassignDialog(FaSubmissionManagementPage page) async {
-    final selected = _selectedSubmissions(page);
-    final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            scrollable: true,
-            title: const Text('Unassign From Folder(s)'),
-            content: SubmissionActionDialogBody(
-              submissions: selected,
-              folderColors: _folderColors,
-              description:
-                  'Remove the selected submissions from all folders they are currently assigned to.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                style: TextButton.styleFrom(
-                  foregroundColor: managementAccent,
-                ),
-                child: const Text('Unassign from Folders'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
+    final selected = _controller.selectedSubmissions(page);
+    final confirmed = await showUnassignSubmissionFolderDialog(
+      context: context,
+      page: page,
+      selected: selected,
+      folderColors: () => _folderColors,
+    );
     if (!mounted || !confirmed) return;
-    await _applyAction(
+    await _controller.applyAction(
       SubmissionManagementActionType.unassignFromFolders,
     );
   }
 
   Future<void> _showMoveDialog(FaSubmissionManagementPage page) async {
-    final selected = _selectedSubmissions(page);
-    final action = await showDialog<SubmissionManagementActionType>(
+    final selected = _controller.selectedSubmissions(page);
+    final action = await showMoveSubmissionsDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        scrollable: true,
-        title: const Text('Move to Gallery or Scraps'),
-        content: SubmissionActionDialogBody(
-          submissions: selected,
-          folderColors: _folderColors,
-          description:
-              'Move the selected submissions to your Gallery or Scraps.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: page.actions.containsKey(
-              SubmissionManagementActionType.moveToScraps,
-            )
-                ? () => Navigator.of(dialogContext).pop(
-                      SubmissionManagementActionType.moveToScraps,
-                    )
-                : null,
-            style: TextButton.styleFrom(
-              foregroundColor: managementAccent,
-            ),
-            child: const Text('Move to Scraps'),
-          ),
-          TextButton(
-            onPressed: page.actions.containsKey(
-              SubmissionManagementActionType.moveToGallery,
-            )
-                ? () => Navigator.of(dialogContext).pop(
-                      SubmissionManagementActionType.moveToGallery,
-                    )
-                : null,
-            style: TextButton.styleFrom(
-              foregroundColor: managementAccent,
-            ),
-            child: const Text('Move to Gallery'),
-          ),
-        ],
-      ),
+      page: page,
+      selected: selected,
+      folderColors: () => _folderColors,
     );
     if (!mounted || action == null) return;
-    await _applyAction(action);
+    await _controller.applyAction(action);
   }
 
   Future<bool> _confirmDelete(FaSubmissionManagementPage page) async {
@@ -566,46 +224,12 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
       _showMessage('Select at least one submission.', error: true);
       return false;
     }
-    final selected = _selectedSubmissions(page);
-    return await showDialog<bool>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            scrollable: true,
-            title: Text(
-              'Permanently delete ${selected.length} submission${selected.length == 1 ? '' : 's'}?',
-            ),
-            content: SubmissionActionDialogBody(
-              submissions: selected,
-              folderColors: _folderColors,
-              description:
-                  'This cannot be undone. Only the submissions shown below will be sent to Fur Affinity for deletion.',
-              warning:
-                  'When removing multiple submissions the page may time out. Progress may still be made. The app will reload the page and keep only any submissions that still remain selected; it will never repeat the request automatically.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('Delete Submissions'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
-
-  void _showResult(FaContentManagementResult result) {
-    final message = result.message ??
-        (result.success ? 'Changes applied.' : 'The change was not applied.');
-    _showMessage(
-      message,
-      success: result.success,
-      warning: result.partial || result.indeterminate,
-      error: !result.success && !result.partial && !result.indeterminate,
+    final selected = _controller.selectedSubmissions(page);
+    return await showDeleteSubmissionsDialog(
+      context: context,
+      page: page,
+      selected: selected,
+      folderColors: () => _folderColors,
     );
   }
 
@@ -921,12 +545,12 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
       );
     }
     if (_loadError != null && _page == null) {
-      return _ErrorState(error: _loadError!, onRetry: _load);
+      return _ErrorState(error: _loadError!, onRetry: _controller.load);
     }
     final page = _page;
     if (page == null) return const SizedBox.shrink();
     final folderColors = _folderColors;
-    final allSelected = _allSelected(page);
+    final allSelected = _controller.allSelected(page);
     return LayoutBuilder(
       builder: (context, viewportConstraints) {
         final width =
@@ -950,7 +574,7 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
             RefreshIndicator(
               color: managementAccent,
               backgroundColor: Colors.black,
-              onRefresh: () => _load(uri: page.sourceUri, resetDrafts: false),
+              onRefresh: () => _controller.load(uri: page.sourceUri, resetDrafts: false),
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
@@ -987,7 +611,7 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
                               showDetails: _titlesEnabled,
                               folderColors: folderColors,
                               enabled: !_mutating,
-                              onToggle: () => _toggleSubmission(submission.id),
+                              onToggle: () => _controller.toggleSubmission(submission.id),
                               onPreview: () =>
                                   _showSubmissionPreview(
                                     submission,
@@ -1029,10 +653,10 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
                 onToggleDetails: () {
                   setState(() => _titlesEnabled = !_titlesEnabled);
                 },
-                onToggleAll: allSelected ? _deselectAll : _selectAll,
+                onToggleAll: allSelected ? _controller.deselectAll : _controller.selectAll,
                 onNewer: () => _navigateToPage(page.newerUri),
                 onOlder: () => _navigateToPage(page.olderUri),
-                onDelete: () => _applyAction(
+                onDelete: () => _controller.applyAction(
                   SubmissionManagementActionType.deleteSubmissions,
                 ),
               ),

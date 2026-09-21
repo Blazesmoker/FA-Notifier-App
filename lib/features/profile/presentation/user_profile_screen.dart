@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'user_profile_shouts_controller.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_details_header.dart';
 import 'package:fanotifier/features/profile/presentation/profile_tab_scroll_scope.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_edit_dialog.dart';
@@ -17,7 +19,6 @@ import 'package:fanotifier/app/navigation/app_navigation.dart';
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/features/profile/domain/shout.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
-import 'package:fanotifier/features/profile/domain/user_profile_shout_deletion_result.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_repository.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
@@ -141,10 +142,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _moveUpMediaProactive.dispose();
     _galleryDetailFetchesActive.dispose();
     _webViewLoaded.dispose();
-    _isLoadingMoreShouts.dispose();
-    _shoutsRevision.dispose();
+    _shoutsController.dispose();
     _watchRequestInFlight.dispose();
-    _isDeletingSelectedShouts.dispose();
     _profileAvatarBorderVisible.dispose();
     _profileNameRowKey.dispose();
     _shoutSelectionController.dispose();
@@ -293,11 +292,11 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   int _previousIndex = 0;
 
-  final ValueNotifier<bool> _isLoadingMoreShouts =
-      ValueNotifier<bool>(false);
-  final ValueNotifier<int> _shoutsRevision = ValueNotifier<int>(0);
-  final ValueNotifier<bool> _isDeletingSelectedShouts =
-      ValueNotifier<bool>(false);
+  late final UserProfileShoutsController _shoutsController;
+  ValueListenable<bool> get _isLoadingMoreShouts => _shoutsController.isLoadingMore;
+  ValueListenable<bool> get _isDeletingSelectedShouts =>
+      _shoutsController.isDeleting;
+  ValueListenable<int> get _shoutsRevision => _shoutsController.revision;
   final ValueNotifier<bool> _watchRequestInFlight =
       ValueNotifier<bool>(false);
   bool _isDraggingBackFromEdge = false;
@@ -335,6 +334,17 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _profileController = UserProfileController(
       repository: profileRepository,
       nickname: widget.nickname,
+    );
+    _shoutsController = UserProfileShoutsController(
+      repository: profileRepository,
+      profileController: _profileController,
+      selectionController: _shoutSelectionController,
+      isMounted: () => mounted,
+      fetchUserProfile: _fetchUserProfile,
+      exitShoutSelectionMode: exitShoutSelectionMode,
+      showMessage: (message, {required color}) {
+        showAppSnackBar(context, message, backgroundColor: color);
+      },
     );
     if (_webViewScrollOptimizationEnabled) {
       SchedulerBinding.instance.addTimingsCallback(_handleFrameTimings);
@@ -1088,7 +1098,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       return;
     }
 
-    await _deleteShouts(selectedShouts);
+    await _shoutsController.deleteShouts(selectedShouts);
   }
 
   Future<void> _confirmDeleteShout(int index, Shout shout) async {
@@ -1105,150 +1115,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
     );
     if (confirmed) {
       if (canDeleteOwnShoutOnOtherProfile) {
-        await _deleteOwnShoutFromOtherProfile(shout);
+        await _shoutsController.deleteOwnShoutFromOtherProfile(shout);
       } else {
-        await _deleteShout(index, shout);
+        await _shoutsController.deleteShouts([shout]);
       }
-    }
-  }
-
-  Future<void> _deleteOwnShoutFromOtherProfile(Shout shout) async {
-    if (_isDeletingSelectedShouts.value || shout.ownShoutDeleteUrl == null) {
-      return;
-    }
-
-    final loadedProfilePage = _profileController.currentShoutPage;
-    _isDeletingSelectedShouts.value = true;
-
-    try {
-      final result = await _profileRepository.deleteOwnShoutFromProfile(
-        shout: shout,
-        sanitizedProfileUsername: _profileController.sanitizedUsername,
-        sfwEnabled: _profileController.sfwEnabled,
-      );
-      if (!mounted) return;
-
-      if (result.missingCookies) {
-        showAppSnackBar(
-          context,
-          'Please log in to perform this action.',
-          backgroundColor: Colors.red,
-        );
-      } else if (result.success) {
-        showAppSnackBar(
-          context,
-          'Shout deleted.',
-          backgroundColor: Colors.green,
-        );
-        await _fetchUserProfile();
-        await _restoreLoadedShoutPages(loadedProfilePage);
-      } else if (result.error != null) {
-        showAppSnackBar(
-          context,
-          'The delete result could not be confirmed. Refresh the profile before trying again.',
-          backgroundColor: Colors.red,
-        );
-      } else {
-        showAppSnackBar(
-          context,
-          'Failed to delete shout.',
-          backgroundColor: Colors.red,
-        );
-      }
-    } catch (_) {
-      if (!mounted) return;
-      showAppSnackBar(
-        context,
-        'The delete result could not be confirmed. Refresh the profile before trying again.',
-        backgroundColor: Colors.red,
-      );
-    } finally {
-      if (mounted) {
-        _isDeletingSelectedShouts.value = false;
-      }
-    }
-  }
-
-  Future<void> _deleteShout(int _, Shout shout) async {
-    await _deleteShouts([shout]);
-  }
-
-  Future<void> _deleteShouts(List<Shout> shoutsToDelete) async {
-    if (shoutsToDelete.isEmpty || _isDeletingSelectedShouts.value) {
-      return;
-    }
-
-    final loadedProfilePage = _profileController.currentShoutPage;
-
-    _isDeletingSelectedShouts.value = true;
-
-    try {
-      final deletionResult = await _profileRepository.deleteShouts(
-        shouts: shoutsToDelete,
-        sfwEnabled: _profileController.sfwEnabled,
-      );
-
-      if (!mounted) return;
-      if (deletionResult.status ==
-          UserProfileShoutDeletionStatus.unmatched) {
-        showAppSnackBar(
-          context,
-          "Failed to match one or more selected shouts on the controls page.",
-          backgroundColor: Colors.red,
-        );
-        return;
-      }
-
-      if (deletionResult.status ==
-          UserProfileShoutDeletionStatus.missingCookies) {
-        showAppSnackBar(context, "Please log in to perform this action.",
-            backgroundColor: Colors.red);
-      } else if (deletionResult.status ==
-          UserProfileShoutDeletionStatus.success) {
-        final deletedCount = shoutsToDelete.length;
-        showAppSnackBar(
-          context,
-          deletedCount == 1
-              ? "Shout deleted."
-              : "$deletedCount shouts deleted.",
-          backgroundColor: Colors.green,
-        );
-        exitShoutSelectionMode();
-        await _fetchUserProfile();
-        await _restoreLoadedShoutPages(loadedProfilePage);
-      } else if (deletionResult.status ==
-          UserProfileShoutDeletionStatus.partialFailure) {
-        showAppSnackBar(
-          context,
-          "Some selected shouts were deleted, but one page failed.",
-          backgroundColor: Colors.red,
-        );
-        exitShoutSelectionMode();
-        await _fetchUserProfile();
-        await _restoreLoadedShoutPages(loadedProfilePage);
-      } else if (deletionResult.error != null) {
-        showAppSnackBar(context, "Error: ${deletionResult.error}",
-            backgroundColor: Colors.red);
-      } else {
-        showAppSnackBar(context, "Failed to delete shout.",
-            backgroundColor: Colors.red);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      showAppSnackBar(context, "Error: $e", backgroundColor: Colors.red);
-    } finally {
-      if (mounted) {
-        _isDeletingSelectedShouts.value = false;
-      }
-    }
-  }
-
-  Future<void> _restoreLoadedShoutPages(int targetPage) async {
-    while (mounted &&
-        _profileController.currentShoutPage < targetPage &&
-        _profileController.currentShoutPage <
-            _profileController.totalShoutPages) {
-      await _loadMoreShouts();
     }
   }
 
@@ -1373,8 +1243,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       _webViewLoaded.value = result.shouldShowDescription
           ? (rebuildDescription ? false : wasWebViewLoaded)
           : true;
-      _shoutSelectionController.reconcile(_profileController.shouts);
-      _shoutsRevision.value++;
+      _shoutsController.reconcileShouts();
       _updateProfileAvatarTransparency(result.parsed.profileImageUrl);
 
       debugPrint(
@@ -1403,49 +1272,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   void switchToGalleryTab() {
     _tabController.animateTo(ProfileSection.gallery.index);
-  }
-
-  Future<void> _loadMoreShouts() async {
-    if (_isLoadingMoreShouts.value ||
-        _profileController.currentShoutPage >=
-            _profileController.totalShoutPages) {
-      debugPrint(
-          "Cannot load more shouts. Loading: ${_isLoadingMoreShouts.value}, Current: ${_profileController.currentShoutPage}, Total: ${_profileController.totalShoutPages}");
-      return;
-    }
-
-    _isLoadingMoreShouts.value = true;
-
-    try {
-      final nextPage = _profileController.currentShoutPage + 1;
-      final payload = await _profileRepository.loadAdditionalShouts(
-        sanitizedUsername: _profileController.sanitizedUsername,
-        shoutPaginationKey: _profileController.shoutPaginationKey,
-        nextPage: nextPage,
-        sfwEnabled: _profileController.sfwEnabled,
-        existingShoutIds:
-            _profileController.shouts.map((shout) => shout.id).toSet(),
-      );
-
-      if (!mounted) return;
-      if (payload == null) {
-        debugPrint("Missing shout pagination key; cannot load more shouts.");
-        return;
-      }
-
-      _profileController.addShouts(payload);
-      _shoutSelectionController.reconcile(_profileController.shouts);
-      _shoutsRevision.value++;
-    } catch (e) {
-      debugPrint('Error loading more shouts: $e');
-      if (!mounted) return;
-      showAppSnackBar(context, 'Failed to load more shouts',
-          backgroundColor: Colors.red);
-    } finally {
-      if (mounted) {
-        _isLoadingMoreShouts.value = false;
-      }
-    }
   }
 
   Widget buildAnimatedAvatar(
@@ -2363,7 +2189,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
           await _fetchUserProfile();
         }
       },
-      onLoadMoreShouts: _loadMoreShouts,
+      onLoadMoreShouts: _shoutsController.loadMoreShouts,
       onConfirmDeleteShout: _confirmDeleteShout,
       onToggleShoutSelectionMode: _toggleShoutSelectionMode,
       onToggleShoutSelection: _toggleShoutSelection,

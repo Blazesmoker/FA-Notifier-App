@@ -1,3 +1,5 @@
+import 'package:fanotifier/features/comments/presentation/comment_selection_controller.dart';
+import 'widgets/submission_detail_sections.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_action_bar.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_tags_panel.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_statistics_row.dart';
@@ -10,7 +12,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:fanotifier/features/comments/presentation/reply_screen.dart';
 import 'package:fanotifier/features/comments/presentation/inline_comment_composer.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:fanotifier/app/navigation/app_navigation.dart';
@@ -143,15 +144,12 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
   final GlobalKey<SelectionAreaState> _titleSelectionKey = GlobalKey();
   final GlobalKey<SelectionAreaState> _submissionContentSelectionKey =
       GlobalKey();
-  final Map<Object, GlobalKey<SelectionAreaState>> _commentSelectionKeys =
-      <Object, GlobalKey<SelectionAreaState>>{};
-  final Map<Object, String> _commentSelectedTexts = <Object, String>{};
+  late final CommentSelectionController _commentSelection =
+      CommentSelectionController(
+        otherSelectionKeys: [_titleSelectionKey, _submissionContentSelectionKey],
+      );
   String _titleSelectedText = '';
   String _submissionContentSelectedText = '';
-  int? _selectionClearPointerId;
-  Offset? _selectionClearPointerDownPosition;
-  DateTime? _selectionClearPointerDownTime;
-  bool _selectionClearPointerMoved = false;
   static const double _edgeBackSwipeDetectorWidth = 25.0;
   static const double _edgeBackSwipeTriggerWidth = 62.0;
   static const double _edgeBackSwipeMinDistance = 72.0;
@@ -449,39 +447,12 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
     state.pauseWebViewDuringScroll();
   }
 
-  Object _commentSelectionId(Map<String, dynamic> comment, int index) {
-    return comment['commentId']?.toString() ?? 'comment_$index';
-  }
-
-  GlobalKey<SelectionAreaState> _commentSelectionKeyFor(Object selectionId) {
-    return _commentSelectionKeys.putIfAbsent(
-      selectionId,
-      () => GlobalKey<SelectionAreaState>(),
-    );
-  }
-
-  String _selectedCommentTextFor(Object selectionId) {
-    return _commentSelectedTexts[selectionId] ?? '';
-  }
-
   void _updateTitleSelectedText(SelectedContent? content) {
     _titleSelectedText = content?.plainText ?? '';
   }
 
   void _updateSubmissionContentSelectedText(SelectedContent? content) {
     _submissionContentSelectedText = content?.plainText ?? '';
-  }
-
-  void _updateCommentSelectedText(
-    Object selectionId,
-    SelectedContent? content,
-  ) {
-    final text = content?.plainText ?? '';
-    if (text.isEmpty) {
-      _commentSelectedTexts.remove(selectionId);
-      return;
-    }
-    _commentSelectedTexts[selectionId] = text;
   }
 
   bool _shouldOfferCommentTranslation(
@@ -524,62 +495,6 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
   void _handleTranslationLanguageDetected() {
     if (!mounted) return;
     setState(() {});
-  }
-
-  void _clearSelectionArea(GlobalKey<SelectionAreaState> key) {
-    final state = key.currentState;
-    if (state == null) return;
-    state.selectableRegion.clearSelection();
-    state.selectableRegion.hideToolbar();
-  }
-
-  void _clearAllTextSelections() {
-    _clearSelectionArea(_titleSelectionKey);
-    _clearSelectionArea(_submissionContentSelectionKey);
-    for (final key in _commentSelectionKeys.values) {
-      _clearSelectionArea(key);
-    }
-  }
-
-  void _handleSelectionClearPointerDown(PointerDownEvent event) {
-    _selectionClearPointerId = event.pointer;
-    _selectionClearPointerDownPosition = event.position;
-    _selectionClearPointerDownTime = DateTime.now();
-    _selectionClearPointerMoved = false;
-  }
-
-  void _handleSelectionClearPointerMove(PointerMoveEvent event) {
-    if (_selectionClearPointerId != event.pointer ||
-        _selectionClearPointerDownPosition == null) {
-      return;
-    }
-    if ((event.position - _selectionClearPointerDownPosition!).distance > 10) {
-      _selectionClearPointerMoved = true;
-    }
-  }
-
-  void _handleSelectionClearPointerUp(PointerUpEvent event) {
-    if (_selectionClearPointerId != event.pointer) return;
-    final downTime = _selectionClearPointerDownTime;
-    final isQuickTap = downTime != null &&
-        DateTime.now().difference(downTime) <=
-            const Duration(milliseconds: 250);
-    if (!_selectionClearPointerMoved && isQuickTap) {
-      _clearAllTextSelections();
-    }
-    _resetSelectionClearPointer();
-  }
-
-  void _handleSelectionClearPointerCancel(PointerCancelEvent event) {
-    if (_selectionClearPointerId != event.pointer) return;
-    _resetSelectionClearPointer();
-  }
-
-  void _resetSelectionClearPointer() {
-    _selectionClearPointerId = null;
-    _selectionClearPointerDownPosition = null;
-    _selectionClearPointerDownTime = null;
-    _selectionClearPointerMoved = false;
   }
 
   @override
@@ -2037,58 +1952,10 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                   actions: [
                     Builder(
                       builder: (context) {
-                        List<PopupMenuEntry<String>> menuItems = [
-                          const PopupMenuItem<String>(
-                            value: 'report',
-                            child: Text('Report'),
-                          ),
-                          if (currentUsername == null ||
-                              currentUsername != username)
-                            PopupMenuItem<String>(
-                              value: 'block_unblock',
-                              child: Text(isBlocked
-                                  ? 'Unblock author'
-                                  : 'Block author'),
-                            ),
-                          const PopupMenuItem<String>(
-                            value: 'info',
-                            child: Text('Info'),
-                          ),
-                          const PopupMenuItem<String>(
-                            value: 'copy_link',
-                            child: Text('Copy link'),
-                          ),
-                        ];
-
-                        if (currentUsername != null &&
-                            currentUsername == username) {
-                          menuItems.add(
-                            const PopupMenuItem<String>(
-                              value: 'manage',
-                              child: Text('Manage'),
-                            ),
-                          );
-                          menuItems.add(
-                            const PopupMenuItem<String>(
-                              value: 'edit',
-                              child: Text('Edit'),
-                            ),
-                          );
-                          menuItems.add(
-                            PopupMenuItem<String>(
-                              value: 'delete',
-                              child: Text(
-                                'Delete',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                            ),
-                          );
-                        }
-                        menuItems.add(
-                          const PopupMenuItem<String>(
-                            value: 'translate',
-                            child: Text('Translate'),
-                          ),
+                        final menuItems = buildSubmissionActionMenu(
+                          currentUsername: currentUsername,
+                          username: username,
+                          isBlocked: isBlocked,
                         );
 
                         return IconButton(
@@ -2171,10 +2038,14 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                 resizeToAvoidBottomInset: false,
                 body: Listener(
                   behavior: HitTestBehavior.opaque,
-                  onPointerDown: _handleSelectionClearPointerDown,
-                  onPointerMove: _handleSelectionClearPointerMove,
-                  onPointerUp: _handleSelectionClearPointerUp,
-                  onPointerCancel: _handleSelectionClearPointerCancel,
+                  onPointerDown:
+                      _commentSelection.handleSelectionClearPointerDown,
+                  onPointerMove:
+                      _commentSelection.handleSelectionClearPointerMove,
+                  onPointerUp:
+                      _commentSelection.handleSelectionClearPointerUp,
+                  onPointerCancel:
+                      _commentSelection.handleSelectionClearPointerCancel,
                   child: Stack(
                     children: [
                       RepaintBoundary(
@@ -2201,222 +2072,24 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                                     children: [
                                       if (profileImageUrl != null &&
                                           username != null)
-                                        Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Flexible(
-                                                child: GestureDetector(
-                                                  onTap: () {
-                                                    Navigator.push(
-                                                      context,
-                                                      UserProfileScreen.route(
-                                                        nickname:
-                                                            linkUsername ??
-                                                                username!,
-                                                      ),
-                                                    );
-                                                  },
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                            right: 6.0),
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        Container(
-                                                          width: 36,
-                                                          height: 36,
-                                                          decoration:
-                                                              const BoxDecoration(
-                                                            color: Colors
-                                                                .transparent,
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .zero,
-                                                          ),
-                                                          child: FaNetworkImage(
-                                                            profileImageUrl!,
-                                                            fit: BoxFit.cover,
-                                                            alignment: Alignment
-                                                                .center,
-
-                                                            loadingBuilder:
-                                                                (context, child,
-                                                                    loadingProgress) {
-                                                              if (loadingProgress ==
-                                                                  null) {
-                                                                return child;
-                                                              }
-                                                              return const Center(
-                                                                child: CircularProgressIndicator(
-                                                                    strokeWidth:
-                                                                        2),
-                                                              );
-                                                            },
-
-                                                            errorBuilder:
-                                                                (context, error,
-                                                                    stackTrace) {
-                                                              return Image
-                                                                  .asset(
-                                                                'assets/images/defaultpic.gif',
-                                                                fit: BoxFit
-                                                                    .cover,
-                                                              );
-                                                            },
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                            width: 10),
-                                                        Flexible(
-                                                          child: FittedBox(
-                                                            fit: BoxFit
-                                                                .scaleDown,
-                                                            alignment: Alignment
-                                                                .centerLeft,
-                                                            child: Row(
-                                                              mainAxisSize:
-                                                                  MainAxisSize
-                                                                      .min,
-                                                              children: [
-                                                                ...iconBeforeUrls
-                                                                    .map(
-                                                                  (url) =>
-                                                                      Padding(
-                                                                    padding: const EdgeInsets
-                                                                        .only(
-                                                                        right:
-                                                                            4.0),
-                                                                    child:
-                                                                        FaNetworkImage(
-                                                                      url,
-                                                                      width: 20,
-                                                                      height:
-                                                                          20,
-                                                                      errorBuilder: (context,
-                                                                              error,
-                                                                              stackTrace) =>
-                                                                          const Icon(
-                                                                        Icons
-                                                                            .error,
-                                                                        size:
-                                                                            20,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                Text(
-                                                                  username!,
-                                                                  style:
-                                                                      const TextStyle(
-                                                                    fontSize:
-                                                                        15,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .bold,
-                                                                  ),
-                                                                ),
-                                                                ...iconAfterUrls
-                                                                    .map(
-                                                                  (url) =>
-                                                                      Padding(
-                                                                    padding: const EdgeInsets
-                                                                        .only(
-                                                                        left:
-                                                                            4.0),
-                                                                    child:
-                                                                        FaNetworkImage(
-                                                                      url,
-                                                                      width: 20,
-                                                                      height:
-                                                                          20,
-                                                                      errorBuilder: (context,
-                                                                              error,
-                                                                              stackTrace) =>
-                                                                          const Icon(
-                                                                        Icons
-                                                                            .error,
-                                                                        size:
-                                                                            20,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
+                                        buildSubmissionAuthorHeader(
+                                          profileImageUrl: profileImageUrl!,
+                                          username: username!,
+                                          currentUsername: currentUsername,
+                                          iconBeforeUrls: iconBeforeUrls,
+                                          iconAfterUrls: iconAfterUrls,
+                                          watchLinksLoading: _watchLinksLoading,
+                                          watchRequestInFlight: _watchRequestInFlight,
+                                          isWatching: isWatching,
+                                          onAuthorTap: () {
+                                            Navigator.push(
+                                              context,
+                                              UserProfileScreen.route(
+                                                nickname: linkUsername ?? username!,
                                               ),
-                                              if (!(currentUsername != null &&
-                                                  currentUsername == username))
-                                                SizedBox(
-                                                  width: 94,
-                                                  height: 24,
-                                                  child:
-                                                      (_watchLinksLoading ||
-                                                              _watchRequestInFlight)
-                                                          ? const Center(
-                                                              child: SizedBox(
-                                                                width: 14,
-                                                                height: 14,
-                                                                child:
-                                                                    CircularProgressIndicator(
-                                                                  strokeWidth: 2,
-                                                                  color: Color(
-                                                                      0xFFE09321),
-                                                                ),
-                                                              ),
-                                                            )
-                                                          : ElevatedButton(
-                                                              onPressed: () =>
-                                                                  _handleWatchButtonPressed(),
-                                                              style: ElevatedButton
-                                                                  .styleFrom(
-                                                                backgroundColor:
-                                                                    isWatching
-                                                                        ? Colors
-                                                                            .black
-                                                                        : const Color(
-                                                                            0xFFE09321),
-                                                                shape:
-                                                                    RoundedRectangleBorder(
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              2),
-                                                                ),
-                                                                side: const BorderSide(
-                                                                    color: Color(
-                                                                        0xFFE09321)),
-                                                              ),
-                                                              child: FittedBox(
-                                                                fit: BoxFit
-                                                                    .scaleDown,
-                                                                child: Text(
-                                                                  isWatching
-                                                                      ? "-Watch"
-                                                                      : "+Watch",
-                                                                  style: const TextStyle(
-                                                                    color: Colors
-                                                                        .white,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .bold,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ),
-                                                ),
-                                            ],
-                                          ),
+                                            );
+                                          },
+                                          onWatchPressed: _handleWatchButtonPressed,
                                         ),
                                       if (fullViewImageUrl != null)
                                         Padding(
@@ -2465,74 +2138,10 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                                               _openImageInspectScreen(
                                                   fullViewImageUrl!);
                                             },
-                                            child: ClipRect(
-                                              child: LayoutBuilder(
-                                                builder:
-                                                    (context, constraints) {
-                                                  final aspectRatio =
-                                                      (imageWidth != null &&
-                                                              imageHeight !=
-                                                                  null)
-                                                          ? imageWidth! /
-                                                              imageHeight!
-                                                          : 16 / 9;
-                                                  return AspectRatio(
-                                                    aspectRatio: aspectRatio,
-                                                    child: FaNetworkImage(
-                                                      fullViewImageUrl!,
-                                                      fit: BoxFit.contain,
-                                                      loadingBuilder: (
-                                                        BuildContext context,
-                                                        Widget child,
-                                                        ImageChunkEvent?
-                                                            loadingProgress,
-                                                      ) {
-                                                        if (loadingProgress ==
-                                                            null) {
-                                                          return child;
-                                                        }
-                                                        return Container(
-                                                          color: Colors.black,
-                                                          child: Center(
-                                                            child:
-                                                                CircularProgressIndicator(
-                                                              value: loadingProgress
-                                                                          .expectedTotalBytes !=
-                                                                      null
-                                                                  ? loadingProgress
-                                                                          .cumulativeBytesLoaded /
-                                                                      (loadingProgress.expectedTotalBytes ??
-                                                                          1)
-                                                                  : null,
-                                                              valueColor:
-                                                                  const AlwaysStoppedAnimation<
-                                                                      Color>(
-                                                                Color(
-                                                                    0xFFE09321),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        );
-                                                      },
-                                                      errorBuilder: (context,
-                                                          error, stackTrace) {
-                                                        return Container(
-                                                          color: Colors.black,
-                                                          child: const Center(
-                                                            child: Icon(
-                                                              Icons
-                                                                  .error_outline,
-                                                              color:
-                                                                  Colors.red,
-                                                              size: 40,
-                                                            ),
-                                                          ),
-                                                        );
-                                                      },
-                                                    ),
-                                                  );
-                                                },
-                                              ),
+                                            child: buildSubmissionImage(
+                                              imageUrl: fullViewImageUrl!,
+                                              imageWidth: imageWidth,
+                                              imageHeight: imageHeight,
                                             ),
                                           ),
                                         ),
@@ -2977,7 +2586,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
           itemBuilder: (context, item) {
             final index = item.index;
             final comment = item.comment;
-            final selectionId = _commentSelectionId(comment, index);
+            final selectionId = _commentSelection.commentSelectionId(comment, index);
             return FaCommentWidget(
                 timeDisplayOccasion: TimeDisplayOccasion.submissionComment,
                 htmlCachePolicy: CommentHtmlCachePolicy.onWidgetUpdate,
@@ -2987,7 +2596,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                 treeLevels: item.treeLevels,
                 collapsed: item.collapsed,
                 onToggleCollapse: item.onToggleCollapse,
-                hasAnyCommentSelection: () => _commentSelectedTexts.isNotEmpty,
+                hasAnyCommentSelection: () => _commentSelection.hasSelection,
                 animationDuration: item.animationDuration,
                 animationCurve: item.animationCurve,
                 onHide: () {
@@ -3045,12 +2654,12 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                   final commentHtml = comment['commentHtml'] ?? '';
                   await _handleCommentLink(context, url, commentHtml);
                 },
-                selectionAreaKey: _commentSelectionKeyFor(selectionId),
+                selectionAreaKey: _commentSelection.commentSelectionKeyFor(selectionId),
                 onSelectionChanged: (content) =>
-                    _updateCommentSelectedText(selectionId, content),
+                    _commentSelection.updateCommentSelectedText(selectionId, content),
                 contextMenuBuilder: ReadOnlySelectionContextMenu.builder(
                   selectedTextProvider: () =>
-                      _selectedCommentTextFor(selectionId),
+                      _commentSelection.selectedCommentTextFor(selectionId),
                   includeIosTranslate: true,
                 ),
                 showTranslateButton: _shouldOfferCommentTranslation(

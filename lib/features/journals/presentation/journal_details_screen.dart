@@ -1,3 +1,4 @@
+import 'package:fanotifier/features/comments/presentation/comment_selection_controller.dart';
 import 'widgets/journal_body.dart';
 import 'widgets/journal_author_header.dart';
 import 'widgets/journal_actions.dart';
@@ -96,16 +97,13 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<SelectionAreaState> _titleSelectionKey = GlobalKey();
   final GlobalKey<SelectionAreaState> _journalBodySelectionKey = GlobalKey();
-  final Map<Object, GlobalKey<SelectionAreaState>> _commentSelectionKeys =
-      <Object, GlobalKey<SelectionAreaState>>{};
-  final Map<Object, String> _commentSelectedTexts = <Object, String>{};
+  late final CommentSelectionController _commentSelection =
+      CommentSelectionController(
+        otherSelectionKeys: [_titleSelectionKey, _journalBodySelectionKey],
+      );
   String _titleSelectedText = '';
   String _journalBodySelectedText = '';
   int _iosScrollRecoveryKey = IosScrollRecovery.revision;
-  int? _selectionClearPointerId;
-  Offset? _selectionClearPointerDownPosition;
-  DateTime? _selectionClearPointerDownTime;
-  bool _selectionClearPointerMoved = false;
 
   @override
   void initState() {
@@ -197,39 +195,12 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
     _showScrollToTopNotifier.value = shouldShow;
   }
 
-  Object _commentSelectionId(Map<String, dynamic> comment, int index) {
-    return comment['commentId']?.toString() ?? 'comment_$index';
-  }
-
-  GlobalKey<SelectionAreaState> _commentSelectionKeyFor(Object selectionId) {
-    return _commentSelectionKeys.putIfAbsent(
-      selectionId,
-      () => GlobalKey<SelectionAreaState>(),
-    );
-  }
-
-  String _selectedCommentTextFor(Object selectionId) {
-    return _commentSelectedTexts[selectionId] ?? '';
-  }
-
   void _updateTitleSelectedText(SelectedContent? content) {
     _titleSelectedText = content?.plainText ?? '';
   }
 
   void _updateJournalBodySelectedText(SelectedContent? content) {
     _journalBodySelectedText = content?.plainText ?? '';
-  }
-
-  void _updateCommentSelectedText(
-    Object selectionId,
-    SelectedContent? content,
-  ) {
-    final text = content?.plainText ?? '';
-    if (text.isEmpty) {
-      _commentSelectedTexts.remove(selectionId);
-      return;
-    }
-    _commentSelectedTexts[selectionId] = text;
   }
 
   bool _shouldOfferCommentTranslation(
@@ -272,62 +243,6 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
   void _handleTranslationLanguageDetected() {
     if (!mounted) return;
     setState(() {});
-  }
-
-  void _clearSelectionArea(GlobalKey<SelectionAreaState> key) {
-    final state = key.currentState;
-    if (state == null) return;
-    state.selectableRegion.clearSelection();
-    state.selectableRegion.hideToolbar();
-  }
-
-  void _clearAllTextSelections() {
-    _clearSelectionArea(_titleSelectionKey);
-    _clearSelectionArea(_journalBodySelectionKey);
-    for (final key in _commentSelectionKeys.values) {
-      _clearSelectionArea(key);
-    }
-  }
-
-  void _handleSelectionClearPointerDown(PointerDownEvent event) {
-    _selectionClearPointerId = event.pointer;
-    _selectionClearPointerDownPosition = event.position;
-    _selectionClearPointerDownTime = DateTime.now();
-    _selectionClearPointerMoved = false;
-  }
-
-  void _handleSelectionClearPointerMove(PointerMoveEvent event) {
-    if (_selectionClearPointerId != event.pointer ||
-        _selectionClearPointerDownPosition == null) {
-      return;
-    }
-    if ((event.position - _selectionClearPointerDownPosition!).distance > 10) {
-      _selectionClearPointerMoved = true;
-    }
-  }
-
-  void _handleSelectionClearPointerUp(PointerUpEvent event) {
-    if (_selectionClearPointerId != event.pointer) return;
-    final downTime = _selectionClearPointerDownTime;
-    final isQuickTap = downTime != null &&
-        DateTime.now().difference(downTime) <=
-            const Duration(milliseconds: 250);
-    if (!_selectionClearPointerMoved && isQuickTap) {
-      _clearAllTextSelections();
-    }
-    _resetSelectionClearPointer();
-  }
-
-  void _handleSelectionClearPointerCancel(PointerCancelEvent event) {
-    if (_selectionClearPointerId != event.pointer) return;
-    _resetSelectionClearPointer();
-  }
-
-  void _resetSelectionClearPointer() {
-    _selectionClearPointerId = null;
-    _selectionClearPointerDownPosition = null;
-    _selectionClearPointerDownTime = null;
-    _selectionClearPointerMoved = false;
   }
 
   @override
@@ -755,10 +670,14 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
                 children: [
                   Listener(
                     behavior: HitTestBehavior.opaque,
-                    onPointerDown: _handleSelectionClearPointerDown,
-                    onPointerMove: _handleSelectionClearPointerMove,
-                    onPointerUp: _handleSelectionClearPointerUp,
-                    onPointerCancel: _handleSelectionClearPointerCancel,
+                    onPointerDown:
+                        _commentSelection.handleSelectionClearPointerDown,
+                    onPointerMove:
+                        _commentSelection.handleSelectionClearPointerMove,
+                    onPointerUp:
+                        _commentSelection.handleSelectionClearPointerUp,
+                    onPointerCancel:
+                        _commentSelection.handleSelectionClearPointerCancel,
                     child: GestureDetector(
                       behavior: HitTestBehavior.deferToChild,
                       onTap: () {
@@ -926,7 +845,10 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
                                   final index = item.index;
                                   final comment = item.comment;
                                   final selectionId =
-                                      _commentSelectionId(comment, index);
+                                      _commentSelection.commentSelectionId(
+                                        comment,
+                                        index,
+                                      );
                                   return FaCommentWidget(
                                       timeDisplayOccasion:
                                           TimeDisplayOccasion.journalComment,
@@ -942,7 +864,7 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
                                       onToggleCollapse:
                                           item.onToggleCollapse,
                                       hasAnyCommentSelection: () =>
-                                          _commentSelectedTexts.isNotEmpty,
+                                          _commentSelection.hasSelection,
                                       animationDuration:
                                           item.animationDuration,
                                       animationCurve: item.animationCurve,
@@ -1021,14 +943,16 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
                                         );
                                       },
                                       selectionAreaKey:
-                                          _commentSelectionKeyFor(selectionId),
+                                          _commentSelection.commentSelectionKeyFor(
+                                            selectionId,
+                                          ),
                                       onSelectionChanged: (content) =>
-                                          _updateCommentSelectedText(
+                                          _commentSelection.updateCommentSelectedText(
                                               selectionId, content),
                                       contextMenuBuilder:
                                           ReadOnlySelectionContextMenu.builder(
                                         selectedTextProvider: () =>
-                                            _selectedCommentTextFor(
+                                            _commentSelection.selectedCommentTextFor(
                                                 selectionId),
                                         includeIosTranslate: true,
                                       ),

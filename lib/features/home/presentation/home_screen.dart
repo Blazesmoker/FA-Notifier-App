@@ -521,30 +521,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 await _homeSessionRepository.loadIsLoggedIn();
 
             await _saveLoginState(true);
-            setState(() {
-              isLoggedIn = true;
-              _webViewController = null;
-            });
-            _logSelectedHomeScreen();
+            _showAuthenticatedHome();
             _startActivitiesPolling(triggerImmediate: false);
 
             await _setSfwCookieToNSFW();
 
             _cancelStabilityTimer();
 
-            if (!_profileFetched) {
-              _profileFetched = true;
-              unawaited(_profileController.fetchUserProfile());
-            }
-
-            if (!wasLoggedIn && !_loginSnackShownThisRun && mounted) {
-              _loginSnackShownThisRun = true;
-              if (_privacySettings.loaded && !_privacySettings.consentShown) {
-                _pendingLoginSnack = true;
-              } else {
-                _showLoginSuccessSnackBar();
-              }
-            }
+            _finishAuthenticatedLogin(wasLoggedIn);
           } else {
             if (!isLoggedIn) {
               _startElementStabilityCheck();
@@ -577,6 +561,30 @@ class _HomeScreenState extends State<HomeScreen> {
         debugPrint("WebView Console Message: ${consoleMessage.message}");
       },
     );
+  }
+
+  void _showAuthenticatedHome() {
+    setState(() {
+      isLoggedIn = true;
+      _webViewController = null;
+    });
+    _logSelectedHomeScreen();
+  }
+
+  void _finishAuthenticatedLogin(bool wasLoggedIn) {
+    if (!_profileFetched) {
+      _profileFetched = true;
+      unawaited(_profileController.fetchUserProfile());
+    }
+
+    if (!wasLoggedIn && !_loginSnackShownThisRun && mounted) {
+      _loginSnackShownThisRun = true;
+      if (_privacySettings.loaded && !_privacySettings.consentShown) {
+        _pendingLoginSnack = true;
+      } else {
+        _showLoginSuccessSnackBar();
+      }
+    }
   }
 
   Future<void> _loadInitialLoginUrl(InAppWebViewController controller) {
@@ -615,11 +623,7 @@ class _HomeScreenState extends State<HomeScreen> {
         } else {
           final elapsed = DateTime.now().difference(_firstTimeElementFound!);
           if (elapsed >= const Duration(seconds: 1)) {
-            setState(() {
-              isLoggedIn = true;
-              _webViewController = null;
-            });
-            _logSelectedHomeScreen();
+            _showAuthenticatedHome();
             _cancelStabilityTimer();
 
             await _homeSessionRepository.saveCookiesFromWebView();
@@ -631,19 +635,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _startActivitiesPolling(triggerImmediate: false);
             await _setSfwCookieToNSFW();
 
-            if (!_profileFetched) {
-              _profileFetched = true;
-              unawaited(_profileController.fetchUserProfile());
-            }
-
-            if (!wasLoggedIn && !_loginSnackShownThisRun && mounted) {
-              _loginSnackShownThisRun = true;
-              if (_privacySettings.loaded && !_privacySettings.consentShown) {
-                _pendingLoginSnack = true;
-              } else {
-                _showLoginSuccessSnackBar();
-              }
-            }
+            _finishAuthenticatedLogin(wasLoggedIn);
           }
         }
       } else {
