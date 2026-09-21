@@ -21,7 +21,7 @@ import 'package:fanotifier/features/journals/domain/journal_deletion_result.dart
 import 'package:fanotifier/features/journals/domain/journal_load_failure.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/utils/app_snack_bar.dart';
-import 'package:fanotifier/shared/utils/comment_composer_lines.dart';
+import 'package:fanotifier/features/comments/presentation/comment_composer_controller.dart';
 import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:fanotifier/core/preferences/translator_settings_provider.dart';
 import 'package:fanotifier/features/settings/domain/time_display_models.dart';
@@ -54,23 +54,17 @@ class JournalDetailsScreen extends StatefulWidget {
 
 class _JournalDetailsScreenState extends State<JournalDetailsScreen>
     with RouteAware, WidgetsBindingObserver {
+  final CommentComposerController _commentComposer =
+      CommentComposerController();
   late final JournalDetailsController _controller;
   final TranslationService _translationService = TranslationService.instance;
   final TranslationSourceTextBuilder _translationSourceTextBuilder =
       TranslationSourceTextBuilder(TranslationService.instance);
-  final TextEditingController _commentController = TextEditingController();
-  final FocusNode _commentFocusNode = FocusNode();
-  bool _commentComposerFocusRequestedByUser = false;
-  bool _blockRestoredCommentComposerFocus = true;
   final ValueNotifier<bool> _showScrollToTopNotifier =
       ValueNotifier<bool>(false);
   final ValueNotifier<bool> _isSendingInlineComment =
       ValueNotifier<bool>(false);
   final ValueNotifier<double> _keyboardInset = ValueNotifier<double>(0);
-  final ValueNotifier<bool> _isCommentComposerExpanded =
-      ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _commentDraftHasText = ValueNotifier<bool>(false);
-  final ValueNotifier<int> _commentDraftCollapsedLines = ValueNotifier<int>(1);
 
   String? get profileImageUrl => _controller.profileImageUrl;
   String? get submissionTitle => _controller.submissionTitle;
@@ -110,9 +104,7 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_onScroll);
-    _commentController.addListener(_onCommentDraftChanged);
-    _commentFocusNode.addListener(_syncCommentComposerExpansion);
-    _onCommentDraftChanged();
+    _commentComposer.initialize();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateKeyboardInset();
     });
@@ -143,17 +135,12 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
     routeObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     IosScrollRecovery.removeListener(_handleIosScrollRecovery);
-    _commentController.removeListener(_onCommentDraftChanged);
-    _commentController.dispose();
-    _commentFocusNode.dispose();
+    _commentComposer.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _showScrollToTopNotifier.dispose();
     _isSendingInlineComment.dispose();
     _keyboardInset.dispose();
-    _isCommentComposerExpanded.dispose();
-    _commentDraftHasText.dispose();
-    _commentDraftCollapsedLines.dispose();
     _controller.removeListener(_handleControllerChanged);
     _controller.dispose();
     super.dispose();
@@ -176,15 +163,15 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
 
   @override
   void didPushNext() {
-    _dismissCommentComposerFocus();
+    _commentComposer.dismissFocus();
   }
 
   @override
   void didPopNext() {
-    _armCommentComposerFocusGuard();
+    _commentComposer.armFocusGuard();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_commentFocusNode.hasFocus) return;
-      _commentFocusNode.unfocus();
+      if (!mounted || !_commentComposer.focusNode.hasFocus) return;
+      _commentComposer.focusNode.unfocus();
     });
   }
 
@@ -262,8 +249,8 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
       _keyboardInset.value = inset;
 
       final keyboardJustClosed = previousInset > 0 && inset <= 0.5;
-      if (keyboardJustClosed && _commentFocusNode.hasFocus) {
-        _dismissCommentComposerFocus();
+      if (keyboardJustClosed && _commentComposer.focusNode.hasFocus) {
+        _commentComposer.dismissFocus();
       }
     }
   }
@@ -465,61 +452,8 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
     );
   }
 
-  void _syncCommentComposerExpansion() {
-    final shouldExpand = _commentFocusNode.hasFocus;
-    if (shouldExpand &&
-        _blockRestoredCommentComposerFocus &&
-        !_commentComposerFocusRequestedByUser) {
-      _dismissCommentComposerFocus();
-      return;
-    }
-    if (shouldExpand != _isCommentComposerExpanded.value) {
-      _isCommentComposerExpanded.value = shouldExpand;
-    }
-    if (shouldExpand) {
-      _commentComposerFocusRequestedByUser = false;
-      _blockRestoredCommentComposerFocus = false;
-    } else {
-      _commentComposerFocusRequestedByUser = false;
-      _blockRestoredCommentComposerFocus = true;
-    }
-  }
-
-  void _armCommentComposerFocusGuard() {
-    _commentComposerFocusRequestedByUser = false;
-    _blockRestoredCommentComposerFocus = true;
-  }
-
-  void _allowCommentComposerFocusFromUser() {
-    _commentComposerFocusRequestedByUser = true;
-    _blockRestoredCommentComposerFocus = false;
-  }
-
-  void _handleCommentComposerPointerDown(PointerDownEvent event) {
-    _allowCommentComposerFocusFromUser();
-  }
-
-  void _dismissCommentComposerFocus() {
-    _armCommentComposerFocusGuard();
-    if (_commentFocusNode.hasFocus) {
-      _commentFocusNode.unfocus();
-    }
-  }
-
-  void _onCommentDraftChanged() {
-    final bool hasText = _commentController.text.trim().isNotEmpty;
-    if (hasText != _commentDraftHasText.value) {
-      _commentDraftHasText.value = hasText;
-    }
-
-    final int collapsedLines = collapsedComposerLines(_commentController.text);
-    if (collapsedLines != _commentDraftCollapsedLines.value) {
-      _commentDraftCollapsedLines.value = collapsedLines;
-    }
-  }
-
   Future<void> _sendInlineComment() async {
-    final commentText = _commentController.text.trim();
+    final commentText = _commentComposer.textController.text.trim();
     if (commentText.isEmpty || _isSendingInlineComment.value) return;
     _isSendingInlineComment.value = true;
 
@@ -530,8 +464,8 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
 
       if (success) {
         _controller.addOptimisticComment(commentText, DateTime.now());
-        _commentController.clear();
-        _commentFocusNode.unfocus();
+        _commentComposer.textController.clear();
+        _commentComposer.focusNode.unfocus();
         await _fetchPostDetailsNew();
 
         if (!mounted) return;
@@ -568,7 +502,7 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
   }
 
   Future<bool> _confirmCloseJournalIfNeeded() async {
-    if (_commentController.text.trim().isEmpty) {
+    if (_commentComposer.textController.text.trim().isEmpty) {
       return true;
     }
 
@@ -600,7 +534,7 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
     );
     final double viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
     return ValueListenableBuilder<bool>(
-      valueListenable: _commentDraftHasText,
+      valueListenable: _commentComposer.hasText,
       builder: (context, hasDraft, child) {
         return PopScope(
           canPop: !hasDraft,
@@ -625,7 +559,7 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
               icon: const Icon(Icons.more_vert),
               position: PopupMenuPosition.under,
               offset: const Offset(0, 8),
-              onOpened: _dismissCommentComposerFocus,
+              onOpened: _commentComposer.dismissFocus,
               onSelected: (value) {
                 switch (value) {
                   case 'share':
@@ -974,7 +908,7 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
                             ),
                             SliverToBoxAdapter(
                               child: ValueListenableBuilder<int>(
-                                valueListenable: _commentDraftCollapsedLines,
+                                valueListenable: _commentComposer.collapsedLines,
                                 builder: (context, collapsedPreviewLines, _) {
                                   final composerSpacerHeight =
                                       inlineCommentComposerClearance(
@@ -992,7 +926,7 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
                   ),
                   Positioned.fill(
                     child: ValueListenableBuilder<bool>(
-                      valueListenable: _isCommentComposerExpanded,
+                      valueListenable: _commentComposer.isExpanded,
                       builder: (context, isExpanded, _) {
                         if (!isExpanded) {
                           return const SizedBox.shrink();
@@ -1011,17 +945,17 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
                     right: 0,
                     bottom: 0,
                     child: InlineCommentComposer(
-                      controller: _commentController,
-                      focusNode: _commentFocusNode,
+                      controller: _commentComposer.textController,
+                      focusNode: _commentComposer.focusNode,
                       keyboardInset: _keyboardInset,
-                      isExpanded: _isCommentComposerExpanded,
-                      collapsedLines: _commentDraftCollapsedLines,
-                      hasText: _commentDraftHasText,
+                      isExpanded: _commentComposer.isExpanded,
+                      collapsedLines: _commentComposer.collapsedLines,
+                      hasText: _commentComposer.hasText,
                       showScrollToTop: _showScrollToTopNotifier,
                       isSending: _isSendingInlineComment,
                       viewPaddingBottom: viewPaddingBottom,
                       scrollToTopHeroTag: 'journal_scroll_top',
-                      onPointerDown: _handleCommentComposerPointerDown,
+                      onPointerDown: _commentComposer.handlePointerDown,
                       onScrollToTop: () {
                         _scrollController.animateTo(
                           0,
@@ -1030,7 +964,7 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
                         );
                       },
                       onSend: _sendInlineComment,
-                      onKeyboardClosing: _dismissCommentComposerFocus,
+                      onKeyboardClosing: _commentComposer.dismissFocus,
                     ),
                   ),
                 ],

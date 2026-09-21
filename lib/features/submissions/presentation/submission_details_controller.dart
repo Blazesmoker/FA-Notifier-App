@@ -10,11 +10,26 @@ import 'package:fanotifier/features/submissions/domain/submission_tag_block_stat
 import 'package:fanotifier/features/submissions/domain/submission_attachment.dart';
 import 'package:flutter/foundation.dart';
 
+enum SubmissionWatchOutcome { missingAuth, success, failed, error }
+
 class SubmissionDetailsController {
   SubmissionDetailsController({
     required this.submissionId,
     required this._repository,
+    required this._isMounted,
+    required this._updateState,
+    required this._reloadUserActions,
+    required this._reloadDetails,
+    required this._showActionMessage,
   });
+
+  final bool Function() _isMounted;
+  final void Function(VoidCallback update) _updateState;
+  final Future<void> Function() _reloadUserActions;
+  final Future<void> Function() _reloadDetails;
+  final void Function(String message, {required bool isError}) _showActionMessage;
+  final Set<String> _tagToggleInFlight = <String>{};
+  Set<String> get tagToggleInFlight => _tagToggleInFlight;
 
   final String submissionId;
   final SubmissionDetailsRepository _repository;
@@ -114,6 +129,206 @@ class SubmissionDetailsController {
   bool get detailsLoaded => _detailsLoaded;
   bool get sfwEnabled => _sfwEnabled;
   bool get nsfwAllowed => _nsfwAllowed;
+
+  Future<void> toggleTagBlock(FaPostTag tag) async {
+    if (_tagToggleInFlight.contains(tag.name)) return;
+
+    if (tagBlocklistNonce == null || tagBlocklistNonce!.isEmpty) {
+      _showActionMessage(
+        'Tag blocking is unavailable right now (missing nonce).',
+        isError: true,
+      );
+      return;
+    }
+
+    _updateState(() => _tagToggleInFlight.add(tag.name));
+
+    try {
+      final shouldBlock = !tag.isBlocked;
+      await _sendTagBlocklistRequest(tag.name, shouldBlock: shouldBlock);
+
+      // Update UI immediately so +/− changes without waiting for a full refresh.
+      _applyLocalTagBlockState(tag.name, isBlocked: shouldBlock);
+
+      // Refresh so the block/unblock state and blocked-content markers match FA.
+      await _reloadDetails();
+
+      // If the refreshed HTML didn't reflect the change yet, keep UI consistent.
+      _applyLocalTagBlockState(tag.name, isBlocked: shouldBlock);
+
+      if (!_isMounted()) return;
+      _showActionMessage(
+        shouldBlock
+            ? 'Tag blocked: ${tag.name}'
+            : 'Tag unblocked: ${tag.name}',
+        isError: false,
+      );
+    } catch (e) {
+      if (!_isMounted()) return;
+      _showActionMessage(
+        'Failed to ${tag.isBlocked ? 'unblock' : 'block'} tag: ${tag.name}',
+        isError: true,
+      );
+    } finally {
+      if (_isMounted()) _updateState(() => _tagToggleInFlight.remove(tag.name));
+    }
+  }
+
+  void _applyLocalTagBlockState(String tagName, {required bool isBlocked}) {
+    final updated = applyLocalTagBlockState(
+      tagName,
+      isBlocked: isBlocked,
+    );
+    if (updated) _updateState(() {});
+  }
+
+  Future<void> _sendTagBlocklistRequest(String tagName,
+      {required bool shouldBlock}) {
+    return updateTagBlocklist(
+      tagName,
+      shouldBlock: shouldBlock,
+    );
+  }
+
+  Future<void> toggleAuthorBlock() async {
+    // When we skipped initial fetch, load links on first use (same as Watch)
+    if (blockLink == null && unblockLink == null && username != null) {
+      _updateState(() => _watchLinksLoading = true);
+      await _reloadUserActions();
+      if (!_isMounted()) return;
+      _updateState(() => _watchLinksLoading = false);
+    }
+    if (isBlocked) {
+      if (unblockLink == null) {
+        _showActionMessage(
+          'Cannot unblock author at this time.',
+          isError: true,
+        );
+        return;
+      }
+      final key = blockActionKey(shouldBlock: false);
+      if (key == null || key.isEmpty) {
+        _showActionMessage(
+          'Unblock key is missing.',
+          isError: true,
+        );
+        return;
+      }
+      await _sendBlockUnblockPostRequest('/unblock/$linkUsername/', key,
+          shouldBlock: false);
+    } else {
+      if (blockLink == null) {
+        _showActionMessage(
+          'Cannot block author at this time.',
+          isError: true,
+        );
+        return;
+      }
+      final key = blockActionKey(shouldBlock: true);
+      if (key == null || key.isEmpty) {
+        _showActionMessage(
+          'Block key is missing.',
+          isError: true,
+        );
+        return;
+      }
+      await _sendBlockUnblockPostRequest('/block/$linkUsername/', key,
+          shouldBlock: true);
+    }
+  }
+
+  Future<void> _sendBlockUnblockPostRequest(String urlPath, String keyValue,
+      {required bool shouldBlock}) async {
+    try {
+      final result = await performBlockUnblock(urlPath, keyValue);
+
+      if (!_isMounted()) return;
+      if (result.status == SubmissionActionStatus.missingAuth) {
+        _showActionMessage(
+          'Please log in to perform this action.',
+          isError: true,
+        );
+        return;
+      }
+
+      if (result.status == SubmissionActionStatus.success) {
+        await _reloadUserActions();
+        if (!_isMounted()) return;
+        _showActionMessage(
+          shouldBlock ? 'Author blocked' : 'Author unblocked',
+          isError: false,
+        );
+      } else {
+        _showActionMessage(
+          'Failed to ${shouldBlock ? 'block' : 'unblock'} author.',
+          isError: true,
+        );
+      }
+    } catch (e) {
+      if (!_isMounted()) return;
+      _showActionMessage(
+        'An error occurred while trying to ${shouldBlock ? 'block' : 'unblock'} author.',
+        isError: true,
+      );
+    }
+  }
+
+  Future<SubmissionWatchOutcome> _sendWatchUnwatchRequest(String urlPath,
+      {required bool shouldWatch}) async {
+    try {
+      final result = await performWatchUnwatch(urlPath);
+      if (result.status == SubmissionActionStatus.missingAuth) {
+        return SubmissionWatchOutcome.missingAuth;
+      }
+      if (result.status == SubmissionActionStatus.success) {
+        await _reloadUserActions();
+        return SubmissionWatchOutcome.success;
+      }
+      debugPrint(
+          'Failed to ${shouldWatch ? 'watch' : 'unwatch'} user. Status code: ${result.statusCode}');
+      return SubmissionWatchOutcome.failed;
+    } catch (e) {
+      debugPrint('Error during ${shouldWatch ? 'watch' : 'unwatch'}: $e');
+      return SubmissionWatchOutcome.error;
+    }
+  }
+
+  Future<void> toggleWatch({
+    required void Function(
+      SubmissionWatchOutcome outcome, {
+      required bool shouldWatch,
+    }) onOutcome,
+  }) async {
+    if (_watchRequestInFlight) return;
+    // When we skipped initial fetch (Browse/Search), fetch links on first tap
+    if (watchLink == null && unwatchLink == null && username != null) {
+      if (_watchLinksLoading) return;
+      _updateState(() => _watchLinksLoading = true);
+      await _reloadUserActions();
+      if (!_isMounted()) return;
+      _updateState(() => _watchLinksLoading = false);
+      // After fetch: if already watching, button will show -Watch; else send watch request below
+    }
+    _updateState(() => _watchRequestInFlight = true);
+    final shouldWatch = !isWatching;
+    var outcome = SubmissionWatchOutcome.failed;
+    try {
+      if (isWatching) {
+        if (unwatchLink == null) return;
+        outcome =
+            await _sendWatchUnwatchRequest(unwatchLink!, shouldWatch: false);
+      } else {
+        if (watchLink == null) return;
+        outcome =
+            await _sendWatchUnwatchRequest(watchLink!, shouldWatch: true);
+      }
+    } finally {
+      if (_isMounted()) {
+        _updateState(() => _watchRequestInFlight = false);
+      }
+    }
+    onOutcome(outcome, shouldWatch: shouldWatch);
+  }
 
   Future<void> loadSfwEnabled() async {
     _sfwEnabled = await _repository.loadSfwEnabled();
@@ -412,14 +627,6 @@ class SubmissionDetailsController {
       confirmationData: confirmationData,
       password: password,
     );
-  }
-
-  void setWatchLinksLoading(bool value) {
-    _watchLinksLoading = value;
-  }
-
-  void setWatchRequestInFlight(bool value) {
-    _watchRequestInFlight = value;
   }
 
   void addComment(String commentText) {

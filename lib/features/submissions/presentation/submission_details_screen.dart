@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/navigation/edge_back_swipe_controller.dart';
 import 'package:fanotifier/features/comments/presentation/comment_selection_controller.dart';
 import 'widgets/submission_detail_sections.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_action_bar.dart';
@@ -16,14 +17,13 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:fanotifier/app/navigation/app_navigation.dart';
 import 'package:fanotifier/shared/fa/fa_username.dart';
-import 'package:fanotifier/shared/utils/comment_composer_lines.dart';
+import 'package:fanotifier/features/comments/presentation/comment_composer_controller.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_description_webview.dart';
 import 'package:fanotifier/features/profile/presentation/image_inspect_screen.dart';
 import 'package:fanotifier/features/submissions/domain/submission_document_models.dart';
 import 'package:fanotifier/features/submissions/domain/submission_details_load_result.dart';
 import 'package:fanotifier/features/submissions/domain/submission_media_export_result.dart';
-import 'package:fanotifier/features/submissions/domain/submission_action_result.dart';
 import 'package:fanotifier/features/submissions/domain/submission_details_repository.dart';
 import 'package:fanotifier/features/submissions/domain/submission_delete_models.dart';
 import 'package:fanotifier/features/submissions/domain/submission_attachment.dart';
@@ -57,8 +57,6 @@ import 'package:provider/provider.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
 
 import '../../../shared/utils/bbcode_context_menu.dart';
-
-enum _WatchOutcome { missingAuth, success, failed, error }
 
 class SubmissionDetailsScreen extends StatefulWidget {
   final String imageUrl;
@@ -108,28 +106,22 @@ class SubmissionDetailsScreen extends StatefulWidget {
 class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
     with RouteAware, WidgetsBindingObserver, TickerProviderStateMixin
     implements DetachableWebViewRouteOwner {
+  late final EdgeBackSwipeController _backSwipe;
   bool _showFullPublicationDate = false;
+  final CommentComposerController _commentComposer =
+      CommentComposerController();
   late final SubmissionDetailsController _controller;
   final TranslationService _translationService = TranslationService.instance;
   final TranslationSourceTextBuilder _translationSourceTextBuilder =
       TranslationSourceTextBuilder(TranslationService.instance);
-  final TextEditingController _commentController = TextEditingController();
-  final FocusNode _commentFocusNode = FocusNode();
-  bool _commentComposerFocusRequestedByUser = false;
-  bool _blockRestoredCommentComposerFocus = true;
   late final SubmissionFavoriteStateController _favoriteStateController;
   bool _observedFavoriteState = false;
   bool _showTagsSection = false;
-  final Set<String> _tagToggleInFlight = <String>{};
   final ValueNotifier<bool> _showScrollToTopNotifier =
       ValueNotifier<bool>(false);
   final ValueNotifier<bool> _isSendingInlineComment =
       ValueNotifier<bool>(false);
   final ValueNotifier<double> _keyboardInset = ValueNotifier<double>(0);
-  final ValueNotifier<bool> _isCommentComposerExpanded =
-      ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _commentDraftHasText = ValueNotifier<bool>(false);
-  final ValueNotifier<int> _commentDraftCollapsedLines = ValueNotifier<int>(1);
   bool _isPostWebViewDetached = false;
   bool _suppressNextRouteDetach = false;
   bool _enableScrollWebViewPause = false;
@@ -150,24 +142,9 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
       );
   String _titleSelectedText = '';
   String _submissionContentSelectedText = '';
-  static const double _edgeBackSwipeDetectorWidth = 25.0;
-  static const double _edgeBackSwipeTriggerWidth = 62.0;
-  static const double _edgeBackSwipeMinDistance = 72.0;
-  static const double _edgeBackSwipeMinVelocity = 700.0;
   static const bool _webViewScrollOptimizationEnabled = false;
-  late final ValueNotifier<double> _backSwipeOffsetNotifier =
-      ValueNotifier<double>(0.0);
-  late final AnimationController _backSwipeAnimationController;
-  Animation<double>? _backSwipeOffsetAnimation;
-  bool _popAfterBackSwipeAnimation = false;
-  bool _isDraggingBackFromEdge = false;
-  bool _didTemporarilyRestorePreviousForSwipe = false;
   int _iosScrollRecoveryKey = IosScrollRecovery.revision;
-  double _backDragStartX = 0.0;
-  double _backDragDistance = 0.0;
 
-  double get _backSwipeOffset => _backSwipeOffsetNotifier.value;
-  set _backSwipeOffset(double value) => _backSwipeOffsetNotifier.value = value;
 
   String? get profileImageUrl => _controller.profileImageUrl;
   String? get username => _controller.username;
@@ -197,10 +174,6 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
         widget.submissionId,
         _controller.isFavorited,
       );
-  String? get watchLink => _controller.watchLink;
-  String? get unwatchLink => _controller.unwatchLink;
-  String? get blockLink => _controller.blockLink;
-  String? get unblockLink => _controller.unblockLink;
   bool get isWatching => _controller.isWatching;
   bool get _watchLinksLoading => _controller.watchLinksLoading;
   bool get _watchRequestInFlight => _controller.watchRequestInFlight;
@@ -214,7 +187,6 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
   List<SubmissionFolderLink> get folders => _controller.folders;
   List<FaPostTag> get keywordTags => _controller.keywordTags;
   List<FaPostTag> get metaKeywordTags => _controller.metaKeywordTags;
-  String? get tagBlocklistNonce => _controller.tagBlocklistNonce;
   bool get _isClassicUserPage => _controller.isClassicUserPage;
   double? get imageWidth => _controller.imageWidth;
   double? get imageHeight => _controller.imageHeight;
@@ -226,6 +198,11 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
     _controller = SubmissionDetailsController(
       submissionId: widget.submissionId,
       repository: widget.repository ?? context.read<SubmissionDetailsRepository>(),
+      isMounted: () => mounted,
+      updateState: (update) => setState(update),
+      reloadUserActions: _fetchUserPageLinks,
+      reloadDetails: _fetchPostDetails,
+      showActionMessage: _showActionMessage,
     );
     _favoriteStateController =
         context.read<SubmissionFavoriteStateController>();
@@ -238,15 +215,17 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
     }
     IosScrollRecovery.addListener(_handleIosScrollRecovery);
     _scrollController.addListener(_onScroll);
-    _commentController.addListener(_onCommentDraftChanged);
-    _commentFocusNode.addListener(_syncCommentComposerExpansion);
-    _onCommentDraftChanged();
+    _commentComposer.initialize();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateKeyboardInset();
     });
-    _backSwipeAnimationController = AnimationController(vsync: this)
-      ..addListener(_onBackSwipeAnimationTick)
-      ..addStatusListener(_onBackSwipeAnimationStatusChanged);
+    _backSwipe = EdgeBackSwipeController(
+      vsync: this,
+      owner: this,
+      screenWidth: () => MediaQuery.sizeOf(context).width,
+      canStart: () => true,
+      onClose: _finishBackSwipeClose,
+    );
 
     Future.wait([
       _loadSfwEnabled(),
@@ -303,20 +282,14 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
       SchedulerBinding.instance.removeTimingsCallback(_handleFrameTimings);
     }
     IosScrollRecovery.removeListener(_handleIosScrollRecovery);
-    _backSwipeAnimationController.dispose();
-    _backSwipeOffsetNotifier.dispose();
+    _backSwipe.dispose();
     WidgetsBinding.instance.removeObserver(this);
-    _commentController.removeListener(_onCommentDraftChanged);
-    _commentController.dispose();
-    _commentFocusNode.dispose();
+    _commentComposer.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _showScrollToTopNotifier.dispose();
     _keyboardInset.dispose();
-    _isCommentComposerExpanded.dispose();
     _isSendingInlineComment.dispose();
-    _commentDraftHasText.dispose();
-    _commentDraftCollapsedLines.dispose();
     super.dispose();
   }
 
@@ -338,7 +311,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
 
   @override
   void didPushNext() {
-    _dismissCommentComposerFocus();
+    _commentComposer.dismissFocus();
     if (_suppressNextRouteDetach ||
         DetachableWebViewRouteRegistry.routeDetachSuppressed) {
       return;
@@ -349,10 +322,10 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
   @override
   void didPopNext() {
     _setRouteWebViewDetached(false);
-    _armCommentComposerFocusGuard();
+    _commentComposer.armFocusGuard();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_commentFocusNode.hasFocus) return;
-      _commentFocusNode.unfocus();
+      if (!mounted || !_commentComposer.focusNode.hasFocus) return;
+      _commentComposer.focusNode.unfocus();
     });
   }
 
@@ -515,8 +488,8 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
       _keyboardInset.value = inset;
 
       final keyboardJustClosed = previousInset > 0 && inset <= 0.5;
-      if (keyboardJustClosed && _commentFocusNode.hasFocus) {
-        _dismissCommentComposerFocus();
+      if (keyboardJustClosed && _commentComposer.focusNode.hasFocus) {
+        _commentComposer.dismissFocus();
       }
     }
   }
@@ -572,79 +545,9 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
     return buildSubmissionTagsPanel(
       keywordTags: keywordTags,
       metaKeywordTags: metaKeywordTags,
-      tagToggleInFlight: _tagToggleInFlight,
-      onToggleTagBlock: _toggleTagBlock,
+      tagToggleInFlight: _controller.tagToggleInFlight,
+      onToggleTagBlock: _controller.toggleTagBlock,
       onSearch: _navigateToSearch,
-    );
-  }
-
-  Future<void> _toggleTagBlock(FaPostTag tag) async {
-    if (_tagToggleInFlight.contains(tag.name)) return;
-
-    if (tagBlocklistNonce == null || tagBlocklistNonce!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('Tag blocking is unavailable right now (missing nonce).'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _tagToggleInFlight.add(tag.name));
-
-    try {
-      final shouldBlock = !tag.isBlocked;
-      await _sendTagBlocklistRequest(tag.name, shouldBlock: shouldBlock);
-
-      // Update UI immediately so +/− changes without waiting for a full refresh.
-      _applyLocalTagBlockState(tag.name, isBlocked: shouldBlock);
-
-      // Refresh so the block/unblock state and blocked-content markers match FA.
-      await _fetchPostDetails();
-
-      // If the refreshed HTML didn't reflect the change yet, keep UI consistent.
-      _applyLocalTagBlockState(tag.name, isBlocked: shouldBlock);
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            shouldBlock
-                ? 'Tag blocked: ${tag.name}'
-                : 'Tag unblocked: ${tag.name}',
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Failed to ${tag.isBlocked ? 'unblock' : 'block'} tag: ${tag.name}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _tagToggleInFlight.remove(tag.name));
-    }
-  }
-
-  void _applyLocalTagBlockState(String tagName, {required bool isBlocked}) {
-    final updated = _controller.applyLocalTagBlockState(
-      tagName,
-      isBlocked: isBlocked,
-    );
-    if (updated) setState(() {});
-  }
-
-  Future<void> _sendTagBlocklistRequest(String tagName,
-      {required bool shouldBlock}) {
-    return _controller.updateTagBlocklist(
-      tagName,
-      shouldBlock: shouldBlock,
     );
   }
 
@@ -661,143 +564,32 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
     );
   }
 
-  Future<void> _handleBlockUnblock() async {
-    // When we skipped initial fetch, load links on first use (same as Watch)
-    if (blockLink == null && unblockLink == null && username != null) {
-      setState(() => _controller.setWatchLinksLoading(true));
-      await _fetchUserPageLinks();
-      if (!mounted) return;
-      setState(() => _controller.setWatchLinksLoading(false));
-    }
-    if (isBlocked) {
-      if (unblockLink == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Cannot unblock author at this time.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-      final key = _controller.blockActionKey(shouldBlock: false);
-      if (key == null || key.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Unblock key is missing.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-      await _sendBlockUnblockPostRequest('/unblock/$linkUsername/', key,
-          shouldBlock: false);
-    } else {
-      if (blockLink == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Cannot block author at this time.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-      final key = _controller.blockActionKey(shouldBlock: true);
-      if (key == null || key.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Block key is missing.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-      await _sendBlockUnblockPostRequest('/block/$linkUsername/', key,
-          shouldBlock: true);
-    }
+  void _showActionMessage(String message, {required bool isError}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+      ),
+    );
   }
 
-  Future<void> _sendBlockUnblockPostRequest(String urlPath, String keyValue,
-      {required bool shouldBlock}) async {
-    try {
-      final result =
-          await _controller.performBlockUnblock(urlPath, keyValue);
-
-      if (!mounted) return;
-      if (result.status == SubmissionActionStatus.missingAuth) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please log in to perform this action.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      if (result.status == SubmissionActionStatus.success) {
-        await _fetchUserPageLinks();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              shouldBlock ? 'Author blocked' : 'Author unblocked',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('Failed to ${shouldBlock ? 'block' : 'unblock'} author.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'An error occurred while trying to ${shouldBlock ? 'block' : 'unblock'} author.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+  Future<void> _handleWatchButtonPressed() {
+    return _controller.toggleWatch(onOutcome: _showWatchOutcomeSnackBar);
   }
 
-  Future<_WatchOutcome> _sendWatchUnwatchRequest(String urlPath,
-      {required bool shouldWatch}) async {
-    try {
-      final result = await _controller.performWatchUnwatch(urlPath);
-      if (result.status == SubmissionActionStatus.missingAuth) {
-        return _WatchOutcome.missingAuth;
-      }
-      if (result.status == SubmissionActionStatus.success) {
-        await _fetchUserPageLinks();
-        return _WatchOutcome.success;
-      }
-      debugPrint(
-          'Failed to ${shouldWatch ? 'watch' : 'unwatch'} user. Status code: ${result.statusCode}');
-      return _WatchOutcome.failed;
-    } catch (e) {
-      debugPrint('Error during ${shouldWatch ? 'watch' : 'unwatch'}: $e');
-      return _WatchOutcome.error;
-    }
-  }
-
-  void _showWatchOutcomeSnackBar(_WatchOutcome outcome,
+  void _showWatchOutcomeSnackBar(SubmissionWatchOutcome outcome,
       {required bool shouldWatch}) {
     final messenger = rootMessengerKey.currentState;
     if (messenger == null) return;
     switch (outcome) {
-      case _WatchOutcome.missingAuth:
+      case SubmissionWatchOutcome.missingAuth:
         messenger.showSnackBar(
           const SnackBar(
             content: Text('Please log in to perform this action.'),
             backgroundColor: Colors.red,
           ),
         );
-      case _WatchOutcome.success:
+      case SubmissionWatchOutcome.success:
         messenger.showSnackBar(
           SnackBar(
             content: Text(
@@ -808,7 +600,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
             backgroundColor: Colors.green,
           ),
         );
-      case _WatchOutcome.failed:
+      case SubmissionWatchOutcome.failed:
         messenger.showSnackBar(
           SnackBar(
             content:
@@ -816,7 +608,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
             backgroundColor: Colors.red,
           ),
         );
-      case _WatchOutcome.error:
+      case SubmissionWatchOutcome.error:
         messenger.showSnackBar(
           SnackBar(
             content: Text(
@@ -825,38 +617,6 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
           ),
         );
     }
-  }
-
-  Future<void> _handleWatchButtonPressed() async {
-    if (_watchRequestInFlight) return;
-    // When we skipped initial fetch (Browse/Search), fetch links on first tap
-    if (watchLink == null && unwatchLink == null && username != null) {
-      if (_watchLinksLoading) return;
-      setState(() => _controller.setWatchLinksLoading(true));
-      await _fetchUserPageLinks();
-      if (!mounted) return;
-      setState(() => _controller.setWatchLinksLoading(false));
-      // After fetch: if already watching, button will show -Watch; else send watch request below
-    }
-    setState(() => _controller.setWatchRequestInFlight(true));
-    final shouldWatch = !isWatching;
-    var outcome = _WatchOutcome.failed;
-    try {
-      if (isWatching) {
-        if (unwatchLink == null) return;
-        outcome =
-            await _sendWatchUnwatchRequest(unwatchLink!, shouldWatch: false);
-      } else {
-        if (watchLink == null) return;
-        outcome =
-            await _sendWatchUnwatchRequest(watchLink!, shouldWatch: true);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _controller.setWatchRequestInFlight(false));
-      }
-    }
-    _showWatchOutcomeSnackBar(outcome, shouldWatch: shouldWatch);
   }
 
   Future<void> hideComment(String hideLink, String commentId) async {
@@ -1118,7 +878,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
   }
 
   Future<void> _showInfoDialog() async {
-    _dismissCommentComposerFocus();
+    _commentComposer.dismissFocus();
     _suppressNextRouteDetach = true;
     final selectedFolder = await showDialog<SubmissionFolderLink>(
       context: context,
@@ -1143,7 +903,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
   }
 
   Future<void> _openImageInspectScreen(String imageUrl) async {
-    _dismissCommentComposerFocus();
+    _commentComposer.dismissFocus();
     _suppressNextRouteDetach = true;
     try {
       await Navigator.push(
@@ -1176,61 +936,8 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
     setState(() => _controller.addComment(commentText));
   }
 
-  void _syncCommentComposerExpansion() {
-    final shouldExpand = _commentFocusNode.hasFocus;
-    if (shouldExpand &&
-        _blockRestoredCommentComposerFocus &&
-        !_commentComposerFocusRequestedByUser) {
-      _dismissCommentComposerFocus();
-      return;
-    }
-    if (shouldExpand != _isCommentComposerExpanded.value) {
-      _isCommentComposerExpanded.value = shouldExpand;
-    }
-    if (shouldExpand) {
-      _commentComposerFocusRequestedByUser = false;
-      _blockRestoredCommentComposerFocus = false;
-    } else {
-      _commentComposerFocusRequestedByUser = false;
-      _blockRestoredCommentComposerFocus = true;
-    }
-  }
-
-  void _armCommentComposerFocusGuard() {
-    _commentComposerFocusRequestedByUser = false;
-    _blockRestoredCommentComposerFocus = true;
-  }
-
-  void _allowCommentComposerFocusFromUser() {
-    _commentComposerFocusRequestedByUser = true;
-    _blockRestoredCommentComposerFocus = false;
-  }
-
-  void _handleCommentComposerPointerDown(PointerDownEvent event) {
-    _allowCommentComposerFocusFromUser();
-  }
-
-  void _dismissCommentComposerFocus() {
-    _armCommentComposerFocusGuard();
-    if (_commentFocusNode.hasFocus) {
-      _commentFocusNode.unfocus();
-    }
-  }
-
-  void _onCommentDraftChanged() {
-    final bool hasText = _commentController.text.trim().isNotEmpty;
-    if (hasText != _commentDraftHasText.value) {
-      _commentDraftHasText.value = hasText;
-    }
-
-    final int collapsedLines = collapsedComposerLines(_commentController.text);
-    if (collapsedLines != _commentDraftCollapsedLines.value) {
-      _commentDraftCollapsedLines.value = collapsedLines;
-    }
-  }
-
   Future<void> _sendInlineComment() async {
-    final commentText = _commentController.text.trim();
+    final commentText = _commentComposer.textController.text.trim();
     if (commentText.isEmpty || _isSendingInlineComment.value) return;
     _isSendingInlineComment.value = true;
 
@@ -1241,8 +948,8 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
 
       if (success) {
         _addComment(commentText);
-        _commentController.clear();
-        _commentFocusNode.unfocus();
+        _commentComposer.textController.clear();
+        _commentComposer.focusNode.unfocus();
         await _fetchPostDetails();
 
         if (!mounted) return;
@@ -1489,7 +1196,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
   }
 
   Future<void> _showEditDialog() async {
-    _dismissCommentComposerFocus();
+    _commentComposer.dismissFocus();
     _suppressNextRouteDetach = true;
     String? type;
     try {
@@ -1555,7 +1262,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
   }
 
   Future<bool> _confirmClosePostIfNeeded() async {
-    if (_commentController.text.trim().isEmpty) {
+    if (_commentComposer.textController.text.trim().isEmpty) {
       return true;
     }
 
@@ -1602,7 +1309,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
 
     _setRouteWebViewDetached(true);
     if (resetBackSwipeOffset) {
-      _resetEdgeBackSwipe();
+      _backSwipe.reset();
     }
 
     await Future<void>.delayed(const Duration(milliseconds: 5));
@@ -1637,262 +1344,15 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
     );
   }
 
-  void _onBackSwipeAnimationTick() {
-    final animation = _backSwipeOffsetAnimation;
-    if (animation == null) {
-      return;
-    }
-    _backSwipeOffset = animation.value;
-  }
-
-  void _onBackSwipeAnimationStatusChanged(AnimationStatus status) {
-    if (status != AnimationStatus.completed) {
-      return;
-    }
-
-    final shouldPop = _popAfterBackSwipeAnimation;
-    _backSwipeOffsetAnimation = null;
-    _popAfterBackSwipeAnimation = false;
-
-    if (shouldPop) {
-      _finishBackSwipeClose();
-    }
-  }
-
   Future<void> _finishBackSwipeClose() async {
     final didPop = await _closePost(resetBackSwipeOffset: false);
     if (!didPop && mounted) {
-      _detachPreviousRouteWebViewAfterCanceledSwipe();
-      _animateBackSwipeTo(
+      _backSwipe.detachPreviousAfterCanceledSwipe();
+      _backSwipe.animateTo(
         0.0,
         duration: const Duration(milliseconds: 180),
       );
     }
-  }
-
-  Duration _backSwipeCloseDuration(
-    double screenWidth,
-    double velocity,
-  ) {
-    final remaining = max(0.0, screenWidth - _backSwipeOffset);
-    if (remaining <= 0.0) {
-      return Duration.zero;
-    }
-
-    if (velocity > 0.0) {
-      final milliseconds =
-          ((remaining / velocity) * 1000).round().clamp(90, 240);
-      return Duration(milliseconds: milliseconds);
-    }
-
-    final distanceFactor = (remaining / screenWidth).clamp(0.2, 1.0);
-    return Duration(milliseconds: (220 * distanceFactor).round());
-  }
-
-  Duration _backSwipeResetDuration(double screenWidth) {
-    if (screenWidth <= 0.0) {
-      return const Duration(milliseconds: 180);
-    }
-
-    final distanceFactor = (_backSwipeOffset / screenWidth).clamp(0.15, 1.0);
-    return Duration(milliseconds: (180 * distanceFactor).round());
-  }
-
-  void _animateBackSwipeTo(
-    double target, {
-    required Duration duration,
-    Curve curve = Curves.easeOutCubic,
-    bool popWhenDone = false,
-  }) {
-    _backSwipeAnimationController.stop();
-    _backSwipeAnimationController.duration = duration;
-    _backSwipeOffsetAnimation = Tween<double>(
-      begin: _backSwipeOffset,
-      end: target,
-    ).animate(
-      CurvedAnimation(
-        parent: _backSwipeAnimationController,
-        curve: curve,
-      ),
-    );
-    _popAfterBackSwipeAnimation = popWhenDone;
-    _backSwipeAnimationController.forward(from: 0.0);
-  }
-
-  void _handleEdgeBackSwipePointerDown(PointerDownEvent event) {
-    if (!(Platform.isAndroid || Platform.isIOS)) {
-      return;
-    }
-    if (event.position.dx <= _edgeBackSwipeTriggerWidth) {
-      _restorePreviousRouteWebViewForSwipe();
-    }
-  }
-
-  void _handleEdgeBackSwipePointerUp(PointerEvent event) {
-    if (!_isDraggingBackFromEdge && _backSwipeOffset == 0.0) {
-      _detachPreviousRouteWebViewAfterCanceledSwipe();
-    }
-  }
-
-  void _handleEdgeBackSwipeStart(DragStartDetails details) {
-    if (!(Platform.isAndroid || Platform.isIOS)) {
-      return;
-    }
-
-    if (details.globalPosition.dx <= _edgeBackSwipeTriggerWidth) {
-      _backSwipeAnimationController.stop();
-      _backSwipeOffsetAnimation = null;
-      _popAfterBackSwipeAnimation = false;
-      _isDraggingBackFromEdge = true;
-      _restorePreviousRouteWebViewForSwipe();
-      _backDragStartX = details.globalPosition.dx - _backSwipeOffset;
-      _backDragDistance = _backSwipeOffset;
-    }
-  }
-
-  void _handleEdgeBackSwipeUpdate(DragUpdateDetails details) {
-    if (!_isDraggingBackFromEdge) {
-      return;
-    }
-
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final distance = (details.globalPosition.dx - _backDragStartX)
-        .clamp(0.0, screenWidth)
-        .toDouble();
-    _backDragDistance = distance;
-    _backSwipeOffset = distance;
-  }
-
-  void _handleEdgeBackSwipeEnd(DragEndDetails details) {
-    if (!_isDraggingBackFromEdge) {
-      return;
-    }
-
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final closeDistanceThreshold =
-        max(_edgeBackSwipeMinDistance, screenWidth * 0.25);
-    final shouldClose = _backDragDistance >= closeDistanceThreshold ||
-        details.velocity.pixelsPerSecond.dx >= _edgeBackSwipeMinVelocity;
-
-    _isDraggingBackFromEdge = false;
-    _backDragStartX = 0.0;
-    _backDragDistance = 0.0;
-
-    if (shouldClose) {
-      _didTemporarilyRestorePreviousForSwipe = false;
-      _animateBackSwipeTo(
-        screenWidth,
-        duration: _backSwipeCloseDuration(
-          screenWidth,
-          details.velocity.pixelsPerSecond.dx,
-        ),
-        popWhenDone: true,
-      );
-    } else {
-      _detachPreviousRouteWebViewAfterCanceledSwipe();
-      _animateBackSwipeTo(
-        0.0,
-        duration: _backSwipeResetDuration(screenWidth),
-      );
-    }
-  }
-
-  void _resetEdgeBackSwipe() {
-    _isDraggingBackFromEdge = false;
-    _backDragStartX = 0.0;
-    _backDragDistance = 0.0;
-    _backSwipeAnimationController.stop();
-    _backSwipeOffsetAnimation = null;
-    _popAfterBackSwipeAnimation = false;
-    _backSwipeOffset = 0.0;
-    _detachPreviousRouteWebViewAfterCanceledSwipe();
-  }
-
-  void _restorePreviousRouteWebViewForSwipe() {
-    if (_didTemporarilyRestorePreviousForSwipe) {
-      return;
-    }
-    final previous = DetachableWebViewRouteRegistry.previousOf(this);
-    if (previous == null) {
-      return;
-    }
-    previous.setRouteWebViewDetached(false);
-    _didTemporarilyRestorePreviousForSwipe = true;
-  }
-
-  void _detachPreviousRouteWebViewAfterCanceledSwipe() {
-    if (!_didTemporarilyRestorePreviousForSwipe) {
-      return;
-    }
-    final previous = DetachableWebViewRouteRegistry.previousOf(this);
-    if (previous != null) {
-      previous.setRouteWebViewDetached(true);
-    }
-    _didTemporarilyRestorePreviousForSwipe = false;
-  }
-
-  Widget _buildEdgeBackSwipeOverlay() {
-    if (!(Platform.isAndroid || Platform.isIOS)) {
-      return const SizedBox.shrink();
-    }
-
-    return Positioned(
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: _edgeBackSwipeDetectorWidth,
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: _handleEdgeBackSwipePointerDown,
-        onPointerUp: _handleEdgeBackSwipePointerUp,
-        onPointerCancel: _handleEdgeBackSwipePointerUp,
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onHorizontalDragStart: _handleEdgeBackSwipeStart,
-          onHorizontalDragUpdate: _handleEdgeBackSwipeUpdate,
-          onHorizontalDragEnd: _handleEdgeBackSwipeEnd,
-          onHorizontalDragCancel: _resetEdgeBackSwipe,
-          child: Container(color: Colors.transparent),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEdgeBackSwipeTransition({required Widget child}) {
-    if (!(Platform.isAndroid || Platform.isIOS)) {
-      return child;
-    }
-
-    return ValueListenableBuilder<double>(
-      valueListenable: _backSwipeOffsetNotifier,
-      child: child,
-      builder: (context, offset, swipeChild) {
-        final screenWidth = MediaQuery.sizeOf(context).width;
-        final progress = screenWidth > 0.0
-            ? (offset / screenWidth).clamp(0.0, 1.0).toDouble()
-            : 0.0;
-
-        return Transform.translate(
-          offset: Offset(offset, 0.0),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              boxShadow: offset > 0.0
-                  ? [
-                      BoxShadow(
-                        color: Colors.black.withValues(
-                          alpha: 0.24 * (1.0 - (progress * 0.5)),
-                        ),
-                        blurRadius: 24.0,
-                        offset: const Offset(-6.0, 0.0),
-                      ),
-                    ]
-                  : const [],
-            ),
-            child: swipeChild,
-          ),
-        );
-      },
-    );
   }
 
   @override
@@ -1922,7 +1382,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
           statusBarIconBrightness: Brightness.light,
         ),
         child: ValueListenableBuilder<bool>(
-          valueListenable: _commentDraftHasText,
+          valueListenable: _commentComposer.hasText,
           builder: (context, hasDraft, child) {
             return PopScope(
               canPop: !hasDraft,
@@ -1936,7 +1396,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
           },
           child: TickerMode(
             enabled: !_isPostWebViewDetached,
-            child: _buildEdgeBackSwipeTransition(
+            child: _backSwipe.buildTransition(
               child: Scaffold(
                 backgroundColor: Colors.black,
                 appBar: AppBar(
@@ -1961,7 +1421,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                         return IconButton(
                           icon: const Icon(Icons.more_vert),
                           onPressed: () async {
-                            _dismissCommentComposerFocus();
+                            _commentComposer.dismissFocus();
 
                             final RenderBox button =
                                 context.findRenderObject() as RenderBox;
@@ -1997,7 +1457,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                                 launchUrlString(_controller.troubleTicketsUrl);
                                 break;
                               case 'block_unblock':
-                                await _handleBlockUnblock();
+                                await _controller.toggleAuthorBlock();
                                 break;
                               case 'info':
                                 await _showInfoDialog();
@@ -2462,7 +1922,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                                 SliverToBoxAdapter(
                                   child: ValueListenableBuilder<int>(
                                     valueListenable:
-                                        _commentDraftCollapsedLines,
+                                        _commentComposer.collapsedLines,
                                     builder:
                                         (context, collapsedPreviewLines, _) {
                                       final composerSpacerHeight =
@@ -2482,7 +1942,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                       ),
                       Positioned.fill(
                         child: ValueListenableBuilder<bool>(
-                          valueListenable: _isCommentComposerExpanded,
+                          valueListenable: _commentComposer.isExpanded,
                           builder: (context, isExpanded, _) {
                             if (!isExpanded) {
                               return const SizedBox.shrink();
@@ -2502,18 +1962,18 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                           right: 0,
                           bottom: 0,
                           child: InlineCommentComposer(
-                            controller: _commentController,
-                            focusNode: _commentFocusNode,
+                            controller: _commentComposer.textController,
+                            focusNode: _commentComposer.focusNode,
                             keyboardInset: _keyboardInset,
-                            isExpanded: _isCommentComposerExpanded,
-                            collapsedLines: _commentDraftCollapsedLines,
-                            hasText: _commentDraftHasText,
+                            isExpanded: _commentComposer.isExpanded,
+                            collapsedLines: _commentComposer.collapsedLines,
+                            hasText: _commentComposer.hasText,
                             showScrollToTop: _showScrollToTopNotifier,
                             isSending: _isSendingInlineComment,
                             viewPaddingBottom: viewPaddingBottom,
                             scrollToTopHeroTag: 'scroll_top',
                             onPointerDown:
-                                _handleCommentComposerPointerDown,
+                                _commentComposer.handlePointerDown,
                             onScrollToTop: () {
                               _scrollController.animateTo(
                                 0,
@@ -2523,7 +1983,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                               );
                             },
                             onSend: _sendInlineComment,
-                            onKeyboardClosing: _dismissCommentComposerFocus,
+                            onKeyboardClosing: _commentComposer.dismissFocus,
                           ),
                         ),
                       if (showLoadingIndicator)
@@ -2536,7 +1996,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                             ),
                           ),
                         ),
-                      _buildEdgeBackSwipeOverlay(),
+                      _backSwipe.buildOverlay(),
                     ],
                   ),
                 ),

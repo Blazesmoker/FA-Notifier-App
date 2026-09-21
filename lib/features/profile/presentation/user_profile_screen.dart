@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/navigation/edge_back_swipe_controller.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'user_profile_shouts_controller.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_details_header.dart';
@@ -117,6 +118,8 @@ class UserProfileScreen extends StatefulWidget {
 class UserProfileScreenState extends State<UserProfileScreen>
     with RouteAware, TickerProviderStateMixin
     implements DetachableWebViewRouteOwner {
+  late final EdgeBackSwipeController _backSwipe;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -132,11 +135,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
       SchedulerBinding.instance.removeTimingsCallback(_handleFrameTimings);
     }
     IosScrollRecovery.removeListener(_handleIosScrollRecovery);
-    _backSwipeAnimationController.dispose();
+    _backSwipe.dispose();
     _tabController.dispose();
     _scrollController.removeListener(_onProfileScroll);
     _scrollController.dispose();
-    _backSwipeOffsetNotifier.dispose();
     _showMoveUpFab.dispose();
     _moveUpFabLift.dispose();
     _moveUpMediaProactive.dispose();
@@ -260,10 +262,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
 
   static const double _profileAvatarBehindBannerStart = 63.0;
 
-  static const double _edgeBackSwipeDetectorWidth = 25.0;
-  static const double _edgeBackSwipeTriggerWidth = 62.0;
-  static const double _edgeBackSwipeMinDistance = 72.0;
-  static const double _edgeBackSwipeMinVelocity = 700.0;
   static const double _bulkSelectionMoveUpGap = 8.0;
   static const double _moveUpFabDefaultBottomSpacing = 16.0;
   static const bool _webViewScrollOptimizationEnabled = false;
@@ -274,11 +272,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
       ValueNotifier<double>(0.0);
   final ValueNotifier<bool> _moveUpMediaProactive =
       ValueNotifier<bool>(false);
-  late final ValueNotifier<double> _backSwipeOffsetNotifier =
-      ValueNotifier<double>(0.0);
-  late final AnimationController _backSwipeAnimationController;
-  Animation<double>? _backSwipeOffsetAnimation;
-  bool _popAfterBackSwipeAnimation = false;
 
   late TabController _tabController;
 
@@ -299,14 +292,12 @@ class UserProfileScreenState extends State<UserProfileScreen>
   ValueListenable<int> get _shoutsRevision => _shoutsController.revision;
   final ValueNotifier<bool> _watchRequestInFlight =
       ValueNotifier<bool>(false);
-  bool _isDraggingBackFromEdge = false;
   bool _isHomeTabMediaVisible = true;
   bool _isGalleryTabActive = false;
   bool _isProfileRouteCurrent = true;
   late final ValueNotifier<bool> _galleryDetailFetchesActive;
   bool _isProfileWebViewDetached = false;
   bool _suppressNextRouteDetach = false;
-  bool _didTemporarilyRestorePreviousForSwipe = false;
   bool _isWebViewPausedForScroll = false;
   bool _enableScrollWebViewPause = false;
   int _frameTimingCount = 0;
@@ -316,11 +307,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       ValueNotifier<bool>(false);
   String? _profileAvatarTransparencyCheckedUrl;
   int _profileAvatarTransparencyCheckGeneration = 0;
-  double _backDragStartX = 0.0;
-  double _backDragDistance = 0.0;
 
-  double get _backSwipeOffset => _backSwipeOffsetNotifier.value;
-  set _backSwipeOffset(double value) => _backSwipeOffsetNotifier.value = value;
   bool get _isShoutSelectionMode =>
       _shoutSelectionController.isSelectionMode;
 
@@ -376,9 +363,13 @@ class UserProfileScreenState extends State<UserProfileScreen>
         ProfileSection.values[_tabController.index],
       ),
     );
-    _backSwipeAnimationController = AnimationController(vsync: this)
-      ..addListener(_onBackSwipeAnimationTick)
-      ..addStatusListener(_onBackSwipeAnimationStatusChanged);
+    _backSwipe = EdgeBackSwipeController(
+      vsync: this,
+      owner: this,
+      screenWidth: () => MediaQuery.sizeOf(context).width,
+      canStart: () => !_isShoutSelectionMode,
+      onClose: _finishBackSwipeClose,
+    );
 
     // Load only the initial tab immediately; others will load after "settling".
     _tabLoadingController.loadInitialSection(
@@ -643,7 +634,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }) async {
     await (_webViewKey.currentState?.pauseWebView() ?? Future.value());
     if (resetBackSwipeOffset) {
-      _resetEdgeBackSwipe();
+      _backSwipe.reset();
     }
     await Future<void>.delayed(const Duration(milliseconds: 5));
     if (!mounted) {
@@ -656,262 +647,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _attemptCloseProfileScreen();
   }
 
-  void _onBackSwipeAnimationTick() {
-    final animation = _backSwipeOffsetAnimation;
-    if (animation == null) {
-      return;
-    }
-    _backSwipeOffset = animation.value;
-  }
-
-  void _onBackSwipeAnimationStatusChanged(AnimationStatus status) {
-    if (status != AnimationStatus.completed) {
-      return;
-    }
-
-    final shouldPop = _popAfterBackSwipeAnimation;
-    _backSwipeOffsetAnimation = null;
-    _popAfterBackSwipeAnimation = false;
-
-    if (shouldPop) {
-      _finishBackSwipeClose();
-    }
-  }
-
   Future<void> _finishBackSwipeClose() async {
     final didPop =
         await _attemptCloseProfileScreen(resetBackSwipeOffset: false);
     if (!didPop && mounted) {
-      _animateBackSwipeTo(
+      _backSwipe.animateTo(
         0.0,
         duration: const Duration(milliseconds: 180),
       );
     }
-  }
-
-  Duration _backSwipeCloseDuration(
-    double screenWidth,
-    double velocity,
-  ) {
-    final remaining = max(0.0, screenWidth - _backSwipeOffset);
-    if (remaining <= 0.0) {
-      return Duration.zero;
-    }
-
-    if (velocity > 0.0) {
-      final milliseconds =
-          ((remaining / velocity) * 1000).round().clamp(90, 240);
-      return Duration(milliseconds: milliseconds);
-    }
-
-    final distanceFactor = (remaining / screenWidth).clamp(0.2, 1.0);
-    return Duration(milliseconds: (220 * distanceFactor).round());
-  }
-
-  Duration _backSwipeResetDuration(double screenWidth) {
-    if (screenWidth <= 0.0) {
-      return const Duration(milliseconds: 180);
-    }
-
-    final distanceFactor = (_backSwipeOffset / screenWidth).clamp(0.15, 1.0);
-    return Duration(milliseconds: (180 * distanceFactor).round());
-  }
-
-  void _animateBackSwipeTo(
-    double target, {
-    required Duration duration,
-    Curve curve = Curves.easeOutCubic,
-    bool popWhenDone = false,
-  }) {
-    _backSwipeAnimationController.stop();
-    _backSwipeAnimationController.duration = duration;
-    _backSwipeOffsetAnimation = Tween<double>(
-      begin: _backSwipeOffset,
-      end: target,
-    ).animate(
-      CurvedAnimation(
-        parent: _backSwipeAnimationController,
-        curve: curve,
-      ),
-    );
-    _popAfterBackSwipeAnimation = popWhenDone;
-    _backSwipeAnimationController.forward(from: 0.0);
-  }
-
-  void _handleEdgeBackSwipeStart(DragStartDetails details) {
-    if (!(Platform.isAndroid || Platform.isIOS) || _isShoutSelectionMode) {
-      return;
-    }
-
-    if (details.globalPosition.dx <= _edgeBackSwipeTriggerWidth) {
-      _backSwipeAnimationController.stop();
-      _backSwipeOffsetAnimation = null;
-      _popAfterBackSwipeAnimation = false;
-      _isDraggingBackFromEdge = true;
-      _restorePreviousRouteWebViewForSwipe();
-      _backDragStartX = details.globalPosition.dx - _backSwipeOffset;
-      _backDragDistance = _backSwipeOffset;
-    }
-  }
-
-  void _handleEdgeBackSwipePointerDown(PointerDownEvent event) {
-    if (!(Platform.isAndroid || Platform.isIOS) || _isShoutSelectionMode) {
-      return;
-    }
-    if (event.position.dx <= _edgeBackSwipeTriggerWidth) {
-      _restorePreviousRouteWebViewForSwipe();
-    }
-  }
-
-  void _handleEdgeBackSwipePointerUp(PointerEvent event) {
-    if (!_isDraggingBackFromEdge && _backSwipeOffset == 0.0) {
-      _detachPreviousRouteWebViewAfterCanceledSwipe();
-    }
-  }
-
-  void _handleEdgeBackSwipeUpdate(DragUpdateDetails details) {
-    if (!_isDraggingBackFromEdge) {
-      return;
-    }
-
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final distance = (details.globalPosition.dx - _backDragStartX)
-        .clamp(0.0, screenWidth)
-        .toDouble();
-    _backDragDistance = distance;
-    _backSwipeOffset = distance;
-  }
-
-  void _handleEdgeBackSwipeEnd(DragEndDetails details) {
-    if (!_isDraggingBackFromEdge) {
-      return;
-    }
-
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final closeDistanceThreshold =
-        max(_edgeBackSwipeMinDistance, screenWidth * 0.25);
-    final shouldClose = _backDragDistance >= closeDistanceThreshold ||
-        details.velocity.pixelsPerSecond.dx >= _edgeBackSwipeMinVelocity;
-
-    _isDraggingBackFromEdge = false;
-    _backDragStartX = 0.0;
-    _backDragDistance = 0.0;
-
-    if (shouldClose) {
-      _didTemporarilyRestorePreviousForSwipe = false;
-      _animateBackSwipeTo(
-        screenWidth,
-        duration: _backSwipeCloseDuration(
-          screenWidth,
-          details.velocity.pixelsPerSecond.dx,
-        ),
-        popWhenDone: true,
-      );
-    } else {
-      _detachPreviousRouteWebViewAfterCanceledSwipe();
-      _animateBackSwipeTo(
-        0.0,
-        duration: _backSwipeResetDuration(screenWidth),
-      );
-    }
-  }
-
-  void _resetEdgeBackSwipe() {
-    _isDraggingBackFromEdge = false;
-    _backDragStartX = 0.0;
-    _backDragDistance = 0.0;
-    _backSwipeAnimationController.stop();
-    _backSwipeOffsetAnimation = null;
-    _popAfterBackSwipeAnimation = false;
-    _backSwipeOffset = 0.0;
-    _detachPreviousRouteWebViewAfterCanceledSwipe();
-  }
-
-  void _restorePreviousRouteWebViewForSwipe() {
-    if (_didTemporarilyRestorePreviousForSwipe) {
-      return;
-    }
-    final previous = DetachableWebViewRouteRegistry.previousOf(this);
-    if (previous == null) {
-      return;
-    }
-    previous.setRouteWebViewDetached(false);
-    _didTemporarilyRestorePreviousForSwipe = true;
-  }
-
-  void _detachPreviousRouteWebViewAfterCanceledSwipe() {
-    if (!_didTemporarilyRestorePreviousForSwipe) {
-      return;
-    }
-    final previous = DetachableWebViewRouteRegistry.previousOf(this);
-    if (previous != null) {
-      previous.setRouteWebViewDetached(true);
-    }
-    _didTemporarilyRestorePreviousForSwipe = false;
-  }
-
-  Widget _buildEdgeBackSwipeOverlay() {
-    if (!(Platform.isAndroid || Platform.isIOS)) {
-      return const SizedBox.shrink();
-    }
-
-    return Positioned(
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: _edgeBackSwipeDetectorWidth,
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: _handleEdgeBackSwipePointerDown,
-        onPointerUp: _handleEdgeBackSwipePointerUp,
-        onPointerCancel: _handleEdgeBackSwipePointerUp,
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onHorizontalDragStart: _handleEdgeBackSwipeStart,
-          onHorizontalDragUpdate: _handleEdgeBackSwipeUpdate,
-          onHorizontalDragEnd: _handleEdgeBackSwipeEnd,
-          onHorizontalDragCancel: _resetEdgeBackSwipe,
-          child: Container(color: Colors.transparent),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEdgeBackSwipeTransition({required Widget child}) {
-    if (!(Platform.isAndroid || Platform.isIOS)) {
-      return child;
-    }
-
-    return ValueListenableBuilder<double>(
-      valueListenable: _backSwipeOffsetNotifier,
-      child: child,
-      builder: (context, offset, swipeChild) {
-        final screenWidth = MediaQuery.sizeOf(context).width;
-        final progress = screenWidth > 0.0
-            ? (offset / screenWidth).clamp(0.0, 1.0).toDouble()
-            : 0.0;
-
-        return Transform.translate(
-          offset: Offset(offset, 0.0),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              boxShadow: offset > 0.0
-                  ? [
-                      BoxShadow(
-                        color: Colors.black.withValues(
-                          alpha: 0.24 * (1.0 - (progress * 0.5)),
-                        ),
-                        blurRadius: 24.0,
-                        offset: const Offset(-6.0, 0.0),
-                      ),
-                    ]
-                  : const [],
-            ),
-            child: swipeChild,
-          ),
-        );
-      },
-    );
   }
 
   IconData _getIconForSection(ProfileSection section) {
@@ -1600,7 +1344,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
           },
           child: TickerMode(
               enabled: !_isProfileWebViewDetached,
-              child: _buildEdgeBackSwipeTransition(
+              child: _backSwipe.buildTransition(
                 child: Scaffold(
                   backgroundColor: Colors.black,
                   body: SafeArea(
@@ -1951,7 +1695,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
                             );
                           },
                         ),
-                        _buildEdgeBackSwipeOverlay(),
+                        _backSwipe.buildOverlay(),
                         _buildDeleteSelectedShoutsFab(),
                       ],
                     ),
