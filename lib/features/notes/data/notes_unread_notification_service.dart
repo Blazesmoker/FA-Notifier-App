@@ -3,6 +3,7 @@ import 'package:fanotifier/features/notes/data/background_note_unread_service.da
 import 'package:fanotifier/features/notes/data/message_storage.dart';
 import 'package:fanotifier/features/notes/data/notes_api_service.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/note_arrival_policy.dart';
 import 'package:fanotifier/features/notes/domain/notes_unread_notification_result.dart';
 import 'package:fanotifier/features/notifications/domain/stable_notification_id.dart';
 
@@ -61,44 +62,14 @@ class NotesUnreadNotificationService {
       }
 
       final shownIds = await MessageStorage.getShownNoteIds();
-      final unreadNotShown =
-          unread.where((m) => !shownIds.contains(m.id)).toList();
-      if (unreadNotShown.isEmpty) {
-        return NotesUnreadNotificationResult(
-          latestTopId: latestTopId,
-          shownCount: 0,
-        );
-      }
-
-      int anchorIndex = -1;
-      if (previousTopId != null) {
-        anchorIndex = fetchedInbox.indexWhere((m) => m.id == previousTopId);
-      }
-
-      final Set<String>? eligibleIds;
-      if (previousTopId == null) {
-        eligibleIds = null;
-      } else {
-        final nextEligibleIds = <String>{};
-        if (anchorIndex > 0) {
-          for (var i = 0; i < anchorIndex; i++) {
-            nextEligibleIds.add(fetchedInbox[i].id);
-          }
-        }
-        eligibleIds = nextEligibleIds;
-      }
-
-      final List<Message> newUnread;
-      if (eligibleIds == null) {
-        newUnread = unreadNotShown;
-      } else if (eligibleIds.isEmpty) {
-        newUnread = <Message>[];
-      } else {
-        final nonNullEligibleIds = eligibleIds;
-        newUnread = unreadNotShown
-            .where((m) => nonNullEligibleIds.contains(m.id))
-            .toList();
-      }
+      final seenIds = await MessageStorage.getSeenNoteIds();
+      final arrivals = NoteArrivalPolicy({...shownIds, ...seenIds});
+      final pendingDeliveries = await MessageStorage.getPendingNoteDeliveries();
+      final newUnread = unread.where((message) {
+        return !shownIds.contains(message.id) &&
+            (arrivals.isNewArrival(message.id) ||
+                pendingDeliveries.containsKey(message.id));
+      }).toList();
 
       final pendingRestoreIds = <String>{};
       final preparedNotes = <({Message message, String content})>[];

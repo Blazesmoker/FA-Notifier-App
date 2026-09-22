@@ -166,7 +166,9 @@ class NoteSubmissionPreviewRepositoryImpl
         _logPreview(
           'Google selected ID not found url=${link.url}',
         );
-        return null;
+        throw const NotePreviewException(
+          'Could not identify the selected Google image.',
+        );
       }
       final imageUrl =
           await _googleImageResolver.resolveHighQualityImageUrl(
@@ -182,6 +184,10 @@ class NoteSubmissionPreviewRepositoryImpl
       } else {
         _logPreview(
           'WebView image URL not found selectedId=$selectedId',
+        );
+        throw const NotePreviewException(
+          'Google did not provide a full-size image before the preview timed out '
+          'or became unavailable.',
         );
       }
     }
@@ -242,7 +248,11 @@ class NoteSubmissionPreviewRepositoryImpl
             'bytes=${page.bodyBytes.length} '
             'resolved=${result.resolvedUri}',
           );
-          return null;
+          throw NotePreviewException(
+            page.statusCode != 200
+                ? 'Google image page request failed (HTTP ${page.statusCode}).'
+                : 'Google returned an empty or unsupported image page.',
+          );
         }
         imageUrls.addAll(
           parseNotePreviewPageImageUrls(
@@ -297,7 +307,13 @@ class NoteSubmissionPreviewRepositoryImpl
           'count=${imageUrls.length} values=$imageUrls',
         );
       }
-      if (imageUrls.isEmpty && !pageAccepted) return null;
+      if (imageUrls.isEmpty && !pageAccepted) {
+        throw NotePreviewException(
+          page.statusCode != 200
+              ? 'Image page request failed (HTTP ${page.statusCode}).'
+              : 'The image page was empty or unsupported.',
+        );
+      }
     }
     for (final imageUrl in imageUrls) {
       try {
@@ -328,7 +344,11 @@ class NoteSubmissionPreviewRepositoryImpl
       'all image candidates failed source=${link.source.name} '
       'url=${link.url}',
     );
-    return null;
+    throw NotePreviewException(
+      imageUrls.isEmpty
+          ? 'Could not find a full-size image on the linked page.'
+          : 'Found the image, but could not download it from the image host.',
+    );
   }
 
   Future<NoteSubmissionPreview?> _loadImage({

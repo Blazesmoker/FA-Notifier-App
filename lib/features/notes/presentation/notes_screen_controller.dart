@@ -194,19 +194,12 @@ class NotesScreenController {
 
   Future<void> refreshAfterManagementAction(NotesFolder folder) async {
     if (folder == NotesFolder.inbox) {
+      await _inFlightInboxPageOne;
       resetInboxPagination();
       await fetchInbox(
         page: 1,
         clearOld: false,
-        suppressNewUnreadNotifications: true,
       );
-      try {
-        final page2 =
-            await _repository.fetchMessages(folder: 'inbox', page: 2);
-        await _repository.markUnreadMessagesAsShown(page2);
-      } catch (e) {
-        debugPrint('[Notes management] Failed to pre-mark page 2: $e');
-      }
     } else {
       resetSentPagination();
       await fetchSent(page: 1, clearOld: false);

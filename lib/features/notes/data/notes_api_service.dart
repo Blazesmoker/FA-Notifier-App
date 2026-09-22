@@ -417,10 +417,31 @@ class NotesApiService implements ManagedNotesRepository {
     if (cookieA == null || cookieB == null) {
       throw Exception('No cookies => user not logged in?');
     }
-    if (sourceFolder == NotesFolder.inbox &&
-        action == NoteManagementAction.markUnread) {
-      await ManualNoteActivityStore().registerManualUnreadBatch(ids);
+    final affectsInbox = sourceFolder == NotesFolder.inbox ||
+        action == NoteManagementAction.restoreFromTrash ||
+        action == NoteManagementAction.restoreFromArchive;
+    final activityStore = ManualNoteActivityStore();
+    if (affectsInbox) await activityStore.registerManualAction(ids);
+    try {
+      await _submitManagementAction(
+        ids: ids,
+        sourceFolder: sourceFolder,
+        action: action,
+        cookieA: cookieA,
+        cookieB: cookieB,
+      );
+    } finally {
+      if (affectsInbox) await activityStore.finishManualAction();
     }
+  }
+
+  Future<void> _submitManagementAction({
+    required List<String> ids,
+    required NotesFolder sourceFolder,
+    required NoteManagementAction action,
+    required String cookieA,
+    required String cookieB,
+  }) async {
     final actionField = _actionField(action);
     final body = [
       'manage_notes=1',

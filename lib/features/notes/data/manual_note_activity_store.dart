@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fanotifier/features/notes/data/background_inbox_service.dart';
 import 'package:fanotifier/features/notes/data/message_storage.dart';
 import 'package:fanotifier/features/notes/domain/note_activity_snapshot.dart';
+import 'package:fanotifier/features/notes/domain/note_arrival_policy.dart';
 
 class ManualNoteActivityStore {
   static const _key = 'manual_note_activity_state_v1';
@@ -21,6 +22,10 @@ class ManualNoteActivityStore {
   }
 
   Future<void> registerManualUnreadBatch(Iterable<String> noteIds) {
+    return registerManualAction(noteIds);
+  }
+
+  Future<void> registerManualAction(Iterable<String> noteIds) {
     final selectedIds = noteIds
         .map((id) => id.trim())
         .where((id) => id.isNotEmpty)
@@ -43,10 +48,22 @@ class ManualNoteActivityStore {
                   (shown.isNotEmpty || seen.isNotEmpty),
             );
       }
+      state.notBeforeMilliseconds = DateTime.now().millisecondsSinceEpoch;
       state.knownIds.addAll(selectedIds);
       state.pendingIds.removeAll(selectedIds);
       await _save(prefs, state);
       await MessageStorage.addShownNoteIds(selectedIds.toList());
+    });
+  }
+
+  Future<void> finishManualAction() {
+    return _serialized(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final state = _read(prefs);
+      if (state == null) return;
+      state.notBeforeMilliseconds = DateTime.now().millisecondsSinceEpoch;
+      await _save(prefs, state);
     });
   }
 
@@ -136,14 +153,12 @@ class ManualNoteActivityStore {
     if (snapshot.unreadCount == 0 && temporarilyReadIds.isEmpty) {
       state.pendingIds.clear();
     }
-    var reachedKnownNote = false;
+    final arrivals = NoteArrivalPolicy(state.knownIds);
     for (final message in snapshot.messages) {
       if (message.id.isEmpty) continue;
-      if (state.knownIds.contains(message.id)) reachedKnownNote = true;
       if (allowNewNotes &&
-          !reachedKnownNote &&
-          (message.isUnread || temporarilyReadIds.contains(message.id)) &&
-          !state.knownIds.contains(message.id)) {
+          arrivals.isNewArrival(message.id) &&
+          (message.isUnread || temporarilyReadIds.contains(message.id))) {
         state.pendingIds.add(message.id);
       }
       if (!message.isUnread && !temporarilyReadIds.contains(message.id)) {

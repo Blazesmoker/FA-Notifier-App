@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:fanotifier/features/notes/domain/note_image_preview_mode.dart';
 import 'package:fanotifier/features/notes/domain/note_image_preview_link.dart';
@@ -104,17 +106,39 @@ class _NoteBodyWithPreviewsState extends State<NoteBodyWithPreviews> {
     final state = _states[id];
     if (state == null || state.status == _PreviewStatus.loading) return;
     state.setLoading();
+    var confirmationDeclined = false;
     try {
       final preview = await widget.repository.loadPreview(
         state.submissionUrl,
-        confirmNsfw: _showNsfwConfirmationDialog,
+        confirmNsfw: () async {
+          final confirmed = await _showNsfwConfirmationDialog();
+          confirmationDeclined = !confirmed;
+          return confirmed;
+        },
       );
       if (!mounted) return;
       state.setResult(preview, expandAfterLoad: expandAfterLoad);
-    } catch (_) {
+      if (preview == null && !confirmationDeclined) {
+        _showPreviewError('Could not load an image preview from this link.');
+      }
+    } catch (error) {
       if (!mounted) return;
       state.setError();
+      final message = switch (error) {
+        NotePreviewException() => error.message,
+        TimeoutException() => 'Image preview request timed out.',
+        SocketException() =>
+          'Could not connect to the image host. Check your connection.',
+        _ => 'Could not load the image preview. Please try again.',
+      };
+      _showPreviewError(message);
     }
+  }
+
+  void _showPreviewError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<bool> _showNsfwConfirmationDialog() async {
@@ -197,7 +221,12 @@ class _NoteBodyWithPreviewsState extends State<NoteBodyWithPreviews> {
     bool hasError = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 2, top: 2, right: 4),
+      padding: const EdgeInsets.only(
+        left: 4,
+        bottom: 8,
+        top: 8,
+        right: 4,
+      ),
       child: Semantics(
         button: true,
         label: label,
@@ -215,35 +244,47 @@ class _NoteBodyWithPreviewsState extends State<NoteBodyWithPreviews> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.image_search,
-                    color: Color(0xFFE09321),
-                    size: 24,
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Center(
+                      child: isLoading
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(
+                              hasError
+                                  ? Icons.error_outline
+                                  : Icons.image_search,
+                              color: hasError
+                                  ? Colors.redAccent
+                                  : const Color(0xFFE09321),
+                              size: hasError ? 18 : 24,
+                            ),
+                    ),
                   ),
                   const SizedBox(width: 4),
-                  Text(
-                    label,
+                  DefaultTextStyle.merge(
                     style: const TextStyle(
                       color: Color(0xFFE09321),
                       fontSize: 16,
                     ),
+                    child: Stack(
+                      alignment: Alignment.centerLeft,
+                      children: [
+                        const Visibility(
+                          visible: false,
+                          maintainSize: true,
+                          maintainAnimation: true,
+                          maintainState: true,
+                          child: Text('show image'),
+                        ),
+                        Text(label),
+                      ],
+                    ),
                   ),
-                  if (isLoading) ...[
-                    const SizedBox(width: 6),
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ],
-                  if (hasError) ...[
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.error_outline,
-                      color: Colors.redAccent,
-                      size: 18,
-                    ),
-                  ],
                 ],
               ),
             ),

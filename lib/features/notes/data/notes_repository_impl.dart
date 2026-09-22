@@ -164,7 +164,6 @@ class NotesRepositoryImpl implements NotesRepository {
     required NoteActivitySnapshot snapshot,
   }) async {
     final activityStore = ManualNoteActivityStore();
-    await activityStore.registerManualUnreadBatch(noteIds);
     await activityStore.reconcile(snapshot);
   }
 

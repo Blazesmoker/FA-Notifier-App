@@ -19,6 +19,7 @@ import 'package:fanotifier/features/notes/data/background_note_unread_service.da
 import 'package:fanotifier/features/notes/data/message_storage.dart';
 import 'package:fanotifier/features/notes/domain/background_inbox_models.dart';
 import 'package:fanotifier/features/notes/domain/message_model.dart';
+import 'package:fanotifier/features/notes/domain/note_arrival_policy.dart';
 import 'package:fanotifier/features/notes/domain/note_activity_snapshot.dart';
 import 'package:fanotifier/features/notifications/data/activities_notification_state.dart';
 import 'package:fanotifier/features/notifications/domain/notification_payloads.dart';
@@ -869,8 +870,10 @@ class BackgroundNotificationWorker {
                 fetchedInbox.where((m) => m.isUnread).toList();
             kDebugPrint('[BG] Found ${unread.length} unread messages');
             final claimedNoteIds = <String>{...shownSet};
+            final arrivals = NoteArrivalPolicy({...shownSet, ...seenSet});
             final List<Message> newNotes = unread
-                .where((message) => claimedNoteIds.add(message.id))
+                .where((message) => arrivals.isNewArrival(message.id) &&
+                    claimedNoteIds.add(message.id))
                 .toList();
             if (newNotes.isNotEmpty) {
               didFindNewNotificationContent = true;
