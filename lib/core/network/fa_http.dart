@@ -199,15 +199,21 @@ class FAHttp {
       Uri uri, {
         Map<String, String>? headers,
         Duration? timeout,
+        bool Function()? isCancelled,
+        String? coordinatorLabel,
+        bool followRedirects = true,
       }) async {
     final requestTimeout = timeout ?? defaultTimeout;
     return _withOneRetry(() async {
       await FaRequestCoordinator.instance.waitForTurn(
-        label: 'GET $uri',
+        label: coordinatorLabel ?? 'GET $uri',
+        isCancelled: isCancelled,
       );
+      if (isCancelled?.call() ?? false) throw StateError('FA request cancelled');
       final client = _ensureClient(timeout: requestTimeout);
       return (() async {
         final request = http.Request('GET', uri)
+          ..followRedirects = followRedirects
           ..headers.addAll(_mergeHeaders(headers));
         final streamedResponse = await client.send(request);
         final resolvedUri =
@@ -227,7 +233,44 @@ class FAHttp {
         );
       })()
           .timeout(requestTimeout);
-    });
+    }, isCancelled: isCancelled);
+  }
+
+  static Future<FAHttpResolvedResponse> postWithResolvedUri(
+    Uri uri, {
+    required Map<String, String> body,
+    Map<String, String>? headers,
+    Duration? timeout,
+    bool Function()? isCancelled,
+    String? coordinatorLabel,
+    bool followRedirects = true,
+  }) async {
+    final requestTimeout = timeout ?? defaultTimeout;
+    return _withOneRetry(() async {
+      await FaRequestCoordinator.instance.waitForTurn(
+        label: coordinatorLabel ?? 'POST $uri',
+        isCancelled: isCancelled,
+      );
+      if (isCancelled?.call() ?? false) throw StateError('FA request cancelled');
+      final client = _ensureClient(timeout: requestTimeout);
+      return (() async {
+        final request = http.Request('POST', uri)
+          ..followRedirects = followRedirects
+          ..headers.addAll(_mergeHeaders(headers))
+          ..bodyFields = body;
+        final streamedResponse = await client.send(request);
+        final resolvedUri = streamedResponse is http.BaseResponseWithUrl
+            ? (streamedResponse as http.BaseResponseWithUrl).url
+            : uri;
+        final response = await http.Response.fromStream(streamedResponse);
+        FaRequestCoordinator.instance.recordHttpStatus(
+          statusCode: response.statusCode,
+          headers: response.headers,
+          responseBody: response.statusCode == 403 ? response.body : null,
+        );
+        return FAHttpResolvedResponse(response: response, resolvedUri: resolvedUri);
+      })().timeout(requestTimeout);
+    }, isCancelled: isCancelled);
   }
 
   static Future<http.Response> getMedia(

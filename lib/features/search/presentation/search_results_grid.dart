@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/scroll_return_controller.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:fanotifier/features/search/domain/search_repository.dart';
@@ -31,6 +32,7 @@ class SearchResultsGrid extends StatefulWidget {
 
 class SearchResultsGridState extends State<SearchResultsGrid> {
   late final SearchImageController _controller;
+  late final ScrollReturnController _scrollReturn;
 
   bool get isLoading => _controller.isLoading;
   bool get _isError => _controller.isError;
@@ -46,16 +48,21 @@ class SearchResultsGridState extends State<SearchResultsGrid> {
       searchQuery: widget.searchQuery,
       isMounted: () => mounted,
       notifyView: () {
-        if (mounted) setState(() {});
+        if (mounted) {
+          _scrollReturn.updateContent(_controller.images);
+          setState(() {});
+        }
       },
       showCloudflareCheck: _showCloudflareDialog,
       repository: context.read<SearchRepository>(),
     );
+    _scrollReturn = ScrollReturnController(scrollController: _scrollController);
     _controller.start();
   }
 
   @override
   void dispose() {
+    _scrollReturn.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -63,6 +70,26 @@ class SearchResultsGridState extends State<SearchResultsGrid> {
   Future<void> scrollToTop({bool animate = true}) async {
     await _controller.scrollToTop(animate: animate);
   }
+
+  Future<void> scrollFromNavigation(
+    ValueChanged<ScrollReturnDirection> onStarted,
+  ) async {
+    var started = false;
+    try {
+      await _scrollReturn.perform(
+        animate: !MediaQuery.disableAnimationsOf(context),
+        onStarted: (direction) {
+          started = true;
+          _controller.isNavbarScrolling = true;
+          onStarted(direction);
+        },
+      );
+    } finally {
+      if (started) _controller.isNavbarScrolling = false;
+    }
+  }
+
+  void cancelNavigationScroll() => _scrollReturn.cancelMovement();
 
   @override
   void didUpdateWidget(covariant SearchResultsGrid oldWidget) {
@@ -74,6 +101,7 @@ class SearchResultsGridState extends State<SearchResultsGrid> {
   }
 
   Future<void> _refreshImages() async {
+    _scrollReturn.reset();
     await _controller.refresh(
       selectedFilters: widget.selectedFilters,
       searchQuery: widget.searchQuery,
@@ -95,6 +123,7 @@ class SearchResultsGridState extends State<SearchResultsGrid> {
   }
 
   bool _handleScrollNotification(ScrollNotification notification) {
+    _scrollReturn.handleScrollNotification(notification);
     return _controller.handleScrollNotification(notification);
   }
 

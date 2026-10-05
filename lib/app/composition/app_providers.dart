@@ -10,6 +10,9 @@ import 'package:fanotifier/core/notifications/domain/local_notification_gateway.
 import 'package:fanotifier/core/timezone/data/fa_timezone_repository.dart';
 import 'package:fanotifier/core/timezone/presentation/timezone_provider.dart';
 import 'package:fanotifier/features/auth/auth_feature.dart';
+import 'package:fanotifier/features/ads/ads_feature.dart';
+import 'package:fanotifier/features/ads/domain/fa_ads_repository.dart';
+import 'package:fanotifier/features/ads/domain/fa_webview_ad_gateway.dart';
 import 'package:fanotifier/features/auth/domain/cloudflare_check_gateway.dart';
 import 'package:fanotifier/features/auth/domain/startup_cloudflare_checker.dart';
 import 'package:fanotifier/features/browse/browse_feature.dart';
@@ -198,8 +201,17 @@ class AppProviders extends StatelessWidget {
         Provider<ProfileShoutTextRepository>(
           create: (_) => ProfileFeature.createShoutTextRepository(),
         ),
+        Provider<FaAdsRepository>(
+          create: (_) => AdsFeature.createRepository(),
+          dispose: (_, repository) => repository.dispose(),
+        ),
+        Provider<FaWebViewAdGateway>(
+          create: (_) => AdsFeature.createWebViewAdGateway(),
+        ),
         Provider<BrowseRepository>(
-          create: (_) => BrowseFeature.createRepository(),
+          create: (context) => BrowseFeature.createRepository(
+            adsRepository: context.read<FaAdsRepository>(),
+          ),
         ),
         Provider<SearchRepository>(
           create: (_) => SearchFeature.createRepository(),

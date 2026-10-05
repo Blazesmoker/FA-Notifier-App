@@ -2,6 +2,9 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
+import 'package:fanotifier/features/ads/domain/fa_ads_repository.dart';
+import 'package:fanotifier/features/ads/domain/fa_webview_ad_gateway.dart';
+import 'package:fanotifier/features/ads/presentation/fa_webview_ad_controller.dart';
 import 'package:fanotifier/features/image_tools/domain/image_optimizer_models.dart';
 import 'package:fanotifier/features/image_tools/presentation/image_optimizer_launcher.dart';
 import 'package:fanotifier/features/submissions/domain/edit_submission_page_repository.dart';
@@ -52,6 +55,7 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
   );
 
   late final EditSubmissionPageRepository _repository;
+  late final FaWebViewAdController _adController;
   late final UploadFilePickerGateway _filePickerGateway;
   late final UploadWebViewScriptRepository _uploadScriptRepository;
   late final Future<void> _sessionPreparation;
@@ -70,9 +74,20 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
     super.initState();
     _repository =
         widget.repository ?? context.read<EditSubmissionPageRepository>();
+    _adController = FaWebViewAdController(
+      context: context,
+      repository: context.read<FaAdsRepository>(),
+      gateway: context.read<FaWebViewAdGateway>(),
+    );
     _filePickerGateway = context.read<UploadFilePickerGateway>();
     _uploadScriptRepository = context.read<UploadWebViewScriptRepository>();
     _sessionPreparation = _repository.prepareWebViewSession();
+  }
+
+  @override
+  void dispose() {
+    _adController.dispose();
+    super.dispose();
   }
 
   Future<void> _optimizeAndInjectImage() async {
@@ -158,7 +173,8 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
   Widget build(BuildContext context) {
     final settings = InAppWebViewSettings(
       javaScriptEnabled: true,
-      useShouldOverrideUrlLoading: false,
+      useShouldOverrideUrlLoading: true,
+      supportMultipleWindows: true,
       verticalScrollBarEnabled: true,
       horizontalScrollBarEnabled: false,
       allowFileAccess: true,
@@ -209,11 +225,17 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
               key: webViewKey,
               initialUrlRequest: URLRequest(url: WebUri(widget.initialUrl)),
               initialSettings: settings,
+              initialUserScripts: _adController.initialUserScripts,
               contextMenu: _buildContextMenu(),
               onWebViewCreated: (controller) {
                 _webViewController = controller;
+                _adController.attach(controller);
+              },
+              onLoadStart: (controller, uri) {
+                _adController.documentStarted(uri);
               },
               onLoadStop: (controller, uri) async {
+                await _adController.documentLoaded(controller, uri);
                 if (uri != null &&
                     _repository.isSubmissionViewUrl(uri.toString())) {
                   await Future.delayed(const Duration(milliseconds: 50));
@@ -221,6 +243,12 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
                   return;
                 }
                 await _injectCustomCssAndJs();
+              },
+              onCreateWindow: _adController.onCreateWindow,
+              shouldOverrideUrlLoading: (controller, navigationAction) async {
+                return _adController.interceptNavigation(navigationAction)
+                    ? NavigationActionPolicy.CANCEL
+                    : NavigationActionPolicy.ALLOW;
               },
             );
           },

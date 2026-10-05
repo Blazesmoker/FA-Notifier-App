@@ -19,6 +19,7 @@ import 'package:fanotifier/features/notes/presentation/notes_sent_tab.dart';
 import 'package:fanotifier/features/notes/presentation/notes_screen_controller.dart';
 import 'package:fanotifier/features/notes/presentation/trash_screen.dart';
 import 'package:fanotifier/features/notes/presentation/notes_selection_controls.dart';
+import 'package:fanotifier/shared/widgets/scroll_return_controller.dart';
 
 enum _NotesMenuAction {
   trash,
@@ -47,11 +48,13 @@ class _NotesActionCopy {
 class NotesScreen extends StatefulWidget {
   final GlobalKey<HomeDrawerShellState> drawerKey;
   final NotesRepository Function() repositoryFactory;
+  final ScrollReturnActionPort? scrollActionPort;
 
   const NotesScreen({
     super.key,
     required this.drawerKey,
     required this.repositoryFactory,
+    this.scrollActionPort,
   });
 
   @override
@@ -77,6 +80,8 @@ class NotesScreenState extends State<NotesScreen>
 
   final ScrollController _inboxScrollController = ScrollController();
   final ScrollController _sentScrollController = ScrollController();
+  late final ScrollReturnController _inboxScrollReturn;
+  late final ScrollReturnController _sentScrollReturn;
 
   bool _isDraggingFromEdge = false;
   int _prevTabIndex = 0;
@@ -99,11 +104,19 @@ class NotesScreenState extends State<NotesScreen>
   @override
   void initState() {
     super.initState();
+    _inboxScrollReturn = ScrollReturnController(scrollController: _inboxScrollController);
+    _sentScrollReturn = ScrollReturnController(scrollController: _sentScrollController);
+    widget.scrollActionPort?.bind(_scrollFromNavigation, _cancelNavigationScroll);
     WidgetsBinding.instance.addObserver(this);
 
     _notesController = NotesScreenController(
       repository: widget.repositoryFactory(),
-      updateState: (update) => setState(update),
+      updateState: (update) {
+        if (!mounted) return;
+        setState(update);
+        _inboxScrollReturn.updateContent(inboxMessages.map((message) => message.id));
+        _sentScrollReturn.updateContent(sentMessages.map((message) => message.id));
+      },
     );
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
@@ -130,6 +143,9 @@ class NotesScreenState extends State<NotesScreen>
 
   void _onTabChanged() {
     if (!mounted) return;
+    if (_tabController.index != _prevTabIndex) {
+      (_prevTabIndex == 0 ? _inboxScrollReturn : _sentScrollReturn).cancelMovement();
+    }
     if (_tabController.index == 1) {
       _ensureSentLoaded();
     }
@@ -144,12 +160,14 @@ class NotesScreenState extends State<NotesScreen>
   }
 
   Future<void> _refreshSentIfVisibleOrMarkStale() async {
+    _sentScrollReturn.reset();
     await _notesController.refreshSentIfVisibleOrMarkStale(
       sentVisible: _tabController.index == 1,
     );
   }
 
   Future<void> _ensureSentLoaded({bool force = false}) async {
+    if (force) _sentScrollReturn.reset();
     await _notesController.ensureSentLoaded(force: force);
   }
 
@@ -284,7 +302,19 @@ class NotesScreenState extends State<NotesScreen>
   }
 
   @override
+  void didUpdateWidget(covariant NotesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.scrollActionPort != widget.scrollActionPort) {
+      oldWidget.scrollActionPort?.unbind(_scrollFromNavigation);
+      widget.scrollActionPort?.bind(_scrollFromNavigation, _cancelNavigationScroll);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.scrollActionPort?.unbind(_scrollFromNavigation);
+    _inboxScrollReturn.dispose();
+    _sentScrollReturn.dispose();
     _tabController.removeListener(_onTabChanged);
     WidgetsBinding.instance.removeObserver(this);
     routeObserver.unsubscribe(this);
@@ -312,6 +342,24 @@ class NotesScreenState extends State<NotesScreen>
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
     );
+  }
+
+  Future<void> _scrollFromNavigation(
+    ValueChanged<ScrollReturnDirection> onStarted,
+  ) async {
+    if (_tabController.indexIsChanging || _tabController.offset.abs() > 0.001) return;
+    final scrollReturn = _tabController.index == 0
+        ? _inboxScrollReturn
+        : _sentScrollReturn;
+    await scrollReturn.perform(
+      onStarted: onStarted,
+      animate: !MediaQuery.disableAnimationsOf(context),
+    );
+  }
+
+  void _cancelNavigationScroll() {
+    _inboxScrollReturn.cancelMovement();
+    _sentScrollReturn.cancelMovement();
   }
 
   @override
@@ -361,6 +409,7 @@ class NotesScreenState extends State<NotesScreen>
 
   Future<void> _initInboxAndSent() async {
     _inboxScrollController.addListener(() {
+      if (_inboxScrollReturn.isBusy || !_inboxScrollController.hasClients) return;
       if (_inboxScrollController.position.pixels ==
               _inboxScrollController.position.maxScrollExtent &&
           !_notesController.isFetchingMoreInbox &&
@@ -370,6 +419,7 @@ class NotesScreenState extends State<NotesScreen>
     });
 
     _sentScrollController.addListener(() {
+      if (_sentScrollReturn.isBusy || !_sentScrollController.hasClients) return;
       if (_sentScrollController.position.pixels ==
               _sentScrollController.position.maxScrollExtent &&
           !_notesController.isFetchingMoreSent &&
@@ -382,6 +432,7 @@ class NotesScreenState extends State<NotesScreen>
   }
 
   Future<void> _fetchInboxTwoPagesOnly() async {
+    _inboxScrollReturn.reset();
     await _notesController.fetchInboxTwoPagesOnly();
   }
 
@@ -390,6 +441,7 @@ class NotesScreenState extends State<NotesScreen>
     bool clearOld = false,
     bool suppressNewUnreadNotifications = false,
   }) async {
+    if (page == 1) _inboxScrollReturn.reset();
     await _notesController.fetchInbox(
       page: page,
       clearOld: clearOld,
@@ -398,14 +450,17 @@ class NotesScreenState extends State<NotesScreen>
   }
 
   Future<void> _loadMoreInbox() async {
+    if (_inboxScrollReturn.isBusy) return;
     await _notesController.loadMoreInbox();
   }
 
   Future<void> _fetchSent({int page = 1, bool clearOld = false}) async {
+    if (page == 1) _sentScrollReturn.reset();
     await _notesController.fetchSent(page: page, clearOld: clearOld);
   }
 
   Future<void> _loadMoreSent() async {
+    if (_sentScrollReturn.isBusy) return;
     await _notesController.loadMoreSent();
   }
 
@@ -643,6 +698,7 @@ class NotesScreenState extends State<NotesScreen>
       key: const Key('notes_screen_visibility'),
       onVisibilityChanged: (info) {
         _isVisibleInHomeStack = info.visibleFraction > 0.01;
+        if (!_isVisibleInHomeStack) _cancelNavigationScroll();
         _notesController.setScreenVisible(_isVisibleInHomeStack);
       },
       child: _buildNotesScaffold(context),
@@ -723,10 +779,17 @@ class NotesScreenState extends State<NotesScreen>
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 0.0),
-                  child: NotificationListener<OverscrollNotification>(
-                    onNotification: (OverscrollNotification notification) {
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (ScrollNotification notification) {
                       final tabIndex = _tabController.index;
-                      if (tabIndex == 0 &&
+                      if (notification.metrics.axis == Axis.horizontal &&
+                          notification is ScrollStartNotification &&
+                          notification.dragDetails != null) {
+                        _cancelNavigationScroll();
+                      }
+                      (tabIndex == 0 ? _inboxScrollReturn : _sentScrollReturn)
+                          .handleScrollNotification(notification);
+                      if (notification is OverscrollNotification && tabIndex == 0 &&
                           notification.metrics.axis == Axis.horizontal &&
                           notification.overscroll < 0) {
                         widget.drawerKey.currentState?.openDrawer();

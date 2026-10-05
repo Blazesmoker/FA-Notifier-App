@@ -1,11 +1,18 @@
+import 'package:fanotifier/features/browse/domain/browse_page_data.dart';
+
 abstract interface class BrowseRepository {
-  Future<List<Map<String, dynamic>>> fetchImages({
+  Future<BrowsePageData> fetchImages({
     required int pageNumber,
     required Map<String, String> selectedFilters,
     required bool sfwEnabled,
+    bool Function()? isCancelled,
   });
 
-  Future<List<Map<String, dynamic>>> parseRecoveredHtml(String html);
+  Future<BrowsePageData> parseRecoveredHtml(
+    String html, {
+    required Uri documentUri,
+    required bool effectiveSfwEnabled,
+  });
 
   Future<String> buildCookieHeader({
     required Map<String, String> selectedFilters,

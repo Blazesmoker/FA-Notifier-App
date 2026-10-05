@@ -65,6 +65,9 @@ class SubmissionSelectionTile extends StatelessWidget {
                     FaThumbnailOutline(
                       rating: submission.rating,
                       borderRadius: 10,
+                      outlineBorderRadius: showDetails
+                          ? const BorderRadius.vertical(top: Radius.circular(10))
+                          : null,
                       child: SizedBox.expand(
                         child: FaNetworkImage(
                           submission.thumbnailUri.toString(),

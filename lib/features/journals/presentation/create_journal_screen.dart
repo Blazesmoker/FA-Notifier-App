@@ -4,6 +4,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 
+import 'package:fanotifier/features/ads/domain/fa_ads_repository.dart';
+import 'package:fanotifier/features/ads/domain/fa_webview_ad_gateway.dart';
+import 'package:fanotifier/features/ads/presentation/fa_webview_ad_controller.dart';
 import 'package:fanotifier/features/journals/domain/create_journal_repository.dart';
 import 'package:fanotifier/shared/widgets/tags_and_codes_webview_widget.dart';
 import 'package:fanotifier/features/journals/presentation/journal_details_screen.dart';
@@ -28,6 +31,7 @@ class CreateJournalScreen extends StatefulWidget {
 class _CreateJournalScreenState extends State<CreateJournalScreen>
     with AutomaticKeepAliveClientMixin {
   late final CreateJournalRepository _createJournalRepository;
+  late final FaWebViewAdController _adController;
   late final String initialUrl;
 
   InAppWebViewController? _webViewController;
@@ -49,6 +53,11 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     super.initState();
     _createJournalRepository =
         widget.repository ?? context.read<CreateJournalRepository>();
+    _adController = FaWebViewAdController(
+      context: context,
+      repository: context.read<FaAdsRepository>(),
+      gateway: context.read<FaWebViewAdGateway>(),
+    );
     initialUrl = _createJournalRepository.buildInitialUrl(widget.journalId);
     _handledCurrentJournal = false;
   }
@@ -109,6 +118,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
   @override
   void dispose() {
     _timer?.cancel();
+    _adController.dispose();
     super.dispose();
   }
 
@@ -180,7 +190,8 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
     super.build(context);
     final settings = InAppWebViewSettings(
       javaScriptEnabled: true,
-      useShouldOverrideUrlLoading: false,
+      useShouldOverrideUrlLoading: true,
+      supportMultipleWindows: true,
       verticalScrollBarEnabled: true,
       horizontalScrollBarEnabled: false,
     );
@@ -204,13 +215,16 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
               key: webViewKey,
               initialUrlRequest: URLRequest(url: WebUri(initialUrl)),
               initialSettings: settings,
+              initialUserScripts: _adController.initialUserScripts,
               contextMenu: _buildContextMenu(),
               onWebViewCreated: (controller) async {
                 _webViewController = controller;
+                _adController.attach(controller);
                 await _createJournalRepository.prepareWebViewSession();
               },
               onLoadStart: (controller, uri) async {
                 _webViewController = controller;
+                _adController.documentStarted(uri);
                 debugPrint("Page started loading: $uri");
                 if (uri != null &&
                     _createJournalRepository.shouldInjectEditorAssets(
@@ -222,6 +236,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
                 }
               },
               onLoadStop: (controller, uri) async {
+                await _adController.documentLoaded(controller, uri);
                 debugPrint("Page finished loading: $uri");
 
                 if (uri != null &&
@@ -234,6 +249,12 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
 
                 await _handlePossibleJournalSuccess(uri?.toString());
                 await _detectJournalViaDom(uri?.toString());
+              },
+              onCreateWindow: _adController.onCreateWindow,
+              shouldOverrideUrlLoading: (controller, navigationAction) async {
+                return _adController.interceptNavigation(navigationAction)
+                    ? NavigationActionPolicy.CANCEL
+                    : NavigationActionPolicy.ALLOW;
               },
               onUpdateVisitedHistory: (controller, uri, androidIsReload) async {
                 if (uri != null) {

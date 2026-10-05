@@ -13,6 +13,7 @@ import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:fanotifier/shared/widgets/fa_unavailable_screen.dart';
 import 'package:fanotifier/shared/widgets/dashed_loading_indicator.dart';
 import 'package:fanotifier/shared/widgets/success_burst_animation.dart';
+import 'package:fanotifier/shared/widgets/scroll_return_controller.dart';
 
 enum _SubmissionsAppBarAction {
   none,
@@ -25,9 +26,11 @@ class SubmissionsScreen extends StatefulWidget {
   const SubmissionsScreen({
     super.key,
     required this.isActive,
+    this.scrollActionPort,
   });
 
   final bool isActive;
+  final ScrollReturnActionPort? scrollActionPort;
 
   @override
   State<SubmissionsScreen> createState() => SubmissionsScreenState();
@@ -38,6 +41,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   late final SubmissionsController _controller;
   late final FaActivitiesPollingPort _activitiesPollingPort;
   final ScrollController _scrollController = ScrollController();
+  late final ScrollReturnController _scrollReturn;
   bool _isScreenVisible = false;
   _SubmissionsAppBarAction _processingAppBarAction =
       _SubmissionsAppBarAction.none;
@@ -61,6 +65,8 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   @override
   void initState() {
     super.initState();
+    _scrollReturn = ScrollReturnController(scrollController: _scrollController);
+    widget.scrollActionPort?.bind(_scrollFromNavigation, _scrollReturn.cancelMovement);
     _activitiesPollingPort = context.read<FaActivitiesPollingPort>();
     _controller = SubmissionsController(
       repository: context.read<SubmissionsRepository>(),
@@ -73,6 +79,11 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   @override
   void didUpdateWidget(covariant SubmissionsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.scrollActionPort != widget.scrollActionPort) {
+      oldWidget.scrollActionPort?.unbind(_scrollFromNavigation);
+      widget.scrollActionPort?.bind(_scrollFromNavigation, _scrollReturn.cancelMovement);
+    }
+    if (!widget.isActive) _scrollReturn.cancelMovement();
     if (oldWidget.isActive != widget.isActive) {
       _updateDetailFetchActivity();
     }
@@ -80,6 +91,8 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
 
   @override
   void dispose() {
+    widget.scrollActionPort?.unbind(_scrollFromNavigation);
+    _scrollReturn.dispose();
     _scrollController.removeListener(_scrollListenerForPagination);
     _scrollController.dispose();
     _controller.removeListener(_handleControllerChanged);
@@ -90,6 +103,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
 
   void _handleControllerChanged() {
     if (mounted) {
+      _scrollReturn.updateContent(_flatSubmissionsList);
       setState(() {});
     }
   }
@@ -107,6 +121,16 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     );
   }
 
+  Future<void> _scrollFromNavigation(
+    ValueChanged<ScrollReturnDirection> onStarted,
+  ) async {
+    if (!widget.isActive) return;
+    await _scrollReturn.perform(
+      onStarted: onStarted,
+      animate: !MediaQuery.disableAnimationsOf(context),
+    );
+  }
+
   void _onWillPop() {
     if (_selectionMode) {
       _controller.exitSelectionMode();
@@ -114,6 +138,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   }
 
   void _scrollListenerForPagination() {
+    if (_scrollReturn.isBusy || !_scrollController.hasClients) return;
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent * 0.9 &&
         !_isLoading &&
@@ -125,6 +150,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   Future<void> refreshSubmissionsManually() => _refreshSubmissions();
 
   Future<void> _refreshSubmissions() {
+    _scrollReturn.reset();
     return _controller.refresh(
       onListingApplied: _scheduleThumbnailPrecache,
     );
@@ -386,6 +412,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       key: const Key('submissions_screen_visibility'),
       onVisibilityChanged: (info) {
         final isVisible = info.visibleFraction > 0.01;
+        if (!isVisible) _scrollReturn.cancelMovement();
         _isScreenVisible = isVisible;
         _updateDetailFetchActivity();
         _activitiesPollingPort
@@ -445,7 +472,13 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
             color: const Color(0xFFE09321),
             backgroundColor: Colors.black,
             onRefresh: _refreshSubmissions,
-            child: _buildRefreshableBody(),
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                _scrollReturn.handleScrollNotification(notification);
+                return false;
+              },
+              child: _buildRefreshableBody(),
+            ),
           ),
         ),
       ),

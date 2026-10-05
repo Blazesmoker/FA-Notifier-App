@@ -284,6 +284,8 @@ class UserProfileScreenState extends State<UserProfileScreen>
       <ProfileSection, double>{};
 
   int _previousIndex = 0;
+  int _galleryRefreshRevision = 0;
+  int _scrapsRefreshRevision = 0;
 
   late final UserProfileShoutsController _shoutsController;
   ValueListenable<bool> get _isLoadingMoreShouts => _shoutsController.isLoadingMore;
@@ -1751,7 +1753,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     if (!_tabLoadingController.isLoaded(section)) {
       return Builder(
         builder: (context) {
-          return CustomScrollView(
+          return ProfileTabScrollViewport.scrollView(
             slivers: [
               SliverOverlapInjector(
                 handle:
@@ -1949,6 +1951,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
       initialFolderUrl: widget.initialFolderUrl,
       isOwnProfile: _profileController.isOwnProfile,
       detailFetchesActive: _galleryDetailFetchesActive,
+      refreshRevision: _galleryRefreshRevision,
+      onSubmissionsChanged: () {
+        if (mounted) setState(() => _scrapsRefreshRevision++);
+      },
     );
   }
 
@@ -1957,6 +1963,10 @@ class UserProfileScreenState extends State<UserProfileScreen>
     return UserProfileScrapsSection(
       sanitizedUsername: _profileController.sanitizedUsername,
       isOwnProfile: _profileController.isOwnProfile,
+      refreshRevision: _scrapsRefreshRevision,
+      onMovedToGallery: () {
+        if (mounted) setState(() => _galleryRefreshRevision++);
+      },
       onSelectionLayoutChanged: (active, barHeight) {
         _onBulkSelectionLayoutChanged(
           ProfileSection.scraps,
@@ -1984,7 +1994,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   void _refreshJournalsList() {
     final journalsState = _journalsKey.currentState;
     if (journalsState == null) return;
-    unawaited(journalsState.refreshJournals());
+    unawaited(journalsState.refreshJournals(force: true));
   }
 
   /// Builds the Journals section content.

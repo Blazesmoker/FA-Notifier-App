@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +8,7 @@ import 'package:fanotifier/features/profile/domain/fa_folder.dart';
 import 'package:fanotifier/features/profile/domain/profile_gallery_repository.dart';
 import 'package:fanotifier/features/profile/domain/profile_folder_selection_resolver.dart';
 import 'package:fanotifier/features/profile/presentation/profile_gallery_sliver.dart';
+import 'package:fanotifier/features/profile/presentation/profile_tab_scroll_scope.dart';
 import 'package:fanotifier/features/submissions/presentation/manage_submissions_screen.dart';
 
 class UserProfileGallerySection extends StatefulWidget {
@@ -17,6 +20,8 @@ class UserProfileGallerySection extends StatefulWidget {
     required this.initialFolderUrl,
     required this.isOwnProfile,
     required this.detailFetchesActive,
+    required this.onSubmissionsChanged,
+    this.refreshRevision = 0,
   });
 
   final String nickname;
@@ -25,6 +30,8 @@ class UserProfileGallerySection extends StatefulWidget {
   final String? initialFolderUrl;
   final bool isOwnProfile;
   final ValueListenable<bool> detailFetchesActive;
+  final VoidCallback onSubmissionsChanged;
+  final int refreshRevision;
 
   @override
   State<UserProfileGallerySection> createState() =>
@@ -67,7 +74,10 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
     }
     if (oldWidget.sanitizedUsername != widget.sanitizedUsername ||
         oldWidget.initialFolderName != widget.initialFolderName ||
-        oldWidget.initialFolderUrl != widget.initialFolderUrl) {
+        !areFaFolderUrlsEquivalent(
+          oldWidget.initialFolderUrl ?? '',
+          widget.initialFolderUrl ?? '',
+        )) {
       _selectedFolderName = widget.initialFolderName ?? 'Main Gallery';
       _selectedFolderUrl = widget.initialFolderUrl ?? '';
       _allFolders = <FaFolder>[];
@@ -87,10 +97,20 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
         widget.detailFetchesActive.value && !_manageSubmissionsOpen;
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh({bool force = false}) async {
     final galleryState = _galleryKey.currentState;
     if (galleryState == null) return;
-    await galleryState.refresh();
+    await galleryState.refresh(force: force);
+  }
+
+  void _refreshIfNeeded() {
+    final galleryState = _galleryKey.currentState;
+    if (galleryState != null) unawaited(galleryState.refreshIfNeeded());
+  }
+
+  void _loadMore() {
+    final galleryState = _galleryKey.currentState;
+    if (galleryState != null) unawaited(galleryState.loadMore());
   }
 
   Future<void> _openManageSubmissions() async {
@@ -98,9 +118,11 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
     _manageSubmissionsOpen = true;
     _updateDetailFetchActivity();
     try {
-      await Navigator.of(context).push(ManageSubmissionsScreen.route());
-      if (!mounted) return;
-      await _refresh();
+      final changed = await Navigator.of(context)
+          .push<bool>(ManageSubmissionsScreen.route());
+      if (!mounted || changed != true) return;
+      widget.onSubmissionsChanged();
+      await _refresh(force: true);
     } finally {
       if (mounted) {
         _manageSubmissionsOpen = false;
@@ -164,8 +186,10 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
           edgeOffset: 30.0,
           displacement: 85.0,
           onRefresh: _refresh,
-          child: CustomScrollView(
-            key: const PageStorageKey<String>('profile-gallery-scroll'),
+          child: ProfileTabScrollViewport.scrollView(
+            storageKey: const PageStorageKey<String>('profile-gallery-scroll'),
+            onActivated: _refreshIfNeeded,
+            onLoadMore: _loadMore,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
           SliverOverlapInjector(
@@ -241,6 +265,7 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
             selectedFolderUrl: galleryUrl,
             onFoldersParsed: _onFoldersParsed,
             detailFetchesActive: _effectiveDetailFetchesActive,
+            refreshRevision: widget.refreshRevision,
           ),
             ],
           ),

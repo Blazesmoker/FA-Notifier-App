@@ -41,6 +41,30 @@ Future<void> handleFALink(
   await navigator.open(context, target, fullUrlToMatch);
 }
 
+enum FaAdLinkDisposition { internal, external, failed }
+
+Future<FaAdLinkDisposition> handleFAAdDestination(
+  BuildContext context,
+  Uri serverDestination,
+) async {
+  if ((serverDestination.scheme != 'https' && serverDestination.scheme != 'http') ||
+      serverDestination.host.isEmpty || serverDestination.userInfo.isNotEmpty) {
+    return FaAdLinkDisposition.failed;
+  }
+  final destination = _externalUrlDestination(serverDestination) ?? serverDestination;
+  if (destination.userInfo.isNotEmpty) return FaAdLinkDisposition.failed;
+  final target = matchFALink(destination.toString());
+  if (target.type != FALinkTargetType.external) {
+    await Provider.of<FaLinkNavigator>(context, listen: false)
+        .open(context, target, destination.toString());
+    return FaAdLinkDisposition.internal;
+  }
+  final opened = await launchUrlString(
+    destination.toString(), mode: LaunchMode.externalApplication,
+  );
+  return opened ? FaAdLinkDisposition.external : FaAdLinkDisposition.failed;
+}
+
 Future<void> handleExternalLink(
   BuildContext context,
   String url,

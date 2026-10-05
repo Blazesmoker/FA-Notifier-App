@@ -41,7 +41,6 @@ class SearchImageController {
   final List<Map<String, dynamic>> images = [];
   final List<List<Map<String, dynamic>>> imageRows = [];
   List<Map<String, dynamic>> normalImagesQueue = [];
-  final Set<String> imageUrls = <String>{};
   final ScrollController scrollController = ScrollController();
 
   bool _sfwEnabled = true;
@@ -50,6 +49,7 @@ class SearchImageController {
   double _nextPageTriggerOffset = double.infinity;
   bool _pendingNextPageFetch = false;
   bool _isNextPageFetchQueued = false;
+  bool isNavbarScrolling = false;
 
   void start() {
     _sfwLoadFuture = _loadSfwEnabled();
@@ -87,7 +87,6 @@ class SearchImageController {
     _selectedFilters = selectedFilters;
     _searchQuery = searchQuery;
     images.clear();
-    imageUrls.clear();
     imageRows.clear();
     normalImagesQueue.clear();
     currentPage = 1;
@@ -113,20 +112,12 @@ class SearchImageController {
     List<Map<String, dynamic>> newImages, {
     required double previousMaxScrollExtent,
   }) async {
-    final filteredImages =
-        newImages.where((image) => !imageUrls.contains(image['url'])).toList();
-
     kDebugPrint(
-      '[Search] Parsed ${newImages.length} thumbnails, '
-      'appending ${filteredImages.length} new ones.',
+      '[Search] Appending all ${newImages.length} parsed thumbnails.',
     );
 
-    for (final image in filteredImages) {
-      imageUrls.add(image['url']);
-    }
-
     final rowProcessing = await processFaImageRows(
-      newImages: filteredImages,
+      newImages: newImages,
       normalImagesQueue: normalImagesQueue,
     );
     final appendedRows = (rowProcessing['rows'] as List)
@@ -139,8 +130,8 @@ class SearchImageController {
 
     if (!_isMounted()) return;
 
-    hasMore = newImages.isNotEmpty && filteredImages.isNotEmpty;
-    images.addAll(filteredImages);
+    hasMore = newImages.isNotEmpty;
+    images.addAll(newImages);
     imageRows.addAll(appendedRows);
     normalImagesQueue = nextQueue;
     _pendingNextPageFetch = false;
@@ -174,7 +165,6 @@ class SearchImageController {
     try {
       if (isRefresh) {
         images.clear();
-        imageUrls.clear();
         imageRows.clear();
         normalImagesQueue.clear();
         currentPage = 1;
@@ -265,7 +255,7 @@ class SearchImageController {
   }
 
   void _scrollListener() {
-    if (!scrollController.hasClients ||
+    if (isNavbarScrolling || !scrollController.hasClients ||
         isLoading ||
         _isNextPageFetchQueued ||
         !hasMore ||
@@ -282,7 +272,7 @@ class SearchImageController {
   }
 
   bool handleScrollNotification(ScrollNotification notification) {
-    if (notification.metrics.axis != Axis.vertical) return false;
+    if (isNavbarScrolling || notification.metrics.axis != Axis.vertical) return false;
 
     if (!_isMounted() ||
         isLoading ||
@@ -301,7 +291,7 @@ class SearchImageController {
   }
 
   void _tryStartPendingNextPageFetch() {
-    if (!_pendingNextPageFetch ||
+    if (isNavbarScrolling || !_pendingNextPageFetch ||
         !scrollController.hasClients ||
         isLoading ||
         _isNextPageFetchQueued ||

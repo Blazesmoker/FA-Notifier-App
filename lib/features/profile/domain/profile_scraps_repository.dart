@@ -3,7 +3,10 @@ import 'package:fanotifier/features/profile/domain/profile_posts_parse_result.da
 abstract interface class ProfileScrapsRepository {
   String buildInitialScrapsPageUrl(String username);
 
-  Future<ProfilePostsParseResult> fetchScrapsPage(String url);
+  Future<ProfilePostsParseResult> fetchScrapsPage(
+    String url, {
+    bool Function()? isCancelled,
+  });
 
   Future<String> buildCookieHeader();
 }

@@ -73,30 +73,31 @@ String buildUploadFileInputScript({
 String buildUploadFilePickerHandlerScript() {
   return '''
     (function() {
-      var input = document.querySelector('input[name="submission"]');
-      if (!input) return;
-      
-      var originalClick = input.onclick;
-      input.onclick = null;
-      
-      input.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        window.flutter_inappwebview.callHandler('selectFile');
-        return false;
-      }, true);
-      
-      var dragDrop = document.querySelector('#submissionFileDragDropArea');
-      if (dragDrop) {
-        dragDrop.addEventListener('click', function(e) {
-          if (e.target.tagName !== 'INPUT') {
-            e.preventDefault();
-            e.stopPropagation();
-            window.flutter_inappwebview.callHandler('selectFile');
-            return false;
+      if (window.__faUploadFilePickerHandlerInstalled) return;
+      window.__faUploadFilePickerHandlerInstalled = true;
+
+      document.addEventListener('click', function(e) {
+        var target = e.target;
+        if (!target || typeof target.closest !== 'function') return;
+
+        var input = target.closest('input[type="file"][name="submission"], input[type="file"][name="thumbnail"]');
+        if (!input) {
+          var label = target.closest('label[for="submissionFileInput"], label[for="thumbnailFileInput"]');
+          if (label) input = document.getElementById(label.htmlFor);
+        }
+        if (!input) {
+          var dragDrop = target.closest('#submissionFileDragDropArea, #thumbnailFileDragDropArea');
+          if (dragDrop) {
+            var inputName = dragDrop.id === 'submissionFileDragDropArea' ? 'submission' : 'thumbnail';
+            input = document.querySelector('input[type="file"][name="' + inputName + '"]');
           }
-        }, true);
-      }
+        }
+        if (!input || input.type !== 'file' || (input.name !== 'submission' && input.name !== 'thumbnail')) return;
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        window.flutter_inappwebview.callHandler('selectFile', input.name);
+      }, true);
     })();
   ''';
 }

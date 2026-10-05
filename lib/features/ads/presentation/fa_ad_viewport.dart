@@ -1,0 +1,146 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
+
+typedef FaAdGeometryReader = FaAdViewportGeometry? Function();
+
+class FaAdViewportGeometry {
+  const FaAdViewportGeometry({
+    required this.bounds,
+    required this.viewport,
+    required this.atStart,
+    required this.isIntersecting,
+    required this.intersectionRatio,
+  });
+
+  final Rect bounds;
+  final Rect viewport;
+  final bool atStart;
+  final bool isIntersecting;
+  final double intersectionRatio;
+}
+
+class FaAdViewport extends StatefulWidget {
+  const FaAdViewport({
+    required this.viewportKey,
+    required this.scrollController,
+    required this.active,
+    required this.onVisibility,
+    required this.child,
+    this.onGeometryReader,
+    this.onLayoutChanged,
+    this.geometryPadding = EdgeInsets.zero,
+    super.key,
+  });
+
+  final GlobalKey viewportKey;
+  final ScrollController scrollController;
+  final ValueListenable<bool> active;
+  final void Function(bool visible, double ratio) onVisibility;
+  final Widget child;
+  final void Function(FaAdGeometryReader reader, bool attached)? onGeometryReader;
+  final VoidCallback? onLayoutChanged;
+  final EdgeInsets geometryPadding;
+
+  @override
+  State<FaAdViewport> createState() => _FaAdViewportState();
+}
+
+class _FaAdViewportState extends State<FaAdViewport> {
+  final GlobalKey _boundsKey = GlobalKey();
+  late final FaAdGeometryReader _geometryReader = _readGeometry;
+  bool _scheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.scrollController.addListener(_schedule);
+    widget.active.addListener(_schedule);
+    widget.onGeometryReader?.call(_geometryReader, true);
+    _schedule();
+  }
+
+  @override
+  void didUpdateWidget(covariant FaAdViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.scrollController != widget.scrollController) {
+      oldWidget.scrollController.removeListener(_schedule);
+      widget.scrollController.addListener(_schedule);
+    }
+    if (oldWidget.active != widget.active) {
+      oldWidget.active.removeListener(_schedule);
+      widget.active.addListener(_schedule);
+    }
+    oldWidget.onGeometryReader?.call(_geometryReader, false);
+    widget.onGeometryReader?.call(_geometryReader, true);
+    _schedule();
+  }
+
+  FaAdViewportGeometry? _readGeometry() {
+    if (!mounted || !widget.active.value || !widget.scrollController.hasClients) {
+      return null;
+    }
+    final target = _boundsKey.currentContext?.findRenderObject();
+    final viewport = widget.viewportKey.currentContext?.findRenderObject();
+    if (target is! RenderBox || viewport is! RenderBox ||
+        !target.attached || !viewport.attached ||
+        !target.hasSize || !viewport.hasSize) {
+      return null;
+    }
+    final bounds = target.localToGlobal(Offset.zero) & target.size;
+    final view = viewport.localToGlobal(Offset.zero) & viewport.size;
+    final padding = widget.geometryPadding;
+    final position = widget.scrollController.position;
+    final intersection = bounds.intersect(view);
+    final visible = bounds.width > 0 && bounds.height > 0 &&
+        intersection.width >= 0 && intersection.height >= 0;
+    final ratio = visible
+        ? (intersection.width * intersection.height / (bounds.width * bounds.height))
+            .clamp(0.0, 1.0).toDouble()
+        : 0.0;
+    return FaAdViewportGeometry(
+      bounds: Rect.fromLTRB(
+        bounds.left - padding.left, bounds.top - padding.top,
+        bounds.right + padding.right, bounds.bottom + padding.bottom,
+      ),
+      viewport: view,
+      atStart: (position.pixels - position.minScrollExtent).abs() <= 0.5,
+      isIntersecting: visible,
+      intersectionRatio: ratio,
+    );
+  }
+
+  void _schedule() {
+    if (_scheduled) return;
+    _scheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduled = false;
+      final geometry = _readGeometry();
+      if (geometry == null) return;
+      widget.onVisibility(geometry.isIntersecting, geometry.intersectionRatio);
+    });
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  @override
+  void dispose() {
+    widget.scrollController.removeListener(_schedule);
+    widget.active.removeListener(_schedule);
+    widget.onGeometryReader?.call(_geometryReader, false);
+    widget.onVisibility(false, 0);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      NotificationListener<SizeChangedLayoutNotification>(
+        onNotification: (_) {
+          widget.onLayoutChanged?.call();
+          _schedule();
+          return false;
+        },
+        child: SizeChangedLayoutNotifier(
+          child: SizedBox(key: _boundsKey, child: widget.child),
+        ),
+      );
+}

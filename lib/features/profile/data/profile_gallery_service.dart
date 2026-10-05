@@ -52,11 +52,13 @@ class ProfileGalleryService implements ProfileGalleryRepository {
   Future<ProfileGalleryPageData> fetchGalleryPage({
     required String url,
     String? selectedFolderUrl,
+    bool Function()? isCancelled,
   }) async {
     debugPrint("Fetching URL: $url");
     final cookieHeader = await _buildCookieHeader();
     final response = await FAHttp.get(
       Uri.parse(url),
+      isCancelled: isCancelled,
       headers: {
         'Cookie': cookieHeader,
         'User-Agent': FAHttp.userAgent,

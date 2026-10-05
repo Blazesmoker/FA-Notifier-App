@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:fanotifier/features/profile/presentation/profile_bulk_selection_bar.dart';
 import 'package:fanotifier/features/profile/presentation/profile_favorites_sliver.dart';
+import 'package:fanotifier/features/profile/presentation/profile_tab_scroll_scope.dart';
 
 class UserProfileFavoritesSection extends StatefulWidget {
   const UserProfileFavoritesSection({
@@ -55,10 +58,20 @@ class _UserProfileFavoritesSectionState
     super.dispose();
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh({bool force = false}) async {
     final favsState = _favsKey.currentState;
     if (favsState == null) return;
-    await favsState.refresh();
+    await favsState.refresh(force: force);
+  }
+
+  void _refreshIfNeeded() {
+    final favsState = _favsKey.currentState;
+    if (favsState != null) unawaited(favsState.refreshIfNeeded());
+  }
+
+  void _loadMore() {
+    final favsState = _favsKey.currentState;
+    if (favsState != null) unawaited(favsState.loadMore());
   }
 
   void _toggleSelectionMode() {
@@ -134,7 +147,7 @@ class _UserProfileFavoritesSectionState
       });
       _selectedCount.value = 0;
       widget.onSelectionLayoutChanged(false, 0);
-      await _refresh();
+      await _refresh(force: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -162,6 +175,15 @@ class _UserProfileFavoritesSectionState
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    const iconSpacing = 16.0;
+    final headerIconStyle = IconButton.styleFrom(
+      padding: const EdgeInsets.symmetric(
+        horizontal: iconSpacing / 2,
+        vertical: 8,
+      ),
+      minimumSize: const Size(0, 48),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
     if (_selectionMode) _scheduleSelectionLayoutReport();
     return Stack(
       children: [
@@ -173,8 +195,11 @@ class _UserProfileFavoritesSectionState
             edgeOffset: 30.0,
             displacement: 70.0,
             onRefresh: _selectionMode ? () async {} : _refresh,
-            child: CustomScrollView(
-              key: const PageStorageKey<String>('profile-favorites-scroll'),
+            child: ProfileTabScrollViewport.scrollView(
+              storageKey:
+                  const PageStorageKey<String>('profile-favorites-scroll'),
+              onActivated: _refreshIfNeeded,
+              onLoadMore: _loadMore,
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverOverlapInjector(
@@ -199,10 +224,13 @@ class _UserProfileFavoritesSectionState
                           ),
                         ),
                         if (widget.isOwnProfile)
+                          const SizedBox(width: iconSpacing / 2),
+                        if (widget.isOwnProfile)
                           IconButton(
                             key: const ValueKey(
                               'profile-favs-selection-button',
                             ),
+                            style: headerIconStyle,
                             tooltip: _selectionMode
                                 ? 'Cancel favorite selection'
                                 : 'Select favorites to remove',
@@ -223,6 +251,7 @@ class _UserProfileFavoritesSectionState
                                 key: const ValueKey(
                                   'profile-favs-select-all-button',
                                 ),
+                                style: headerIconStyle,
                                 tooltip:
                                     'Select or deselect all displayed favorites',
                                 onPressed: _isApplying

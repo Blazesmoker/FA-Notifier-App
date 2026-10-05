@@ -29,6 +29,8 @@ import 'package:fanotifier/shared/fa/domain/user_profile.dart';
 import 'package:fanotifier/shared/fa/domain/notifications.dart';
 import 'package:fanotifier/features/home/domain/home_login_webview_support.dart';
 import 'package:fanotifier/features/home/presentation/home_bottom_navigation_bar.dart';
+import 'package:fanotifier/features/home/presentation/home_scroll_action_icon.dart';
+import 'package:fanotifier/shared/widgets/scroll_return_controller.dart';
 import 'package:fanotifier/features/home/domain/home_profile_repository.dart';
 import 'package:fanotifier/features/home/domain/home_session_repository.dart';
 import 'package:fanotifier/features/home/domain/home_start_screen_preference.dart';
@@ -118,6 +120,11 @@ class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey<SearchScreenState> _searchKey =
       GlobalKey<SearchScreenState>();
   final GlobalKey<NotesScreenState> _notesKey = GlobalKey<NotesScreenState>();
+  final List<ScrollReturnActionPort> _scrollActions =
+      List.generate(5, (_) => ScrollReturnActionPort());
+  final List<ValueNotifier<HomeScrollActionFeedback?>> _scrollFeedback =
+      List.generate(5, (_) => ValueNotifier<HomeScrollActionFeedback?>(null));
+  int _nextScrollFeedback = 0;
   late final NotificationNavigationProvider _navProvider;
 
   // Gate login SnackBar to only show once per real login
@@ -164,6 +171,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    for (final action in _scrollActions) {
+      action.cancel();
+    }
+    for (final feedback in _scrollFeedback) {
+      feedback.dispose();
+    }
     _dataRefreshTimer?.cancel();
     _foregroundFetchTimer?.cancel();
     _elementCheckTimer?.cancel();
@@ -316,6 +329,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void openNotificationsWithSection(String section) {
+    _scrollActions[_selectedIndex].cancel();
     setState(() {
       _selectedIndex = 3;
       _loadedHomeIndexes.add(3);
@@ -346,10 +360,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _drawerKey.currentState?.closeDrawer();
 
     if (index == _selectedIndex) {
-      unawaited(_scrollToTopForIndex(index));
+      unawaited(_performNavbarScroll(index));
       return;
     }
 
+    _scrollActions[_selectedIndex].cancel();
     setState(() {
       _selectedIndex = index;
       _loadedHomeIndexes.add(index);
@@ -379,26 +394,32 @@ class _HomeScreenState extends State<HomeScreen> {
     appAnalytics.logScreen(screen);
   }
 
-  Future<void> _scrollToTopForIndex(int index) async {
-    switch (index) {
-      case 0:
-        await _browseKey.currentState?.scrollToTop();
-        return;
-      case 1:
-        await _searchKey.currentState?.scrollToTop();
-        return;
-      case 2:
-        await _submissionsKey.currentState?.scrollToTop();
-        return;
-      case 4:
-        await _notesKey.currentState?.scrollToTop();
-        return;
-      default:
-        return;
-    }
+  Future<void> _performNavbarScroll(int index) async {
+    await _scrollActions[index].invoke((direction) {
+      if (!mounted || !isLoggedIn || _selectedIndex != index) return;
+      _scrollFeedback[index].value = HomeScrollActionFeedback(
+        ++_nextScrollFeedback, direction,
+      );
+    });
+  }
+
+  Widget _scrollActionIcon(
+    int index,
+    Widget icon, {
+    double size = 24.0,
+    Widget? badge,
+  }) {
+    return HomeScrollActionIcon(
+      icon: icon,
+      feedback: _scrollFeedback[index],
+      active: _selectedIndex == index,
+      badge: badge,
+      size: size,
+    );
   }
 
   void _triggerSearch(String query) {
+    _scrollActions[_selectedIndex].cancel();
     setState(() {
       _selectedIndex = 1;
       _loadedHomeIndexes.add(1);
@@ -766,7 +787,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHomeStackChild(int index, Widget Function() builder) {
     if (index == _selectedIndex || _loadedHomeIndexes.contains(index)) {
-      return builder();
+      return Listener(
+        onPointerDown: (_) => _scrollActions[index].cancel(),
+        child: builder(),
+      );
     }
     return const SizedBox.shrink();
   }
@@ -816,7 +840,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             body: BrowseImageGrid(
               key: _browseKey,
+              scrollActionPort: _scrollActions[0],
               selectedFilters: browseFilters,
+              sfwEnabled: _sfwEnabled,
+              isActive: _selectedIndex == 0,
             ),
           ),
         ),
@@ -824,6 +851,7 @@ class _HomeScreenState extends State<HomeScreen> {
           1,
           () => SearchScreen(
             key: _searchKey,
+            scrollActionPort: _scrollActions[1],
             searchFilters: searchFilters,
             sfwEnabled: _sfwEnabled,
             onFilterUpdated: (updatedSearchFilters) {
@@ -840,6 +868,7 @@ class _HomeScreenState extends State<HomeScreen> {
           2,
           () => SubmissionsScreen(
             key: _submissionsKey,
+            scrollActionPort: _scrollActions[2],
             isActive: _selectedIndex == 2,
           ),
         ),
@@ -847,6 +876,7 @@ class _HomeScreenState extends State<HomeScreen> {
           3,
           () => NotificationsScreen(
             drawerKey: _drawerKey,
+            scrollActionPort: _scrollActions[3],
             key: ValueKey(_notificationsInitialSection),
             initialSection: _notificationsInitialSection,
           ),
@@ -855,6 +885,7 @@ class _HomeScreenState extends State<HomeScreen> {
           4,
           () => NotesScreen(
             drawerKey: _drawerKey,
+            scrollActionPort: _scrollActions[4],
             repositoryFactory: context.read<NotesRepositoryFactory>(),
             key: _notesKey,
           ),
@@ -864,6 +895,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _changeIndex(DrawerIndex indexScreen) {
+    _scrollActions[_selectedIndex].cancel();
     if (indexScreen == DrawerIndex.upload) {
       setState(() {
         drawerIndex = indexScreen;
@@ -924,6 +956,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _logout() async {
+    for (final action in _scrollActions) {
+      action.cancel();
+    }
+    await _browseKey.currentState?.stopAdsForLogout();
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1058,87 +1095,107 @@ class _HomeScreenState extends State<HomeScreen> {
                       HomeBottomNavigationBar(
                           items: [
                             BottomNavigationBarItem(
-                              icon: const Icon(Icons.home_rounded),
+                              icon: _scrollActionIcon(
+                                0, const Icon(Icons.home_rounded),
+                              ),
                               label: 'Browse',
                               backgroundColor: AppTheme.background,
                             ),
                             BottomNavigationBarItem(
-                              icon: const Icon(Icons.search),
+                              icon: _scrollActionIcon(
+                                1, const Icon(Icons.search),
+                              ),
                               label: 'Search',
                               backgroundColor: AppTheme.background,
                             ),
                             BottomNavigationBarItem(
-                              icon: Image(
-                                image: _submissionsIconImage,
-                                width: 27,
-                                height: 27,
-                                color: Colors.grey,
-                                gaplessPlayback: true,
+                              icon: _scrollActionIcon(
+                                2,
+                                Image(
+                                  image: _submissionsIconImage,
+                                  width: 27,
+                                  height: 27,
+                                  color: Colors.grey,
+                                  gaplessPlayback: true,
+                                ),
+                                size: 27.0,
                               ),
-                              activeIcon: Image(
-                                image: _submissionsIconImage,
-                                width: 27,
-                                height: 27,
-                                color: const Color(0xFFE09321),
-                                gaplessPlayback: true,
+                              activeIcon: _scrollActionIcon(
+                                2,
+                                Image(
+                                  image: _submissionsIconImage,
+                                  width: 27,
+                                  height: 27,
+                                  color: const Color(0xFFE09321),
+                                  gaplessPlayback: true,
+                                ),
+                                size: 27.0,
                               ),
                               label: 'Submissions',
                               backgroundColor: AppTheme.background,
                             ),
                             BottomNavigationBarItem(
-                              icon: badges.Badge(
-                                badgeContent: SizedBox(
-                                  width: 13,
-                                  height: 13,
-                                  child: Center(
-                                    child: FittedBox(
-                                      child: Text(
-                                        _getNotificationsEnabledSum(
-                                                settings, faNotificationService)
-                                            .toString(),
-                                        style: const TextStyle(
-                                            color: Colors.white),
+                              icon: _scrollActionIcon(
+                                3,
+                                const Icon(Icons.notifications),
+                                badge: badges.Badge(
+                                  badgeContent: SizedBox(
+                                    width: 13,
+                                    height: 13,
+                                    child: Center(
+                                      child: FittedBox(
+                                        child: Text(
+                                          _getNotificationsEnabledSum(
+                                                  settings, faNotificationService)
+                                              .toString(),
+                                          style: const TextStyle(
+                                              color: Colors.white),
+                                        ),
                                       ),
                                     ),
                                   ),
+                                  showBadge: _getNotificationsEnabledSum(
+                                          settings, faNotificationService) >
+                                      0,
+                                  position: badges.BadgePosition.topEnd(
+                                      top: -5, end: -7),
+                                  badgeStyle: const badges.BadgeStyle(
+                                    padding: EdgeInsets.all(2),
+                                    badgeColor: Colors.red,
+                                  ),
+                                  child: const SizedBox.expand(),
                                 ),
-                                showBadge: _getNotificationsEnabledSum(
-                                        settings, faNotificationService) >
-                                    0,
-                                position: badges.BadgePosition.topEnd(
-                                    top: -5, end: -7),
-                                badgeStyle: const badges.BadgeStyle(
-                                  padding: EdgeInsets.all(2),
-                                  badgeColor: Colors.red,
-                                ),
-                                child: const Icon(Icons.notifications),
                               ),
                               label: 'Notifications',
                               backgroundColor: AppTheme.background,
                             ),
                             BottomNavigationBarItem(
-                              icon: badges.Badge(
-                                badgeContent: SizedBox(
-                                  width: 13,
-                                  height: 13,
-                                  child: Center(
-                                    child: FittedBox(
-                                      child: Text(
-                                        unreadCount.toString(),
-                                        style: const TextStyle(
-                                            color: Colors.white),
+                              icon: _scrollActionIcon(
+                                4,
+                                const Icon(Icons.mail),
+                                badge: badges.Badge(
+                                  badgeContent: SizedBox(
+                                    width: 13,
+                                    height: 13,
+                                    child: Center(
+                                      child: FittedBox(
+                                        child: Text(
+                                          unreadCount.toString(),
+                                          style: const TextStyle(
+                                              color: Colors.white),
+                                        ),
                                       ),
                                     ),
                                   ),
+                                  showBadge: unreadCount > 0,
+                                  position: badges.BadgePosition.topEnd(
+                                      top: -5, end: -7),
+                                  badgeStyle: const badges.BadgeStyle(
+                                    padding: EdgeInsets.all(2),
+                                    badgeColor: Colors.red,
+                                  ),
+                                  child: const SizedBox.expand(),
                                 ),
-                                showBadge: unreadCount > 0,
-                                position: badges.BadgePosition.topEnd(
-                                    top: -5, end: -7),
-                                badgeStyle: const badges.BadgeStyle(
-                                  padding: EdgeInsets.all(2),
-                                  badgeColor: Colors.red,
-                                ),
-                                child: const Icon(Icons.mail),
                               ),
                               label: 'Notes',
                               backgroundColor: AppTheme.background,

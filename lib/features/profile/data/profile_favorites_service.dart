@@ -28,10 +28,14 @@ class ProfileFavoritesService implements ProfileFavoritesRepository {
   }
 
   @override
-  Future<ProfilePostsParseResult> fetchFavoritesPage(String url) async {
+  Future<ProfilePostsParseResult> fetchFavoritesPage(
+    String url, {
+    bool Function()? isCancelled,
+  }) async {
     final cookieHeader = await buildCookieHeader();
     final response = await FAHttp.get(
       Uri.parse(url),
+      isCancelled: isCancelled,
       headers: {
         'Cookie': cookieHeader,
         'User-Agent': FAHttp.userAgent,

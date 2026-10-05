@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:material_ui/material_ui.dart';
 
 import 'package:fanotifier/features/profile/presentation/profile_journals.dart';
+import 'package:fanotifier/features/profile/presentation/profile_tab_scroll_scope.dart';
 
 class UserProfileJournalsSection extends StatefulWidget {
   const UserProfileJournalsSection({
@@ -43,8 +44,8 @@ class _UserProfileJournalsSectionState extends State<UserProfileJournalsSection>
       edgeOffset: 30.0,
       displacement: 70.0,
       onRefresh: _refresh,
-      child: CustomScrollView(
-        key: const PageStorageKey<String>('profile-journals-scroll'),
+      child: ProfileTabScrollViewport.scrollView(
+        storageKey: const PageStorageKey<String>('profile-journals-scroll'),
         physics: Platform.isIOS
             ? const AlwaysScrollableScrollPhysics(
                 parent: ClampingScrollPhysics(),

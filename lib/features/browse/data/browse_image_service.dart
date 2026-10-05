@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:fanotifier/features/ads/data/fa_ad_parser.dart';
+import 'package:fanotifier/features/browse/domain/browse_page_data.dart';
 import 'package:fanotifier/features/browse/data/browse_image_parser.dart';
 import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
@@ -12,20 +14,26 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class BrowseImageService {
   BrowseImageService({
     FlutterSecureStorage? secureStorage,
+    Future<void> Function({required Uri documentUri, required String? setCookieHeader})?
+        onDocumentCookies,
   }) : _secureStorage = secureStorage ??
             const FlutterSecureStorage(
               iOptions: IOSOptions(
                 accountName: 'flutter_secure_storage_service',
                 accessibility: KeychainAccessibility.first_unlock,
               ),
-            );
+            ),
+        _onDocumentCookies = onDocumentCookies;
 
   final FlutterSecureStorage _secureStorage;
+  final Future<void> Function({required Uri documentUri, required String? setCookieHeader})?
+      _onDocumentCookies;
 
-  Future<List<Map<String, dynamic>>> fetchImages({
+  Future<BrowsePageData> fetchImages({
     required int pageNumber,
     required Map<String, String> selectedFilters,
     required bool sfwEnabled,
+    bool Function()? isCancelled,
   }) async {
     final cookieHeader = await buildCookieHeader(
       selectedFilters: selectedFilters,
@@ -54,26 +62,54 @@ class BrowseImageService {
       'btn': 'Next',
     };
 
-    var resp = await FAHttp.post(uri, headers: headers, body: body);
-
-    if (resp.isRedirect || (resp.statusCode >= 300 && resp.statusCode < 400)) {
+    final loaded = await FAHttp.postWithResolvedUri(
+      uri, headers: headers, body: body,
+      isCancelled: isCancelled, coordinatorLabel: 'Browse page',
+      followRedirects: false,
+    );
+    currentUri = loaded.resolvedUri;
+    var resp = loaded.response;
+    var method = 'POST';
+    final seen = {'$method $currentUri'};
+    for (var hop = 0; ; hop++) {
+      if (isCancelled?.call() ?? false) throw StateError('Browse request cancelled');
+      await _onDocumentCookies?.call(
+        documentUri: currentUri, setCookieHeader: resp.headers['set-cookie'],
+      );
+      if (isCancelled?.call() ?? false) throw StateError('Browse request cancelled');
+      if (![301, 302, 303, 307, 308].contains(resp.statusCode)) break;
+      if (hop >= 5) throw Exception('Too many Browse redirects.');
       final loc = resp.headers['location'];
       if (loc == null || loc.isEmpty) {
         throw Exception('Redirect without Location header');
       }
-      final redirectUri = uri.resolve(loc);
-      currentUri = redirectUri;
-      resp = await FAHttp.get(
-        redirectUri,
-        headers: {
-          HttpHeaders.cookieHeader:
-              await FaCookieHelper.appendCfClearanceToCookieHeader(
-            cookieHeader,
-          ),
-          'User-Agent': FAHttp.userAgent,
-          'Referer': uri.toString(),
-        },
-      );
+      final redirectUri = currentUri.resolve(loc);
+      method = resp.statusCode == 307 || resp.statusCode == 308 ? method : 'GET';
+      if (redirectUri.scheme != 'https' || redirectUri.userInfo.isNotEmpty ||
+          (redirectUri.host != 'www.furaffinity.net' && redirectUri.host != 'furaffinity.net') ||
+          !seen.add('$method $redirectUri')) {
+        throw Exception('Invalid Browse redirect.');
+      }
+      final redirectHeaders = {
+        HttpHeaders.cookieHeader: await FaCookieHelper.appendCfClearanceToCookieHeader(
+          await buildCookieHeader(selectedFilters: selectedFilters, sfwEnabled: sfwEnabled),
+        ),
+        'User-Agent': FAHttp.userAgent,
+        'Referer': currentUri.toString(),
+      };
+      final redirected = method == 'POST'
+          ? await FAHttp.postWithResolvedUri(
+              redirectUri, body: body, headers: redirectHeaders,
+              isCancelled: isCancelled, coordinatorLabel: 'Browse page redirect',
+              followRedirects: false,
+            )
+          : await FAHttp.getWithResolvedUri(
+              redirectUri, headers: redirectHeaders,
+              isCancelled: isCancelled, coordinatorLabel: 'Browse page redirect',
+              followRedirects: false,
+            );
+      resp = redirected.response;
+      currentUri = redirected.resolvedUri;
     }
 
     final refreshedCf = FaCookieHelper.extractCfClearanceFromSetCookieHeader(
@@ -103,7 +139,17 @@ class BrowseImageService {
         }
         throw Exception(faMessage.message);
       }
-      return parseBrowseImageHtml(resp.body);
+      return BrowsePageData(
+        images: await parseBrowseImageHtml(resp.body),
+        ads: parseFaAdPage(
+          html: resp.body,
+          documentUri: currentUri,
+          sfwEnabled: ContentRatingFilters.effectiveSfwCookieValue(
+                globalSfwEnabled: sfwEnabled,
+                filters: selectedFilters,
+              ) == '1',
+        ),
+      );
     }
 
     throw Exception('FAImageGrid: HTTP ${resp.statusCode} fetching images.');

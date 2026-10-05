@@ -13,6 +13,7 @@ import 'package:fanotifier/features/submissions/presentation/submission_details_
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/utils/fa_link_matcher.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/scroll_return_controller.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:html/dom.dart' as dom;
@@ -22,11 +23,13 @@ import 'package:provider/provider.dart';
 class NotificationSectionWidget extends StatelessWidget {
   final int sectionIndex;
   final NotificationActivitiesController controller;
+  final ScrollReturnController scrollReturn;
   final SfwModePreference _sfwModePreference = const SfwModePreference();
   const NotificationSectionWidget({
     super.key,
     required this.sectionIndex,
     required this.controller,
+    required this.scrollReturn,
   })
       ;
 
@@ -42,11 +45,14 @@ class NotificationSectionWidget extends StatelessWidget {
         return RefreshIndicator(
           color: const Color(0xFFE09321),
           backgroundColor: Colors.black,
-          onRefresh: () => controller.refresh(
-            source: 'notifications_refresh_indicator',
-          ),
+          onRefresh: () {
+            scrollReturn.reset();
+            return controller.refresh(source: 'notifications_refresh_indicator');
+          },
           child: section.items.isEmpty
               ? ListView(
+                  key: PageStorageKey('notification-${section.title}'),
+                  controller: scrollReturn.scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
                   children: const [
                     SizedBox(
@@ -58,6 +64,8 @@ class NotificationSectionWidget extends StatelessWidget {
                   ],
                 )
               : ListView.builder(
+                  key: PageStorageKey('notification-${section.title}'),
+                  controller: scrollReturn.scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
                   itemCount: section.items.length,
                   itemBuilder: (context, itemIndex) {

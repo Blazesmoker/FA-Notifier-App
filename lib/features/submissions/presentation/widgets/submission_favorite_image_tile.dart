@@ -76,69 +76,89 @@ class SubmissionFavoriteImageTile extends StatelessWidget {
               SizedBox(
                 width: width,
                 height: height,
-                child: HeartAnimationOptimized(
-                  isFavorite: isFav,
-                  wasInitiallyFavorited: wasInitiallyFav,
-                  containerWidth: width,
-                  containerHeight: height,
-                  child: FaThumbnailOutline(
-                    rating: rating,
-                    borderRadius: 8.0,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8.0),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          const ColoredBox(color: Color(0xFF2C2C2C)),
-                          Stack(
+                child: Stack(
+                  children: [
+                    HeartAnimationOptimized(
+                      isFavorite: isFav,
+                      wasInitiallyFavorited: wasInitiallyFav,
+                      containerWidth: width,
+                      containerHeight: height,
+                      child: FaThumbnailOutline(
+                        rating: rating,
+                        borderRadius: 8.0,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8.0),
+                          child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              FaNetworkImage(
-                                thumbnailUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (ctx, err, stack) => Container(
-                                  color: Colors.grey[300],
-                                  child: const Icon(
-                                    Icons.error,
-                                    color: Colors.red,
+                              const ColoredBox(color: Color(0xFF2C2C2C)),
+                              Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  FaNetworkImage(
+                                    thumbnailUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (ctx, err, stack) => Container(
+                                      color: Colors.grey[300],
+                                      child: const Icon(
+                                        Icons.error,
+                                        color: Colors.red,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
-                              _FadeInNetworkImage(
-                                imageUrl: displayUrl,
-                                fit: BoxFit.cover,
-                                duration: const Duration(milliseconds: 300),
-                                errorBuilder: (ctx, err, stack) => Container(
-                                  color: Colors.grey[300],
-                                  child: const Icon(
-                                    Icons.error,
-                                    color: Colors.red,
+                                  _FadeInNetworkImage(
+                                    imageUrl: displayUrl,
+                                    fit: BoxFit.cover,
+                                    duration: const Duration(milliseconds: 300),
+                                    errorBuilder: (ctx, err, stack) => Container(
+                                      color: Colors.grey[300],
+                                      child: const Icon(
+                                        Icons.error,
+                                        color: Colors.red,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
                             ],
                           ),
-                          if (selectionMode)
-                            Container(
-                              color: isSelected
-                                  ? Colors.black54
-                                  : Colors.black26,
-                              child: Center(
-                                child: Icon(
-                                  isSelected
-                                      ? Icons.check_circle
-                                      : Icons.radio_button_unchecked,
-                                  color: isSelected
-                                      ? const Color(0xFFE09321)
-                                      : Colors.white,
-                                  size: 30,
-                                ),
-                              ),
-                            ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
+                    Positioned.fill(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 140),
+                        decoration: BoxDecoration(
+                          color: selectionMode
+                              ? isSelected
+                                  ? Colors.black54
+                                  : Colors.black26
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: selectionMode && isSelected
+                                ? const Color(0xFFE09321)
+                                : Colors.transparent,
+                            width: 2.0,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (selectionMode)
+                      Positioned.fill(
+                        child: Center(
+                          child: Icon(
+                            isSelected
+                                ? Icons.check_circle
+                                : Icons.radio_button_unchecked,
+                            color: isSelected
+                                ? const Color(0xFFE09321)
+                                : Colors.white,
+                            size: 30,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
               FaThumbnailCaption(

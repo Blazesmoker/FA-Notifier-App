@@ -3,6 +3,9 @@ import 'dart:io';
 import 'dart:math';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:fanotifier/features/ads/domain/fa_ads_repository.dart';
+import 'package:fanotifier/features/ads/domain/fa_webview_ad_gateway.dart';
+import 'package:fanotifier/features/ads/presentation/fa_webview_ad_controller.dart';
 import 'package:fanotifier/shared/widgets/tags_and_codes_webview_widget.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_details_screen.dart';
 import 'package:fanotifier/features/upload/domain/submission_template.dart';
@@ -38,6 +41,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   late final UploadNavigationRepository _navigationRepository;
   late final SubmissionTemplateRepository _templateRepository;
   late final UploadWebViewSessionGateway _webViewSessionGateway;
+  late final FaWebViewAdController _adController;
 
   String get initialUrl => _navigationRepository.initialUrl;
   String get finalizeUrl => _navigationRepository.finalizeUrl;
@@ -49,6 +53,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   Timer? _timer;
   bool _isProcessingUploadSuccess = false;
   bool _isFinalizeReady = false;
+  bool _isSelectingFile = false;
 
   bool _toolsMenuOpen = false;
   late final AnimationController _toolsMenuController;
@@ -67,6 +72,11 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     _navigationRepository = context.read<UploadNavigationRepository>();
     _templateRepository = context.read<SubmissionTemplateRepository>();
     _webViewSessionGateway = context.read<UploadWebViewSessionGateway>();
+    _adController = FaWebViewAdController(
+      context: context,
+      repository: context.read<FaAdsRepository>(),
+      gateway: context.read<FaWebViewAdGateway>(),
+    );
     _permissionGateway.requestInitialPermissions();
 
     _toolsMenuController = AnimationController(
@@ -211,6 +221,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
   @override
   void dispose() {
     _timer?.cancel();
+    _adController.dispose();
     _toolsMenuController.dispose();
     super.dispose();
   }
@@ -518,6 +529,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     final settings = InAppWebViewSettings(
       javaScriptEnabled: true,
       useShouldOverrideUrlLoading: true,
+      supportMultipleWindows: true,
       verticalScrollBarEnabled: true,
       horizontalScrollBarEnabled: false,
       allowFileAccess: true,
@@ -530,29 +542,43 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       key: webViewKey,
       initialUrlRequest: URLRequest(url: WebUri(initialUrl)),
       initialSettings: settings,
+      initialUserScripts: _adController.initialUserScripts,
       contextMenu: _buildContextMenu(),
       onWebViewCreated: (controller) async {
         _webViewBridge.attach(controller);
+        _adController.attach(controller);
         await _webViewSessionGateway.setCookies();
 
         controller.addJavaScriptHandler(
           handlerName: 'selectFile',
-          callback: (args) async {
-            await _selectAndInjectFile();
+          callback: (List<dynamic> args) async {
+            if (args.isEmpty) return;
+            final inputName = args.first;
+            if (inputName is! String ||
+                (inputName != 'submission' && inputName != 'thumbnail')) {
+              return;
+            }
+            await _selectAndInjectFile(inputName);
           },
         );
       },
 
       onLoadStart: (controller, uri) async {
         _webViewBridge.attach(controller);
+        _adController.documentStarted(uri);
         await _handleLoadUrl(uri?.toString());
       },
       onLoadStop: (controller, uri) async {
+        await _adController.documentLoaded(controller, uri);
         await _handleLoadUrl(uri?.toString());
 
         await _injectFilePickerHandler();
       },
+      onCreateWindow: _adController.onCreateWindow,
       shouldOverrideUrlLoading: (controller, navigationAction) async {
+        if (_adController.interceptNavigation(navigationAction)) {
+          return NavigationActionPolicy.CANCEL;
+        }
         final uri = navigationAction.request.url;
 
         if (Platform.isIOS &&
@@ -572,7 +598,9 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     await _webViewBridge.injectFilePickerHandler();
   }
 
-  Future<void> _selectAndInjectFile() async {
+  Future<void> _selectAndInjectFile(String inputName) async {
+    if (!mounted || _isSelectingFile) return;
+    _isSelectingFile = true;
     try {
       final source = await showDialog<String>(
         context: context,
@@ -624,7 +652,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
         ),
       );
 
-      if (source == null) return;
+      if (source == null || !mounted) return;
 
       if (source != 'files' && source != 'gallery') {
         debugPrint('Failed to read file bytes');
@@ -634,13 +662,15 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
       final selectedFile = source == 'files'
           ? await _filePickerGateway.pickFile()
           : await _filePickerGateway.pickGalleryImage();
-      if (selectedFile == null) return;
+      if (selectedFile == null || !mounted) return;
 
-      await _webViewBridge.injectFile(selectedFile);
+      await _webViewBridge.injectFile(selectedFile, inputName: inputName);
 
       debugPrint('File loaded successfully: ${selectedFile.fileName}');
     } catch (e) {
       debugPrint('Error selecting file: $e');
+    } finally {
+      _isSelectingFile = false;
     }
   }
 

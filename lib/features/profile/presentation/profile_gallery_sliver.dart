@@ -9,6 +9,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:fanotifier/features/profile/domain/profile_gallery_repository.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
 import 'package:fanotifier/features/profile/domain/fa_folder.dart';
+import 'package:fanotifier/features/profile/presentation/profile_tab_scroll_scope.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/shared/widgets/heart_animation_optimized.dart';
 import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
@@ -23,6 +24,7 @@ class ProfileGallerySliver extends StatefulWidget {
   final String? selectedFolderUrl;
   final FoldersCallback onFoldersParsed;
   final ValueListenable<bool> detailFetchesActive;
+  final int refreshRevision;
 
   const ProfileGallerySliver({
     super.key,
@@ -30,6 +32,7 @@ class ProfileGallerySliver extends StatefulWidget {
     required this.onFoldersParsed,
     required this.detailFetchesActive,
     this.selectedFolderUrl,
+    this.refreshRevision = 0,
   });
 
   @override
@@ -44,6 +47,10 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   bool _hasMore = true;
   String? _nextPageUrl;
   int _fetchGeneration = 0;
+  int _refreshGeneration = 0;
+  Future<void>? _refreshFuture;
+  Future<void>? _pageFetchFuture;
+  bool _needsRefresh = false;
 
   String _selectedFolderUrl = '';
 
@@ -87,20 +94,26 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
       widget.detailFetchesActive.addListener(_handleDetailFetchActivityChanged);
       _setDetailFetchesActive(widget.detailFetchesActive.value);
     }
+    final selectedFolderUrl =
+        widget.selectedFolderUrl == null || widget.selectedFolderUrl!.isEmpty
+            ? _profileGalleryRepository.buildDefaultGalleryUrl(widget.username)
+            : widget.selectedFolderUrl!;
     if (oldWidget.username != widget.username ||
-        oldWidget.selectedFolderUrl != widget.selectedFolderUrl) {
-      _selectedFolderUrl = (widget.selectedFolderUrl == null || widget.selectedFolderUrl!.isEmpty)
-          ? _profileGalleryRepository.buildDefaultGalleryUrl(widget.username)
-          : _profileGalleryRepository
-              .normalizeFolderUrl(widget.selectedFolderUrl!);
-      _nextPageUrl = _buildInitialUrl();
-      unawaited(refresh());
+        !areFaFolderUrlsEquivalent(_selectedFolderUrl, selectedFolderUrl) ||
+        oldWidget.refreshRevision != widget.refreshRevision) {
+      _selectedFolderUrl = selectedFolderUrl;
+      _needsRefresh = true;
+      _fetchGeneration++;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(refreshIfNeeded());
+      });
     }
   }
 
   @override
   void dispose() {
     _isDisposed = true;
+    _fetchGeneration++;
     widget.detailFetchesActive
         .removeListener(_handleDetailFetchActivityChanged);
     for (final notifier in _tileRevisions.values) {
@@ -140,6 +153,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
   void _queueDetailFetch(int index) {
     if (!_detailFetchesActive ||
+        _needsRefresh ||
         index < 0 ||
         index >= _images.length ||
         !_visibleTileIndices.contains(index)) {
@@ -164,6 +178,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   }) {
     if (_isDisposed ||
         !_detailFetchesActive ||
+        _needsRefresh ||
         fetchGeneration != _fetchGeneration ||
         detailFetchGeneration != _detailFetchGeneration) {
       return true;
@@ -214,9 +229,34 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
     );
   }
 
-  Future<void> refresh() async {
-    if (_isDisposed) return;
+  Future<void> refreshIfNeeded() {
+    if (_isDisposed ||
+        !_needsRefresh ||
+        !ProfileTabScrollScope.canFetch(context)) {
+      return Future<void>.value();
+    }
+    return refresh(force: true);
+  }
+
+  Future<void> loadMore() {
+    if (_isDisposed || !ProfileTabScrollScope.canFetch(context)) {
+      return Future<void>.value();
+    }
+    if (_needsRefresh) return refresh(force: true);
+    if (_images.isEmpty) return Future<void>.value();
+    return _fetchPage();
+  }
+
+  Future<void> refresh({bool force = false}) {
+    if (_isDisposed) return Future<void>.value();
+    if (!force &&
+        _refreshFuture != null &&
+        _refreshGeneration == _fetchGeneration) {
+      return _refreshFuture!;
+    }
     _fetchGeneration++;
+    _refreshGeneration = _fetchGeneration;
+    _needsRefresh = false;
     _resetTileRevisions();
     setState(() {
       _images.clear();
@@ -227,13 +267,25 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
       _activeFetches = 0;
       _visibleTileIndices.clear();
     });
-    await _fetchPage();
+    late final Future<void> refreshFuture;
+    refreshFuture = _fetchPage().whenComplete(() {
+      if (identical(_refreshFuture, refreshFuture)) _refreshFuture = null;
+    });
+    _refreshFuture = refreshFuture;
+    return refreshFuture;
   }
 
-  Future<void> _fetchPage() async {
-    if (_isDisposed) return;
-    if (_isLoading || !_hasMore || _nextPageUrl == null) return;
+  Future<void> _fetchPage() {
+    if (_isDisposed || !_hasMore || _nextPageUrl == null) {
+      return Future<void>.value();
+    }
+    if (_isLoading) return _pageFetchFuture ?? Future<void>.value();
+    final future = _loadPage();
+    _pageFetchFuture = future;
+    return future;
+  }
 
+  Future<void> _loadPage() async {
     final fetchGeneration = _fetchGeneration;
     setState(() => _isLoading = true);
 
@@ -241,6 +293,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
       final result = await _profileGalleryRepository.fetchGalleryPage(
         url: _nextPageUrl!,
         selectedFolderUrl: widget.selectedFolderUrl,
+        isCancelled: () => _isDisposed || fetchGeneration != _fetchGeneration,
       );
       if (_isDisposed || !mounted || fetchGeneration != _fetchGeneration) return;
 
@@ -279,7 +332,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
   // Process the submission queue with a concurrency limit.
   void _processSubmissionQueue() {
-    if (_isDisposed || !_detailFetchesActive) return;
+    if (_isDisposed || !_detailFetchesActive || _needsRefresh) return;
 
     while (_submissionQueue.isNotEmpty && _activeFetches < _maxConcurrentFetches) {
       final index = _submissionQueue.removeFirst();
@@ -412,9 +465,6 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
                 child: CircularProgressIndicator(),
               ),
             );
-          }
-          if (index >= _images.length - 10 && !_isLoading && _hasMore && _nextPageUrl != null) {
-            Future.microtask(() => _fetchPage());
           }
           final item = _images[index];
           return ValueListenableBuilder<int>(

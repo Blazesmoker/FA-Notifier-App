@@ -9,6 +9,7 @@ import 'package:fanotifier/features/settings/presentation/time_display_settings_
 import 'package:fanotifier/shared/utils/time_display_formatter.dart';
 import 'package:fanotifier/shared/utils/special_text_span_builder.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/scroll_return_controller.dart';
 import 'package:extended_text/extended_text.dart';
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
@@ -101,6 +102,7 @@ class AvatarWidget extends StatelessWidget {
 
 /// A stateful widget for the Shouts section.
 class ShoutsSectionWidget extends StatefulWidget {
+  final ScrollReturnController scrollReturn;
   final FaNotificationsController service;
   final FaActivitiesPollingPort pollingService;
   final bool isActive;
@@ -110,6 +112,7 @@ class ShoutsSectionWidget extends StatefulWidget {
     required this.service,
     required this.pollingService,
     required this.isActive,
+    required this.scrollReturn,
   });
 
   @override
@@ -149,6 +152,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
 
   Widget _buildLoadingList(String label) {
     return ListView(
+      key: const PageStorageKey('notification-shouts'),
+      controller: widget.scrollReturn.scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
         const SizedBox(height: 180),
@@ -195,7 +200,10 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
     return RefreshIndicator(
       color: const Color(0xFFE09321),
       backgroundColor: Colors.black,
-      onRefresh: _controller.refresh,
+      onRefresh: () {
+        widget.scrollReturn.reset();
+        return _controller.refresh();
+      },
       child: Column(
         children: [
           const Divider(height: 4.0, color: Color(0xFF111111), thickness: 4.0),
@@ -229,6 +237,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                 }
                 if (snapshot.hasError) {
                   return ListView(
+                    key: const PageStorageKey('notification-shouts'),
+                    controller: widget.scrollReturn.scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
                     children: [
                       const SizedBox(height: 200),
@@ -244,9 +254,12 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
 
                 final data = snapshot.data ?? [];
                 final shouts = _controller.acceptSnapshotData(data);
+                widget.scrollReturn.updateContent(shouts);
 
                 if (shouts.isEmpty) {
                   return ListView(
+                    key: const PageStorageKey('notification-shouts'),
+                    controller: widget.scrollReturn.scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
                     children: const [
                       SizedBox(
@@ -263,6 +276,8 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                 }
 
                 return ListView.builder(
+                  key: const PageStorageKey('notification-shouts'),
+                  controller: widget.scrollReturn.scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
                   itemCount: shouts.length,
                   itemBuilder: (ctx2, index) {

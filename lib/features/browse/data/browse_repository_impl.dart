@@ -1,3 +1,5 @@
+import 'package:fanotifier/features/ads/data/fa_ad_parser.dart';
+import 'package:fanotifier/features/browse/domain/browse_page_data.dart';
 import 'package:fanotifier/features/browse/data/browse_filter_options_service.dart';
 import 'package:fanotifier/features/browse/data/browse_image_parser.dart';
 import 'package:fanotifier/features/browse/data/browse_image_service.dart';
@@ -10,21 +12,35 @@ class BrowseRepositoryImpl implements BrowseRepository {
   final BrowseImageService _imageService;
 
   @override
-  Future<List<Map<String, dynamic>>> fetchImages({
+  Future<BrowsePageData> fetchImages({
     required int pageNumber,
     required Map<String, String> selectedFilters,
     required bool sfwEnabled,
+    bool Function()? isCancelled,
   }) {
     return _imageService.fetchImages(
       pageNumber: pageNumber,
       selectedFilters: selectedFilters,
       sfwEnabled: sfwEnabled,
+      isCancelled: isCancelled,
     );
   }
 
   @override
-  Future<List<Map<String, dynamic>>> parseRecoveredHtml(String html) {
-    return parseBrowseImageHtml(html);
+  Future<BrowsePageData> parseRecoveredHtml(
+    String html, {
+    required Uri documentUri,
+    required bool effectiveSfwEnabled,
+  }) async {
+    return BrowsePageData(
+      images: await parseBrowseImageHtml(html),
+      modeMatchesRequest: faAdPageModeMatches(html, effectiveSfwEnabled),
+      ads: parseFaAdPage(
+        html: html,
+        documentUri: documentUri,
+        sfwEnabled: effectiveSfwEnabled,
+      ),
+    );
   }
 
   @override

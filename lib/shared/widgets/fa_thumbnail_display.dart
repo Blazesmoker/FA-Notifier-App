@@ -12,12 +12,14 @@ class FaThumbnailOutline extends StatelessWidget {
   final Widget child;
   final String? rating; // "general" | "mature" | "adult" | null
   final double borderRadius;
+  final BorderRadius? outlineBorderRadius;
 
   const FaThumbnailOutline({
     super.key,
     required this.child,
     required this.rating,
     this.borderRadius = 8.0,
+    this.outlineBorderRadius,
   });
 
   @override
@@ -36,7 +38,8 @@ class FaThumbnailOutline extends StatelessWidget {
             child: IgnorePointer(
               child: Container(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(borderRadius),
+                  borderRadius:
+                      outlineBorderRadius ?? BorderRadius.circular(borderRadius),
                   border: Border.all(
                     color: outlineColor,
                     width: AppTheme.thumbnailRatingOutlineWidth,

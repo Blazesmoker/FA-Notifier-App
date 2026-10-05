@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:fanotifier/features/profile/presentation/profile_image_row_layout.dart';
 import 'package:fanotifier/features/profile/domain/profile_scraps_repository.dart';
+import 'package:fanotifier/features/profile/presentation/profile_tab_scroll_scope.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_details_screen.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
@@ -18,11 +19,13 @@ class ProfileScrapsSliver extends StatefulWidget {
   final String username;
   final bool selectionMode;
   final ValueChanged<int> onSelectionCountChanged;
+  final int refreshRevision;
 
   const ProfileScrapsSliver({
     required this.username,
     required this.selectionMode,
     required this.onSelectionCountChanged,
+    this.refreshRevision = 0,
     super.key,
   });
 
@@ -35,6 +38,10 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   bool _isLoading = false;
   bool _hasMore = true;
   int _fetchGeneration = 0;
+  int _refreshGeneration = 0;
+  Future<void>? _refreshFuture;
+  Future<void>? _pageFetchFuture;
+  bool _needsRefresh = false;
 
 
   final List<Map<String, dynamic>> _images = [];
@@ -58,7 +65,7 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     _managementRepository = context.read<SubmissionManagementRepository>();
     _nextPageUrl =
         _profileScrapsRepository.buildInitialScrapsPageUrl(widget.username);
-    unawaited(_fetchImages());
+    unawaited(refresh());
   }
 
   @override
@@ -67,13 +74,19 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     if (oldWidget.selectionMode && !widget.selectionMode) {
       _clearSelectionState();
     }
-    if (oldWidget.username != widget.username) {
-      unawaited(refresh());
+    if (oldWidget.username != widget.username ||
+        oldWidget.refreshRevision != widget.refreshRevision) {
+      _needsRefresh = true;
+      _fetchGeneration++;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(refreshIfNeeded());
+      });
     }
   }
 
   @override
   void dispose() {
+    _fetchGeneration++;
     for (final notifier in _selectionStates.values) {
       notifier.dispose();
     }
@@ -159,9 +172,34 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     widget.onSelectionCountChanged(_selectedSubmissionIds.length);
   }
 
-  Future<void> refresh() async {
-    if (!mounted) return;
+  Future<void> refreshIfNeeded() {
+    if (!mounted ||
+        !_needsRefresh ||
+        !ProfileTabScrollScope.canFetch(context)) {
+      return Future<void>.value();
+    }
+    return refresh(force: true);
+  }
+
+  Future<void> loadMore() {
+    if (!mounted || !ProfileTabScrollScope.canFetch(context)) {
+      return Future<void>.value();
+    }
+    if (_needsRefresh) return refresh(force: true);
+    if (_images.isEmpty) return Future<void>.value();
+    return _fetchImages();
+  }
+
+  Future<void> refresh({bool force = false}) {
+    if (!mounted) return Future<void>.value();
+    if (!force &&
+        _refreshFuture != null &&
+        _refreshGeneration == _fetchGeneration) {
+      return _refreshFuture!;
+    }
     _fetchGeneration++;
+    _refreshGeneration = _fetchGeneration;
+    _needsRefresh = false;
     final selectionChanged = _selectedSubmissionIds.isNotEmpty;
     _resetTileStates();
     setState(() {
@@ -175,17 +213,33 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
       _selectedSubmissionIds.clear();
     });
     if (selectionChanged) widget.onSelectionCountChanged(0);
-    await _fetchImages();
+    late final Future<void> refreshFuture;
+    refreshFuture = _fetchImages().whenComplete(() {
+      if (identical(_refreshFuture, refreshFuture)) _refreshFuture = null;
+    });
+    _refreshFuture = refreshFuture;
+    return refreshFuture;
   }
 
-  Future<void> _fetchImages() async {
-    if (!mounted || _isLoading || _nextPageUrl == null) return;
+  Future<void> _fetchImages() {
+    if (!mounted || !_hasMore || _nextPageUrl == null) {
+      return Future<void>.value();
+    }
+    if (_isLoading) return _pageFetchFuture ?? Future<void>.value();
+    final future = _loadPage();
+    _pageFetchFuture = future;
+    return future;
+  }
+
+  Future<void> _loadPage() async {
     final fetchGeneration = _fetchGeneration;
     setState(() => _isLoading = true);
 
     try {
-      final result =
-          await _profileScrapsRepository.fetchScrapsPage(_nextPageUrl!);
+      final result = await _profileScrapsRepository.fetchScrapsPage(
+        _nextPageUrl!,
+        isCancelled: () => !mounted || fetchGeneration != _fetchGeneration,
+      );
       if (!mounted || fetchGeneration != _fetchGeneration) return;
       setState(() {
         _images.addAll(result.posts);
@@ -345,10 +399,6 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
         delegate: SliverChildBuilderDelegate(
               (ctx, index) {
             if (index < _imageRows.length) {
-              if (index == _imageRows.length - 1 && _hasMore && !_isLoading) {
-                // Attempt to fetch more when nearing the bottom.
-                Future.microtask(_fetchImages);
-              }
               final rowImages = _imageRows[index];
               return _buildRow(rowImages);
             } else {

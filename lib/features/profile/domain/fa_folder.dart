@@ -14,5 +14,7 @@ bool areFaFolderUrlsEquivalent(String url1, String url2) {
 
   return uri1.scheme == uri2.scheme &&
       uri1.host == uri2.host &&
+      uri1.port == uri2.port &&
+      uri1.query == uri2.query &&
       normalizePath(uri1.path) == normalizePath(uri2.path);
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:provider/provider.dart';
 import 'package:fanotifier/features/profile/domain/profile_journals_repository.dart';
+import 'package:fanotifier/features/profile/presentation/profile_tab_scroll_scope.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:fanotifier/features/journals/presentation/journal_details_screen.dart';
@@ -27,6 +28,9 @@ class ProfileJournalsState extends State<ProfileJournals> {
   List<Map<String, dynamic>> journals = [];
   bool hasMore = true;
   int _fetchGeneration = 0;
+  int _refreshGeneration = 0;
+  Future<void>? _refreshFuture;
+  Future<void>? _pageFetchFuture;
   final ValueNotifier<bool> _isLoadingMore = ValueNotifier<bool>(false);
 
   late final ProfileJournalsRepository _profileJournalsRepository;
@@ -35,26 +39,33 @@ class ProfileJournalsState extends State<ProfileJournals> {
   void initState() {
     super.initState();
     _profileJournalsRepository = context.read<ProfileJournalsRepository>();
-    unawaited(_fetchJournals(currentPage));
+    unawaited(refreshJournals());
   }
 
   @override
   void didUpdateWidget(ProfileJournals oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.username != widget.username) {
-      unawaited(refreshJournals());
+      unawaited(refreshJournals(force: true));
     }
   }
 
   @override
   void dispose() {
+    _fetchGeneration++;
     _isLoadingMore.dispose();
     super.dispose();
   }
 
-  Future<void> refreshJournals() async {
-    if (!mounted) return;
+  Future<void> refreshJournals({bool force = false}) {
+    if (!mounted) return Future<void>.value();
+    if (!force &&
+        _refreshFuture != null &&
+        _refreshGeneration == _fetchGeneration) {
+      return _refreshFuture!;
+    }
     _fetchGeneration++;
+    _refreshGeneration = _fetchGeneration;
     _isLoadingMore.value = false;
     setState(() {
       journals.clear();
@@ -62,17 +73,27 @@ class ProfileJournalsState extends State<ProfileJournals> {
       hasMore = true;
       isLoading = false;
     });
-    await _fetchJournals(currentPage);
+    late final Future<void> refreshFuture;
+    refreshFuture = _fetchJournals(currentPage).whenComplete(() {
+      if (identical(_refreshFuture, refreshFuture)) _refreshFuture = null;
+    });
+    _refreshFuture = refreshFuture;
+    return refreshFuture;
   }
 
   void loadNextPage() {
-    if (!mounted || isLoading || !hasMore) return;
+    if (!mounted ||
+        isLoading ||
+        !hasMore ||
+        !ProfileTabScrollScope.canFetch(context)) {
+      return;
+    }
     unawaited(_fetchJournals(currentPage));
   }
 
   void _handleJournalMutated() {
     if (!mounted) return;
-    unawaited(refreshJournals());
+    unawaited(refreshJournals(force: true));
   }
 
   Future<void> _openJournal(String journalId) async {
@@ -88,8 +109,16 @@ class ProfileJournalsState extends State<ProfileJournals> {
     );
   }
 
-  Future<void> _fetchJournals(int pageNumber) async {
-    if (isLoading || !hasMore) {
+  Future<void> _fetchJournals(int pageNumber) {
+    if (!mounted || !hasMore) return Future<void>.value();
+    if (isLoading) return _pageFetchFuture ?? Future<void>.value();
+    final future = _loadPage(pageNumber);
+    _pageFetchFuture = future;
+    return future;
+  }
+
+  Future<void> _loadPage(int pageNumber) async {
+    if (!mounted) {
       return;
     }
     final fetchGeneration = _fetchGeneration;
@@ -104,6 +133,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
       final page = await _profileJournalsRepository.fetchJournalsPage(
         username: widget.username,
         pageNumber: pageNumber,
+        isCancelled: () => !mounted || fetchGeneration != _fetchGeneration,
       );
       if (!mounted || fetchGeneration != _fetchGeneration) {
         return;

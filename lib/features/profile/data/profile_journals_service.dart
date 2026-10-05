@@ -25,6 +25,7 @@ class ProfileJournalsService implements ProfileJournalsRepository {
   Future<ProfileJournalsPageData> fetchJournalsPage({
     required String username,
     required int pageNumber,
+    bool Function()? isCancelled,
   }) async {
     final cookieHeader = await _getAllCookies();
 
@@ -34,6 +35,7 @@ class ProfileJournalsService implements ProfileJournalsRepository {
 
     final response = await FAHttp.get(
       Uri.parse(url),
+      isCancelled: isCancelled,
       headers: {
         'Cookie': cookieHeader,
         'User-Agent': FAHttp.userAgent,

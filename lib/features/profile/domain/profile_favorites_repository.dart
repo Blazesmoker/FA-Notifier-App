@@ -3,7 +3,10 @@ import 'package:fanotifier/features/profile/domain/profile_posts_parse_result.da
 abstract interface class ProfileFavoritesRepository {
   String buildInitialFavoritesPageUrl(String username);
 
-  Future<ProfilePostsParseResult> fetchFavoritesPage(String url);
+  Future<ProfilePostsParseResult> fetchFavoritesPage(
+    String url, {
+    bool Function()? isCancelled,
+  });
 
   Future<String> buildCookieHeader();
 }

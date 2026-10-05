@@ -15,6 +15,9 @@ class SubmissionFavoriteStateController extends ChangeNotifier {
   final Map<String, _SubmissionFavoriteEntry> _entries = {};
   int _sessionGeneration = 0;
   bool _disposed = false;
+  int _mutationRevision = 0;
+
+  int get mutationRevision => _mutationRevision;
 
   bool valueFor(String submissionId, bool fallback) {
     return _entries[submissionId]?.desiredState ?? fallback;
@@ -134,6 +137,7 @@ class SubmissionFavoriteStateController extends ChangeNotifier {
       entry.desiredState = result.confirmedState;
     }
     if (result.success && result.changed) {
+      _mutationRevision++;
       entry.favUrl = null;
       entry.unfavUrl = null;
     }

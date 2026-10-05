@@ -5,16 +5,19 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/features/search/presentation/search_results_grid.dart';
 import 'package:fanotifier/features/search/presentation/search_filters_screen.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
+import 'package:fanotifier/shared/widgets/scroll_return_controller.dart';
 
 class SearchScreen extends StatefulWidget {
   final Map<String, String> searchFilters;
   final bool sfwEnabled;
+  final ScrollReturnActionPort? scrollActionPort;
   final Function(Map<String, String>) onFilterUpdated;
 
   const SearchScreen({
     required this.searchFilters,
     required this.sfwEnabled,
     required this.onFilterUpdated,
+    this.scrollActionPort,
     super.key,
   });
 
@@ -32,10 +35,21 @@ class SearchScreenState extends State<SearchScreen> {
   @override
   void initState() {
     super.initState();
+    widget.scrollActionPort?.bind(_scrollFromNavigation, _cancelNavigationScroll);
+  }
+
+  @override
+  void didUpdateWidget(covariant SearchScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.scrollActionPort != widget.scrollActionPort) {
+      oldWidget.scrollActionPort?.unbind(_scrollFromNavigation);
+      widget.scrollActionPort?.bind(_scrollFromNavigation, _cancelNavigationScroll);
+    }
   }
 
   @override
   void dispose() {
+    widget.scrollActionPort?.unbind(_scrollFromNavigation);
     _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -58,6 +72,16 @@ class SearchScreenState extends State<SearchScreen> {
 
   Future<void> scrollToTop() async {
     await _resultsKey.currentState?.scrollToTop();
+  }
+
+  Future<void> _scrollFromNavigation(
+    ValueChanged<ScrollReturnDirection> onStarted,
+  ) async {
+    await _resultsKey.currentState?.scrollFromNavigation(onStarted);
+  }
+
+  void _cancelNavigationScroll() {
+    _resultsKey.currentState?.cancelNavigationScroll();
   }
 
   @override

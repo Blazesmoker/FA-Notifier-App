@@ -4,5 +4,6 @@ abstract interface class ProfileJournalsRepository {
   Future<ProfileJournalsPageData> fetchJournalsPage({
     required String username,
     required int pageNumber,
+    bool Function()? isCancelled,
   });
 }

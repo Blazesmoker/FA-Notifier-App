@@ -13,6 +13,7 @@ import 'package:fanotifier/features/notifications/presentation/notification_sett
 import 'package:fanotifier/features/notifications/presentation/notification_shouts_section.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_removal_button_content.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/shared/widgets/scroll_return_controller.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -21,10 +22,14 @@ import 'package:visibility_detector/visibility_detector.dart';
 class NotificationsScreen extends StatefulWidget {
   final String? initialSection;
   final GlobalKey<HomeDrawerShellState> drawerKey;
+  final ScrollReturnActionPort? scrollActionPort;
 
-  const NotificationsScreen(
-      {super.key, required this.drawerKey, this.initialSection})
-      ;
+  const NotificationsScreen({
+    super.key,
+    required this.drawerKey,
+    this.initialSection,
+    this.scrollActionPort,
+  });
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -40,6 +45,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   late NotificationActivitiesController _activitiesController;
   late FaActivitiesPollingPort _activitiesPollingPort;
   bool _activitiesControllerInitialized = false;
+  final Map<String, ScrollReturnController> _scrollReturns = {};
+  final List<ScrollReturnController> _retiredScrollReturns = [];
   NotificationRemovalButtonPhase _removeSelectedPhase =
       NotificationRemovalButtonPhase.idle;
   NotificationRemovalButtonPhase _nukeSectionPhase =
@@ -61,6 +68,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   @override
   void initState() {
     super.initState();
+    widget.scrollActionPort?.bind(_scrollFromNavigation, _cancelNavigationScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(_activitiesController.loadOnFirstOpen());
@@ -82,7 +90,23 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   }
 
   @override
+  void didUpdateWidget(covariant NotificationsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.scrollActionPort != widget.scrollActionPort) {
+      oldWidget.scrollActionPort?.unbind(_scrollFromNavigation);
+      widget.scrollActionPort?.bind(_scrollFromNavigation, _cancelNavigationScroll);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.scrollActionPort?.unbind(_scrollFromNavigation);
+    for (final scrollReturn in [..._scrollReturns.values, ..._retiredScrollReturns]) {
+      scrollReturn.dispose();
+      scrollReturn.scrollController.dispose();
+    }
+    _scrollReturns.clear();
+    _retiredScrollReturns.clear();
     _tabController?.dispose();
     _activitiesController.setScreenVisible(false);
     super.dispose();
@@ -90,6 +114,61 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
   void _syncActiveNotificationSection() {
     _activitiesController.setActiveSection(_tabController?.index);
+  }
+
+  ScrollReturnController? get _currentScrollReturn {
+    if (!_activitiesControllerInitialized) return null;
+    final index = _tabController?.index;
+    final sections = _activitiesController.sections;
+    if (index == null || index < 0 || index >= sections.length) return null;
+    return _scrollReturns[sections[index].title];
+  }
+
+  void _synchronizeScrollReturns() {
+    final sections = _activitiesController.sections;
+    final titles = sections.map((section) => section.title).toSet();
+    for (final title in _scrollReturns.keys.toList(growable: false)) {
+      if (titles.contains(title)) continue;
+      final scrollReturn = _scrollReturns.remove(title)!;
+      scrollReturn.reset();
+      _retiredScrollReturns.add(scrollReturn);
+    }
+    if (_retiredScrollReturns.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final retired = _retiredScrollReturns.toList(growable: false);
+        _retiredScrollReturns.clear();
+        for (final scrollReturn in retired) {
+          scrollReturn.dispose();
+          scrollReturn.scrollController.dispose();
+        }
+      });
+    }
+    for (final section in sections) {
+      final scrollReturn = _scrollReturns.putIfAbsent(
+        section.title,
+        () => ScrollReturnController(scrollController: ScrollController()),
+      );
+      if (!isShoutsNotificationSectionTitle(section.title)) {
+        scrollReturn.updateContent(section.items.map((item) => item.id));
+      }
+    }
+  }
+
+  Future<void> _scrollFromNavigation(
+    ValueChanged<ScrollReturnDirection> onStarted,
+  ) async {
+    final tabs = _tabController;
+    if (tabs == null || tabs.indexIsChanging || tabs.offset.abs() > 0.001) return;
+    await _currentScrollReturn?.perform(
+      onStarted: onStarted,
+      animate: !MediaQuery.disableAnimationsOf(context),
+    );
+  }
+
+  void _cancelNavigationScroll() {
+    for (final scrollReturn in _scrollReturns.values) {
+      scrollReturn.cancelMovement();
+    }
   }
 
   void _showNotificationSettingsDialog() {
@@ -167,6 +246,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   }
 
   void _initializeTabController(int sectionCount) {
+    _cancelNavigationScroll();
     _tabController?.dispose();
     _initialTabIndex = _activitiesController.initialTabIndex(
       widget.initialSection,
@@ -187,6 +267,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       if (!mounted) return;
       final idx = _tabController!.index;
       if (idx != _lastTabIndex) {
+        _cancelNavigationScroll();
         _lastTabIndex = idx;
         _syncActiveNotificationSection();
         appAnalytics.logScreen(
@@ -536,6 +617,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     return VisibilityDetector(
       key: const Key('notifications_screen_visibility'),
       onVisibilityChanged: (info) {
+        if (info.visibleFraction <= 0.01) _cancelNavigationScroll();
         _activitiesController.setScreenVisible(
           info.visibleFraction > 0.01,
           activeIndex: _tabController?.index,
@@ -544,6 +626,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       child: Consumer<FaNotificationsController>(
         builder: (context, service, child) {
           _activitiesController.updateService(service);
+          _synchronizeScrollReturns();
           final sections = _activitiesController.sections;
           final showInitialLoading =
               _activitiesController.showInitialLoading;
@@ -734,9 +817,16 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                         height: 4.0, color: Color(0xFF111111), thickness: 4.0),
                     _buildBulkActionRow(),
                     Expanded(
-                      child: NotificationListener<OverscrollNotification>(
-                        onNotification: (OverscrollNotification notification) {
-                          if (_tabController?.index == 0 &&
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: (ScrollNotification notification) {
+                          if (notification.metrics.axis == Axis.horizontal &&
+                              notification is ScrollStartNotification &&
+                              notification.dragDetails != null) {
+                            _cancelNavigationScroll();
+                          }
+                          _currentScrollReturn?.handleScrollNotification(notification);
+                          if (notification is OverscrollNotification &&
+                              _tabController?.index == 0 &&
                               notification.overscroll < 0 &&
                               notification.metrics.axis == Axis.horizontal) {
                             widget.drawerKey.currentState?.openDrawer();
@@ -754,6 +844,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                   section.title)) {
                                 return ShoutsSectionWidget(
                                   key: _shoutsSectionKey,
+                                  scrollReturn: _scrollReturns[section.title]!,
                                   service: service,
                                   pollingService: _activitiesPollingPort,
                                   isActive:
@@ -761,7 +852,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                 );
                               } else {
                                 return NotificationSectionWidget(
+                                  key: ValueKey('notification-${section.title}'),
                                   sectionIndex: index,
+                                  scrollReturn: _scrollReturns[section.title]!,
                                   controller: _activitiesController,
                                 );
                               }

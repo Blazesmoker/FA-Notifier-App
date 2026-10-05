@@ -28,10 +28,14 @@ class ProfileScrapsService implements ProfileScrapsRepository {
   }
 
   @override
-  Future<ProfilePostsParseResult> fetchScrapsPage(String url) async {
+  Future<ProfilePostsParseResult> fetchScrapsPage(
+    String url, {
+    bool Function()? isCancelled,
+  }) async {
     final cookieHeader = await buildCookieHeader();
     final response = await FAHttp.get(
       Uri.parse(url),
+      isCancelled: isCancelled,
       headers: {
         'Cookie': cookieHeader,
         'User-Agent': FAHttp.userAgent,

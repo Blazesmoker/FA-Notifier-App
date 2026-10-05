@@ -14,6 +14,7 @@ import 'package:fanotifier/features/profile/presentation/user_profile_components
 import 'package:fanotifier/features/profile/presentation/user_profile_shouts_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_shout_selection_controller.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_styles.dart';
+import 'package:fanotifier/features/profile/presentation/profile_tab_scroll_scope.dart';
 import 'package:fanotifier/features/profile/presentation/profile_animated_media_visibility.dart';
 
 class UserProfileHomeSection extends StatelessWidget {
@@ -107,8 +108,8 @@ class UserProfileHomeSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      key: const PageStorageKey<String>('profile-home-scroll'),
+    return ProfileTabScrollViewport.scrollView(
+      storageKey: const PageStorageKey<String>('profile-home-scroll'),
       physics: Platform.isIOS ? const ClampingScrollPhysics() : null,
       slivers: [
         SliverOverlapInjector(

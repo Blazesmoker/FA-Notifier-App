@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:fanotifier/features/profile/presentation/profile_bulk_selection_bar.dart';
 import 'package:fanotifier/features/profile/presentation/profile_scraps_sliver.dart';
+import 'package:fanotifier/features/profile/presentation/profile_tab_scroll_scope.dart';
 
 class UserProfileScrapsSection extends StatefulWidget {
   const UserProfileScrapsSection({
@@ -10,11 +13,15 @@ class UserProfileScrapsSection extends StatefulWidget {
     required this.sanitizedUsername,
     required this.isOwnProfile,
     required this.onSelectionLayoutChanged,
+    required this.onMovedToGallery,
+    this.refreshRevision = 0,
   });
 
   final String sanitizedUsername;
   final bool isOwnProfile;
   final ProfileBulkSelectionLayoutChanged onSelectionLayoutChanged;
+  final VoidCallback onMovedToGallery;
+  final int refreshRevision;
 
   @override
   State<UserProfileScrapsSection> createState() =>
@@ -55,10 +62,20 @@ class _UserProfileScrapsSectionState extends State<UserProfileScrapsSection>
     super.dispose();
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh({bool force = false}) async {
     final scrapsState = _scrapsKey.currentState;
     if (scrapsState == null) return;
-    await scrapsState.refresh();
+    await scrapsState.refresh(force: force);
+  }
+
+  void _refreshIfNeeded() {
+    final scrapsState = _scrapsKey.currentState;
+    if (scrapsState != null) unawaited(scrapsState.refreshIfNeeded());
+  }
+
+  void _loadMore() {
+    final scrapsState = _scrapsKey.currentState;
+    if (scrapsState != null) unawaited(scrapsState.loadMore());
   }
 
   void _toggleSelectionMode() {
@@ -134,7 +151,8 @@ class _UserProfileScrapsSectionState extends State<UserProfileScrapsSection>
       });
       _selectedCount.value = 0;
       widget.onSelectionLayoutChanged(false, 0);
-      await _refresh();
+      widget.onMovedToGallery();
+      await _refresh(force: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -162,6 +180,15 @@ class _UserProfileScrapsSectionState extends State<UserProfileScrapsSection>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    const iconSpacing = 16.0;
+    final headerIconStyle = IconButton.styleFrom(
+      padding: const EdgeInsets.symmetric(
+        horizontal: iconSpacing / 2,
+        vertical: 8,
+      ),
+      minimumSize: const Size(0, 48),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
     if (_selectionMode) _scheduleSelectionLayoutReport();
     return Stack(
       children: [
@@ -173,8 +200,10 @@ class _UserProfileScrapsSectionState extends State<UserProfileScrapsSection>
             edgeOffset: 30.0,
             displacement: 70.0,
             onRefresh: _selectionMode ? () async {} : _refresh,
-            child: CustomScrollView(
-              key: const PageStorageKey<String>('profile-scraps-scroll'),
+            child: ProfileTabScrollViewport.scrollView(
+              storageKey: const PageStorageKey<String>('profile-scraps-scroll'),
+              onActivated: _refreshIfNeeded,
+              onLoadMore: _loadMore,
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverOverlapInjector(
@@ -199,10 +228,13 @@ class _UserProfileScrapsSectionState extends State<UserProfileScrapsSection>
                           ),
                         ),
                         if (widget.isOwnProfile)
+                          const SizedBox(width: iconSpacing / 2),
+                        if (widget.isOwnProfile)
                           IconButton(
                             key: const ValueKey(
                               'profile-scraps-selection-button',
                             ),
+                            style: headerIconStyle,
                             tooltip: _selectionMode
                                 ? 'Cancel scrap selection'
                                 : 'Select scraps to move',
@@ -223,6 +255,7 @@ class _UserProfileScrapsSectionState extends State<UserProfileScrapsSection>
                                 key: const ValueKey(
                                   'profile-scraps-select-all-button',
                                 ),
+                                style: headerIconStyle,
                                 tooltip:
                                     'Select or deselect all displayed scraps',
                                 onPressed: _isApplying
@@ -247,6 +280,7 @@ class _UserProfileScrapsSectionState extends State<UserProfileScrapsSection>
                   username: widget.sanitizedUsername,
                   selectionMode: _selectionMode,
                   onSelectionCountChanged: _onSelectionCountChanged,
+                  refreshRevision: widget.refreshRevision,
                 ),
                 if (_selectionMode)
                   const SliverToBoxAdapter(child: SizedBox(height: 104)),

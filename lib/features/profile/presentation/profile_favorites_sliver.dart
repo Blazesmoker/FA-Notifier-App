@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:fanotifier/features/profile/domain/profile_favorites_repository.dart';
+import 'package:fanotifier/features/profile/presentation/profile_tab_scroll_scope.dart';
 import 'package:fanotifier/features/profile/presentation/profile_image_row_layout.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_details_screen.dart';
@@ -37,6 +38,10 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
   bool _isLoading = false;
   bool _hasMore = true;
   int _fetchGeneration = 0;
+  int _refreshGeneration = 0;
+  Future<void>? _refreshFuture;
+  Future<void>? _pageFetchFuture;
+  bool _needsRefresh = false;
 
 
   final List<Map<String, dynamic>> _images = [];
@@ -52,6 +57,8 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
   final Map<String, ValueNotifier<bool>> _selectionStates =
       <String, ValueNotifier<bool>>{};
   late final SubmissionFavoriteRepository _favoriteRepository;
+  late final SubmissionFavoriteStateController _favoriteStateController;
+  late int _favoriteMutationRevision;
 
   int get selectedCount => _selectedFavoriteIds.length;
 
@@ -61,11 +68,14 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
     _profileFavoritesRepository =
         context.read<ProfileFavoritesRepository>();
     _favoriteRepository = context.read<SubmissionFavoriteRepository>();
+    _favoriteStateController = context.read<SubmissionFavoriteStateController>();
+    _favoriteMutationRevision = _favoriteStateController.mutationRevision;
+    _favoriteStateController.addListener(_handleFavoriteMutation);
 
     _nextPageUrl = _profileFavoritesRepository.buildInitialFavoritesPageUrl(
       widget.username,
     );
-    unawaited(_fetchImages());
+    unawaited(refresh());
   }
 
   @override
@@ -75,12 +85,14 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
       _clearSelectionState();
     }
     if (oldWidget.username != widget.username) {
-      unawaited(refresh());
+      _invalidate();
     }
   }
 
   @override
   void dispose() {
+    _fetchGeneration++;
+    _favoriteStateController.removeListener(_handleFavoriteMutation);
     for (final notifier in _selectionStates.values) {
       notifier.dispose();
     }
@@ -166,9 +178,51 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
     widget.onSelectionCountChanged(_selectedFavoriteIds.length);
   }
 
-  Future<void> refresh() async {
+  void _handleFavoriteMutation() {
+    final revision = _favoriteStateController.mutationRevision;
+    if (_favoriteMutationRevision == revision) return;
+    _favoriteMutationRevision = revision;
+    if (widget.isOwnProfile) _invalidate();
+  }
+
+  void _invalidate() {
     if (!mounted) return;
+    _needsRefresh = true;
     _fetchGeneration++;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(refreshIfNeeded());
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  Future<void> refreshIfNeeded() {
+    if (!mounted ||
+        !_needsRefresh ||
+        !ProfileTabScrollScope.canFetch(context)) {
+      return Future<void>.value();
+    }
+    return refresh(force: true);
+  }
+
+  Future<void> loadMore() {
+    if (!mounted || !ProfileTabScrollScope.canFetch(context)) {
+      return Future<void>.value();
+    }
+    if (_needsRefresh) return refresh(force: true);
+    if (_images.isEmpty) return Future<void>.value();
+    return _fetchImages();
+  }
+
+  Future<void> refresh({bool force = false}) {
+    if (!mounted) return Future<void>.value();
+    if (!force &&
+        _refreshFuture != null &&
+        _refreshGeneration == _fetchGeneration) {
+      return _refreshFuture!;
+    }
+    _fetchGeneration++;
+    _refreshGeneration = _fetchGeneration;
+    _needsRefresh = false;
     final selectionChanged = _selectedFavoriteIds.isNotEmpty;
     _resetTileStates();
     setState(() {
@@ -183,17 +237,33 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
       _selectedFavoriteIds.clear();
     });
     if (selectionChanged) widget.onSelectionCountChanged(0);
-    await _fetchImages();
+    late final Future<void> refreshFuture;
+    refreshFuture = _fetchImages().whenComplete(() {
+      if (identical(_refreshFuture, refreshFuture)) _refreshFuture = null;
+    });
+    _refreshFuture = refreshFuture;
+    return refreshFuture;
   }
 
-  Future<void> _fetchImages() async {
-    if (!mounted || _isLoading || _nextPageUrl == null) return;
+  Future<void> _fetchImages() {
+    if (!mounted || !_hasMore || _nextPageUrl == null) {
+      return Future<void>.value();
+    }
+    if (_isLoading) return _pageFetchFuture ?? Future<void>.value();
+    final future = _loadPage();
+    _pageFetchFuture = future;
+    return future;
+  }
+
+  Future<void> _loadPage() async {
     final fetchGeneration = _fetchGeneration;
     setState(() => _isLoading = true);
 
     try {
-      final parseResult =
-          await _profileFavoritesRepository.fetchFavoritesPage(_nextPageUrl!);
+      final parseResult = await _profileFavoritesRepository.fetchFavoritesPage(
+        _nextPageUrl!,
+        isCancelled: () => !mounted || fetchGeneration != _fetchGeneration,
+      );
       if (!mounted || fetchGeneration != _fetchGeneration) return;
       setState(() {
         _images.addAll(parseResult.posts);
@@ -361,10 +431,6 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
         delegate: SliverChildBuilderDelegate(
               (ctx, index) {
             if (index < _imageRows.length) {
-              // When nearing the bottom, fetch more images.
-              if (index == _imageRows.length - 1 && _hasMore && !_isLoading) {
-                Future.microtask(_fetchImages);
-              }
               return _buildRow(_imageRows[index]);
             } else {
               return Padding(
