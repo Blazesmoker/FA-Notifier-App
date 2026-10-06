@@ -9,6 +9,7 @@ import 'package:fanotifier/features/submissions/domain/submission_list_item.dart
 import 'package:fanotifier/features/submissions/domain/submissions_repository.dart';
 import 'package:fanotifier/features/submissions/presentation/submissions_controller.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_favorite_image_tile.dart';
+import 'package:fanotifier/features/submissions/presentation/widgets/submissions_selection_bar.dart';
 import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:fanotifier/shared/widgets/fa_unavailable_screen.dart';
 import 'package:fanotifier/shared/widgets/dashed_loading_indicator.dart';
@@ -132,6 +133,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   }
 
   void _onWillPop() {
+    if (_isAppBarActionProcessing) return;
     if (_selectionMode) {
       _controller.exitSelectionMode();
     }
@@ -292,6 +294,11 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
       }
     }
     _controller.exitSelectionMode();
+    if (mounted) {
+      setState(() {
+        _processingAppBarAction = _SubmissionsAppBarAction.none;
+      });
+    }
   }
 
   Widget _buildAppBarActionIcon({
@@ -382,6 +389,9 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
       controller: _scrollController,
+      padding: _selectionMode
+          ? EdgeInsets.only(bottom: 104 + MediaQuery.paddingOf(context).bottom)
+          : null,
       itemCount: _listItems.length + (_isLoading ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == _listItems.length) {
@@ -432,27 +442,13 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
             centerTitle: true,
             title: const Text('Submissions'),
             actions: [
-              if (_selectionMode)
+              if (!_selectionMode)
                 IconButton(
-                  icon: const Icon(Icons.library_add_check, size: 22),
-                  tooltip: 'Select All',
+                  icon: const Icon(Icons.delete),
+                  tooltip: 'Delete Selected',
                   onPressed:
-                      _isAppBarActionProcessing ? null : _toggleAllSelection,
+                      _isAppBarActionProcessing ? null : _onTrashIconPressed,
                 ),
-              IconButton(
-                icon: _buildAppBarActionIcon(
-                  idleIcon: Icon(
-                    _selectionMode ? Icons.delete_forever : Icons.delete,
-                  ),
-                  isProcessing: _processingAppBarAction ==
-                      _SubmissionsAppBarAction.deleteSelected,
-                  isSuccess: _processingAppBarAction ==
-                      _SubmissionsAppBarAction.deleteSelectedSuccess,
-                ),
-                tooltip: 'Delete Selected',
-                onPressed:
-                    _isAppBarActionProcessing ? null : _onTrashIconPressed,
-              ),
               IconButton(
                 icon: _buildAppBarActionIcon(
                   idleIcon: const Icon(
@@ -468,17 +464,44 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
               ),
             ],
           ),
-          body: RefreshIndicator(
-            color: const Color(0xFFE09321),
-            backgroundColor: Colors.black,
-            onRefresh: _refreshSubmissions,
-            child: NotificationListener<ScrollNotification>(
-              onNotification: (notification) {
-                _scrollReturn.handleScrollNotification(notification);
-                return false;
-              },
-              child: _buildRefreshableBody(),
-            ),
+          body: Stack(
+            children: [
+              AbsorbPointer(
+                absorbing: _selectionMode && _isAppBarActionProcessing,
+                child: RefreshIndicator(
+                  color: const Color(0xFFE09321),
+                  backgroundColor: Colors.black,
+                  onRefresh: _refreshSubmissions,
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      _scrollReturn.handleScrollNotification(notification);
+                      return false;
+                    },
+                    child: _buildRefreshableBody(),
+                  ),
+                ),
+              ),
+              if (_selectionMode)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: SubmissionsSelectionBar(
+                    selectedCount: _selectedSubmissions.length,
+                    isApplying: _isAppBarActionProcessing,
+                    deleteIcon: _buildAppBarActionIcon(
+                      idleIcon: const Icon(Icons.delete_forever, size: 20),
+                      isProcessing: _processingAppBarAction ==
+                          _SubmissionsAppBarAction.deleteSelected,
+                      isSuccess: _processingAppBarAction ==
+                          _SubmissionsAppBarAction.deleteSelectedSuccess,
+                    ),
+                    onToggleAll: _toggleAllSelection,
+                    onCancel: _controller.exitSelectionMode,
+                    onDelete: _onTrashIconPressed,
+                  ),
+                ),
+            ],
           ),
         ),
       ),

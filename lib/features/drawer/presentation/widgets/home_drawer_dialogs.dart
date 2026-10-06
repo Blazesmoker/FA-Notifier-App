@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
 
 Widget buildDrawerOpenLinkDialog(
   BuildContext context, {
@@ -9,7 +10,12 @@ Widget buildDrawerOpenLinkDialog(
     title: const Text('Open Link'),
     content: TextField(
       controller: controller,
-      decoration: const InputDecoration(labelText: 'Enter link'),
+      style: const TextStyle(color: Colors.white),
+      decoration: const InputDecoration(
+        labelText: 'Enter link',
+        labelStyle: TextStyle(color: Colors.white),
+        floatingLabelStyle: TextStyle(color: Colors.white),
+      ),
     ),
     actions: [
       TextButton(
@@ -20,23 +26,43 @@ Widget buildDrawerOpenLinkDialog(
         onPressed: () => Navigator.of(context).pop(),
         child: const Text('Cancel'),
       ),
-      TextButton(
-        style: TextButton.styleFrom(
-          backgroundColor: const Color(0xFFE09321),
-          foregroundColor: Colors.white,
-        ),
-        onPressed: () {
-          final String url = controller.text.trim();
-          if (url.isNotEmpty) {
-            // Close dialog first, then handle the link
-            Navigator.of(context).pop();
+      ValueListenableBuilder<TextEditingValue>(
+        valueListenable: controller,
+        builder: (buttonContext, value, child) {
+          return TextButton(
+            style: TextButton.styleFrom(
+              backgroundColor: const Color(0xFFE09321),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              final String url = controller.text.trim();
+              if (url.isEmpty) {
+                final clipboardData =
+                    await Clipboard.getData(Clipboard.kTextPlain);
+                if (!buttonContext.mounted) return;
 
-            onOpen(context, url);
-          } else {
-            Navigator.of(context).pop();
-          }
+                final text = clipboardData?.text;
+                if (text == null ||
+                    text.isEmpty ||
+                    controller.text.trim().isNotEmpty) {
+                  return;
+                }
+
+                controller.value = TextEditingValue(
+                  text: text,
+                  selection: TextSelection.collapsed(offset: text.length),
+                );
+                return;
+              }
+
+              // Close dialog first, then handle the link
+              Navigator.of(context).pop();
+
+              onOpen(context, url);
+            },
+            child: Text(value.text.trim().isEmpty ? 'Paste' : 'Ok'),
+          );
         },
-        child: const Text('Ok'),
       ),
     ],
   );

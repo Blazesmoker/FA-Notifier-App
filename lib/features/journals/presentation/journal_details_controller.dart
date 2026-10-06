@@ -31,6 +31,8 @@ class JournalDetailsController extends ChangeNotifier {
   String? _authorUserName;
   String? _authorSymbol;
   String? _authorUserTitle;
+  List<String> _authorIconBeforeUrls = [];
+  List<String> _authorIconAfterUrls = [];
   bool _isJournalClassic = false;
   String? _watchLink;
   String? _unwatchLink;
@@ -64,6 +66,8 @@ class JournalDetailsController extends ChangeNotifier {
   String? get authorUserName => _authorUserName;
   String? get authorSymbol => _authorSymbol;
   String? get authorUserTitle => _authorUserTitle;
+  List<String> get authorIconBeforeUrls => _authorIconBeforeUrls;
+  List<String> get authorIconAfterUrls => _authorIconAfterUrls;
   bool get isJournalClassic => _isJournalClassic;
   String? get watchLink => _watchLink;
   String? get unwatchLink => _unwatchLink;
@@ -184,6 +188,8 @@ class JournalDetailsController extends ChangeNotifier {
     _authorUserName = result.authorSlug;
     _authorSymbol = result.symbol;
     _authorUserTitle = result.userTitle;
+    _authorIconBeforeUrls = result.authorIconBeforeUrls;
+    _authorIconAfterUrls = result.authorIconAfterUrls;
     _submissionDescription = result.submissionDescription;
     _submissionTitle = result.title;
     _publicationTime = result.dateTime;

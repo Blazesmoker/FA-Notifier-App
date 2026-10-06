@@ -63,6 +63,21 @@ class JournalApiService {
     final classicTitleBox = document.querySelector('td.journal-title-box');
     final isJournalClassic =
         (modernDetails == null) && (classicTitleBox != null);
+    final authorDetails = modernDetails ?? classicTitleBox;
+    final authorUsernameBlock =
+        authorDetails?.querySelector('.c-usernameBlock') ?? authorDetails;
+    final authorIconBeforeUrls = authorUsernameBlock
+            ?.querySelectorAll('usericon-block-before img')
+            .map((element) => buildAbsoluteFaUrl(element.attributes['src']))
+            .whereType<String>()
+            .toList() ??
+        <String>[];
+    final authorIconAfterUrls = authorUsernameBlock
+            ?.querySelectorAll('usericon-block-after img')
+            .map((element) => buildAbsoluteFaUrl(element.attributes['src']))
+            .whereType<String>()
+            .toList() ??
+        <String>[];
 
     dom.Element? profileImageElement;
     String? profileImageUrl;
@@ -339,6 +354,8 @@ class JournalApiService {
       authorSlug: authorSlug,
       symbol: symbol,
       userTitle: userTitle,
+      authorIconBeforeUrls: authorIconBeforeUrls,
+      authorIconAfterUrls: authorIconAfterUrls,
       isJournalClassic: isJournalClassic,
       ownerEditLink: ownerEditLink,
       favoriteLink: favoriteLink,

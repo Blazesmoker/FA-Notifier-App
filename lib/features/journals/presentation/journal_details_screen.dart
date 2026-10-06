@@ -75,6 +75,8 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
   String? get authorUserName => _controller.authorUserName;
   String? get authorSymbol => _controller.authorSymbol;
   String? get authorUserTitle => _controller.authorUserTitle;
+  List<String> get authorIconBeforeUrls => _controller.authorIconBeforeUrls;
+  List<String> get authorIconAfterUrls => _controller.authorIconAfterUrls;
   bool get isJournalClassic => _controller.isJournalClassic;
   String? get fullViewImageUrl => _controller.fullViewImageUrl;
   String? get fileLink => _controller.fileLink;
@@ -644,6 +646,10 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
                                           authorUserName: authorUserName,
                                           authorSymbol: authorSymbol,
                                           authorUserTitle: authorUserTitle,
+                                          authorIconBeforeUrls:
+                                              authorIconBeforeUrls,
+                                          authorIconAfterUrls:
+                                              authorIconAfterUrls,
                                           isJournalClassic: isJournalClassic,
                                           onAuthorTap: () {
                                             if (authorUserName != null &&
@@ -716,7 +722,7 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
                                                   _journalBodySelectedText,
                                               includeIosTranslate: true,
                                             ),
-                                            child: buildJournalBody(
+                                            child: JournalBody(
                                               submissionDescription:
                                                   submissionDescription,
                                               onLinkTap: (url) => handleFALink(

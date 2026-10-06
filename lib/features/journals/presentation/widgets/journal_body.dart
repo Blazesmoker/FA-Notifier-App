@@ -2,11 +2,49 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 
-Widget buildJournalBody({
+class JournalBody extends StatefulWidget {
+  const JournalBody({
+    required this.submissionDescription,
+    required this.onLinkTap,
+    super.key,
+  });
+
+  final String? submissionDescription;
+  final void Function(String?) onLinkTap;
+
+  @override
+  State<JournalBody> createState() => _JournalBodyState();
+}
+
+class _JournalBodyState extends State<JournalBody> {
+  GlobalKey _anchorKey = GlobalKey();
+
+  @override
+  void didUpdateWidget(covariant JournalBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if ((oldWidget.submissionDescription ?? '') !=
+        (widget.submissionDescription ?? '')) {
+      _anchorKey = GlobalKey();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _buildJournalBody(
+      submissionDescription: widget.submissionDescription,
+      onLinkTap: widget.onLinkTap,
+      anchorKey: _anchorKey,
+    );
+  }
+}
+
+Widget _buildJournalBody({
   required String? submissionDescription,
   required void Function(String?) onLinkTap,
+  required GlobalKey anchorKey,
 }) {
   return html_pkg.Html(
+    anchorKey: anchorKey,
     data: submissionDescription ?? '',
     style: {
       "body": html_pkg.Style(

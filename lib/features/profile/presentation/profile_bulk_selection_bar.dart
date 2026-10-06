@@ -57,7 +57,7 @@ class ProfileBulkSelectionBar extends StatelessWidget {
                 tooltip: 'Cancel selection',
                 onPressed: isApplying ? null : onCancel,
                 padding: _profileBulkSelectionBarCancelPadding,
-                icon: const Icon(Icons.close, color: Colors.red),
+                icon: const Icon(Icons.close, color: Colors.white),
               ),
               IconButton(
                 key: const ValueKey('profile-bulk-selection-toggle-all'),

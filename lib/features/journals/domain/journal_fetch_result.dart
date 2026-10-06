@@ -5,6 +5,8 @@ class JournalFetchResult {
     required this.authorSlug,
     required this.symbol,
     required this.userTitle,
+    required this.authorIconBeforeUrls,
+    required this.authorIconAfterUrls,
     required this.isJournalClassic,
     required this.ownerEditLink,
     required this.favoriteLink,
@@ -37,6 +39,8 @@ class JournalFetchResult {
   final String? authorSlug;
   final String? symbol;
   final String? userTitle;
+  final List<String> authorIconBeforeUrls;
+  final List<String> authorIconAfterUrls;
   final bool isJournalClassic;
   final String? ownerEditLink;
   final String? favoriteLink;

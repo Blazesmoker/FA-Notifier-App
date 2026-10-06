@@ -7,6 +7,8 @@ Widget buildJournalAuthorHeader({
   required String? authorUserName,
   required String? authorSymbol,
   required String? authorUserTitle,
+  required List<String> authorIconBeforeUrls,
+  required List<String> authorIconAfterUrls,
   required bool isJournalClassic,
   required VoidCallback onAuthorTap,
 }) {
@@ -49,10 +51,34 @@ Widget buildJournalAuthorHeader({
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              authorDisplayName ?? authorUserName ?? 'Anonymous',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-              overflow: TextOverflow.ellipsis,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ...authorIconBeforeUrls.map(
+                    (url) => Padding(
+                      padding: const EdgeInsets.only(right: 4.0),
+                      child: FaNetworkImage(url, width: 20, height: 20),
+                    ),
+                  ),
+                  Text(
+                    authorDisplayName ?? authorUserName ?? 'Anonymous',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                  ),
+                  ...authorIconAfterUrls.map(
+                    (url) => Padding(
+                      padding: const EdgeInsets.only(left: 4.0),
+                      child: FaNetworkImage(url, width: 20, height: 20),
+                    ),
+                  ),
+                ],
+              ),
             ),
             if (authorUserName != null && authorUserName.isNotEmpty)
               Text(
