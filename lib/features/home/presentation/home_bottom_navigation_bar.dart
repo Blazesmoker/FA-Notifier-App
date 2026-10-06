@@ -236,9 +236,9 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
                                         glass.LiquidGlassLens(
                                       style: glass.LiquidGlassStyle(
                                         shape: glass.LiquidGlassShape.continuousRoundedRectangle(
-                                        cornerRadius: 24,
+                                        cornerRadius: 32,
 
-                                        borderWidth: 0.5,
+                                        borderWidth: 0.1,
 
                                         lightColor: Color(0x807A7A7A),
 
@@ -247,13 +247,12 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
                                         lightDirection: 30,
 
                                         borderType: glass.OpticalBorder(
-                                          lightSpread: 0.50,
+                                          lightSpread: 0.35,
 
-                                          ambientIntensity: 0.25,
+                                          ambientIntensity: 0.7,
 
                                           borderSolidity: 0.0,
 
-                                          // 0.0 is useful here because you want a neutral greyish rim.
                                           borderSaturation: 0.0,
                                         ),
                                       ),
@@ -268,7 +267,7 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
                                         // 0.01 is intentionally extremely subtle.
                                         distortion: distortionEnabled ? 0.03 : 0.0,
 
-                                        distortionWidth: 8,
+                                        distortionWidth: 10,
 
                                         magnification: 1,
 
@@ -339,6 +338,8 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
   double velocityY = 0;
   double visibility = 0;
   double stretch = 0;
+  double _holdExpansion = 0;
+  double _targetHoldExpansion = 0;
   double _movingSize = 0;
   double _movingSizeVelocity = 0;
   double _verticalStretch = 0;
@@ -391,6 +392,10 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
   }
 
   double itemWidth(int index) => unit * (1 + 0.5 * activation(index));
+
+  double _bubbleItemWidth(int index) =>
+      itemWidth(index) *
+      (index == 0 || index == 1 || index == count - 1 ? 0.8 : 1.0);
 
   double _edgeCenter(
     int index,
@@ -465,6 +470,7 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
     _targetX = centerAt(index);
     _targetY = 0;
     _targetVerticalStretch = 0;
+    _targetHoldExpansion = 0;
     _fadeAfterSettling = !tapTransition &&
         (_targetVisibility > 0 || _fadeAfterSettling);
     _targetVisibility = _fadeAfterSettling ? 1 : 0;
@@ -486,6 +492,7 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
     _targetX = targetX.clamp(edgeInset, width - edgeInset).toDouble();
     _targetY = (targetY * 0.18).clamp(-8.0, 8.0).toDouble();
     _targetVerticalStretch = (targetY.abs() * 0.08).clamp(0.0, 6.0).toDouble();
+    _targetHoldExpansion = 1;
     _targetVisibility = 1;
     _wake();
   }
@@ -511,6 +518,7 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
     x = _targetX;
     y = _targetY;
     visibility = _targetVisibility;
+    _holdExpansion = _targetHoldExpansion;
     velocityX = velocityY = stretch = 0;
     _movingSize = _movingSizeVelocity = _verticalStretchVelocity = 0;
     _verticalStretch = reduceMotion ? 0 : _targetVerticalStretch;
@@ -540,8 +548,9 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
       y += velocityY * dt;
       final alpha = 1 - math.exp(-dt / 0.045);
       visibility += (_targetVisibility - visibility) * alpha;
+      _holdExpansion += (_targetHoldExpansion - _holdExpansion) * alpha;
       final targetStretch =
-          (velocityX.abs() / 160).clamp(0.0, 8.0).toDouble();
+          (velocityX.abs() / 30).clamp(0.0, 8.0).toDouble();
       stretch += (targetStretch - stretch) * alpha;
       final movingTarget = ((velocityX.abs() + velocityY.abs() * 4) / 550)
           .clamp(0.0, 1.0)
@@ -559,6 +568,7 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
         (y - _targetY).abs() < 0.02 &&
         velocityX.abs() < 0.1 &&
         velocityY.abs() < 0.1 &&
+        (_holdExpansion - _targetHoldExpansion).abs() < 0.002 &&
         stretch < 0.02 &&
         _movingSize.abs() < 0.002 &&
         _movingSizeVelocity.abs() < 0.02 &&
@@ -583,8 +593,8 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
     final p = position;
     final lower = p.floor();
     final upper = p.ceil();
-    final itemSpan = itemWidth(lower) +
-        (itemWidth(upper) - itemWidth(lower)) * (p - lower);
+    final itemSpan = _bubbleItemWidth(lower) +
+        (_bubbleItemWidth(upper) - _bubbleItemWidth(lower)) * (p - lower);
     final movingSize = _movingSize.clamp(0.0, 1.0).toDouble();
     final verticalStretch = _verticalStretch.clamp(0.0, 7.0).toDouble();
     final desiredBubbleWidth = (itemSpan +
@@ -597,7 +607,11 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
     final left = (x - bubbleWidth / 2)
         .clamp(0.0, width - bubbleWidth)
         .toDouble();
-    final bubbleHeight = 58 + 2 * (1 - movingSize) + verticalStretch;
+    final heldBubbleHeight =
+        68 + 2 * (1 - movingSize) + verticalStretch - stretch * 1.75;
+    final releasedBubbleHeight = _barHeight;
+    final bubbleHeight = releasedBubbleHeight +
+        (heldBubbleHeight - releasedBubbleHeight) * _holdExpansion;
     final top = 28 + y.clamp(-8.0, 8.0).toDouble() - bubbleHeight / 2;
     return Rect.fromLTWH(
       left,
