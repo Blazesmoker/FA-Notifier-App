@@ -18,7 +18,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-/// The main Notifications Screen widget.
 class NotificationsScreen extends StatefulWidget {
   final String? initialSection;
   final GlobalKey<HomeDrawerShellState> drawerKey;

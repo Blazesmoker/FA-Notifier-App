@@ -1,4 +1,3 @@
-import 'package:fanotifier/features/ads/data/fa_ad_parser.dart';
 import 'package:fanotifier/features/browse/domain/browse_page_data.dart';
 import 'package:fanotifier/features/browse/data/browse_filter_options_service.dart';
 import 'package:fanotifier/features/browse/data/browse_image_parser.dart';
@@ -32,15 +31,13 @@ class BrowseRepositoryImpl implements BrowseRepository {
     required Uri documentUri,
     required bool effectiveSfwEnabled,
   }) async {
-    return BrowsePageData(
-      images: await parseBrowseImageHtml(html),
-      modeMatchesRequest: faAdPageModeMatches(html, effectiveSfwEnabled),
-      ads: parseFaAdPage(
-        html: html,
-        documentUri: documentUri,
-        sfwEnabled: effectiveSfwEnabled,
-      ),
+    final parsed = await parseBrowsePageHtml(
+      html: html,
+      documentUri: documentUri,
+      sfwEnabled: effectiveSfwEnabled,
+      recovered: true,
     );
+    return parsed.page;
   }
 
   @override

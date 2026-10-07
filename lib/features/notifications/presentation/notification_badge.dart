@@ -9,7 +9,7 @@ class NotificationBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (count == '0') {
-      return const SizedBox(); // Don't show anything if count is 0
+      return const SizedBox();
     }
 
     return Container(

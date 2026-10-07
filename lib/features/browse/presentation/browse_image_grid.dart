@@ -53,6 +53,10 @@ class BrowseImageGridState extends State<BrowseImageGrid>
   late final ScrollReturnController _scrollReturn;
   final GlobalKey _viewportKey = GlobalKey();
   final ValueNotifier<bool> _adsActive = ValueNotifier(false);
+  List<_BrowseGridRow> _cachedGridRows = const [];
+  Map<String, int> _rowIndexByKey = const {};
+  int _cachedContentRevision = -1;
+  int _cachedAdsRevision = -1;
   ModalRoute<dynamic>? _route;
   bool _routeVisible = true;
   bool _appResumed = true;
@@ -83,7 +87,9 @@ class BrowseImageGridState extends State<BrowseImageGrid>
       repository: context.read<BrowseRepository>(),
       sfwEnabled: widget.sfwEnabled,
     );
-    _ads = BrowseAdsController(context.read<FaAdsRepository>(), _controller.scrollController);
+    _ads = BrowseAdsController(
+      context.read<FaAdsRepository>(), _controller.scrollController, _viewportKey,
+    );
     _scrollReturn = ScrollReturnController(
       scrollController: _controller.scrollController,
       onSavePosition: _ads.captureReturnPosition,
@@ -268,7 +274,10 @@ class BrowseImageGridState extends State<BrowseImageGrid>
     final screenHeight = MediaQuery.of(context).size.height;
     final maxHeight = screenHeight * 0.4;
     final errorMessage = _errorMessage;
-    _ads.synchronize(_controller.sections, MediaQuery.sizeOf(context).width);
+    _ads.synchronize(
+      _controller.sections, MediaQuery.sizeOf(context).width,
+      contentRevision: _controller.sectionsRevision,
+    );
     final rows = _gridRows();
 
     if (!isLoading &&
@@ -335,8 +344,7 @@ class BrowseImageGridState extends State<BrowseImageGrid>
                   itemCount: rows.length + (isLoading ? 1 : 0),
                   findChildIndexCallback: (key) {
                     if (key is! ValueKey<String>) return null;
-                    final index = rows.indexWhere((row) => row.key == key.value);
-                    return index < 0 ? null : index;
+                    return _rowIndexByKey[key.value];
                   },
                   itemBuilder: (context, index) {
                     if (index == rows.length) {
@@ -381,6 +389,7 @@ class BrowseImageGridState extends State<BrowseImageGrid>
                         scrollController: _scrollController,
                         active: _adsActive,
                         geometryPadding: rowPadding,
+                        visibilityManagedExternally: true,
                         onGeometryReader: (reader, attached) {
                           _ads.registerViewportRow(
                             page: row.page, key: row.key, kind: row.kind,
@@ -394,7 +403,6 @@ class BrowseImageGridState extends State<BrowseImageGrid>
                           if (slot != null && section != null) {
                             section.setSlotVisibility(slot.definition.placement, visible, ratio);
                           }
-                          _ads.viewportChanged();
                         },
                         child: slot != null && section != null
                             ? FaAdBanner(
@@ -412,6 +420,12 @@ class BrowseImageGridState extends State<BrowseImageGrid>
   }
 
   List<_BrowseGridRow> _gridRows() {
+    final contentRevision = _controller.sectionsRevision;
+    final adsRevision = _ads.structureRevision;
+    if (_cachedContentRevision == contentRevision &&
+        _cachedAdsRevision == adsRevision) {
+      return _cachedGridRows;
+    }
     final result = <_BrowseGridRow>[];
     for (final page in _controller.sections) {
       final section = _ads.section(page.pageNumber);
@@ -458,7 +472,17 @@ class BrowseImageGridState extends State<BrowseImageGrid>
         ));
       }
     }
-    return decorated;
+    _cachedGridRows = List.unmodifiable(decorated);
+    _rowIndexByKey = {
+      for (var index = 0; index < decorated.length; index++)
+        decorated[index].key: index,
+    };
+    _cachedContentRevision = contentRevision;
+    _cachedAdsRevision = adsRevision;
+    FaAdsLog.event(FaAdsLogCategory.perf, 'browse_row_cache_rebuilt',
+        counts: {'rows': decorated.length, 'sections': _controller.sections.length},
+        checks: {'stableKeys': true, 'countingRequest': false});
+    return _cachedGridRows;
   }
 
   void _openArtwork(Map<String, dynamic> image) {

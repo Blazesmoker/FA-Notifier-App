@@ -155,7 +155,6 @@ class FaThumbnailCaption extends StatelessWidget {
   }
 }
 
-/// Convenience wrapper that composes [FaThumbnailOutline] + [FaThumbnailCaption].
 class FaThumbnailDisplay extends StatelessWidget {
   final Widget child;
   final String? rating;

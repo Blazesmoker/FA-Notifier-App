@@ -1,4 +1,3 @@
-/// Holds counts for each notification category.
 class NotificationCounts {
   final int submissions;
   final int watches;

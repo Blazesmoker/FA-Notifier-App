@@ -1,8 +1,31 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
-typedef FaAdGeometryReader = FaAdViewportGeometry? Function();
+typedef FaAdGeometryReader = FaAdViewportGeometry? Function({
+  FaAdViewportMetrics? metrics,
+});
+
+class FaAdViewportMetrics {
+  const FaAdViewportMetrics({required this.bounds, required this.atStart});
+
+  final Rect bounds;
+  final bool atStart;
+}
+
+FaAdViewportMetrics? readFaAdViewportMetrics(
+  GlobalKey viewportKey, ScrollController scrollController,
+) {
+  if (!scrollController.hasClients) return null;
+  final viewport = viewportKey.currentContext?.findRenderObject();
+  if (viewport is! RenderBox || !viewport.attached || !viewport.hasSize) {
+    return null;
+  }
+  final position = scrollController.position;
+  return FaAdViewportMetrics(
+    bounds: viewport.localToGlobal(Offset.zero) & viewport.size,
+    atStart: (position.pixels - position.minScrollExtent).abs() <= 0.5,
+  );
+}
 
 class FaAdViewportGeometry {
   const FaAdViewportGeometry({
@@ -30,6 +53,7 @@ class FaAdViewport extends StatefulWidget {
     this.onGeometryReader,
     this.onLayoutChanged,
     this.geometryPadding = EdgeInsets.zero,
+    this.visibilityManagedExternally = false,
     super.key,
   });
 
@@ -41,6 +65,7 @@ class FaAdViewport extends StatefulWidget {
   final void Function(FaAdGeometryReader reader, bool attached)? onGeometryReader;
   final VoidCallback? onLayoutChanged;
   final EdgeInsets geometryPadding;
+  final bool visibilityManagedExternally;
 
   @override
   State<FaAdViewport> createState() => _FaAdViewportState();
@@ -54,8 +79,10 @@ class _FaAdViewportState extends State<FaAdViewport> {
   @override
   void initState() {
     super.initState();
-    widget.scrollController.addListener(_schedule);
-    widget.active.addListener(_schedule);
+    if (!widget.visibilityManagedExternally) {
+      widget.scrollController.addListener(_schedule);
+      widget.active.addListener(_schedule);
+    }
     widget.onGeometryReader?.call(_geometryReader, true);
     _schedule();
   }
@@ -63,34 +90,43 @@ class _FaAdViewportState extends State<FaAdViewport> {
   @override
   void didUpdateWidget(covariant FaAdViewport oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.scrollController != widget.scrollController) {
-      oldWidget.scrollController.removeListener(_schedule);
-      widget.scrollController.addListener(_schedule);
+    final managementChanged = oldWidget.visibilityManagedExternally !=
+        widget.visibilityManagedExternally;
+    if (managementChanged || oldWidget.scrollController != widget.scrollController) {
+      if (!oldWidget.visibilityManagedExternally) {
+        oldWidget.scrollController.removeListener(_schedule);
+      }
+      if (!widget.visibilityManagedExternally) {
+        widget.scrollController.addListener(_schedule);
+      }
     }
-    if (oldWidget.active != widget.active) {
-      oldWidget.active.removeListener(_schedule);
-      widget.active.addListener(_schedule);
+    if (managementChanged || oldWidget.active != widget.active) {
+      if (!oldWidget.visibilityManagedExternally) {
+        oldWidget.active.removeListener(_schedule);
+      }
+      if (!widget.visibilityManagedExternally) {
+        widget.active.addListener(_schedule);
+      }
     }
     oldWidget.onGeometryReader?.call(_geometryReader, false);
     widget.onGeometryReader?.call(_geometryReader, true);
     _schedule();
   }
 
-  FaAdViewportGeometry? _readGeometry() {
+  FaAdViewportGeometry? _readGeometry({FaAdViewportMetrics? metrics}) {
     if (!mounted || !widget.active.value || !widget.scrollController.hasClients) {
       return null;
     }
     final target = _boundsKey.currentContext?.findRenderObject();
-    final viewport = widget.viewportKey.currentContext?.findRenderObject();
-    if (target is! RenderBox || viewport is! RenderBox ||
-        !target.attached || !viewport.attached ||
-        !target.hasSize || !viewport.hasSize) {
+    if (target is! RenderBox || !target.attached || !target.hasSize) {
       return null;
     }
+    final viewMetrics = metrics ??
+        readFaAdViewportMetrics(widget.viewportKey, widget.scrollController);
+    if (viewMetrics == null) return null;
     final bounds = target.localToGlobal(Offset.zero) & target.size;
-    final view = viewport.localToGlobal(Offset.zero) & viewport.size;
+    final view = viewMetrics.bounds;
     final padding = widget.geometryPadding;
-    final position = widget.scrollController.position;
     final intersection = bounds.intersect(view);
     final visible = bounds.width > 0 && bounds.height > 0 &&
         intersection.width >= 0 && intersection.height >= 0;
@@ -104,17 +140,18 @@ class _FaAdViewportState extends State<FaAdViewport> {
         bounds.right + padding.right, bounds.bottom + padding.bottom,
       ),
       viewport: view,
-      atStart: (position.pixels - position.minScrollExtent).abs() <= 0.5,
+      atStart: viewMetrics.atStart,
       isIntersecting: visible,
       intersectionRatio: ratio,
     );
   }
 
   void _schedule() {
-    if (_scheduled) return;
+    if (widget.visibilityManagedExternally || _scheduled) return;
     _scheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scheduled = false;
+      if (!mounted || widget.visibilityManagedExternally) return;
       final geometry = _readGeometry();
       if (geometry == null) return;
       widget.onVisibility(geometry.isIntersecting, geometry.intersectionRatio);
@@ -124,8 +161,10 @@ class _FaAdViewportState extends State<FaAdViewport> {
 
   @override
   void dispose() {
-    widget.scrollController.removeListener(_schedule);
-    widget.active.removeListener(_schedule);
+    if (!widget.visibilityManagedExternally) {
+      widget.scrollController.removeListener(_schedule);
+      widget.active.removeListener(_schedule);
+    }
     widget.onGeometryReader?.call(_geometryReader, false);
     widget.onVisibility(false, 0);
     super.dispose();

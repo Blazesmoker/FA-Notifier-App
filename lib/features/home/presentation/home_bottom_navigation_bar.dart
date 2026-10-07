@@ -247,7 +247,7 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
                                         lightDirection: 30,
 
                                         borderType: glass.OpticalBorder(
-                                          lightSpread: 0.35,
+                                          lightSpread: 0.43,
 
                                           ambientIntensity: 0.7,
 
@@ -264,14 +264,12 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
                                       ),
 
                                       refraction: glass.LiquidGlassRefraction(
-                                        // 0.01 is intentionally extremely subtle.
                                         distortion: distortionEnabled ? 0.03 : 0.0,
 
                                         distortionWidth: 10,
 
                                         magnification: 1,
 
-                                        // 0.001 is extremely subtle.
                                         chromaticAberration:
                                             distortionEnabled ? 0.002 : 0.0,
                                       ),

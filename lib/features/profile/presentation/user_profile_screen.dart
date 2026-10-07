@@ -256,7 +256,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
   final ValueNotifier<bool> _webViewLoaded = ValueNotifier<bool>(false);
 
   static const double sliverAppBarExpandedHeight = 120.0;
-  static const double sliverAppBarMinHeight = kToolbarHeight - 80.0; // 56.0
+  static const double sliverAppBarMinHeight = kToolbarHeight - 80.0;
   static const double collapsibleHeaderMaxHeight = 110.0;
   static const double navigationSliderHeight = 64.0;
 
@@ -1403,7 +1403,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                     children: [
                                       Stack(
                                         children: [
-                                          // Stroked text as outline
                                           Text(
                                             _profileController.symbolUsername ??
                                                 'Profile',
@@ -1416,7 +1415,6 @@ class UserProfileScreenState extends State<UserProfileScreen>
                                                 ..color = Color(0xFF111111),
                                             ),
                                           ),
-                                          // Filled text on top
                                           Text(
                                             _profileController.symbolUsername ??
                                                 'Profile',

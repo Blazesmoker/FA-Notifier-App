@@ -322,7 +322,6 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
     }
 
     try {
-      // Wait a bit to ensure the page is fully loaded
       await Future.delayed(const Duration(milliseconds: 300));
 
       final fields = await _readFinalizeFields();

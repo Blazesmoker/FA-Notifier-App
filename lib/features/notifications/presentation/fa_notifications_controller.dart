@@ -9,7 +9,6 @@ import 'package:fanotifier/shared/fa/domain/fa_notification_state_port.dart';
 import 'package:fanotifier/features/notifications/domain/notification_shout_merge_policy.dart';
 import 'package:fanotifier/features/notifications/domain/notification_removal_outcome.dart';
 
-/// Centralized service for notifications.
 class FaNotificationsController with ChangeNotifier implements FaNotificationStatePort {
   FaNotificationsController({
     required this._repository,

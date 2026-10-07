@@ -363,7 +363,7 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
                 color: Colors.black,
                 child: const Center(
                   child: PulsatingLoadingIndicator(
-                    size: 78.0, // medium
+                    size: 78.0,
                     assetPath: 'assets/icons/fathemed.png',
                   ),
                 ),

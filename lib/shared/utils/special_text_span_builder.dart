@@ -150,7 +150,6 @@ class EmojiSpecialTextSpanBuilder extends SpecialTextSpanBuilder {
           spans.add(TextSpan(text: emojiKey, style: textStyle));
         }
       } else if (match.group(4) != null) {
-        // URL
         final url = match.group(4)!;
         spans.add(TextSpan(
           text: url,

@@ -11,11 +11,9 @@ class HeartAnimationOptimized extends StatefulWidget {
   final bool wasInitiallyFavorited;
   final Widget child;
 
-  /// Container width/height to size the big heart animation
   final double containerWidth;
   final double containerHeight;
 
-  /// Animation duration for the big heart
   final Duration animationDuration;
 
   const HeartAnimationOptimized({
@@ -34,24 +32,19 @@ class HeartAnimationOptimized extends StatefulWidget {
 
 class HeartAnimationOptimizedState extends State<HeartAnimationOptimized>
     with SingleTickerProviderStateMixin {
-  /// Tracks the current favorite state inside this widget
   late bool _localFav;
 
-  /// Animation controller for big hearts/broken hearts
   late AnimationController _controller;
   late Animation<double> _scaleAnim;
   late Animation<double> _opacityAnim;
 
-  /// Display the big full heart icons
   bool _showBigHeart = false;
 
-  /// Display the big broken heart icons
   bool _showBigBrokenHeart = false;
 
   /// Shows a small broken heart if toggling from favored->unfavored
   bool _showSmallBrokenHeart = false;
 
-  /// Flag to track if initialization has been handled
   bool _hasInitialized = false;
 
   @override
@@ -84,14 +77,12 @@ class HeartAnimationOptimizedState extends State<HeartAnimationOptimized>
     if (oldWidget.isFavorite != widget.isFavorite) {
       if (!_hasInitialized) {
         if (widget.wasInitiallyFavorited && widget.isFavorite) {
-          // Initially favorited and still favorited; skip animation
           setState(() {
             _localFav = widget.isFavorite;
             _hasInitialized = true;
           });
           return;
         } else if (!widget.wasInitiallyFavorited && widget.isFavorite) {
-          // Initially unfavorited and now favorited; play animation
           setState(() {
             _showBigHeart = true;
             _showBigBrokenHeart = false;
@@ -103,7 +94,6 @@ class HeartAnimationOptimizedState extends State<HeartAnimationOptimized>
             _hasInitialized = true;
           });
         } else if (widget.wasInitiallyFavorited && !widget.isFavorite) {
-          // Initially favorited and now unfavorited; play broken heart animation
           setState(() {
             _showBigHeart = false;
             _showBigBrokenHeart = true;
@@ -116,7 +106,6 @@ class HeartAnimationOptimizedState extends State<HeartAnimationOptimized>
             _hasInitialized = true;
           });
         } else {
-          // Initially unfavorited and still unfavorited; no animation
           setState(() {
             _localFav = widget.isFavorite;
             _hasInitialized = true;

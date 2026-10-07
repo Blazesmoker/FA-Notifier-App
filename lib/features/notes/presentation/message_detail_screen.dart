@@ -337,7 +337,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
       messageActionsButtonsBottomInset,
     );
     if (_shouldShowReplySuccess) {
-      _shouldShowReplySuccess = false; // Reset immediately
+      _shouldShowReplySuccess = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           debugPrint('DEBUG: Showing snackbar from build cycle');

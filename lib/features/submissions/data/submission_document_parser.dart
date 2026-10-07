@@ -10,7 +10,6 @@ import 'package:fanotifier/features/submissions/domain/submission_document_model
 import 'package:fanotifier/shared/fa/parsing_utils.dart';
 
 class SubmissionDocumentParser {
-  /// Parses the main post document and returns structured data.
   static SubmissionParseResult parsePostDocument(dom.Document document) {
     final titleText = document.querySelector('title')?.text.toLowerCase() ?? '';
     final h2Text = document.querySelector('h2')?.text.toLowerCase() ?? '';

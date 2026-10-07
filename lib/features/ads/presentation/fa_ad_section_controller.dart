@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -61,9 +60,9 @@ class FaAdSectionController {
     required this.sectionNumber,
     required this.page,
     required this.layout,
-    required FaAdsRepository repository,
+    required this._repository,
     this.onSizeWillChange,
-  }) : _repository = repository {
+  }) {
     slots = [for (final slot in layout.slots) FaAdSlotController(slot)];
     FaAdsLog.event(FaAdsLogCategory.config, 'section_created',
         section: sectionNumber,
@@ -91,7 +90,7 @@ class FaAdSectionController {
   bool get _canStart => _active && !_disposed;
 
   void setActive(bool active) {
-    if (_disposed) return;
+    if (_disposed || _active == active) return;
     _active = active;
     if (active) {
       for (final slot in slots) {
@@ -107,10 +106,11 @@ class FaAdSectionController {
     }
   }
 
-  void setSlotVisibility(FaAdPlacement placement, bool visible, double ratio) {
-    if (_disposed) return;
+  bool setSlotVisibility(FaAdPlacement placement, bool visible, double ratio) {
+    if (_disposed) return false;
     final slot = slots.firstWhere((slot) => slot.definition.placement == placement);
-    if (slot.visible != visible) {
+    var changed = slot.visible != visible;
+    if (changed) {
       FaAdsLog.event(FaAdsLogCategory.visibility, visible ? 'slot_entered' : 'slot_left',
           section: sectionNumber, delivery: _generation, slot: placement.name,
           counts: {'visiblePermille': (ratio * 1000).round()},
@@ -119,10 +119,12 @@ class FaAdSectionController {
     slot.visible = visible;
     if (visible && _active && !slot.activated) {
       slot.activated = true;
+      changed = true;
       FaAdsLog.event(FaAdsLogCategory.slot, 'activation_latched',
           section: sectionNumber, delivery: _generation, slot: placement.name,
           checks: {'geometricIntersection': true, 'durationGate': false});
     }
+    return changed;
   }
 
   void activateVisibleSlots() {

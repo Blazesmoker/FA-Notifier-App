@@ -1,3 +1,4 @@
+import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html_parser;
 
 class FaSystemMessage {
@@ -23,12 +24,12 @@ class FaMaintenanceUnavailableException implements Exception {
   String toString() => message;
 }
 
-FaSystemMessage? parseFaSystemMessage(Object? html) {
+FaSystemMessage? parseFaSystemMessage(Object? html, {Document? parsedDocument}) {
   if (html == null) return null;
   final raw = html.toString();
   if (raw.trim().isEmpty) return null;
 
-  final document = html_parser.parse(raw);
+  final document = parsedDocument ?? html_parser.parse(raw);
   final redirectMessage = document.querySelector('.redirect-message');
   final noticeSection = document.querySelector('section.notice-message') ??
       document.querySelector('.notice-message');

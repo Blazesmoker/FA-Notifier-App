@@ -143,7 +143,6 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       controller,
       navigationDelegate: NavigationDelegate(
           onPageStarted: (String url) {
-            // Check if we've navigated to the messages list (success)
             debugPrint('DEBUG: WebView page started: $url');
             if (_webViewGateway.isSentMessagesListUrl(url)) {
               debugPrint('DEBUG: Success detected in onPageStarted');
@@ -166,7 +165,6 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
               });
             }
 
-            // Double-check for success page
             if (_webViewGateway.isSentMessagesListUrl(url)) {
               debugPrint('DEBUG: Success detected in onPageFinished');
               if (mounted && !_replySentSuccessfully) {

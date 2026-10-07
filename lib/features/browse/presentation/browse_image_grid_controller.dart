@@ -19,8 +19,8 @@ class BrowseImageGridController extends ChangeNotifier {
     required this._selectedFilters,
     required this._onCloudflareChallenge,
     required this._repository,
-    required bool sfwEnabled,
-  }) : _sfwEnabled = sfwEnabled;
+    required this._sfwEnabled,
+  });
 
   static const double _nextPageLeadScreens = 2.5;
 
@@ -40,6 +40,7 @@ class BrowseImageGridController extends ChangeNotifier {
   String? _errorMessage;
   bool _sfwEnabled;
   int _requestGeneration = 0;
+  int _sectionsRevision = 0;
   bool _isHandlingCloudflareChallenge = false;
   double _nextPageTriggerOffset = double.infinity;
   bool _pendingNextPageFetch = false;
@@ -52,6 +53,7 @@ class BrowseImageGridController extends ChangeNotifier {
   List<Map<String, dynamic>> get images => _images;
   List<List<Map<String, dynamic>>> get imageRows => _imageRows;
   List<BrowseGridSection> get sections => _sections;
+  int get sectionsRevision => _sectionsRevision;
   List<Map<String, dynamic>> get normalImagesQueue => _normalImagesQueue;
   bool get sfwEnabled => _sfwEnabled;
   bool get isLoading => _isLoading;
@@ -104,6 +106,7 @@ class BrowseImageGridController extends ChangeNotifier {
     _images.clear();
     _imageRows.clear();
     _sections.clear();
+    _sectionsRevision++;
     _normalImagesQueue.clear();
     _currentPage = 1;
     _hasMore = true;
@@ -148,6 +151,7 @@ class BrowseImageGridController extends ChangeNotifier {
         _images.clear();
         _imageRows.clear();
         _sections.clear();
+        _sectionsRevision++;
         _normalImagesQueue.clear();
         _currentPage = 1;
         _hasMore = true;
@@ -277,6 +281,7 @@ class BrowseImageGridController extends ChangeNotifier {
         rows: appendedRows,
         ads: page.ads,
       ));
+      _sectionsRevision++;
     }
     _normalImagesQueue = nextQueue;
     _pendingNextPageFetch = false;

@@ -46,7 +46,7 @@ class _HeartAnimationWidgetState extends State<HeartAnimationWidget>
   void initState() {
     super.initState();
     _localFav = widget.isFavorite;
-    _showSmallHeart = _localFav; // If we start favored, show the small heart.
+    _showSmallHeart = _localFav;
 
     _controller = AnimationController(
       vsync: this,
@@ -105,7 +105,6 @@ class _HeartAnimationWidgetState extends State<HeartAnimationWidget>
         setState(() {
           _showBigHeart = false;
           _showBigBrokenHeart = false;
-          // If it's currently unfaved, hide the broken heart icons
           if (!newFav) {
             _showSmallBrokenHeart = false;
           }

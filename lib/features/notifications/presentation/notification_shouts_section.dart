@@ -100,7 +100,6 @@ class AvatarWidget extends StatelessWidget {
   }
 }
 
-/// A stateful widget for the Shouts section.
 class ShoutsSectionWidget extends StatefulWidget {
   final ScrollReturnController scrollReturn;
   final FaNotificationsController service;
@@ -177,18 +176,14 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
     super.dispose();
   }
 
-  /// Called when user taps "Select All"
   Future<void> toggleSelectAll() => _controller.toggleSelectAll();
 
-  /// Called when user taps "Remove Selected"
   Future<NotificationRemovalOutcome> removeSelected() =>
       _controller.removeSelected();
 
-  /// Called when user taps "Nuke" for the entire "Shouts" section
   Future<NotificationRemovalOutcome> nukeSection() =>
       _controller.nukeSection();
 
-  /// Called when the checkbox is toggled
   void _onCheckboxChanged(Shout shout, bool? val) {
     if (val == null) return;
     _controller.setChecked(shout, val);
@@ -502,13 +497,11 @@ class _AvatarFadeInImageState extends State<_AvatarFadeInImage> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Placeholder (always visible)
         Image.asset(
           widget.fallbackAsset,
           fit: BoxFit.cover,
         ),
 
-        // Real image fades in on top
         FaNetworkImage(
           widget.imageUrl,
           fit: BoxFit.cover,

@@ -402,7 +402,6 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
 
   @override
   Widget build(BuildContext context) {
-    // If no images yet, show a placeholder.
     if (_images.isEmpty && _isLoading) {
       return SliverToBoxAdapter(
         child: SizedBox(

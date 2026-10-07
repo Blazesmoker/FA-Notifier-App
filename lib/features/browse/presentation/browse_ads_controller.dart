@@ -16,18 +16,20 @@ enum BrowseAdRowKind { artwork, headerAd, footerAd, divider }
 enum _BrowsePageQualification { content, shortPage, listTop }
 
 class BrowseAdsController {
-  BrowseAdsController(this._repository, this._scrollController);
+  BrowseAdsController(this._repository, this._scrollController, this._viewportKey);
 
   static const Duration _minimumPageStay = Duration(seconds: 2);
   static const double _geometryTolerance = 0.5;
 
   final FaAdsRepository _repository;
   final BrowseAdScrollController _scrollController;
+  final GlobalKey _viewportKey;
   final Map<int, FaAdSectionController> _sections = {};
   final Map<int, BrowseGridSection> _pages = {};
   final Map<String, _BrowseAdRowProbe> _rows = {};
   final Set<int> _seen = {};
   final Set<int> _retainedPages = {};
+  final Set<int> _pendingSectionActivation = {};
   Timer? _stayTimer;
   _BrowsePageStay? _stay;
   Rect? _lastViewport;
@@ -41,6 +43,8 @@ class BrowseAdsController {
   int _nextVisit = 0;
   int _scheduleRevision = 0;
   int _resumeRevision = 0;
+  int _structureRevision = 0;
+  int? _contentRevision;
   bool _active = false;
   bool _disposed = false;
   bool _scheduled = false;
@@ -50,9 +54,18 @@ class BrowseAdsController {
   _BrowseReturnAnchor? _returnAnchor;
 
   FaAdSectionController? section(int page) => _sections[page];
+  int get structureRevision => _structureRevision;
 
-  void synchronize(List<BrowseGridSection> pages, double width) {
+  void synchronize(
+    List<BrowseGridSection> pages, double width, {
+    int? contentRevision,
+  }) {
     if (_disposed) return;
+    if (contentRevision != null && contentRevision == _contentRevision &&
+        _layoutWidth == width) {
+      return;
+    }
+    _contentRevision = contentRevision;
     if (_layoutWidth != null && _layoutWidth != width) {
       _scrollController.clearResizeAnchor();
       _cancelStay('layout_changed');
@@ -76,7 +89,11 @@ class BrowseAdsController {
         if (previous != null && _stay?.page == page.pageNumber) {
           _cancelStay('layout_changed');
         }
-        _sections.remove(page.pageNumber)?.dispose();
+        if (_sections.remove(page.pageNumber) != null) {
+          previous?.dispose();
+          _pendingSectionActivation.remove(page.pageNumber);
+          _structureRevision++;
+        }
         continue;
       }
       if (previous != null && identical(previous.page, metadata) &&
@@ -84,19 +101,29 @@ class BrowseAdsController {
         continue;
       }
       if (_stay?.page == page.pageNumber) _cancelStay('layout_changed');
-      previous?.dispose();
+      if (previous != null) {
+        previous.dispose();
+        _rows.removeWhere((_, row) => row.page.pageNumber == page.pageNumber);
+      }
       _sections[page.pageNumber] = FaAdSectionController(
         sectionNumber: page.pageNumber,
         page: metadata, layout: layout, repository: _repository,
         onSizeWillChange: (_) => _prepareAdResize(),
       )..setActive(_active && !_resuming);
+      _pendingSectionActivation.add(page.pageNumber);
+      _structureRevision++;
     }
   }
 
   void _forgetPage(int page) {
     if (_returnAnchor?.page.pageNumber == page) _returnAnchor = null;
     if (_stay?.page == page) _cancelStay('content_changed');
-    _sections.remove(page)?.dispose();
+    final section = _sections.remove(page);
+    if (section != null) {
+      section.dispose();
+      _structureRevision++;
+    }
+    _pendingSectionActivation.remove(page);
     _pages.remove(page);
     _rows.removeWhere((_, row) => row.page.pageNumber == page);
     _seen.remove(page);
@@ -117,11 +144,13 @@ class BrowseAdsController {
     if (!active) {
       _scrollController.clearResizeAnchor();
       _cancelStay('browse_hidden');
+      _pendingSectionActivation.clear();
       for (final section in _sections.values) {
         section.setActive(false);
       }
       return;
     }
+    _pendingSectionActivation.addAll(_sections.keys);
     _resuming = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_disposed || !_active || revision != _resumeRevision) return;
@@ -185,10 +214,12 @@ class BrowseAdsController {
 
   void captureReturnPosition() {
     _returnAnchor = null;
+    final metrics = readFaAdViewportMetrics(_viewportKey, _scrollController);
+    if (metrics == null) return;
     MapEntry<String, _BrowseAdRowProbe>? selected;
     FaAdViewportGeometry? selectedGeometry;
     for (final entry in _rows.entries) {
-      final geometry = entry.value.reader();
+      final geometry = entry.value.reader(metrics: metrics);
       if (geometry == null) continue;
       final intersection = geometry.bounds.intersect(geometry.viewport);
       if (intersection.width <= 0 || intersection.height <= 0) continue;
@@ -278,16 +309,19 @@ class BrowseAdsController {
   void _prepareAdResize() {
     if (_disposed) return;
     if (_active && !_resuming && _programmaticScroll == null) {
+      final metrics = readFaAdViewportMetrics(_viewportKey, _scrollController);
       _BrowseAdRowProbe? anchor;
       double? top;
-      for (final row in _rows.values) {
-        final geometry = row.reader();
-        if (geometry == null) continue;
-        final intersection = geometry.bounds.intersect(geometry.viewport);
-        if (intersection.width <= 0 || intersection.height <= 0) continue;
-        if (top == null || geometry.bounds.top < top) {
-          anchor = row;
-          top = geometry.bounds.top;
+      if (metrics != null) {
+        for (final row in _rows.values) {
+          final geometry = row.reader(metrics: metrics);
+          if (geometry == null) continue;
+          final intersection = geometry.bounds.intersect(geometry.viewport);
+          if (intersection.width <= 0 || intersection.height <= 0) continue;
+          if (top == null || geometry.bounds.top < top) {
+            anchor = row;
+            top = geometry.bounds.top;
+          }
         }
       }
       if (anchor != null) _scrollController.preserveResizeAnchor(anchor.reader);
@@ -308,7 +342,8 @@ class BrowseAdsController {
     if (attached) {
       _rows[key] = _BrowseAdRowProbe(page, kind, artworkIndex, placement, reader);
     } else if (identical(_rows[key]?.reader, reader)) {
-      _rows.remove(key);
+      final row = _rows.remove(key);
+      if (row != null) _updateSlotVisibility(row, false, 0);
     }
     _scheduleVisibility();
   }
@@ -329,21 +364,22 @@ class BrowseAdsController {
 
   void _reconcileVisibility() {
     if (_disposed || !_active || _resuming) return;
+    final metrics = readFaAdViewportMetrics(_viewportKey, _scrollController);
+    if (metrics == null) {
+      _cancelStay('content_not_qualified');
+      return;
+    }
     final measured = <_BrowseMeasuredRow>[];
     for (final row in _rows.values) {
-      final geometry = row.reader();
+      final geometry = row.reader(metrics: metrics);
       if (geometry == null || geometry.bounds.isEmpty ||
           geometry.viewport.isEmpty || !geometry.bounds.width.isFinite ||
           !geometry.bounds.height.isFinite) {
+        _updateSlotVisibility(row, false, 0);
         continue;
       }
       measured.add(_BrowseMeasuredRow(row, geometry));
-      final placement = row.placement;
-      if (placement != null) {
-        _sections[row.page.pageNumber]?.setSlotVisibility(
-          placement, geometry.isIntersecting, geometry.intersectionRatio,
-        );
-      }
+      _updateSlotVisibility(row, geometry.isIntersecting, geometry.intersectionRatio);
     }
     final viewport = measured.isEmpty ? null : measured.first.geometry.viewport;
     if (viewport != _lastViewport) {
@@ -360,6 +396,7 @@ class BrowseAdsController {
         final section = _sections[page];
         section?.setActive(false);
         section?.refresh();
+        if (section != null) _pendingSectionActivation.add(page);
         FaAdsLog.event(FaAdsLogCategory.lifecycle, 'visible_section_refreshed',
             section: page, delivery: section?.deliveryGeneration);
       }
@@ -370,9 +407,19 @@ class BrowseAdsController {
       _updateVisit(candidate);
     }
     _seen.addAll(visible);
-    for (final section in _sections.values) {
-      section.setActive(true);
-      section.activateVisibleSlots();
+    for (final page in _pendingSectionActivation.toList(growable: false)) {
+      _pendingSectionActivation.remove(page);
+      final section = _sections[page];
+      section?.setActive(true);
+      section?.activateVisibleSlots();
+    }
+  }
+
+  void _updateSlotVisibility(_BrowseAdRowProbe row, bool visible, double ratio) {
+    final placement = row.placement;
+    if (placement == null) return;
+    if (_sections[row.page.pageNumber]?.setSlotVisibility(placement, visible, ratio) == true) {
+      _pendingSectionActivation.add(row.page.pageNumber);
     }
   }
 
@@ -500,6 +547,7 @@ class BrowseAdsController {
     if (stay.renew && section != null) {
       section.setActive(false);
       section.refresh();
+      _pendingSectionActivation.add(stay.page);
       FaAdsLog.event(FaAdsLogCategory.lifecycle, 'back_scrolled_section_refreshed',
           section: stay.page, delivery: section.deliveryGeneration,
           counts: {'visit': stay.visit}, checks: stay.qualificationChecks);
@@ -530,6 +578,9 @@ class BrowseAdsController {
       section.dispose();
     }
     _sections.clear();
+    _pendingSectionActivation.clear();
+    _structureRevision++;
+    _contentRevision = null;
     _pages.clear();
     _rows.clear();
     _seen.clear();

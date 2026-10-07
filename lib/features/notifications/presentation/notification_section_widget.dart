@@ -605,10 +605,8 @@ class _FadeInNetworkImageState extends State<FadeInNetworkImage> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Placeholder is always visible
         widget.placeholder,
 
-        // Image fades in smoothly
         FaNetworkImage(
           widget.imageUrl,
           fit: widget.fit,

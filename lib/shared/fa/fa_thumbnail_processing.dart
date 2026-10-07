@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html_parser;
 
 import 'package:fanotifier/shared/fa/fa_thumbnail_parser.dart';
@@ -8,7 +9,10 @@ Future<List<Map<String, dynamic>>> parseFaThumbnailHtml(String html) {
 }
 
 List<Map<String, dynamic>> _parseFaThumbnailHtml(String html) {
-  final document = html_parser.parse(html);
+  return parseFaThumbnailDocument(html_parser.parse(html));
+}
+
+List<Map<String, dynamic>> parseFaThumbnailDocument(Document document) {
   final figures = FaThumbnailParser.selectThumbnailFigures(document);
   final imageMetadata = <Map<String, dynamic>>[];
 

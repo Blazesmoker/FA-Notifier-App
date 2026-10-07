@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:fanotifier/features/ads/data/fa_ad_parser.dart';
 import 'package:fanotifier/features/browse/domain/browse_page_data.dart';
 import 'package:fanotifier/features/browse/data/browse_image_parser.dart';
 import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
@@ -14,16 +13,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class BrowseImageService {
   BrowseImageService({
     FlutterSecureStorage? secureStorage,
-    Future<void> Function({required Uri documentUri, required String? setCookieHeader})?
-        onDocumentCookies,
+    this._onDocumentCookies,
   }) : _secureStorage = secureStorage ??
             const FlutterSecureStorage(
               iOptions: IOSOptions(
                 accountName: 'flutter_secure_storage_service',
                 accessibility: KeychainAccessibility.first_unlock,
               ),
-            ),
-        _onDocumentCookies = onDocumentCookies;
+            );
 
   final FlutterSecureStorage _secureStorage;
   final Future<void> Function({required Uri documentUri, required String? setCookieHeader})?
@@ -128,7 +125,16 @@ class BrowseImageService {
     }
 
     if (resp.statusCode == 200) {
-      final faMessage = parseFaSystemMessage(resp.body);
+      final parsed = await parseBrowsePageHtml(
+        html: resp.body,
+        documentUri: currentUri,
+        sfwEnabled: ContentRatingFilters.effectiveSfwCookieValue(
+              globalSfwEnabled: sfwEnabled,
+              filters: selectedFilters,
+            ) == '1',
+      );
+      if (isCancelled?.call() ?? false) throw StateError('Browse request cancelled');
+      final faMessage = parsed.systemMessage;
       if (faMessage != null) {
         if (faMessage.isMaintenanceOrUnavailable) {
           FaRequestCoordinator.instance.recordMaintenanceOrUnavailable(
@@ -139,17 +145,7 @@ class BrowseImageService {
         }
         throw Exception(faMessage.message);
       }
-      return BrowsePageData(
-        images: await parseBrowseImageHtml(resp.body),
-        ads: parseFaAdPage(
-          html: resp.body,
-          documentUri: currentUri,
-          sfwEnabled: ContentRatingFilters.effectiveSfwCookieValue(
-                globalSfwEnabled: sfwEnabled,
-                filters: selectedFilters,
-              ) == '1',
-        ),
-      );
+      return parsed.page;
     }
 
     throw Exception('FAImageGrid: HTTP ${resp.statusCode} fetching images.');

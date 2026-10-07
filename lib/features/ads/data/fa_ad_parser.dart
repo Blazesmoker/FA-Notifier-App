@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html_parser;
 
 import 'package:fanotifier/core/logging/fa_ads_logging.dart';
@@ -9,9 +10,10 @@ FaAdPageMetadata? parseFaAdPage({
   required String html,
   required Uri documentUri,
   required bool sfwEnabled,
+  Document? parsedDocument,
 }) {
   try {
-    final document = html_parser.parse(html);
+    final document = parsedDocument ?? html_parser.parse(html);
     final modeControl = document.querySelector('input#sfw-toggle-mobile') ??
         document.querySelector('input#sfw-toggle');
     if (modeControl != null && modeControl.attributes.containsKey('checked') != sfwEnabled) {

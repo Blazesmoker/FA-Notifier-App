@@ -102,7 +102,7 @@ class AppTheme {
     color: lightGrey,
   );
 
-  static const TextStyle body2 = TextStyle( ///comments text
+  static const TextStyle body2 = TextStyle(
     fontFamily: fontName,
     fontWeight: FontWeight.w400,
     fontSize: 14,

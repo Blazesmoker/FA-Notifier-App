@@ -13,12 +13,10 @@ import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 
 class FaWebViewAdController with WidgetsBindingObserver {
   FaWebViewAdController({
-    required BuildContext context,
-    required FaAdsRepository repository,
-    required FaWebViewAdGateway gateway,
-  })  : _context = context,
-        _repository = repository,
-        _gateway = gateway {
+    required this._context,
+    required this._repository,
+    required this._gateway,
+  }) {
     WidgetsBinding.instance.addObserver(this);
     final settings = PlatformInAppWebViewController.debugLoggingSettings;
     final filters = [
@@ -185,7 +183,7 @@ class FaWebViewAdController with WidgetsBindingObserver {
               canStart: canStart,
             )
           : clickUri;
-      if (!canStart()) return;
+      if (!canStart() || !_context.mounted) return;
       final disposition = await handleFAAdDestination(_context, destination);
       FaAdsLog.event(FaAdsLogCategory.click, 'destination_handed_off',
           slot: slot,
