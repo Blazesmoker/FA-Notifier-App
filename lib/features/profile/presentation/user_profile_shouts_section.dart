@@ -217,6 +217,7 @@ class UserProfileShoutsSection extends StatelessWidget {
 
   Widget _buildShoutsList() {
     return ListView.separated(
+      key: const PageStorageKey<String>('profile-shouts-scroll'),
       padding: EdgeInsets.zero,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),

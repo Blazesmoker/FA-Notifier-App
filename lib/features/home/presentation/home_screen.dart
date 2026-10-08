@@ -1132,6 +1132,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         thickness: 3.0,
                       ),
                       HomeBottomNavigationBar(
+                          iconSizes: const [24, 24, 27, 24, 24],
                           items: [
                             BottomNavigationBarItem(
                               icon: _scrollActionIcon(

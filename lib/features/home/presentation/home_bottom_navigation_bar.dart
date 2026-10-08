@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:material_ui/material_ui.dart';
@@ -9,6 +9,9 @@ import 'package:liquid_glass_easy/liquid_glass_easy.dart' as glass;
 
 const _barHeight = 56.0;
 const _navIconSize = 24.0;
+const _navLabelHeight = 18.0;
+const _bubbleHorizontalPadding = 18.0;
+const _wideBubbleHorizontalPadding = 12.0;
 const _selectedColor = Color(0xFFE09321);
 
 class HomeBottomNavigationBar extends StatefulWidget {
@@ -16,12 +19,14 @@ class HomeBottomNavigationBar extends StatefulWidget {
     required this.items,
     required this.currentIndex,
     required this.onSelected,
+    this.iconSizes,
     super.key,
   });
 
   final List<BottomNavigationBarItem> items;
   final int currentIndex;
   final ValueChanged<int> onSelected;
+  final List<double>? iconSizes;
 
   @override
   State<HomeBottomNavigationBar> createState() =>
@@ -40,6 +45,12 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
   Offset? _pressPosition;
   Offset? _lastPosition;
   bool _holding = false;
+  TextStyle? _labelStyle;
+  TextScaler? _labelTextScaler;
+  TextDirection? _labelDirection;
+  Locale? _labelLocale;
+  List<String> _labels = const [];
+  List<Size> _labelSizes = const [];
 
   @override
   void initState() {
@@ -154,6 +165,43 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
     if (shouldSelect) widget.onSelected(index);
   }
 
+  void _updateLabelMetrics() {
+    final style = DefaultTextStyle.of(context).style.merge(
+      const TextStyle(fontSize: 14, color: _selectedColor),
+    );
+    final textScaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    final locale = Localizations.maybeLocaleOf(context);
+    final labels = [for (final item in widget.items) item.label ?? ''];
+    if (style == _labelStyle &&
+        textScaler == _labelTextScaler &&
+        direction == _labelDirection &&
+        locale == _labelLocale &&
+        listEquals(labels, _labels)) {
+      return;
+    }
+    _labelStyle = style;
+    _labelTextScaler = textScaler;
+    _labelDirection = direction;
+    _labelLocale = locale;
+    _labels = labels;
+    _labelSizes = labels.map((label) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: style),
+        textDirection: direction,
+        textScaler: textScaler,
+        locale: locale,
+        maxLines: 1,
+      )..layout();
+      final scale = painter.height <= 0
+          ? 1.0
+          : math.min(1.0, _navLabelHeight / painter.height);
+      final size = Size(painter.width * scale, _navLabelHeight);
+      painter.dispose();
+      return size;
+    }).toList(growable: false);
+  }
+
   List<Widget> _buildItems() => [
         for (final item in widget.items) ...[
           Center(
@@ -174,7 +222,9 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
               child: Text(
                 item.label ?? '',
                 maxLines: 1,
-                style: const TextStyle(fontSize: 14, color: _selectedColor),
+                style: _labelStyle,
+                textScaler: _labelTextScaler,
+                locale: _labelLocale,
               ),
             ),
           ),
@@ -183,6 +233,7 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
 
   @override
   Widget build(BuildContext context) {
+    _updateLabelMetrics();
     final rtl = Directionality.of(context) == TextDirection.rtl;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return RepaintBoundary(
@@ -193,7 +244,12 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
           top: false,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              _motion.configure(constraints.maxWidth, reduceMotion);
+              _motion.configure(
+                constraints.maxWidth,
+                reduceMotion,
+                _labelSizes,
+                widget.iconSizes,
+              );
               return Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: _onDown,
@@ -329,6 +385,8 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
   int _selectedIndex;
   Duration? _lastTick;
   double width = 0;
+  List<Size> labelSizes = const [];
+  List<double>? _iconSizes;
   bool reduceMotion = false;
   double x = 0;
   double y = 0;
@@ -351,30 +409,32 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
   double _tapProgress = 1;
 
   double get unit => width / (count + 0.5);
-  double get position {
+  double get position => _positionAt(x);
+
+  double _positionAt(double centerX) {
     if (width <= 0) return _selectedIndex.toDouble();
     if (count <= 1) return 0;
     if (count == 2) {
-      return ((x - centerAt(0)) / (centerAt(1) - centerAt(0)))
+      return ((centerX - centerAt(0)) / (centerAt(1) - centerAt(0)))
           .clamp(0.0, 1.0)
           .toDouble();
     }
     final secondCenter = centerAt(1);
-    if (x <= secondCenter) {
-      return ((x - centerAt(0)) / (secondCenter - centerAt(0)))
+    if (centerX <= secondCenter) {
+      return ((centerX - centerAt(0)) / (secondCenter - centerAt(0)))
           .clamp(0.0, (count - 1).toDouble())
           .toDouble();
     }
     final lastInteriorCenter = centerAt(count - 2);
-    if (x >= lastInteriorCenter) {
+    if (centerX >= lastInteriorCenter) {
       final lastCenter = centerAt(count - 1);
       final edgePosition = count - 2 +
-          (x - lastInteriorCenter) / (lastCenter - lastInteriorCenter);
+          (centerX - lastInteriorCenter) / (lastCenter - lastInteriorCenter);
       return edgePosition
           .clamp(0.0, (count - 1).toDouble())
           .toDouble();
     }
-    return (x / unit - 0.75)
+    return (centerX / unit - 0.75)
         .clamp(0.0, (count - 1).toDouble())
         .toDouble();
   }
@@ -391,9 +451,24 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
 
   double itemWidth(int index) => unit * (1 + 0.5 * activation(index));
 
-  double _bubbleItemWidth(int index) =>
-      itemWidth(index) *
-      (index == 0 || index == 1 || index == count - 1 ? 0.8 : 1.0);
+  double _bubbleItemWidth(int index) {
+    final padding = index == 0 || index == 1 || index == count - 1
+        ? _bubbleHorizontalPadding
+        : _wideBubbleHorizontalPadding;
+    return math.max(_iconSizes?[index] ?? _navIconSize, labelSizes[index].width) +
+        padding * 2;
+  }
+
+  double _bubbleWidthAt(double p) {
+    final lower = p.floor();
+    final upper = p.ceil();
+    final itemSpan = _bubbleItemWidth(lower) +
+        (_bubbleItemWidth(upper) - _bubbleItemWidth(lower)) * (p - lower);
+    final movingSize = _movingSize.clamp(0.0, 1.0).toDouble();
+    return (itemSpan - 4 * movingSize + stretch * 0.35)
+        .clamp(0.0, width)
+        .toDouble();
+  }
 
   double _edgeCenter(
     int index,
@@ -434,7 +509,14 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
     return center;
   }
 
-  void configure(double nextWidth, bool nextReduceMotion) {
+  void configure(
+    double nextWidth,
+    bool nextReduceMotion,
+    List<Size> nextLabelSizes,
+    List<double>? nextIconSizes,
+  ) {
+    labelSizes = nextLabelSizes;
+    _iconSizes = nextIconSizes;
     if (nextWidth != width) {
       final previousWidth = width;
       width = nextWidth;
@@ -588,20 +670,9 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
   }
 
   Rect get bubbleRect {
-    final p = position;
-    final lower = p.floor();
-    final upper = p.ceil();
-    final itemSpan = _bubbleItemWidth(lower) +
-        (_bubbleItemWidth(upper) - _bubbleItemWidth(lower)) * (p - lower);
     final movingSize = _movingSize.clamp(0.0, 1.0).toDouble();
     final verticalStretch = _verticalStretch.clamp(0.0, 7.0).toDouble();
-    final desiredBubbleWidth = (itemSpan +
-            4 +
-            4 * (1 - movingSize) +
-            stretch * 0.35)
-        .clamp(0.0, width)
-        .toDouble();
-    final bubbleWidth = desiredBubbleWidth;
+    final bubbleWidth = _bubbleWidthAt(position);
     final left = (x - bubbleWidth / 2)
         .clamp(0.0, width - bubbleWidth)
         .toDouble();
@@ -651,12 +722,14 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
 class _NavItemsFlow extends FlowDelegate {
   _NavItemsFlow(this.motion, this.rtl, this.width)
       : reduceMotion = motion.reduceMotion,
+        labelSizes = motion.labelSizes,
         super(repaint: motion);
 
   final _NavMotion motion;
   final bool rtl;
   final double width;
   final bool reduceMotion;
+  final List<Size> labelSizes;
 
   @override
   Size getSize(BoxConstraints constraints) => Size(width, _barHeight);
@@ -665,8 +738,8 @@ class _NavItemsFlow extends FlowDelegate {
   BoxConstraints getConstraintsForChild(int i, BoxConstraints constraints) =>
       i % 3 == 2
           ? BoxConstraints.tightFor(
-              width: math.max(0.0, width / (motion.count + 0.5) * 1.5 - 12),
-              height: 18,
+              width: labelSizes[i ~/ 3].width,
+              height: _navLabelHeight,
             )
           : const BoxConstraints.tightFor(width: 48, height: 40);
 
@@ -701,7 +774,8 @@ class _NavItemsFlow extends FlowDelegate {
       final labelTransform = Matrix4.diagonal3Values(scale, scale, 1)
         ..setTranslationRaw(
           center - labelSize.width * scale / 2,
-          34 + 5 * (1 - activation) + vertical + (18 - 18 * scale) / 2,
+          34 + 5 * (1 - activation) + vertical +
+              (_navLabelHeight - _navLabelHeight * scale) / 2,
           0,
         );
       context.paintChild(index * 3 + 2,
@@ -712,7 +786,9 @@ class _NavItemsFlow extends FlowDelegate {
 
   @override
   bool shouldRelayout(covariant _NavItemsFlow oldDelegate) =>
-      width != oldDelegate.width || motion.count != oldDelegate.motion.count;
+      width != oldDelegate.width ||
+      motion.count != oldDelegate.motion.count ||
+      !listEquals(labelSizes, oldDelegate.labelSizes);
 
   @override
   bool shouldRepaint(covariant _NavItemsFlow oldDelegate) =>
