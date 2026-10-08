@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart' as glass;
 
 const _barHeight = 56.0;
+const _navReferenceWidth = 360.0;
 const _navIconSize = 24.0;
 const _navLabelHeight = 18.0;
 const _bubbleHorizontalPadding = 18.0;
@@ -153,7 +154,7 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
         (offset.dx < 0 ||
             offset.dx > _motion.width ||
             offset.dy < 0 ||
-            offset.dy > _barHeight)) {
+            offset.dy > _motion.barHeight)) {
       _cancel();
       return;
     }
@@ -259,7 +260,7 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
                   if (event.pointer == _pointer) _cancel();
                 },
                 child: SizedBox(
-                  height: _barHeight,
+                  height: _motion.barHeight,
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
@@ -292,9 +293,9 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
                                         glass.LiquidGlassLens(
                                       style: glass.LiquidGlassStyle(
                                         shape: glass.LiquidGlassShape.continuousRoundedRectangle(
-                                        cornerRadius: 32,
+                                        cornerRadius: 32 * _motion.visualScale,
 
-                                        borderWidth: 0.1,
+                                        borderWidth: 0.1 * _motion.visualScale,
 
                                         lightColor: Color(0x807A7A7A),
 
@@ -322,7 +323,7 @@ class _HomeBottomNavigationBarState extends State<HomeBottomNavigationBar>
                                       refraction: glass.LiquidGlassRefraction(
                                         distortion: distortionEnabled ? 0.03 : 0.0,
 
-                                        distortionWidth: 10,
+                                        distortionWidth: 10 * _motion.visualScale,
 
                                         magnification: 1,
 
@@ -409,6 +410,9 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
   double _tapProgress = 1;
 
   double get unit => width / (count + 0.5);
+  double get visualScale =>
+      math.max(1.0, width / _navReferenceWidth);
+  double get barHeight => _barHeight * visualScale;
   double get position => _positionAt(x);
 
   double _positionAt(double centerX) {
@@ -465,7 +469,7 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
     final itemSpan = _bubbleItemWidth(lower) +
         (_bubbleItemWidth(upper) - _bubbleItemWidth(lower)) * (p - lower);
     final movingSize = _movingSize.clamp(0.0, 1.0).toDouble();
-    return (itemSpan - 4 * movingSize + stretch * 0.35)
+    return ((itemSpan - 4 * movingSize + stretch * 0.35) * visualScale)
         .clamp(0.0, width)
         .toDouble();
   }
@@ -478,10 +482,12 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
   ) {
     final neighborDistance = (ownWidth + neighborWidth) / 2;
     if (index == 0) {
-      final neighborLeft = center + neighborDistance - _navIconSize / 2;
+      final neighborLeft =
+          center + neighborDistance - _navIconSize * visualScale / 2;
       return neighborLeft / 2;
     }
-    final neighborRight = center - neighborDistance + _navIconSize / 2;
+    final neighborRight =
+        center - neighborDistance + _navIconSize * visualScale / 2;
     return (neighborRight + width) / 2;
   }
 
@@ -570,8 +576,9 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
     _fadeAfterSettling = false;
     final edgeInset = math.min(width, unit * 1.5 + 8) / 2;
     _targetX = targetX.clamp(edgeInset, width - edgeInset).toDouble();
-    _targetY = (targetY * 0.18).clamp(-8.0, 8.0).toDouble();
-    _targetVerticalStretch = (targetY.abs() * 0.08).clamp(0.0, 6.0).toDouble();
+    _targetY = (targetY / visualScale * 0.18).clamp(-8.0, 8.0).toDouble();
+    _targetVerticalStretch =
+        (targetY.abs() / visualScale * 0.08).clamp(0.0, 6.0).toDouble();
     _targetHoldExpansion = 1;
     _targetVisibility = 1;
     _wake();
@@ -629,10 +636,11 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
       final alpha = 1 - math.exp(-dt / 0.045);
       visibility += (_targetVisibility - visibility) * alpha;
       _holdExpansion += (_targetHoldExpansion - _holdExpansion) * alpha;
+      final horizontalSpeed = velocityX.abs() / visualScale;
       final targetStretch =
-          (velocityX.abs() / 30).clamp(0.0, 8.0).toDouble();
+          (horizontalSpeed / 30).clamp(0.0, 8.0).toDouble();
       stretch += (targetStretch - stretch) * alpha;
-      final movingTarget = ((velocityX.abs() + velocityY.abs() * 4) / 550)
+      final movingTarget = ((horizontalSpeed + velocityY.abs() * 4) / 550)
           .clamp(0.0, 1.0)
           .toDouble();
       _movingSizeVelocity +=
@@ -677,11 +685,14 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
         .clamp(0.0, width - bubbleWidth)
         .toDouble();
     final heldBubbleHeight =
-        68 + 2 * (1 - movingSize) + verticalStretch - stretch * 1.75;
-    final releasedBubbleHeight = _barHeight;
+        (68 + 2 * (1 - movingSize) + verticalStretch - stretch * 1.75) *
+            visualScale;
+    final releasedBubbleHeight = barHeight;
     final bubbleHeight = releasedBubbleHeight +
         (heldBubbleHeight - releasedBubbleHeight) * _holdExpansion;
-    final top = 28 + y.clamp(-8.0, 8.0).toDouble() - bubbleHeight / 2;
+    final top = barHeight / 2 +
+        y.clamp(-8.0, 8.0).toDouble() * visualScale -
+        bubbleHeight / 2;
     return Rect.fromLTWH(
       left,
       top,
@@ -722,6 +733,7 @@ class _NavMotion extends ChangeNotifier implements ValueListenable<double> {
 class _NavItemsFlow extends FlowDelegate {
   _NavItemsFlow(this.motion, this.rtl, this.width)
       : reduceMotion = motion.reduceMotion,
+        visualScale = motion.visualScale,
         labelSizes = motion.labelSizes,
         super(repaint: motion);
 
@@ -729,10 +741,12 @@ class _NavItemsFlow extends FlowDelegate {
   final bool rtl;
   final double width;
   final bool reduceMotion;
+  final double visualScale;
   final List<Size> labelSizes;
 
   @override
-  Size getSize(BoxConstraints constraints) => Size(width, _barHeight);
+  Size getSize(BoxConstraints constraints) =>
+      Size(width, _barHeight * visualScale);
 
   @override
   BoxConstraints getConstraintsForChild(int i, BoxConstraints constraints) =>
@@ -757,12 +771,15 @@ class _NavItemsFlow extends FlowDelegate {
       final center = rtl ? width - logicalCenter : logicalCenter;
       final vertical = motion.y.clamp(-8.0, 8.0).toDouble() *
           activation *
-          motion.visibility;
-      final iconTransform = Matrix4.translationValues(
-        center - 24,
-        8 - 8 * activation + vertical,
-        0,
-      );
+          motion.visibility *
+          visualScale;
+      final iconTransform =
+          Matrix4.diagonal3Values(visualScale, visualScale, 1)
+            ..setTranslationRaw(
+              center - 24 * visualScale,
+              (8 - 8 * activation) * visualScale + vertical,
+              0,
+            );
       context.paintChild(index * 3,
           transform: iconTransform, opacity: 1 - activation);
       context.paintChild(index * 3 + 1,
@@ -770,12 +787,15 @@ class _NavItemsFlow extends FlowDelegate {
       final labelSize = context.getChildSize(index * 3 + 2)!;
       final scale = labelSize.width <= 0
           ? 1.0
-          : ((itemWidth - 12) / labelSize.width).clamp(0.0, 1.0).toDouble();
-      final labelTransform = Matrix4.diagonal3Values(scale, scale, 1)
+          : ((itemWidth - 12 * visualScale) / (labelSize.width * visualScale))
+              .clamp(0.0, 1.0)
+              .toDouble();
+      final labelScale = scale * visualScale;
+      final labelTransform = Matrix4.diagonal3Values(labelScale, labelScale, 1)
         ..setTranslationRaw(
-          center - labelSize.width * scale / 2,
-          34 + 5 * (1 - activation) + vertical +
-              (_navLabelHeight - _navLabelHeight * scale) / 2,
+          center - labelSize.width * labelScale / 2,
+          (34 + 5 * (1 - activation)) * visualScale + vertical +
+              _navLabelHeight * (visualScale - labelScale) / 2,
           0,
         );
       context.paintChild(index * 3 + 2,
@@ -787,6 +807,7 @@ class _NavItemsFlow extends FlowDelegate {
   @override
   bool shouldRelayout(covariant _NavItemsFlow oldDelegate) =>
       width != oldDelegate.width ||
+      visualScale != oldDelegate.visualScale ||
       motion.count != oldDelegate.motion.count ||
       !listEquals(labelSizes, oldDelegate.labelSizes);
 
@@ -795,6 +816,7 @@ class _NavItemsFlow extends FlowDelegate {
       motion != oldDelegate.motion ||
       rtl != oldDelegate.rtl ||
       width != oldDelegate.width ||
+      visualScale != oldDelegate.visualScale ||
       reduceMotion != oldDelegate.reduceMotion;
 }
 
