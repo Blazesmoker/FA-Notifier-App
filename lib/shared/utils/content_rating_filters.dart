@@ -1,3 +1,5 @@
+import 'package:fanotifier/shared/fa/domain/fa_page_settings.dart';
+
 class ContentRatingFilters {
   static const String ratingGeneralKey = 'rating-general';
   static const String ratingMatureKey = 'rating-mature';
@@ -8,10 +10,14 @@ class ContentRatingFilters {
     'Type': '1',
     'Species': '1',
     'Gender': '',
+    'page': '1',
+    'perpage': '72',
   };
 
   static const Map<String, String> _defaultSearchFields = {
     'order-by': 'relevancy',
+    'page': '1',
+    'perpage': '72',
     'order-direction': 'desc',
     'range': '5years',
     'mode': 'extended',
@@ -66,6 +72,10 @@ class ContentRatingFilters {
         filters['Species'] ?? filters['species'] ?? normalized['Species']!;
     normalized['Gender'] =
         filters['Gender'] ?? filters['gender'] ?? normalized['Gender']!;
+    normalized[FaPageSettings.pageKey] =
+        FaPageSettings.startingPage(filters).toString();
+    normalized[FaPageSettings.perPageKey] =
+        FaPageSettings.resultsPerPage(filters);
     normalized[ratingGeneralKey] =
         filters[ratingGeneralKey] ?? normalized[ratingGeneralKey]!;
     normalized[ratingMatureKey] =
@@ -79,10 +89,15 @@ class ContentRatingFilters {
     Map<String, String> filters, {
     required bool sfwEnabled,
   }) {
-    return {
+    final normalized = {
       ...defaultSearchFilters(sfwEnabled: sfwEnabled),
       ...filters,
     };
+    normalized[FaPageSettings.pageKey] =
+        FaPageSettings.startingPage(normalized).toString();
+    normalized[FaPageSettings.perPageKey] =
+        FaPageSettings.resultsPerPage(normalized);
+    return normalized;
   }
 
   static bool allowsExplicitNsfw(Map<String, String> filters) {

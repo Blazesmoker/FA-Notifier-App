@@ -1,4 +1,5 @@
 import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
+import 'package:fanotifier/shared/fa/domain/fa_grid_pagination.dart';
 import 'package:material_ui/material_ui.dart';
 import 'dart:async';
 import 'package:flutter_html/flutter_html.dart';
@@ -28,6 +29,9 @@ class ProfileJournalsState extends State<ProfileJournals> {
   bool isLoading = false;
   bool _hasLoadError = false;
   List<Map<String, dynamic>> journals = [];
+  final List<Widget> _journalCards = <Widget>[];
+  final FaLoadedItemIds _loadedIds = FaLoadedItemIds();
+  final FaGridPaginationProgress _pagination = FaGridPaginationProgress();
   bool hasMore = true;
   int _fetchGeneration = 0;
   int _refreshGeneration = 0;
@@ -71,6 +75,9 @@ class ProfileJournalsState extends State<ProfileJournals> {
     _isLoadingMore.value = false;
     setState(() {
       journals.clear();
+      _journalCards.clear();
+      _loadedIds.clear();
+      _pagination.clear();
       currentPage = 1;
       hasMore = true;
       isLoading = false;
@@ -90,6 +97,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
         !ProfileTabScrollScope.canFetch(context)) {
       return;
     }
+    _pagination.resume();
     unawaited(_fetchJournals(currentPage));
   }
 
@@ -133,23 +141,47 @@ class ProfileJournalsState extends State<ProfileJournals> {
       setState(() {});
     }
     try {
-      final page = await _profileJournalsRepository.fetchJournalsPage(
-        username: widget.username,
-        pageNumber: pageNumber,
-        isCancelled: () => !mounted || fetchGeneration != _fetchGeneration,
-      );
-      if (!mounted || fetchGeneration != _fetchGeneration) {
-        return;
+      var requestedPage = pageNumber;
+      while (hasMore) {
+        final page = await _profileJournalsRepository.fetchJournalsPage(
+          username: widget.username,
+          pageNumber: requestedPage,
+          isCancelled: () => !mounted || fetchGeneration != _fetchGeneration,
+        );
+        if (!mounted || fetchGeneration != _fetchGeneration) return;
+        final batch = _loadedIds.prepare(
+          page.journals,
+          idOf: (journal) => journal['uniqueNumber'] as String,
+        );
+        _loadedIds.commit(batch);
+        journals.addAll(batch.items);
+        for (final journal in batch.items) {
+          _journalCards.add(_ProfileJournalCard(
+            key: ValueKey('profile-journal-${journal['uniqueNumber']}'),
+            journal: journal,
+            onOpen: _openJournal,
+          ));
+        }
+        _pagination.record(
+          cursor: '$requestedPage',
+          duplicateOnly: batch.duplicateOnly,
+        );
+        hasMore = page.hasMore;
+        currentPage = requestedPage + 1;
+        if (!batch.duplicateOnly ||
+            !hasMore ||
+            _pagination.paused ||
+            !ProfileTabScrollScope.canFetch(context)) {
+          break;
+        }
+        requestedPage = currentPage;
       }
 
       if (loadingMore) {
         _isLoadingMore.value = false;
       }
       setState(() {
-        journals.addAll(page.journals);
-        hasMore = page.hasMore;
         isLoading = false;
-        currentPage = pageNumber + 1;
       });
     } catch (e, stackTrace) {
       if (!mounted || fetchGeneration != _fetchGeneration) {
@@ -182,10 +214,6 @@ class ProfileJournalsState extends State<ProfileJournals> {
   }
 
   Widget _buildContent(BuildContext context) {
-    final timeFormat =
-        context.select<TimeDisplaySettingsProvider, TimeDisplayFormat>(
-      (settings) => settings.formatFor(TimeDisplayOccasion.profileJournal),
-    );
     if (journals.isEmpty && isLoading) {
       return const SliverFillRemaining(
         child: Center(
@@ -217,289 +245,305 @@ class ProfileJournalsState extends State<ProfileJournals> {
     return SliverToBoxAdapter(
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children: List<Widget>.generate(
-          journals.length + 1,
-          (index) {
-            if (index < journals.length) {
-              final journal = journals[index];
+        children: [
+          ..._journalCards,
+          _buildPaginationFooter(),
+        ],
+      ),
+    );
+  }
 
-              return RepaintBoundary(
-                key: ValueKey('profile-journal-${journal['uniqueNumber']}'),
-                child: Padding(
+  Widget _buildPaginationFooter() {
+    if (hasMore) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16.0),
+        child: Center(
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _isLoadingMore,
+            builder: (context, isLoadingMore, child) {
+              if (isLoadingMore) {
+                return const CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    Color(0xFFE09321),
+                  ),
+                );
+              }
+              return ElevatedButton(
+                onPressed: loadNextPage,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE09321),
+                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
-                      vertical: 1.0, horizontal: 8.0),
-                  child: Card(
-                    child: ListTile(
-                      title: Text(journal['title']),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Posted on: ${formatTimeInText(
-                              journal['datePosted'] ?? '',
-                              format: timeFormat,
-                            )}',
-                          ),
-                          const SizedBox(height: 8.0),
-                          CachedProfileHtml(
-                            cacheKey: journal['contentHtml'],
-                            child: Html(
-                              data: journal['contentHtml'],
-                              style: {
-                              "a": Style(
-                                textDecoration: TextDecoration.none,
-                                color: const Color(0xFFE09321),
-                              ),
-                              "hr": Style(
-                                padding: HtmlPaddings.symmetric(vertical: 8),
-                                margin: Margins.symmetric(vertical: 8),
-                                height: Height(1),
-                              ),
-                              ".bbcode_center": Style(
-                                textAlign: TextAlign.center,
-                                display: Display.block,
-                              ),
-                              ".bbcode_right": Style(
-                                textAlign: TextAlign.right,
-                                display: Display.block,
-                              ),
-                              ".bbcode_left": Style(
-                                textAlign: TextAlign.left,
-                                display: Display.block,
-                              ),
-                              },
-                              onLinkTap: (url, _, _) async {
-                                await _openJournal(journal['uniqueNumber']);
-                              },
-                              extensions: [
-                              faHtmlImageExtension(),
-                              TagExtension(
-                                tagsToExtend: {"i"},
-                                builder: (ExtensionContext context) {
-                                  final classAttr = context.attributes['class'];
-                                  switch (classAttr) {
-                                    case 'smilie tongue':
-                                      return Image.asset(
-                                          'assets/emojis/tongue.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie evil':
-                                      return Image.asset(
-                                          'assets/emojis/evil.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie lmao':
-                                      return Image.asset(
-                                          'assets/emojis/lmao.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie gift':
-                                      return Image.asset(
-                                          'assets/emojis/gift.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie derp':
-                                      return Image.asset(
-                                          'assets/emojis/derp.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie teeth':
-                                      return Image.asset(
-                                          'assets/emojis/teeth.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie cool':
-                                      return Image.asset(
-                                          'assets/emojis/cool.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie huh':
-                                      return Image.asset(
-                                          'assets/emojis/huh.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie cd':
-                                      return Image.asset('assets/emojis/cd.png',
-                                          width: 20, height: 20);
-                                    case 'smilie coffee':
-                                      return Image.asset(
-                                          'assets/emojis/coffee.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie sarcastic':
-                                      return Image.asset(
-                                          'assets/emojis/sarcastic.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie veryhappy':
-                                      return Image.asset(
-                                          'assets/emojis/veryhappy.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie wink':
-                                      return Image.asset(
-                                          'assets/emojis/wink.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie whatever':
-                                      return Image.asset(
-                                          'assets/emojis/whatever.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie crying':
-                                      return Image.asset(
-                                          'assets/emojis/crying.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie love':
-                                      return Image.asset(
-                                          'assets/emojis/love.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie serious':
-                                      return Image.asset(
-                                          'assets/emojis/serious.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie yelling':
-                                      return Image.asset(
-                                          'assets/emojis/yelling.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie oooh':
-                                      return Image.asset(
-                                          'assets/emojis/oooh.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie angel':
-                                      return Image.asset(
-                                          'assets/emojis/angel.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie dunno':
-                                      return Image.asset(
-                                          'assets/emojis/dunno.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie nerd':
-                                      return Image.asset(
-                                          'assets/emojis/nerd.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie sad':
-                                      return Image.asset(
-                                          'assets/emojis/sad.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie zipped':
-                                      return Image.asset(
-                                          'assets/emojis/zipped.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie smile':
-                                      return Image.asset(
-                                          'assets/emojis/smile.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie badhairday':
-                                      return Image.asset(
-                                          'assets/emojis/badhairday.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie embarrassed':
-                                      return Image.asset(
-                                          'assets/emojis/embarrassed.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie note':
-                                      return Image.asset(
-                                          'assets/emojis/note.png',
-                                          width: 20,
-                                          height: 20);
-                                    case 'smilie sleepy':
-                                      return Image.asset(
-                                          'assets/emojis/sleepy.png',
-                                          width: 20,
-                                          height: 20);
-                                    default:
-                                      return const SizedBox.shrink();
-                                  }
-                                },
-                              ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8.0),
-                          Align(
-                            alignment: Alignment.bottomRight,
-                            child: Padding(
-                              padding: const EdgeInsets.only(
-                                  right: 0.0, top: 0.0, bottom: 4.0),
-                              child: GestureDetector(
-                                onTap: () {
-                                  _openJournal(journal['uniqueNumber']);
-                                },
-                                child: Text(
-                                  '${journal['commentsCount']} Comments',
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      onTap: () {
-                        _openJournal(journal['uniqueNumber']);
-                      },
-                    ),
+                    horizontal: 24.0,
+                    vertical: 12.0,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                ),
+                child: const Text(
+                  'Load More',
+                  style: TextStyle(
+                    fontSize: 16.0,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               );
-            } else {
-              if (hasMore) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16.0),
-                  child: Center(
-                    child: ValueListenableBuilder<bool>(
-                      valueListenable: _isLoadingMore,
-                      builder: (context, isLoadingMore, child) {
-                        if (isLoadingMore) {
-                          return const CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Color(0xFFE09321),
-                            ),
-                          );
+            },
+          ),
+        ),
+      );
+    } else {
+      return const SizedBox(height: 80.0);
+    }
+  }
+}
+
+class _ProfileJournalCard extends StatelessWidget {
+  const _ProfileJournalCard({
+    super.key,
+    required this.journal,
+    required this.onOpen,
+  });
+
+  final Map<String, dynamic> journal;
+  final Future<void> Function(String) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final timeFormat =
+        context.select<TimeDisplaySettingsProvider, TimeDisplayFormat>(
+      (settings) => settings.formatFor(TimeDisplayOccasion.profileJournal),
+    );
+    return RepaintBoundary(
+      key: ValueKey('profile-journal-${journal['uniqueNumber']}'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            vertical: 1.0, horizontal: 8.0),
+        child: Card(
+          child: ListTile(
+            title: Text(journal['title']),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Posted on: ${formatTimeInText(
+                    journal['datePosted'] ?? '',
+                    format: timeFormat,
+                  )}',
+                ),
+                const SizedBox(height: 8.0),
+                CachedProfileHtml.builder(
+                  cacheKey: journal['contentHtml'],
+                  builder: () => Html(
+                    data: journal['contentHtml'],
+                    style: {
+                    "a": Style(
+                      textDecoration: TextDecoration.none,
+                      color: const Color(0xFFE09321),
+                    ),
+                    "hr": Style(
+                      padding: HtmlPaddings.symmetric(vertical: 8),
+                      margin: Margins.symmetric(vertical: 8),
+                      height: Height(1),
+                    ),
+                    ".bbcode_center": Style(
+                      textAlign: TextAlign.center,
+                      display: Display.block,
+                    ),
+                    ".bbcode_right": Style(
+                      textAlign: TextAlign.right,
+                      display: Display.block,
+                    ),
+                    ".bbcode_left": Style(
+                      textAlign: TextAlign.left,
+                      display: Display.block,
+                    ),
+                    },
+                    onLinkTap: (url, _, _) async {
+                      await onOpen(journal['uniqueNumber']);
+                    },
+                    extensions: [
+                    faHtmlImageExtension(),
+                    TagExtension(
+                      tagsToExtend: {"i"},
+                      builder: (ExtensionContext context) {
+                        final classAttr = context.attributes['class'];
+                        switch (classAttr) {
+                          case 'smilie tongue':
+                            return Image.asset(
+                                'assets/emojis/tongue.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie evil':
+                            return Image.asset(
+                                'assets/emojis/evil.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie lmao':
+                            return Image.asset(
+                                'assets/emojis/lmao.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie gift':
+                            return Image.asset(
+                                'assets/emojis/gift.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie derp':
+                            return Image.asset(
+                                'assets/emojis/derp.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie teeth':
+                            return Image.asset(
+                                'assets/emojis/teeth.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie cool':
+                            return Image.asset(
+                                'assets/emojis/cool.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie huh':
+                            return Image.asset(
+                                'assets/emojis/huh.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie cd':
+                            return Image.asset('assets/emojis/cd.png',
+                                width: 20, height: 20);
+                          case 'smilie coffee':
+                            return Image.asset(
+                                'assets/emojis/coffee.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie sarcastic':
+                            return Image.asset(
+                                'assets/emojis/sarcastic.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie veryhappy':
+                            return Image.asset(
+                                'assets/emojis/veryhappy.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie wink':
+                            return Image.asset(
+                                'assets/emojis/wink.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie whatever':
+                            return Image.asset(
+                                'assets/emojis/whatever.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie crying':
+                            return Image.asset(
+                                'assets/emojis/crying.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie love':
+                            return Image.asset(
+                                'assets/emojis/love.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie serious':
+                            return Image.asset(
+                                'assets/emojis/serious.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie yelling':
+                            return Image.asset(
+                                'assets/emojis/yelling.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie oooh':
+                            return Image.asset(
+                                'assets/emojis/oooh.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie angel':
+                            return Image.asset(
+                                'assets/emojis/angel.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie dunno':
+                            return Image.asset(
+                                'assets/emojis/dunno.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie nerd':
+                            return Image.asset(
+                                'assets/emojis/nerd.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie sad':
+                            return Image.asset(
+                                'assets/emojis/sad.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie zipped':
+                            return Image.asset(
+                                'assets/emojis/zipped.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie smile':
+                            return Image.asset(
+                                'assets/emojis/smile.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie badhairday':
+                            return Image.asset(
+                                'assets/emojis/badhairday.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie embarrassed':
+                            return Image.asset(
+                                'assets/emojis/embarrassed.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie note':
+                            return Image.asset(
+                                'assets/emojis/note.png',
+                                width: 20,
+                                height: 20);
+                          case 'smilie sleepy':
+                            return Image.asset(
+                                'assets/emojis/sleepy.png',
+                                width: 20,
+                                height: 20);
+                          default:
+                            return const SizedBox.shrink();
                         }
-                        return ElevatedButton(
-                          onPressed: loadNextPage,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFE09321),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24.0,
-                              vertical: 12.0,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8.0),
-                            ),
-                          ),
-                          child: const Text(
-                            'Load More',
-                            style: TextStyle(
-                              fontSize: 16.0,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        );
                       },
                     ),
+                    ],
                   ),
-                );
-              } else {
-                return const SizedBox(height: 80.0);
-              }
-            }
-          },
+                ),
+                const SizedBox(height: 8.0),
+                Align(
+                  alignment: Alignment.bottomRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                        right: 0.0, top: 0.0, bottom: 4.0),
+                    child: GestureDetector(
+                      onTap: () {
+                        onOpen(journal['uniqueNumber']);
+                      },
+                      child: Text(
+                        '${journal['commentsCount']} Comments',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            onTap: () {
+              onOpen(journal['uniqueNumber']);
+            },
+          ),
         ),
       ),
     );

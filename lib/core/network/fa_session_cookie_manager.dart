@@ -21,9 +21,6 @@ class FaSessionCookieManager extends CookieManager {
     RequestInterceptorHandler handler,
   ) async {
     if (_isFaRequest(options)) {
-      options.headers.removeWhere(
-        (name, _) => name.toLowerCase() == HttpHeaders.userAgentHeader,
-      );
       options.headers[HttpHeaders.userAgentHeader] = FAHttp.userAgent;
     }
     await super.onRequest(options, handler);

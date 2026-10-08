@@ -1,4 +1,5 @@
 import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
+import 'package:fanotifier/shared/fa/domain/fa_session_access.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'widgets/message_detail_actions.dart';
 import 'widgets/message_detail_header.dart';
@@ -9,6 +10,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:fanotifier/features/notes/domain/note_message_repository.dart';
+import 'package:fanotifier/features/notes/domain/note_reply_models.dart';
 import 'package:fanotifier/features/notes/domain/managed_notes_repository.dart';
 import 'package:fanotifier/features/notes/domain/note_management.dart';
 import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
@@ -39,6 +41,7 @@ class MessageDetailScreen extends StatefulWidget {
   final String folder;
   final bool allowMarkUnread;
   final NotesFolder sourceFolder;
+  final bool refreshNotesOnExit;
 
   const MessageDetailScreen({
     super.key,
@@ -46,6 +49,7 @@ class MessageDetailScreen extends StatefulWidget {
     required this.folder,
     required this.sourceFolder,
     this.allowMarkUnread = true,
+    this.refreshNotesOnExit = true,
   });
 
   @override
@@ -74,6 +78,8 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
   String recipientUsername = '';
   int pageNumber = 1;
   bool isClassic = false;
+  NoteReplyContext? _replyContext;
+  int? _replyContextGeneration;
   bool _shouldShowReplySuccess = false;
   bool _didTriggerRefreshOnExit = false;
   bool _isMutating = false;
@@ -101,6 +107,8 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
       errorMessage = '';
     });
     try {
+      final replyContextGeneration =
+          context.read<FaSessionAccess>().verifiedGeneration;
       final result = await _noteMessageRepository.fetchMessageDetails(
         messageLink: widget.messageLink,
         folder: widget.folder,
@@ -121,6 +129,8 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
 
         setState(() {
           isClassic = details.isClassic;
+          _replyContext = details.replyContext;
+          _replyContextGeneration = replyContextGeneration;
           messageId = details.messageId;
           pageNumber = details.pageNumber;
           subject = details.subject;
@@ -187,7 +197,9 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
   GlobalKey _selectableKey = GlobalKey();
 
   void _triggerNotesRefreshOnce() {
-    if (_didTriggerRefreshOnExit) return;
+    if (_didTriggerRefreshOnExit || !widget.refreshNotesOnExit) {
+      return;
+    }
     _didTriggerRefreshOnExit = true;
     _notesRefreshPort.triggerRefresh();
   }
@@ -668,6 +680,10 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                                         : senderUsername,
                                     messageId: messageId ?? '',
                                     messageLink: widget.messageLink,
+                                    folder: widget.folder,
+                                    replyContext: _replyContext,
+                                    replyContextGeneration:
+                                        _replyContextGeneration,
                                     imagePreviewMode: imagePreviewMode,
                                   ),
                                 ),

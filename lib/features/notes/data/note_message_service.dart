@@ -73,7 +73,11 @@ class NoteMessageService implements NoteMessageRepository {
 
     if (response.statusCode == 200) {
       return NoteMessageFetchResult(
-        details: parseNoteMessageDetails(response.data, messageLink),
+        details: parseNoteMessageDetails(
+          response.data,
+          messageLink,
+          documentUri: response.realUri,
+        ),
         statusCode: response.statusCode,
       );
     }

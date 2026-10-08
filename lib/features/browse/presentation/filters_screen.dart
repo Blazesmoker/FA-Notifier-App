@@ -3,17 +3,22 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:fanotifier/features/browse/domain/browse_repository.dart';
 import 'package:fanotifier/features/browse/domain/browse_filter_display_names.dart';
+import 'package:fanotifier/shared/fa/domain/fa_filter_options.dart';
+import 'package:fanotifier/shared/fa/domain/fa_page_settings.dart';
 import 'package:fanotifier/shared/utils/content_rating_filters.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/shared/widgets/fa_pagination_filter_fields.dart';
 
 class FiltersScreen extends StatefulWidget {
   /// Pass in the currently selected filters.
   final Map<String, String> selectedFilters;
   final bool sfwEnabled;
+  final Future<void> Function()? onRetry;
 
   const FiltersScreen({
     required this.selectedFilters,
     required this.sfwEnabled,
+    this.onRetry,
     super.key,
   });
 
@@ -23,8 +28,13 @@ class FiltersScreen extends StatefulWidget {
 
 class _FiltersScreenState extends State<FiltersScreen> {
   late Map<String, String> currentFilters;
+  late final TextEditingController _pageController;
+  final _paginationFormKey = GlobalKey<FormState>();
+  FaFilterOptions? _filterDefinitions;
 
   bool _isLoadingFilters = true;
+  bool _filterLoadFailed = false;
+  StreamSubscription<FaFilterOptions>? _filterSubscription;
 
   Map<String, List<Map<String, String>>> _filterOptions = {};
 
@@ -47,6 +57,11 @@ class _FiltersScreenState extends State<FiltersScreen> {
     browseFilterDisplayNames.forEach((internalKey, displayLabel) {
       currentFilters[internalKey] = selectedFilters[displayLabel]!;
     });
+    currentFilters[FaPageSettings.perPageKey] =
+        selectedFilters[FaPageSettings.perPageKey]!;
+    _pageController = TextEditingController(
+      text: selectedFilters[FaPageSettings.pageKey],
+    );
 
     _ratingGeneral =
         selectedFilters[ContentRatingFilters.ratingGeneralKey] == '1';
@@ -54,21 +69,60 @@ class _FiltersScreenState extends State<FiltersScreen> {
         selectedFilters[ContentRatingFilters.ratingMatureKey] == '1';
     _ratingAdult = selectedFilters[ContentRatingFilters.ratingAdultKey] == '1';
 
-    _fetchFilterData();
+    final repository = context.read<BrowseRepository>();
+    _filterSubscription = repository.filterOptionsChanges.listen((options) {
+      if (!mounted) return;
+      setState(() => _acceptFilterOptions(options));
+    });
+    final cachedOptions = repository.filterOptions;
+    if (cachedOptions != null) {
+      _acceptFilterOptions(cachedOptions);
+    } else {
+      unawaited(_fetchFilterData());
+    }
   }
 
-  /// Fetches filter options from the FA browse page.
-  Future<void> _fetchFilterData() async {
+  void _acceptFilterOptions(FaFilterOptions options) {
+    _filterDefinitions = options;
+    _filterOptions = {
+      for (final entry in options.groups.entries)
+        entry.key: [
+          for (final option in entry.value)
+            {'label': option.label, 'value': option.value},
+        ],
+    };
+    _updateCurrentFilters();
+    _isLoadingFilters = false;
+    _filterLoadFailed = false;
+  }
+
+  Future<void> _fetchFilterData({bool retry = false}) async {
+    final repository = context.read<BrowseRepository>();
     setState(() {
       _isLoadingFilters = true;
+      _filterLoadFailed = false;
     });
-    final loadedFilterOptions =
-        await context.read<BrowseRepository>().fetchFilterOptions();
-    setState(() {
-      _filterOptions = loadedFilterOptions;
-      _updateCurrentFilters();
-      _isLoadingFilters = false;
-    });
+    try {
+      if (retry && repository.filterOptions == null) {
+        await widget.onRetry?.call();
+      }
+      final options = await repository.fetchFilterOptions();
+      if (!mounted || !_isLoadingFilters) return;
+      setState(() => _acceptFilterOptions(options));
+    } catch (_) {
+      if (!mounted || _filterOptions.isNotEmpty) return;
+      setState(() {
+        _isLoadingFilters = false;
+        _filterLoadFailed = true;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _filterSubscription?.cancel();
+    _pageController.dispose();
+    super.dispose();
   }
 
   void _updateCurrentFilters() {
@@ -103,6 +157,9 @@ class _FiltersScreenState extends State<FiltersScreen> {
         'Type': currentFilters['atype'] ?? '1',
         'Species': currentFilters['species'] ?? '1',
         'Gender': currentFilters['gender'] ?? '0',
+        FaPageSettings.pageKey: _pageController.text,
+        FaPageSettings.perPageKey:
+            FaPageSettings.resultsPerPage(currentFilters),
         ContentRatingFilters.ratingGeneralKey: _ratingGeneral ? '1' : '0',
         ContentRatingFilters.ratingMatureKey: _ratingMature ? '1' : '0',
         ContentRatingFilters.ratingAdultKey: _ratingAdult ? '1' : '0',
@@ -111,16 +168,45 @@ class _FiltersScreenState extends State<FiltersScreen> {
     );
   }
 
+  void _applyFilters() {
+    if (_paginationFormKey.currentState?.validate() != true) {
+      return;
+    }
+    Navigator.pop(context, getMappedFilters());
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_isLoadingFilters) {
+    if (_isLoadingFilters || _filterLoadFailed) {
       return Scaffold(
-          appBar: AppBar(
-            title: const Text('Filters'),
+        appBar: AppBar(title: const Text('Filters')),
+        body: SafeArea(
+          child: Center(
+            child: _isLoadingFilters
+                ? const PulsatingLoadingIndicator(
+                    size: 108.0,
+                    assetPath: 'assets/icons/fathemed.png',
+                  )
+                : Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Could not load Browse filters. Retry loading the Browse page.',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        TextButton(
+                          onPressed: () => _fetchFilterData(retry: true),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
           ),
-          body: Center(
-              child: PulsatingLoadingIndicator(
-                  size: 108.0, assetPath: 'assets/icons/fathemed.png')));
+        ),
+      );
     }
 
     return Scaffold(
@@ -129,9 +215,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.check, color: applyButtonColor),
-            onPressed: () {
-              Navigator.pop(context, getMappedFilters());
-            },
+            onPressed: _applyFilters,
           ),
         ],
       ),
@@ -153,6 +237,20 @@ class _FiltersScreenState extends State<FiltersScreen> {
                           ],
                         );
                       }),
+                      FaPaginationFilterFields(
+                        formKey: _paginationFormKey,
+                        pageController: _pageController,
+                        resultsPerPage:
+                            currentFilters[FaPageSettings.perPageKey]!,
+                        resultsPerPageOptions:
+                            _filterDefinitions![FaPageSettings.perPageKey],
+                        onResultsPerPageChanged: (value) {
+                          setState(() {
+                            currentFilters[FaPageSettings.perPageKey] = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 20),
                       const SizedBox(height: 10),
                       Container(
                         alignment: Alignment.centerLeft,
@@ -227,6 +325,11 @@ class _FiltersScreenState extends State<FiltersScreen> {
                               currentFilters['atype'] = defaults['Type']!;
                               currentFilters['species'] = defaults['Species']!;
                               currentFilters['gender'] = defaults['Gender']!;
+                              currentFilters[FaPageSettings.perPageKey] =
+                                  defaults[FaPageSettings.perPageKey]!;
+                              _pageController.text =
+                                  defaults[FaPageSettings.pageKey]!;
+                              _updateCurrentFilters();
                               _ratingGeneral = defaults[
                                       ContentRatingFilters.ratingGeneralKey] ==
                                   '1';
@@ -265,9 +368,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
                         color: Colors.transparent,
                         child: InkWell(
                           borderRadius: BorderRadius.circular(24.0),
-                          onTap: () {
-                            Navigator.pop(context, getMappedFilters());
-                          },
+                          onTap: _applyFilters,
                           child: const Center(
                             child: Text(
                               'Apply',

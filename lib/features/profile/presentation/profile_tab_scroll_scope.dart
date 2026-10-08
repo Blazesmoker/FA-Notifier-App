@@ -175,6 +175,7 @@ class ProfileTabScrollViewport extends StatefulWidget {
     required this.child,
     this.onActivated,
     this.onLoadMore,
+    this.onUserScrollStart,
   });
 
   ProfileTabScrollViewport.scrollView({
@@ -184,6 +185,7 @@ class ProfileTabScrollViewport extends StatefulWidget {
     required List<Widget> slivers,
     this.onActivated,
     this.onLoadMore,
+    this.onUserScrollStart,
   }) : child = CustomScrollView(
           key: storageKey,
           physics: physics,
@@ -193,6 +195,7 @@ class ProfileTabScrollViewport extends StatefulWidget {
   final Widget child;
   final VoidCallback? onActivated;
   final VoidCallback? onLoadMore;
+  final VoidCallback? onUserScrollStart;
 
   @override
   State<ProfileTabScrollViewport> createState() =>
@@ -253,7 +256,8 @@ class _ProfileTabScrollViewportState extends State<ProfileTabScrollViewport> {
       key: ValueKey<(ScrollController, int)>(identity),
       child: widget.child,
     );
-    if (widget.onActivated == null && widget.onLoadMore == null) {
+    if (widget.onActivated == null && widget.onLoadMore == null &&
+        widget.onUserScrollStart == null) {
       return viewport;
     }
     return NotificationListener<ScrollMetricsNotification>(
@@ -263,6 +267,13 @@ class _ProfileTabScrollViewportState extends State<ProfileTabScrollViewport> {
       },
       child: NotificationListener<ScrollNotification>(
         onNotification: (notification) {
+          if (notification.depth == 0 &&
+              notification.metrics.axis == Axis.vertical &&
+              notification is ScrollStartNotification &&
+              notification.dragDetails != null &&
+              ProfileTabScrollScope.canFetch(context)) {
+            widget.onUserScrollStart?.call();
+          }
           _handleMetrics(notification.metrics, notification.depth);
           return false;
         },

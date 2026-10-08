@@ -1,15 +1,12 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:html/parser.dart' as html_parser;
 
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/features/profile/data/profile_posts_parser.dart';
+import 'package:fanotifier/features/profile/data/profile_submission_parser.dart';
 import 'package:fanotifier/features/profile/domain/profile_gallery_page_data.dart';
 import 'package:fanotifier/features/profile/domain/profile_gallery_repository.dart';
 import 'package:fanotifier/features/profile/domain/profile_submission_data.dart';
-import 'package:fanotifier/shared/fa/parsing/submission_favorite_links_parser.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
 
 String buildDefaultProfileGalleryUrl(String username) {
@@ -70,12 +67,17 @@ class ProfileGalleryService implements ProfileGalleryRepository {
       throw Exception('Failed to load images: ${response.statusCode}');
     }
 
-    final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-    final parseRes = parseProfileGalleryHtml(
-      decodedBody,
+    if (isCancelled?.call() ?? false) {
+      throw StateError('FA request cancelled');
+    }
+    final parseRes = await parseProfileGalleryPage(
+      response.bodyBytes,
       url,
       selectedFolderUrl: selectedFolderUrl,
     );
+    if (isCancelled?.call() ?? false) {
+      throw StateError('FA request cancelled');
+    }
 
     for (final post in parseRes.posts) {
       post['hqUrl'] = null;
@@ -118,50 +120,14 @@ class ProfileGalleryService implements ProfileGalleryRepository {
       throw Exception('Submission page fetch failed: ${resp.statusCode}');
     }
 
-    final doc = html_parser.parse(utf8.decode(resp.bodyBytes));
-    String hqUrl = '';
-    final subArea = doc.querySelector('div.submission-area.submission-image');
-    if (subArea != null) {
-      final img = subArea.querySelector('img#submissionImg');
-      if (img != null) {
-        final fullview = img.attributes['data-fullview-src'];
-        if (fullview != null && fullview.isNotEmpty) {
-          hqUrl = fullview.startsWith('//') ? 'https:$fullview' : fullview;
-        } else {
-          final src = img.attributes['src'];
-          if (src != null && src.isNotEmpty) {
-            hqUrl = src.startsWith('//') ? 'https:$src' : src;
-          }
-        }
-      }
+    if (isCancelled?.call() ?? false) {
+      throw StateError('FA request cancelled');
     }
-
-    if (hqUrl.isEmpty) {
-      final img = doc.querySelector('img#submissionImg');
-      if (img != null) {
-        final fullview = img.attributes['data-fullview-src'];
-        if (fullview != null && fullview.isNotEmpty) {
-          hqUrl = fullview.startsWith('//') ? 'https:$fullview' : fullview;
-        } else {
-          final src = img.attributes['src'];
-          if (src != null && src.isNotEmpty) {
-            hqUrl = src.startsWith('//') ? 'https:$src' : src;
-          }
-        }
-      }
+    final parsed = await parseProfileSubmissionPage(resp.bodyBytes);
+    if (isCancelled?.call() ?? false) {
+      throw StateError('FA request cancelled');
     }
-
-    final favoriteLinks = parseSubmissionFavoriteLinksFromDocument(
-      doc,
-      includeClassicFallback: true,
-    );
-
-    return ProfileSubmissionData(
-      hqUrl: hqUrl,
-      isFav: favoriteLinks.isFavorited,
-      favUrl: favoriteLinks.favUrl,
-      unfavUrl: favoriteLinks.unfavUrl,
-    );
+    return parsed;
   }
 
   Future<String> _buildCookieHeader() async {

@@ -1,14 +1,16 @@
 import 'package:fanotifier/features/browse/domain/browse_page_data.dart';
-import 'package:fanotifier/features/browse/data/browse_filter_options_service.dart';
 import 'package:fanotifier/features/browse/data/browse_image_parser.dart';
 import 'package:fanotifier/features/browse/data/browse_image_service.dart';
 import 'package:fanotifier/features/browse/domain/browse_repository.dart';
+import 'package:fanotifier/shared/fa/data/fa_filter_options_cache.dart';
+import 'package:fanotifier/shared/fa/domain/fa_filter_options.dart';
 
 class BrowseRepositoryImpl implements BrowseRepository {
   BrowseRepositoryImpl({BrowseImageService? imageService})
       : _imageService = imageService ?? BrowseImageService();
 
   final BrowseImageService _imageService;
+  final _filterOptions = FaFilterOptionsCache();
 
   @override
   Future<BrowsePageData> fetchImages({
@@ -17,10 +19,14 @@ class BrowseRepositoryImpl implements BrowseRepository {
     required bool sfwEnabled,
     bool Function()? isCancelled,
   }) {
-    return _imageService.fetchImages(
-      pageNumber: pageNumber,
-      selectedFilters: selectedFilters,
-      sfwEnabled: sfwEnabled,
+    return _filterOptions.capture(
+      (cancelled) => _imageService.fetchImages(
+        pageNumber: pageNumber,
+        selectedFilters: selectedFilters,
+        sfwEnabled: sfwEnabled,
+        isCancelled: cancelled,
+      ),
+      (page) => page.filterOptions,
       isCancelled: isCancelled,
     );
   }
@@ -30,14 +36,19 @@ class BrowseRepositoryImpl implements BrowseRepository {
     String html, {
     required Uri documentUri,
     required bool effectiveSfwEnabled,
-  }) async {
-    final parsed = await parseBrowsePageHtml(
-      html: html,
-      documentUri: documentUri,
-      sfwEnabled: effectiveSfwEnabled,
-      recovered: true,
+  }) {
+    return _filterOptions.capture(
+      (_) async {
+        final parsed = await parseBrowsePageHtml(
+          html: html,
+          documentUri: documentUri,
+          sfwEnabled: effectiveSfwEnabled,
+          recovered: true,
+        );
+        return parsed.page;
+      },
+      (page) => page.filterOptions,
     );
-    return parsed.page;
   }
 
   @override
@@ -52,7 +63,17 @@ class BrowseRepositoryImpl implements BrowseRepository {
   }
 
   @override
-  Future<Map<String, List<Map<String, String>>>> fetchFilterOptions() {
-    return fetchBrowseFilterOptions();
-  }
+  FaFilterOptions? get filterOptions => _filterOptions.current;
+
+  @override
+  Stream<FaFilterOptions> get filterOptionsChanges => _filterOptions.changes;
+
+  @override
+  Future<FaFilterOptions> fetchFilterOptions() => _filterOptions.requireOptions();
+
+  @override
+  void clearFilterOptions() => _filterOptions.clear();
+
+  @override
+  void dispose() => _filterOptions.dispose();
 }

@@ -1,3 +1,5 @@
+import 'package:fanotifier/features/notes/domain/note_reply_models.dart';
+
 class NoteMessageDetails {
   const NoteMessageDetails({
     required this.isClassic,
@@ -14,6 +16,7 @@ class NoteMessageDetails {
     required this.senderUsername,
     required this.recipientLink,
     required this.recipientUsername,
+    required this.replyContext,
   });
 
   final bool isClassic;
@@ -30,6 +33,7 @@ class NoteMessageDetails {
   final String senderUsername;
   final String recipientLink;
   final String recipientUsername;
+  final NoteReplyContext replyContext;
 }
 
 class NoteMessageFetchResult {

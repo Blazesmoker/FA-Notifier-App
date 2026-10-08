@@ -1,4 +1,5 @@
 import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
+import 'package:fanotifier/shared/fa/domain/fa_grid_pagination.dart';
 import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
@@ -47,6 +48,8 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
 
 
   final List<Map<String, dynamic>> _images = [];
+  final FaLoadedItemIds _loadedIds = FaLoadedItemIds();
+  final FaGridPaginationProgress _pagination = FaGridPaginationProgress();
 
   final List<List<Map<String, dynamic>>> _imageRows = [];
 
@@ -234,6 +237,8 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
       _isLoading = false;
       _hasMore = true;
       _images.clear();
+      _loadedIds.clear();
+      _pagination.clear();
       _imageRows.clear();
       _normalImagesQueue.clear();
       _selectedFavoriteIds.clear();
@@ -247,8 +252,10 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
     return refreshFuture;
   }
 
+  void resumePagination() => _pagination.resume();
+
   Future<void> _fetchImages() {
-    if (!mounted || !_hasMore || _nextPageUrl == null) {
+    if (!mounted || _pagination.paused || !_hasMore || _nextPageUrl == null) {
       return Future<void>.value();
     }
     if (_isLoading) return _pageFetchFuture ?? Future<void>.value();
@@ -260,24 +267,46 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
   Future<void> _loadPage() async {
     _hasLoadError = false;
     final fetchGeneration = _fetchGeneration;
-    setState(() => _isLoading = true);
+    _isLoading = true;
+    if (_images.isEmpty) setState(() {});
 
     try {
-      final parseResult = await _profileFavoritesRepository.fetchFavoritesPage(
-        _nextPageUrl!,
-        isCancelled: () => !mounted || fetchGeneration != _fetchGeneration,
-      );
-      if (!mounted || fetchGeneration != _fetchGeneration) return;
-      setState(() {
-        _images.addAll(parseResult.posts);
+      while (_nextPageUrl != null) {
+        final requestedUrl = _nextPageUrl!;
+        final parseResult = await _profileFavoritesRepository.fetchFavoritesPage(
+          requestedUrl,
+          isCancelled: () => !mounted || fetchGeneration != _fetchGeneration,
+        );
+        if (!mounted || fetchGeneration != _fetchGeneration) return;
+        final batch = _loadedIds.prepare(
+          parseResult.posts,
+          idOf: (image) => image['uniqueNumber'] as String,
+        );
         appendProfileImagesIntoRows(
-          newImages: parseResult.posts,
+          newImages: batch.items,
           imageRows: _imageRows,
           normalImagesQueue: _normalImagesQueue,
         );
-        _preloadImagesImmediately(parseResult.posts);
-        _nextPageUrl = parseResult.nextPageUrl;
-        _hasMore = parseResult.nextPageUrl != null;
+        _loadedIds.commit(batch);
+        _images.addAll(batch.items);
+        _pagination.record(
+          cursor: requestedUrl,
+          duplicateOnly: batch.duplicateOnly,
+        );
+        _preloadImagesImmediately(batch.items, fetchGeneration);
+        final nextUrl = parseResult.nextPageUrl;
+        final repeatedCursor =
+            nextUrl != null && _pagination.hasCompleted(nextUrl);
+        _nextPageUrl = repeatedCursor ? null : nextUrl;
+        _hasMore = _nextPageUrl != null;
+        if (!batch.duplicateOnly ||
+            !_hasMore ||
+            _pagination.paused ||
+            !ProfileTabScrollScope.canFetch(context)) {
+          break;
+        }
+      }
+      setState(() {
         _isLoading = false;
       });
     } catch (e) {
@@ -291,10 +320,15 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
   }
 
   /// Preload some images to improve scrolling smoothness.
-  void _preloadImagesImmediately(List<Map<String, dynamic>> images) {
+  void _preloadImagesImmediately(
+    List<Map<String, dynamic>> images,
+    int fetchGeneration,
+  ) {
     for (var image in images) {
       faNetworkImageProvider(image['url']).then((provider) {
-        if (mounted) precacheImage(provider, context);
+        if (mounted && fetchGeneration == _fetchGeneration) {
+          precacheImage(provider, context);
+        }
       });
     }
   }

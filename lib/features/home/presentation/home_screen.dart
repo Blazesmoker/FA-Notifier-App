@@ -2,11 +2,13 @@ import 'package:fanotifier/shared/fa/domain/fa_session_access.dart';
 import 'dart:async';
 import 'package:fanotifier/features/notifications/presentation/notification_navigation_provider.dart';
 import 'package:fanotifier/features/browse/presentation/browse_image_grid.dart';
+import 'package:fanotifier/features/browse/domain/browse_repository.dart';
 import 'package:fanotifier/features/browse/presentation/filters_screen.dart';
 import 'package:fanotifier/features/notes/domain/notes_repository.dart';
 import 'package:fanotifier/features/notes/presentation/notes_screen.dart';
 import 'package:fanotifier/features/notifications/presentation/notifications_screen.dart';
 import 'package:fanotifier/features/search/presentation/search_screen.dart';
+import 'package:fanotifier/features/search/domain/search_repository.dart';
 import 'package:fanotifier/features/submissions/presentation/submissions_screen.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
 import 'package:fanotifier/features/upload/presentation/upload_submission_screen.dart';
@@ -834,6 +836,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           builder: (context) => FiltersScreen(
                             selectedFilters: browseFilters,
                             sfwEnabled: _sfwEnabled,
+                            onRetry: () async {
+                              await _browseKey.currentState
+                                  ?.refreshFilterOptions();
+                            },
                           ),
                         ),
                       );
@@ -984,6 +990,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       _activitiesPolling.stop();
+      context.read<BrowseRepository>().clearFilterOptions();
+      context.read<SearchRepository>().clearFilterOptions();
       context.read<SubmissionFavoriteStateController>().clear();
       await _homeSessionRepository.clearLocalSession();
 

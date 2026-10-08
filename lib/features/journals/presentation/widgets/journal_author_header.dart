@@ -22,8 +22,8 @@ Widget buildJournalAuthorHeader({
             onTap: onAuthorTap,
             child: FaNetworkImage(
               profileImageUrl,
-              width: 46,
-              height: 46,
+              width: 50,
+              height: 50,
               fit: BoxFit.cover,
               loadingBuilder: (context, child, loadingProgress) {
                 if (loadingProgress == null) {
@@ -31,16 +31,16 @@ Widget buildJournalAuthorHeader({
                 }
                 return Image.asset(
                   'assets/images/defaultpic.gif',
-                  width: 46,
-                  height: 46,
+                  width: 50,
+                  height: 50,
                   fit: BoxFit.cover,
                 );
               },
               errorBuilder: (context, error, stackTrace) {
                 return Image.asset(
                   'assets/images/defaultpic.gif',
-                  width: 46,
-                  height: 46,
+                  width: 50,
+                  height: 50,
                   fit: BoxFit.cover,
                 );
               },
@@ -66,7 +66,7 @@ Widget buildJournalAuthorHeader({
                   Text(
                     authorDisplayName ?? authorUserName ?? 'Anonymous',
                     style: const TextStyle(
-                      fontSize: 20,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                     maxLines: 1,

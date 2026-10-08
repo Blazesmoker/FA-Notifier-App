@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:fanotifier/features/search/data/search_image_parser.dart';
 import 'package:fanotifier/features/search/data/search_query_builder.dart';
+import 'package:fanotifier/features/search/domain/search_page_data.dart';
+import 'package:fanotifier/shared/fa/domain/fa_filter_options.dart';
 import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
@@ -23,20 +25,52 @@ class SearchImageService {
 
   final FlutterSecureStorage _secureStorage;
 
-  Future<List<Map<String, dynamic>>> fetchImages({
+  Future<SearchPageData> fetchImages({
     required int pageNumber,
     required Map<String, String> selectedFilters,
     required String searchQuery,
     required String cookieHeader,
-  }) async {
+    bool Function()? isCancelled,
+  }) {
     final uri = buildFaSearchUri(
       pageNumber: pageNumber,
       selectedFilters: selectedFilters,
       searchQuery: searchQuery,
     );
 
+    return _fetchPage(uri, cookieHeader, isCancelled: isCancelled);
+  }
+
+  Future<FaFilterOptions?> fetchFilterOptions({
+    required Map<String, String> selectedFilters,
+    required bool sfwEnabled,
+    bool Function()? isCancelled,
+  }) async {
+    final cookieHeader = await buildCookieHeader(
+      selectedFilters: selectedFilters,
+      sfwEnabled: sfwEnabled,
+    );
+    final page = await _fetchPage(
+      Uri.https('www.furaffinity.net', '/search/'),
+      cookieHeader,
+      isCancelled: isCancelled,
+      filtersOnly: true,
+    );
+    return page.filterOptions;
+  }
+
+  Future<SearchPageData> _fetchPage(
+    Uri uri,
+    String cookieHeader, {
+    bool Function()? isCancelled,
+    bool filtersOnly = false,
+  }) async {
+    if (isCancelled?.call() ?? false) {
+      throw StateError('FA request cancelled');
+    }
     final response = await FAHttp.get(
       uri,
+      isCancelled: isCancelled,
       headers: {
         HttpHeaders.cookieHeader:
             await FaCookieHelper.appendCfClearanceToCookieHeader(cookieHeader),
@@ -64,7 +98,17 @@ class SearchImageService {
     }
 
     if (response.statusCode == 200) {
-      final faMessage = parseFaSystemMessage(response.body);
+      if (isCancelled?.call() ?? false) {
+        throw StateError('FA request cancelled');
+      }
+      final parsed = await parseSearchPageHtml(
+        response.body,
+        filtersOnly: filtersOnly,
+      );
+      if (isCancelled?.call() ?? false) {
+        throw StateError('FA request cancelled');
+      }
+      final faMessage = parsed.systemMessage;
       if (faMessage != null) {
         if (faMessage.isMaintenanceOrUnavailable) {
           FaRequestCoordinator.instance.recordMaintenanceOrUnavailable(
@@ -73,9 +117,11 @@ class SearchImageService {
           );
           throw FaMaintenanceUnavailableException(faMessage.message);
         }
-        throw Exception(faMessage.message);
+        if (!filtersOnly || parsed.filterOptions == null) {
+          throw Exception(faMessage.message);
+        }
       }
-      return parseSearchImageHtml(response.body);
+      return parsed.page;
     }
 
     throw Exception('Failed to load images: ${response.statusCode}');

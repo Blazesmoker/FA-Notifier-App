@@ -1,7 +1,14 @@
 import 'dart:convert';
 
-String buildSubmissionAudioHtml(String url) {
+String buildSubmissionAudioHtml(
+  String url, {
+  bool nativePlaybackSpeedEnabled = true,
+  double playbackRate = 1.0,
+}) {
   final encodedUrl = jsonEncode(url);
+  final controlsList = nativePlaybackSpeedEnabled
+      ? 'nodownload'
+      : 'nodownload noplaybackrate';
   return '''
 <!doctype html>
 <html>
@@ -11,46 +18,40 @@ String buildSubmissionAudioHtml(String url) {
 <style>
 *{box-sizing:border-box}
 html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#151515;color:#fff;color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-.player{position:relative;height:100%;padding:8px 12px 4px}
+.player{position:relative;height:100%;padding:8px 0 4px}
 audio{display:block;width:100%;height:54px;touch-action:pan-x}
-.rate{display:grid;grid-template-columns:auto minmax(80px,1fr) 42px;gap:10px;align-items:center;height:42px;font-size:13px;color:#bbb}
-input{width:100%;accent-color:#e09321;touch-action:pan-x}
-output{text-align:right;color:#e09321;font-variant-numeric:tabular-nums}
-#error{display:none;position:absolute;left:12px;right:12px;bottom:1px;padding:1px 3px;background:rgba(21,21,21,.92);font-size:10px;color:#ff7777}
+#error{display:none;position:absolute;left:0;right:0;bottom:1px;padding:1px 3px;background:rgba(21,21,21,.92);font-size:10px;color:#ff7777}
 #error:not(:empty){display:block}
 </style>
 </head>
 <body>
 <div class="player">
-<audio id="player" controls controlslist="nodownload noplaybackrate" preload="metadata"></audio>
-<div class="rate">
-<label for="rate">Speed</label>
-<input id="rate" type="range" min="0.25" max="2" step="0.25" value="1">
-<output id="rateValue">1×</output>
-</div>
+<audio id="player" controls controlslist="$controlsList" preload="metadata"></audio>
 <div id="error"></div>
 </div>
 <script>
 const player=document.getElementById('player');
-const rate=document.getElementById('rate');
-const rateValue=document.getElementById('rateValue');
 player.src=$encodedUrl;
-function applyRate(){
-  const value=Number(rate.value);
-  player.defaultPlaybackRate=value;
-  player.playbackRate=value;
-  const label=Number.isInteger(value)?value.toFixed(0):value.toFixed(2).replace(/0\$/,'');
-  rateValue.textContent=label+'×';
-}
-rate.addEventListener('input',applyRate);
-player.addEventListener('loadedmetadata',applyRate);
+player.defaultPlaybackRate=$playbackRate;
+player.playbackRate=$playbackRate;
 player.addEventListener('error',function(){
   document.getElementById('error').textContent='Unable to play this file. You can still download it.';
 });
-applyRate();
 </script>
 </body>
 </html>
+''';
+}
+
+String buildSubmissionAudioPlaybackRateScript(double playbackRate) {
+  return '''
+(function(){
+  const player=document.getElementById('player');
+  if(!player){return false;}
+  player.defaultPlaybackRate=$playbackRate;
+  player.playbackRate=$playbackRate;
+  return true;
+})();
 ''';
 }
 

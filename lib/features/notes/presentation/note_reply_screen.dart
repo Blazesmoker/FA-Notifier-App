@@ -7,6 +7,7 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:fanotifier/features/notes/domain/note_reply_repository.dart';
+import 'package:fanotifier/features/notes/domain/note_reply_models.dart';
 import 'package:fanotifier/features/notes/domain/note_reply_webview_gateway.dart';
 import 'package:fanotifier/features/notes/presentation/note_reply_webview_controller_factory.dart';
 import 'package:fanotifier/features/notes/domain/note_image_preview_mode.dart';
@@ -26,6 +27,9 @@ class NoteReplyScreen extends StatefulWidget {
   final String username;
   final String messageId;
   final String messageLink;
+  final String folder;
+  final NoteReplyContext? replyContext;
+  final int? replyContextGeneration;
   final NoteImagePreviewMode imagePreviewMode;
 
   const NoteReplyScreen({
@@ -36,6 +40,9 @@ class NoteReplyScreen extends StatefulWidget {
     required this.username,
     required this.messageId,
     required this.messageLink,
+    this.folder = 'inbox',
+    this.replyContext,
+    this.replyContextGeneration,
     required this.imagePreviewMode,
   });
 
@@ -58,7 +65,9 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       const NoteReplyWebViewControllerFactory();
 
   late String recipient;
-  bool _isMessageDetailsLoading = true;
+  late NoteReplyContext _replyContext;
+  late int _replyContextGeneration;
+  bool _isMessageDetailsLoading = false;
   bool _contextLoadFailed = false;
   String errorMessage = '';
 
@@ -86,7 +95,15 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
             );
     _noteReplyRepository = context.read<NoteReplyRepositoryFactory>()();
     _webViewGateway = context.read<NoteReplyWebViewGateway>();
-    _fetchMessageDetails();
+    final generation = context.read<FaSessionAccess>().verifiedGeneration;
+    _replyContext = widget.replyContext ??
+        NoteReplyContext(recipient: recipient, isClassicTheme: false);
+    _replyContextGeneration = widget.replyContextGeneration ?? generation;
+    recipient = _replyContext.recipient;
+    _isClassicTheme = _replyContext.isClassicTheme;
+    if (widget.replyContext == null || _replyContextGeneration != generation) {
+      _fetchMessageDetails();
+    }
   }
 
   Future<void> _onRequestClose() async {
@@ -109,14 +126,18 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
       errorMessage = '';
     });
     try {
+      final generation = context.read<FaSessionAccess>().verifiedGeneration;
       final details = await _noteReplyRepository.fetchReplyContext(
         widget.messageLink,
+        folder: widget.folder,
       );
 
       if (mounted) {
         setState(() {
           recipient = details.recipient;
           _isClassicTheme = details.isClassicTheme;
+          _replyContext = details;
+          _replyContextGeneration = generation;
           _isMessageDetailsLoading = false;
         });
       }
@@ -133,9 +154,13 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
   Future<void> _recoverSession() async {
     await context.read<FaSessionAccess>().synchronizeWebViewSession();
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     await _webViewGateway.setAuthCookies();
-    if (!mounted || !_contextLoadFailed) return;
+    if (!mounted) {
+      return;
+    }
     await _fetchMessageDetails();
   }
 
@@ -260,14 +285,38 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     });
 
     try {
+      if (_contextLoadFailed ||
+          _replyContextGeneration !=
+              context.read<FaSessionAccess>().verifiedGeneration) {
+        await _fetchMessageDetails();
+        if (!mounted || _contextLoadFailed) {
+          return;
+        }
+      }
+      final generation = context.read<FaSessionAccess>().verifiedGeneration;
       final result = await _noteReplyRepository.sendModernReply(
         messageLink: widget.messageLink,
+        folder: widget.folder,
+        replyContext: _replyContext,
         recipient: recipient,
         subject: widget.subject,
         replyText: replyText,
         originalContent: widget.originalContent,
       );
 
+      if (!mounted) {
+        return;
+      }
+      final refreshedContext = result.replyContext;
+      if (refreshedContext != null) {
+        setState(() {
+          _replyContext = refreshedContext;
+          recipient = refreshedContext.recipient;
+          _isClassicTheme = refreshedContext.isClassicTheme;
+          _replyContextGeneration = generation;
+        });
+      }
+      _contextLoadFailed = result.requiresContextRefresh;
       if (result.success) {
         if (mounted) {
           Navigator.pop(context, true);

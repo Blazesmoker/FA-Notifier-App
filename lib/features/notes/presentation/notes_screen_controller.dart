@@ -244,30 +244,9 @@ class NotesScreenController {
   }
 
   Future<void> fetchInboxTwoPagesOnly() async {
-    try {
-      final shownIds = await _repository.getShownNoteIds();
-      final seenIds = await _repository.getSeenNoteIds();
-      final page1 = await _repository.fetchPage(folder: 'inbox', page: 1);
-      final fetched = <Message>[...page1.messages];
-      if (shouldFetchSecondInboxPage(
-        page1Messages: page1.messages,
-        shownNoteIds: shownIds,
-        seenNoteIds: seenIds,
-        topbarNotes: page1.topbarCounts?.notes,
-      )) {
-        fetched.addAll(
-          await _repository.fetchMessages(folder: 'inbox', page: 2),
-        );
-      }
-      await _handleNewUnreadMessages(fetched);
-      await _repository.handleTopbarCounts(
-        page1.topbarCounts,
-        source: 'notes_screen_two_page_refresh',
-      );
-      await _repository.markMessagesAsSeen(fetched);
-    } catch (e) {
-      debugPrint('[Foreground fetchInboxTwoPagesOnly] error => $e');
-    }
+    await _inFlightInboxPageOne;
+    resetInboxPagination();
+    await fetchInbox(checkSecondPage: true);
   }
 
   Future<void> fetchInbox({
@@ -275,6 +254,7 @@ class NotesScreenController {
     bool clearOld = false,
     bool suppressNewUnreadNotifications = false,
     Set<String> manuallyMarkedUnreadIds = const <String>{},
+    bool checkSecondPage = false,
   }) {
     final shouldCoalesce = page == 1 &&
         !clearOld &&
@@ -290,6 +270,7 @@ class NotesScreenController {
       clearOld: clearOld,
       suppressNewUnreadNotifications: suppressNewUnreadNotifications,
       manuallyMarkedUnreadIds: manuallyMarkedUnreadIds,
+      checkSecondPage: checkSecondPage,
     );
     if (!shouldCoalesce) return operation;
 
@@ -308,6 +289,7 @@ class NotesScreenController {
     required bool clearOld,
     required bool suppressNewUnreadNotifications,
     required Set<String> manuallyMarkedUnreadIds,
+    required bool checkSecondPage,
   }) async {
     var pageApplied = false;
     if (page == 1) {
@@ -377,8 +359,27 @@ class NotesScreenController {
         });
       }
 
+      var observedMessages = newMessages;
       if (page == 1 && !suppressNewUnreadNotifications) {
-        await _handleNewUnreadMessages(newMessages);
+        if (checkSecondPage) {
+          final shownIds = await _repository.getShownNoteIds();
+          final seenIds = await _repository.getSeenNoteIds();
+          if (shouldFetchSecondInboxPage(
+            page1Messages: newMessages,
+            shownNoteIds: shownIds,
+            seenNoteIds: seenIds,
+            topbarNotes: result.topbarCounts?.notes,
+          )) {
+            try {
+              final page2 = await _repository.fetchMessages(
+                folder: 'inbox',
+                page: 2,
+              );
+              observedMessages = <Message>[...newMessages, ...page2];
+            } catch (_) {}
+          }
+        }
+        await _handleNewUnreadMessages(observedMessages);
         await _repository.handleTopbarCounts(
           result.topbarCounts,
           source: 'notes_screen_inbox_refresh',
@@ -389,7 +390,7 @@ class NotesScreenController {
           _lastInboxTopId = newMessages.first.id;
         }
       }
-      await _repository.markMessagesAsSeen(newMessages);
+      await _repository.markMessagesAsSeen(observedMessages);
     } catch (e) {
       if (!pageApplied) _failedInboxPage = page;
       _setState(() {

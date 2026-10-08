@@ -78,6 +78,8 @@ class _UserProfileScrapsSectionState extends State<UserProfileScrapsSection>
     if (scrapsState != null) unawaited(scrapsState.loadMore());
   }
 
+  void _resumePagination() => _scrapsKey.currentState?.resumePagination();
+
   void _toggleSelectionMode() {
     if (_isApplying) return;
     final nextSelectionMode = !_selectionMode;
@@ -204,6 +206,7 @@ class _UserProfileScrapsSectionState extends State<UserProfileScrapsSection>
               storageKey: const PageStorageKey<String>('profile-scraps-scroll'),
               onActivated: _refreshIfNeeded,
               onLoadMore: _loadMore,
+              onUserScrollStart: _resumePagination,
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverOverlapInjector(

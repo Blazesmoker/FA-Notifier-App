@@ -44,7 +44,17 @@ class ProfileJournalsService implements ProfileJournalsRepository {
     );
 
     if (response.statusCode == 200) {
-      final parsed = await compute(parseProfileJournalsHtml, response.body);
+      if (isCancelled?.call() ?? false) {
+        throw StateError('FA request cancelled');
+      }
+      final parsed = await compute(
+        parseProfileJournalsHtml,
+        response.body,
+        debugLabel: 'profile_journals_page_parse',
+      );
+      if (isCancelled?.call() ?? false) {
+        throw StateError('FA request cancelled');
+      }
       return ProfileJournalsPageData(
         journals: parsed.journals,
         hasMore: parsed.hasMore,

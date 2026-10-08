@@ -1,4 +1,5 @@
 import 'package:fanotifier/features/browse/domain/browse_page_data.dart';
+import 'package:fanotifier/shared/fa/domain/fa_filter_options.dart';
 
 abstract interface class BrowseRepository {
   Future<BrowsePageData> fetchImages({
@@ -19,5 +20,9 @@ abstract interface class BrowseRepository {
     required bool sfwEnabled,
   });
 
-  Future<Map<String, List<Map<String, String>>>> fetchFilterOptions();
+  FaFilterOptions? get filterOptions;
+  Stream<FaFilterOptions> get filterOptionsChanges;
+  Future<FaFilterOptions> fetchFilterOptions();
+  void clearFilterOptions();
+  void dispose();
 }

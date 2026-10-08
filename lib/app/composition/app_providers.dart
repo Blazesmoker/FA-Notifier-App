@@ -214,9 +214,11 @@ class AppProviders extends StatelessWidget {
           create: (context) => BrowseFeature.createRepository(
             adsRepository: context.read<FaAdsRepository>(),
           ),
+          dispose: (_, repository) => repository.dispose(),
         ),
         Provider<SearchRepository>(
           create: (_) => SearchFeature.createRepository(),
+          dispose: (_, repository) => repository.dispose(),
         ),
         Provider<FindSourceRepository>(
           create: (_) => SearchFeature.createFindSourceRepository(),

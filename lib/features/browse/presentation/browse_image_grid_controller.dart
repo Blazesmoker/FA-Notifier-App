@@ -8,6 +8,8 @@ import 'package:fanotifier/features/browse/domain/browse_page_data.dart';
 import 'package:fanotifier/features/browse/domain/browse_repository.dart';
 import 'package:fanotifier/features/browse/presentation/browse_ad_scroll_controller.dart';
 import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
+import 'package:fanotifier/shared/fa/domain/fa_grid_pagination.dart';
+import 'package:fanotifier/shared/fa/domain/fa_page_settings.dart';
 import 'package:fanotifier/shared/fa/fa_thumbnail_processing.dart';
 
 typedef BrowseCloudflareChallengeHandler = Future<CloudflareCheckResult?>
@@ -29,6 +31,8 @@ class BrowseImageGridController extends ChangeNotifier {
   final List<Map<String, dynamic>> _images = [];
   final List<List<Map<String, dynamic>>> _imageRows = [];
   final List<BrowseGridSection> _sections = [];
+  final FaLoadedItemIds _loadedIds = FaLoadedItemIds();
+  final FaGridPaginationProgress _pagination = FaGridPaginationProgress();
 
   Map<String, String> _selectedFilters;
   List<Map<String, dynamic>> _normalImagesQueue = [];
@@ -69,6 +73,7 @@ class BrowseImageGridController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   void initialize() {
+    _currentPage = FaPageSettings.startingPage(_selectedFilters);
     unawaited(_fetchImages(_currentPage));
     scrollController.addListener(_scrollListener);
   }
@@ -87,7 +92,8 @@ class BrowseImageGridController extends ChangeNotifier {
   }
 
   void _scrollListener() {
-    if (isNavbarScrolling || !scrollController.hasClients ||
+    if (_disposed || _pagination.paused || isNavbarScrolling ||
+        !scrollController.hasClients ||
         _isLoading ||
         _isNextPageFetchQueued ||
         !_hasMore ||
@@ -113,11 +119,13 @@ class BrowseImageGridController extends ChangeNotifier {
     _sfwEnabled = sfwEnabled;
     _selectedFilters = selectedFilters;
     _images.clear();
+    _loadedIds.clear();
+    _pagination.clear();
     _imageRows.clear();
     _sections.clear();
     _sectionsRevision++;
     _normalImagesQueue.clear();
-    _currentPage = 1;
+    _currentPage = FaPageSettings.startingPage(_selectedFilters);
     _hasMore = true;
     _nextPageTriggerOffset = double.infinity;
     _pendingNextPageFetch = false;
@@ -158,11 +166,13 @@ class BrowseImageGridController extends ChangeNotifier {
     try {
       if (isRefresh) {
         _images.clear();
+        _loadedIds.clear();
+        _pagination.clear();
         _imageRows.clear();
         _sections.clear();
         _sectionsRevision++;
         _normalImagesQueue.clear();
-        _currentPage = 1;
+        _currentPage = pageNumber;
         _hasMore = true;
         _nextPageTriggerOffset = double.infinity;
         _pendingNextPageFetch = false;
@@ -176,12 +186,16 @@ class BrowseImageGridController extends ChangeNotifier {
         isCancelled: stale,
       );
       if (stale()) return;
-      await _appendImages(
+      final continueLoading = await _appendImages(
         page,
         pageNumber: pageNumber,
         generation: generation,
         previousMaxScrollExtent: previousMaxScrollExtent,
       );
+      if (continueLoading && !stale()) {
+        _currentPage = pageNumber + 1;
+        await _fetchImages(_currentPage);
+      }
     } on CloudflareChallengeException catch (e) {
       if (stale()) return;
       kDebugPrint('Cloudflare challenge detected while fetching browse images.');
@@ -238,32 +252,42 @@ class BrowseImageGridController extends ChangeNotifier {
     }
   }
 
-  Future<void> _appendImages(
+  Future<bool> _appendImages(
     BrowsePageData page, {
     required int pageNumber,
     required int generation,
     required double previousMaxScrollExtent,
   }) async {
     final newImages = page.images;
-
-    final rowProcessing = await processFaImageRows(
-      newImages: newImages,
-      normalImagesQueue: _normalImagesQueue,
+    final batch = _loadedIds.prepare(
+      newImages,
+      idOf: (image) => image['uniqueNumber'] as String,
     );
-    final appendedRows = (rowProcessing['rows'] as List)
-        .map(
-          (row) => List<Map<String, dynamic>>.from(row as List),
-        )
-        .toList();
-    final nextQueue =
-        List<Map<String, dynamic>>.from(rowProcessing['queue'] as List);
+    var appendedRows = <List<Map<String, dynamic>>>[];
+    var nextQueue = _normalImagesQueue;
+    if (batch.items.isNotEmpty) {
+      final rowProcessing = await processFaImageRows(
+        newImages: batch.items,
+        normalImagesQueue: _normalImagesQueue,
+      );
+      appendedRows = (rowProcessing['rows'] as List)
+          .map((row) => List<Map<String, dynamic>>.from(row as List))
+          .toList();
+      nextQueue =
+          List<Map<String, dynamic>>.from(rowProcessing['queue'] as List);
+    }
 
-    if (_disposed || generation != _requestGeneration) return;
+    if (_disposed || generation != _requestGeneration) return false;
 
     _isError = false;
     _errorMessage = null;
     _hasMore = newImages.isNotEmpty;
-    _images.addAll(newImages);
+    _loadedIds.commit(batch);
+    _pagination.record(
+      cursor: '$pageNumber',
+      duplicateOnly: batch.duplicateOnly,
+    );
+    _images.addAll(batch.items);
     _imageRows.addAll(appendedRows);
     if (appendedRows.isNotEmpty) {
       _sections.add(BrowseGridSection(
@@ -277,13 +301,18 @@ class BrowseImageGridController extends ChangeNotifier {
     _pendingNextPageFetch = false;
     _isNextPageFetchQueued = false;
     _isLoading = false;
-    _notifyChanged();
-
-    _scheduleNextPageTrigger(previousMaxScrollExtent: previousMaxScrollExtent);
+    final continueLoading = batch.duplicateOnly && !_pagination.paused;
+    if (!continueLoading) _notifyChanged();
+    if (appendedRows.isNotEmpty) {
+      _scheduleNextPageTrigger(previousMaxScrollExtent: previousMaxScrollExtent);
+    }
+    return continueLoading;
   }
 
   void _scheduleNextPageTrigger({required double previousMaxScrollExtent}) {
+    final generation = _requestGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_disposed || generation != _requestGeneration) return;
       if (_disposed || !_hasMore) {
         _pendingNextPageFetch = false;
         _isNextPageFetchQueued = false;
@@ -314,8 +343,12 @@ class BrowseImageGridController extends ChangeNotifier {
 
   bool handleScrollNotification(ScrollNotification notification) {
     if (isNavbarScrolling || notification.metrics.axis != Axis.vertical) return false;
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      _pagination.resume();
+    }
 
-    if (_disposed ||
+    if (_disposed || _pagination.paused ||
         _isLoading ||
         _isNextPageFetchQueued ||
         !_hasMore ||
@@ -332,7 +365,8 @@ class BrowseImageGridController extends ChangeNotifier {
   }
 
   void _tryStartPendingNextPageFetch() {
-    if (isNavbarScrolling || !_pendingNextPageFetch ||
+    if (_disposed || _pagination.paused || isNavbarScrolling ||
+        !_pendingNextPageFetch ||
         !scrollController.hasClients ||
         _isLoading ||
         _isNextPageFetchQueued ||
@@ -352,7 +386,8 @@ class BrowseImageGridController extends ChangeNotifier {
     _currentPage = nextPage;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_disposed || nextPage != _currentPage || generation != _requestGeneration) {
+      if (_disposed || generation != _requestGeneration) return;
+      if (nextPage != _currentPage) {
         _isNextPageFetchQueued = false;
         return;
       }

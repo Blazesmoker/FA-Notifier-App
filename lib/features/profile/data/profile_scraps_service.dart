@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
@@ -46,8 +44,14 @@ class ProfileScrapsService implements ProfileScrapsRepository {
       throw Exception("Failed to load scraps: ${response.statusCode}");
     }
 
-    final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
-    return parseProfileScrapsPostsHtml(decodedBody, url);
+    if (isCancelled?.call() ?? false) {
+      throw StateError('FA request cancelled');
+    }
+    final parsed = await parseProfileScrapsPostsPage(response.bodyBytes, url);
+    if (isCancelled?.call() ?? false) {
+      throw StateError('FA request cancelled');
+    }
+    return parsed;
   }
 
   @override

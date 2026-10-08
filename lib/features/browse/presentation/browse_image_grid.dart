@@ -248,6 +248,11 @@ class BrowseImageGridState extends State<BrowseImageGrid>
     await _controller.refresh(widget.selectedFilters, sfwEnabled: widget.sfwEnabled);
   }
 
+  Future<void> refreshFilterOptions() async {
+    if (isLoading || _loggedOut) return;
+    await _refreshImages();
+  }
+
   bool _handleScrollNotification(ScrollNotification notification) {
     _scrollReturn.handleScrollNotification(notification);
     return _controller.handleScrollNotification(notification);

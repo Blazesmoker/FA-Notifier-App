@@ -3,6 +3,7 @@ import 'package:html/parser.dart' as html_parser;
 
 import 'package:fanotifier/core/logging/app_logging.dart';
 import 'package:fanotifier/features/ads/data/fa_ad_parser.dart';
+import 'package:fanotifier/features/browse/data/browse_filter_options_parser.dart';
 import 'package:fanotifier/features/browse/domain/browse_page_data.dart';
 import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:fanotifier/shared/fa/fa_thumbnail_processing.dart';
@@ -40,6 +41,7 @@ BrowsePageParseResult _parseBrowsePage(_BrowsePageParseInput input) {
   return BrowsePageParseResult(
     page: BrowsePageData(
       images: parseFaThumbnailDocument(document),
+      filterOptions: parseBrowseFilterDocument(document),
       modeMatchesRequest: !input.recovered ||
           faAdPageModeMatches(input.html, input.sfwEnabled),
       ads: parseFaAdPage(

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:fanotifier/features/browse/domain/browse_page_data.dart';
 import 'package:fanotifier/features/browse/data/browse_image_parser.dart';
 import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
+import 'package:fanotifier/shared/fa/domain/fa_page_settings.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
 import 'package:fanotifier/core/network/fa_request_coordinator.dart';
@@ -55,7 +56,7 @@ class BrowseImageService {
       'rating_general': _getFilterValue(selectedFilters, 'rating-general'),
       'rating_mature': _getFilterValue(selectedFilters, 'rating-mature'),
       'rating_adult': _getFilterValue(selectedFilters, 'rating-adult'),
-      'perpage': '72',
+      'perpage': FaPageSettings.resultsPerPage(selectedFilters),
       'btn': 'Next',
     };
 

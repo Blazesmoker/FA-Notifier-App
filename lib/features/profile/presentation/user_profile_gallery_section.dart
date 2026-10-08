@@ -113,6 +113,8 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
     if (galleryState != null) unawaited(galleryState.loadMore());
   }
 
+  void _resumePagination() => _galleryKey.currentState?.resumePagination();
+
   Future<void> _openManageSubmissions() async {
     if (_manageSubmissionsOpen) return;
     _manageSubmissionsOpen = true;
@@ -190,6 +192,7 @@ class _UserProfileGallerySectionState extends State<UserProfileGallerySection>
             storageKey: const PageStorageKey<String>('profile-gallery-scroll'),
             onActivated: _refreshIfNeeded,
             onLoadMore: _loadMore,
+            onUserScrollStart: _resumePagination,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
           SliverOverlapInjector(

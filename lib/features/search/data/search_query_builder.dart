@@ -1,3 +1,5 @@
+import 'package:fanotifier/shared/fa/domain/fa_page_settings.dart';
+
 Uri buildFaSearchUri({
   required int pageNumber,
   required Map<String, String> selectedFilters,
@@ -29,8 +31,14 @@ Uri buildFaSearchUri({
     'type-story': selectedFilters['type-story'] ?? '1',
     'type-photo': selectedFilters['type-photo'] ?? '1',
     'type-poetry': selectedFilters['type-poetry'] ?? '1',
-    'perpage': selectedFilters['perpage'] ?? '72',
+    'perpage': FaPageSettings.resultsPerPage(selectedFilters),
   };
+
+  for (final entry in selectedFilters.entries) {
+    if (RegExp(r'^(?:type|rating)-[a-z][a-z0-9_-]*$').hasMatch(entry.key)) {
+      queryParams[entry.key] = entry.value;
+    }
+  }
 
   if (selectedFilters['range'] == 'manual') {
     queryParams['range_from'] = selectedFilters['range_from'] ?? '';
@@ -41,19 +49,15 @@ Uri buildFaSearchUri({
 }
 
 String _buildGenderQuery(Map<String, String> filters, {required bool useOr}) {
-  const map = {
-    'male': 'male',
-    'female': 'female',
-    'trans_male': '"trans male"',
-    'trans_female': '"trans female"',
-    'intersex': 'intersex',
-    'non_binary': '"non binary"',
-  };
-
   final selected = <String>[];
-  map.forEach((key, term) {
-    if (filters['gender-$key'] == '1') selected.add(term);
-  });
+  for (final entry in filters.entries) {
+    if (entry.value != '1' ||
+        !RegExp(r'^gender-[a-z][a-z0-9_]*$').hasMatch(entry.key)) {
+      continue;
+    }
+    final term = entry.key.substring('gender-'.length).replaceAll('_', ' ');
+    selected.add(term.contains(' ') ? '"$term"' : term);
+  }
   if (selected.isEmpty) return '';
 
   final separator = useOr ? ' | ' : ' ';

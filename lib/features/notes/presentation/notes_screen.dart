@@ -74,6 +74,8 @@ class NotesScreenState extends State<NotesScreen>
   StreamSubscription<void>? _notesRefreshSub;
   bool _isVisibleInHomeStack = false;
   bool _initialInboxLoadCompleted = false;
+  bool _returnRefreshScheduled = false;
+  bool _noteDetailsOpen = false;
   AppLifecycleState? _lastLifecycleState;
 
   bool _isDialogOpen = false;
@@ -142,7 +144,9 @@ class NotesScreenState extends State<NotesScreen>
   }
 
   void _refreshFromSignal() {
-    if (!mounted) return;
+    if (!mounted || _returnRefreshScheduled) {
+      return;
+    }
     _notesController.resetAllPagination();
     _fetchInbox(page: 1, clearOld: false);
     _refreshSentIfVisibleOrMarkStale();
@@ -200,6 +204,7 @@ class NotesScreenState extends State<NotesScreen>
     if (_selectionMode) {
       _toggleSelection(msg);
     } else {
+      _noteDetailsOpen = true;
       if (_tabController.index == 0) {
         Navigator.of(context)
             .push(MaterialPageRoute(
@@ -208,13 +213,9 @@ class NotesScreenState extends State<NotesScreen>
             messageLink: msg.link,
             folder: 'inbox',
             sourceFolder: NotesFolder.inbox,
+            refreshNotesOnExit: false,
           ),
-        ))
-            .then((result) {
-          if (result == 'refresh' || result == 'marked_unread') {
-            _refreshAfterMessageMutation();
-          }
-        });
+        ));
       } else {
         Navigator.of(context)
             .push(MaterialPageRoute(
@@ -223,21 +224,11 @@ class NotesScreenState extends State<NotesScreen>
             messageLink: msg.link,
             folder: 'sent',
             sourceFolder: NotesFolder.sent,
+            refreshNotesOnExit: false,
           ),
-        ))
-            .then((result) {
-          if (result == 'refresh' || result == 'marked_unread') {
-            _refreshAfterMessageMutation();
-          }
-        });
+        ));
       }
     }
-  }
-
-  void _refreshAfterMessageMutation() {
-    _notesController.resetAllPagination();
-    _fetchInbox(page: 1, clearOld: false);
-    _refreshSentIfVisibleOrMarkStale();
   }
 
   Future<void> _applySelectedAction(_NotesMenuAction menuAction) async {
@@ -380,8 +371,19 @@ class NotesScreenState extends State<NotesScreen>
     // NotesScreen lives inside HomeScreen's IndexedStack, so it stays mounted even
     // when another tab is selected. Only refetch on returning to Home if Notes is
     // actually visible (selected).
+    if (_returnRefreshScheduled) {
+      return;
+    }
+    final returningFromNoteDetails = _noteDetailsOpen;
+    _noteDetailsOpen = false;
+    _returnRefreshScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _isDialogOpen || !_isVisibleInHomeStack) return;
+      _returnRefreshScheduled = false;
+      if (!mounted ||
+          _isDialogOpen ||
+          (!returningFromNoteDetails && !_isVisibleInHomeStack)) {
+        return;
+      }
       _fetchInboxTwoPagesOnly();
       _notesController.resetSentPagination();
       _refreshSentIfVisibleOrMarkStale();
@@ -833,6 +835,7 @@ class NotesScreenState extends State<NotesScreen>
                           },
                           loadMore: _loadMoreInbox,
                           onOpenMessage: (msg) {
+                            _noteDetailsOpen = true;
                             Navigator.of(context)
                                 .push(MaterialPageRoute(
                               settings: const AnalyticsRouteSettings(
@@ -842,14 +845,9 @@ class NotesScreenState extends State<NotesScreen>
                                 messageLink: msg.link,
                                 folder: 'inbox',
                                 sourceFolder: NotesFolder.inbox,
+                                refreshNotesOnExit: false,
                               ),
-                            ))
-                                .then((result) {
-                              if (result == 'refresh' ||
-                                  result == 'marked_unread') {
-                                _refreshAfterMessageMutation();
-                              }
-                            });
+                            ));
                           },
                           onPreviewMessage: (msg) =>
                               _showPreviewDialog(msg, 'inbox'),
@@ -876,6 +874,7 @@ class NotesScreenState extends State<NotesScreen>
                           },
                           loadMore: _loadMoreSent,
                           onOpenMessage: (msg) {
+                            _noteDetailsOpen = true;
                             Navigator.of(context)
                                 .push(MaterialPageRoute(
                               settings: const AnalyticsRouteSettings(
@@ -885,14 +884,9 @@ class NotesScreenState extends State<NotesScreen>
                                 messageLink: msg.link,
                                 folder: 'sent',
                                 sourceFolder: NotesFolder.sent,
+                                refreshNotesOnExit: false,
                               ),
-                            ))
-                                .then((result) {
-                              if (result == 'refresh' ||
-                                  result == 'marked_unread') {
-                                _refreshAfterMessageMutation();
-                              }
-                            });
+                            ));
                           },
                           isSelectionMode: _selectionMode,
                           selectedIds: _selectedIds,

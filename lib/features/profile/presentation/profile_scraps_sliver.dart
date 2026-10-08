@@ -1,4 +1,5 @@
 import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
+import 'package:fanotifier/shared/fa/domain/fa_grid_pagination.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'dart:async';
@@ -47,6 +48,8 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
 
 
   final List<Map<String, dynamic>> _images = [];
+  final FaLoadedItemIds _loadedIds = FaLoadedItemIds();
+  final FaGridPaginationProgress _pagination = FaGridPaginationProgress();
 
   final List<List<Map<String, dynamic>>> _imageRows = [];
   final List<Map<String, dynamic>> _normalImagesQueue = [];
@@ -210,6 +213,8 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
       _isLoading = false;
       _hasMore = true;
       _images.clear();
+      _loadedIds.clear();
+      _pagination.clear();
       _imageRows.clear();
       _normalImagesQueue.clear();
       _selectedSubmissionIds.clear();
@@ -223,8 +228,10 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     return refreshFuture;
   }
 
+  void resumePagination() => _pagination.resume();
+
   Future<void> _fetchImages() {
-    if (!mounted || !_hasMore || _nextPageUrl == null) {
+    if (!mounted || _pagination.paused || !_hasMore || _nextPageUrl == null) {
       return Future<void>.value();
     }
     if (_isLoading) return _pageFetchFuture ?? Future<void>.value();
@@ -236,25 +243,46 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   Future<void> _loadPage() async {
     _hasLoadError = false;
     final fetchGeneration = _fetchGeneration;
-    setState(() => _isLoading = true);
+    _isLoading = true;
+    if (_images.isEmpty) setState(() {});
 
     try {
-      final result = await _profileScrapsRepository.fetchScrapsPage(
-        _nextPageUrl!,
-        isCancelled: () => !mounted || fetchGeneration != _fetchGeneration,
-      );
-      if (!mounted || fetchGeneration != _fetchGeneration) return;
-      setState(() {
-        _images.addAll(result.posts);
+      while (_nextPageUrl != null) {
+        final requestedUrl = _nextPageUrl!;
+        final result = await _profileScrapsRepository.fetchScrapsPage(
+          requestedUrl,
+          isCancelled: () => !mounted || fetchGeneration != _fetchGeneration,
+        );
+        if (!mounted || fetchGeneration != _fetchGeneration) return;
+        final batch = _loadedIds.prepare(
+          result.posts,
+          idOf: (image) => image['uniqueNumber'] as String,
+        );
         appendProfileImagesIntoRows(
-          newImages: result.posts,
+          newImages: batch.items,
           imageRows: _imageRows,
           normalImagesQueue: _normalImagesQueue,
         );
-        _preloadImagesImmediately(result.posts);
-
-        _nextPageUrl = result.nextPageUrl;
-        _hasMore = result.nextPageUrl != null;
+        _loadedIds.commit(batch);
+        _images.addAll(batch.items);
+        _pagination.record(
+          cursor: requestedUrl,
+          duplicateOnly: batch.duplicateOnly,
+        );
+        _preloadImagesImmediately(batch.items, fetchGeneration);
+        final nextUrl = result.nextPageUrl;
+        final repeatedCursor =
+            nextUrl != null && _pagination.hasCompleted(nextUrl);
+        _nextPageUrl = repeatedCursor ? null : nextUrl;
+        _hasMore = _nextPageUrl != null;
+        if (!batch.duplicateOnly ||
+            !_hasMore ||
+            _pagination.paused ||
+            !ProfileTabScrollScope.canFetch(context)) {
+          break;
+        }
+      }
+      setState(() {
         _isLoading = false;
       });
     } catch (e) {
@@ -267,10 +295,15 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
     }
   }
 
-  void _preloadImagesImmediately(List<Map<String, dynamic>> fetchedImages) {
+  void _preloadImagesImmediately(
+    List<Map<String, dynamic>> fetchedImages,
+    int fetchGeneration,
+  ) {
     for (var image in fetchedImages) {
       faNetworkImageProvider(image['url']).then((provider) {
-        if (mounted) precacheImage(provider, context);
+        if (mounted && fetchGeneration == _fetchGeneration) {
+          precacheImage(provider, context);
+        }
       });
     }
   }

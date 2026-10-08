@@ -1,9 +1,15 @@
 import 'package:html/parser.dart' as html_parser;
 
 import 'package:fanotifier/features/notes/domain/note_message_models.dart';
+import 'package:fanotifier/features/notes/domain/note_reply_models.dart';
+import 'package:fanotifier/features/notes/data/note_form_parser.dart';
 import 'package:fanotifier/shared/fa/user_submitted_html_linkifier.dart';
 
-NoteMessageDetails parseNoteMessageDetails(String decodedBody, String messageLink) {
+NoteMessageDetails parseNoteMessageDetails(
+  String decodedBody,
+  String messageLink, {
+  Uri? documentUri,
+}) {
   final document = html_parser.parse(decodedBody);
 
   final isClassic = document.querySelector(
@@ -162,6 +168,10 @@ NoteMessageDetails parseNoteMessageDetails(String decodedBody, String messageLin
   }
 
   final rawHtml = modernHtml ?? classicHtml;
+  final replyRecipient = document
+      .querySelector('form#note-form input[name="to"]')
+      ?.attributes['value']
+      ?.trim();
   String messageContent;
   String messageContentHtml;
   if (rawHtml == null || rawHtml.isEmpty) {
@@ -204,5 +214,16 @@ NoteMessageDetails parseNoteMessageDetails(String decodedBody, String messageLin
     senderUsername: senderUsername,
     recipientLink: recipientLink,
     recipientUsername: recipientUsername,
+    replyContext: NoteReplyContext(
+      recipient: replyRecipient != null && replyRecipient.isNotEmpty
+          ? replyRecipient
+          : senderUsername,
+      isClassicTheme: isClassic,
+      form: parseNoteReplyForm(
+        document,
+        documentUri ??
+            Uri.parse('https://www.furaffinity.net').resolve(messageLink),
+      ),
+    ),
   );
 }

@@ -5,6 +5,8 @@ import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/features/auth/domain/cloudflare_check_result.dart';
 import 'package:fanotifier/features/search/domain/search_repository.dart';
 import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
+import 'package:fanotifier/shared/fa/domain/fa_grid_pagination.dart';
+import 'package:fanotifier/shared/fa/domain/fa_page_settings.dart';
 import 'package:fanotifier/shared/fa/fa_thumbnail_processing.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -40,6 +42,8 @@ class SearchImageController {
   String? errorMessage;
   final List<Map<String, dynamic>> images = [];
   final List<List<Map<String, dynamic>>> imageRows = [];
+  final FaLoadedItemIds _loadedIds = FaLoadedItemIds();
+  final FaGridPaginationProgress _pagination = FaGridPaginationProgress();
   List<Map<String, dynamic>> normalImagesQueue = [];
   final ScrollController scrollController = ScrollController();
 
@@ -51,9 +55,12 @@ class SearchImageController {
   bool _pendingNextPageFetch = false;
   bool _isNextPageFetchQueued = false;
   bool isNavbarScrolling = false;
+  int _requestGeneration = 0;
+  bool _disposed = false;
 
   void start() {
     _sfwLoadFuture = _loadSfwEnabled();
+    currentPage = FaPageSettings.startingPage(_selectedFilters);
     fetchImages(currentPage);
     scrollController.addListener(_scrollListener);
   }
@@ -73,6 +80,8 @@ class SearchImageController {
   }
 
   void dispose() {
+    _disposed = true;
+    _requestGeneration++;
     scrollController.dispose();
   }
 
@@ -93,13 +102,17 @@ class SearchImageController {
     required Map<String, String> selectedFilters,
     required String searchQuery,
   }) async {
+    _requestGeneration++;
+    isLoading = false;
     _cloudflareRecoveryCancelled = false;
-    _selectedFilters = selectedFilters;
+    _selectedFilters = Map<String, String>.from(selectedFilters);
     _searchQuery = searchQuery;
     images.clear();
+    _loadedIds.clear();
+    _pagination.clear();
     imageRows.clear();
     normalImagesQueue.clear();
-    currentPage = 1;
+    currentPage = FaPageSettings.startingPage(_selectedFilters);
     hasMore = true;
     _nextPageTriggerOffset = double.infinity;
     _pendingNextPageFetch = false;
@@ -110,46 +123,60 @@ class SearchImageController {
     await fetchImages(currentPage, isRefresh: true);
   }
 
-  Future<String> _getAllCookies() async {
+  Future<String> _getAllCookies(Map<String, String> filters) async {
     await _sfwLoadFuture;
     return _repository.buildCookieHeader(
-      selectedFilters: _selectedFilters,
+      selectedFilters: filters,
       sfwEnabled: _sfwEnabled,
     );
   }
 
-  Future<void> _appendImages(
+  Future<bool> _appendImages(
     List<Map<String, dynamic>> newImages, {
+    required int pageNumber,
+    required int generation,
     required double previousMaxScrollExtent,
   }) async {
-    kDebugPrint(
-      '[Search] Appending all ${newImages.length} parsed thumbnails.',
+    final batch = _loadedIds.prepare(
+      newImages,
+      idOf: (image) => image['uniqueNumber'] as String,
     );
+    var appendedRows = <List<Map<String, dynamic>>>[];
+    var nextQueue = normalImagesQueue;
+    if (batch.items.isNotEmpty) {
+      final rowProcessing = await processFaImageRows(
+        newImages: batch.items,
+        normalImagesQueue: normalImagesQueue,
+      );
+      appendedRows = (rowProcessing['rows'] as List)
+          .map((row) => List<Map<String, dynamic>>.from(row as List))
+          .toList();
+      nextQueue =
+          List<Map<String, dynamic>>.from(rowProcessing['queue'] as List);
+    }
 
-    final rowProcessing = await processFaImageRows(
-      newImages: newImages,
-      normalImagesQueue: normalImagesQueue,
-    );
-    final appendedRows = (rowProcessing['rows'] as List)
-        .map(
-          (row) => List<Map<String, dynamic>>.from(row as List),
-        )
-        .toList();
-    final nextQueue =
-        List<Map<String, dynamic>>.from(rowProcessing['queue'] as List);
-
-    if (!_isMounted()) return;
+    if (_disposed || !_isMounted() || generation != _requestGeneration) {
+      return false;
+    }
 
     hasMore = newImages.isNotEmpty;
-    images.addAll(newImages);
+    _loadedIds.commit(batch);
+    _pagination.record(
+      cursor: '$pageNumber',
+      duplicateOnly: batch.duplicateOnly,
+    );
+    images.addAll(batch.items);
     imageRows.addAll(appendedRows);
     normalImagesQueue = nextQueue;
     _pendingNextPageFetch = false;
     _isNextPageFetchQueued = false;
     isLoading = false;
-    _notifyView();
-
-    _scheduleNextPageTrigger(previousMaxScrollExtent: previousMaxScrollExtent);
+    final continueLoading = batch.duplicateOnly && !_pagination.paused;
+    if (!continueLoading) _notifyView();
+    if (appendedRows.isNotEmpty) {
+      _scheduleNextPageTrigger(previousMaxScrollExtent: previousMaxScrollExtent);
+    }
+    return continueLoading;
   }
 
   Future<void> fetchImages(
@@ -157,7 +184,18 @@ class SearchImageController {
     bool isRefresh = false,
     int remainingCloudflareRecoveries = 2,
   }) async {
-    if (isLoading || !hasMore || _cloudflareRecoveryCancelled) return;
+    if (_disposed ||
+        !_isMounted() ||
+        isLoading ||
+        !hasMore ||
+        _cloudflareRecoveryCancelled) {
+      return;
+    }
+    final generation = _requestGeneration;
+    final filters = Map<String, String>.from(_selectedFilters);
+    final query = _searchQuery;
+    bool stale() =>
+        _disposed || !_isMounted() || generation != _requestGeneration;
     kDebugPrint(
       '[Search] Fetching page $pageNumber${isRefresh ? ' (refresh)' : ''}',
     );
@@ -175,26 +213,38 @@ class SearchImageController {
     try {
       if (isRefresh) {
         images.clear();
+        _loadedIds.clear();
+        _pagination.clear();
         imageRows.clear();
         normalImagesQueue.clear();
-        currentPage = 1;
+        currentPage = pageNumber;
         hasMore = true;
         _nextPageTriggerOffset = double.infinity;
         _pendingNextPageFetch = false;
         _isNextPageFetchQueued = false;
       }
 
-      final newImages = await _repository.fetchImages(
+      if (stale()) return;
+      final page = await _repository.fetchImages(
         pageNumber: pageNumber,
-        selectedFilters: _selectedFilters,
-        searchQuery: _searchQuery,
-        cookieHeader: await _getAllCookies(),
+        selectedFilters: filters,
+        searchQuery: query,
+        cookieHeader: _getAllCookies(filters),
+        isCancelled: stale,
       );
-      await _appendImages(
-        newImages,
+      if (stale()) return;
+      final continueLoading = await _appendImages(
+        page.images,
+        pageNumber: pageNumber,
+        generation: generation,
         previousMaxScrollExtent: previousMaxScrollExtent,
       );
+      if (continueLoading && !stale()) {
+        currentPage = pageNumber + 1;
+        await fetchImages(currentPage);
+      }
     } on CloudflareChallengeException catch (e) {
+      if (stale()) return;
       kDebugPrint('Cloudflare challenge detected while fetching search images.');
       if (_isMounted()) {
         _pendingNextPageFetch = false;
@@ -217,6 +267,7 @@ class SearchImageController {
         return;
       }
       final result = await _requestCloudflareCheck(initialUrl: e.initialUrl);
+      if (stale()) return;
       if (result?.passed != true || !_isMounted()) {
         _cloudflareRecoveryCancelled = true;
         hasMore = false;
@@ -238,6 +289,7 @@ class SearchImageController {
       );
       return;
     } catch (e) {
+      if (stale()) return;
       kDebugPrint('Error fetching images: $e');
       _pendingNextPageFetch = false;
       _isNextPageFetchQueued = false;
@@ -264,7 +316,8 @@ class SearchImageController {
   }
 
   void _scrollListener() {
-    if (isNavbarScrolling || !scrollController.hasClients ||
+    if (_disposed || _pagination.paused || isNavbarScrolling ||
+        !scrollController.hasClients ||
         isLoading ||
         _isNextPageFetchQueued ||
         !hasMore ||
@@ -282,8 +335,12 @@ class SearchImageController {
 
   bool handleScrollNotification(ScrollNotification notification) {
     if (isNavbarScrolling || notification.metrics.axis != Axis.vertical) return false;
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      _pagination.resume();
+    }
 
-    if (!_isMounted() ||
+    if (_disposed || _pagination.paused || !_isMounted() ||
         isLoading ||
         _isNextPageFetchQueued ||
         !hasMore ||
@@ -300,7 +357,8 @@ class SearchImageController {
   }
 
   void _tryStartPendingNextPageFetch() {
-    if (isNavbarScrolling || !_pendingNextPageFetch ||
+    if (_disposed || _pagination.paused || isNavbarScrolling ||
+        !_pendingNextPageFetch ||
         !scrollController.hasClients ||
         isLoading ||
         _isNextPageFetchQueued ||
@@ -317,8 +375,10 @@ class SearchImageController {
     _nextPageTriggerOffset = double.infinity;
     final nextPage = currentPage + 1;
     currentPage = nextPage;
+    final generation = _requestGeneration;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_disposed || generation != _requestGeneration) return;
       if (!_isMounted()) {
         _isNextPageFetchQueued = false;
         return;
@@ -335,7 +395,9 @@ class SearchImageController {
   }
 
   void _scheduleNextPageTrigger({required double previousMaxScrollExtent}) {
+    final generation = _requestGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_disposed || generation != _requestGeneration) return;
       if (!_isMounted() || !hasMore) {
         _pendingNextPageFetch = false;
         _isNextPageFetchQueued = false;

@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 
@@ -15,6 +18,68 @@ class ProfileGalleryHtmlParseResult {
     this.nextPageUrl,
     required this.folders,
   });
+}
+
+Future<ProfileGalleryHtmlParseResult> parseProfileGalleryPage(
+  List<int> bodyBytes,
+  String currentUrl, {
+  String? selectedFolderUrl,
+}) {
+  return compute(
+    _parseGalleryPage,
+    (bytes: bodyBytes, url: currentUrl, folder: selectedFolderUrl),
+    debugLabel: 'profile_gallery_page_parse',
+  );
+}
+
+ProfileGalleryHtmlParseResult _parseGalleryPage(
+  ({List<int> bytes, String url, String? folder}) input,
+) {
+  return parseProfileGalleryHtml(
+    utf8.decode(input.bytes, allowMalformed: true),
+    input.url,
+    selectedFolderUrl: input.folder,
+  );
+}
+
+Future<ProfilePostsParseResult> parseProfileFavoritePostsPage(
+  List<int> bodyBytes,
+  String currentUrl,
+) {
+  return compute(
+    _parseFavoritePostsPage,
+    (bytes: bodyBytes, url: currentUrl),
+    debugLabel: 'profile_favorites_page_parse',
+  );
+}
+
+ProfilePostsParseResult _parseFavoritePostsPage(
+  ({List<int> bytes, String url}) input,
+) {
+  return parseProfileFavoritePostsHtml(
+    utf8.decode(input.bytes, allowMalformed: true),
+    input.url,
+  );
+}
+
+Future<ProfilePostsParseResult> parseProfileScrapsPostsPage(
+  List<int> bodyBytes,
+  String currentUrl,
+) {
+  return compute(
+    _parseScrapsPostsPage,
+    (bytes: bodyBytes, url: currentUrl),
+    debugLabel: 'profile_scraps_page_parse',
+  );
+}
+
+ProfilePostsParseResult _parseScrapsPostsPage(
+  ({List<int> bytes, String url}) input,
+) {
+  return parseProfileScrapsPostsHtml(
+    utf8.decode(input.bytes, allowMalformed: true),
+    input.url,
+  );
 }
 
 ProfileGalleryHtmlParseResult parseProfileGalleryHtml(

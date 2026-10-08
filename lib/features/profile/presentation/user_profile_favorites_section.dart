@@ -74,6 +74,8 @@ class _UserProfileFavoritesSectionState
     if (favsState != null) unawaited(favsState.loadMore());
   }
 
+  void _resumePagination() => _favsKey.currentState?.resumePagination();
+
   void _toggleSelectionMode() {
     if (_isApplying) return;
     final nextSelectionMode = !_selectionMode;
@@ -200,6 +202,7 @@ class _UserProfileFavoritesSectionState
                   const PageStorageKey<String>('profile-favorites-scroll'),
               onActivated: _refreshIfNeeded,
               onLoadMore: _loadMore,
+              onUserScrollStart: _resumePagination,
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverOverlapInjector(

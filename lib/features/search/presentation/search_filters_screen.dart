@@ -1,9 +1,18 @@
+import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
+import 'package:fanotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:fanotifier/features/search/domain/search_filter_date_range.dart';
 import 'package:fanotifier/features/search/domain/search_filter_options.dart';
+import 'package:fanotifier/features/search/domain/search_repository.dart';
+import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
+import 'package:fanotifier/shared/fa/domain/fa_filter_options.dart';
+import 'package:fanotifier/shared/fa/domain/fa_page_settings.dart';
 import 'package:fanotifier/shared/utils/content_rating_filters.dart';
 import 'package:fanotifier/shared/utils/string_extensions.dart';
+import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/shared/widgets/fa_pagination_filter_fields.dart';
 
 class SearchFiltersScreen extends StatefulWidget {
   final Map<String, String> selectedSearchFilters;
@@ -23,8 +32,14 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
   final Color _applyButtonColor = const Color(0xFFE09321);
 
   late Map<String, String> currentSearchFilters;
+  late final TextEditingController _pageController;
+  final _paginationFormKey = GlobalKey<FormState>();
   DateTime? fromDate;
   DateTime? toDate;
+  FaFilterOptions? _filterOptions;
+  StreamSubscription<FaFilterOptions>? _filterSubscription;
+  bool _isLoadingFilters = true;
+  bool _filterLoadFailed = false;
 
   @override
   void initState() {
@@ -33,19 +48,112 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
       widget.selectedSearchFilters,
       sfwEnabled: widget.sfwEnabled,
     );
+    _pageController = TextEditingController(
+      text: currentSearchFilters[FaPageSettings.pageKey],
+    );
 
     if (currentSearchFilters['mode'] == null ||
         currentSearchFilters['mode']!.isEmpty) {
       currentSearchFilters['mode'] = 'extended';
-    }
-    for (final genderOption in searchGenderOptions) {
-      currentSearchFilters['gender-${genderOption['key']}'] ??= '0';
     }
 
     if (currentSearchFilters['range'] == 'manual') {
       fromDate = parseSearchFilterDate(currentSearchFilters['range_from']);
       toDate = parseSearchFilterDate(currentSearchFilters['range_to']);
     }
+    final repository = context.read<SearchRepository>();
+    _filterSubscription = repository.filterOptionsChanges.listen((options) {
+      if (!mounted) return;
+      setState(() => _acceptFilterOptions(options));
+    });
+    final cachedOptions = repository.filterOptions;
+    if (cachedOptions != null) {
+      _acceptFilterOptions(cachedOptions);
+    } else {
+      unawaited(_fetchFilterData());
+    }
+  }
+
+  void _acceptFilterOptions(FaFilterOptions options) {
+    _filterOptions = options;
+    _updateCurrentFilters();
+    _isLoadingFilters = false;
+    _filterLoadFailed = false;
+  }
+
+  void _updateCurrentFilters() {
+    final options = _filterOptions;
+    if (options == null) return;
+    for (final name in [
+      SearchFilterGroups.orderBy,
+      SearchFilterGroups.orderDirection,
+      SearchFilterGroups.range,
+      SearchFilterGroups.mode,
+      SearchFilterGroups.perPage,
+    ]) {
+      final choices = options[name];
+      if (!choices.any((option) => option.value == currentSearchFilters[name])) {
+        currentSearchFilters[name] = choices.first.value;
+      }
+    }
+    for (final option in options[SearchFilterGroups.gender]) {
+      currentSearchFilters[option.field] ??= '0';
+    }
+    for (final option in options[SearchFilterGroups.type]) {
+      currentSearchFilters[option.field] ??= option.value;
+    }
+    for (final option in options[SearchFilterGroups.rating]) {
+      currentSearchFilters[option.field] ??=
+          widget.sfwEnabled ? '0' : option.value;
+    }
+  }
+
+  Future<void> _fetchFilterData({int remainingRecoveries = 1}) async {
+    final repository = context.read<SearchRepository>();
+    setState(() {
+      _isLoadingFilters = true;
+      _filterLoadFailed = false;
+    });
+    try {
+      final options = await repository.fetchFilterOptions(
+        selectedFilters: Map<String, String>.from(currentSearchFilters),
+        sfwEnabled: widget.sfwEnabled,
+      );
+      if (!mounted || !_isLoadingFilters) return;
+      setState(() => _acceptFilterOptions(options));
+    } on CloudflareChallengeException catch (error) {
+      if (!mounted) return;
+      if (remainingRecoveries > 0 && ModalRoute.of(context)?.isCurrent == true) {
+        final result = await CloudflareCheckScreen.show(
+          context,
+          initialUrl: error.initialUrl ?? 'https://www.furaffinity.net/search/',
+          asDialog: true,
+        );
+        if (!mounted) return;
+        if (result?.passed == true) {
+          await _fetchFilterData(remainingRecoveries: remainingRecoveries - 1);
+          return;
+        }
+      }
+      _showFilterLoadError();
+    } catch (_) {
+      _showFilterLoadError();
+    }
+  }
+
+  void _showFilterLoadError() {
+    if (!mounted || _filterOptions != null) return;
+    setState(() {
+      _isLoadingFilters = false;
+      _filterLoadFailed = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    _filterSubscription?.cancel();
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _editManualDates() async {
@@ -175,17 +283,55 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
     );
   }
 
+  void _applyFilters() {
+    final page = FaPageSettings.positiveInteger(_pageController.text);
+    if (_paginationFormKey.currentState?.validate() != true || page == null) {
+      return;
+    }
+    currentSearchFilters[FaPageSettings.pageKey] = page.toString();
+    Navigator.pop(context, currentSearchFilters);
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingFilters || _filterLoadFailed) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Search Filters')),
+        body: SafeArea(
+          child: Center(
+            child: _isLoadingFilters
+                ? const PulsatingLoadingIndicator(
+                    size: 108.0,
+                    assetPath: 'assets/icons/fathemed.png',
+                  )
+                : Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Could not load Search filters. Please try again.',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        TextButton(
+                          onPressed: _fetchFilterData,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text('Search Filters'),
         actions: [
           IconButton(
             icon: Icon(Icons.check),
-            onPressed: () {
-              Navigator.pop(context, currentSearchFilters);
-            },
+            onPressed: _applyFilters,
           ),
         ],
       ),
@@ -196,6 +342,20 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               _buildSortCriteria(),
+              const SizedBox(height: 20),
+              FaPaginationFilterFields(
+                formKey: _paginationFormKey,
+                pageController: _pageController,
+                resultsPerPage:
+                    currentSearchFilters[FaPageSettings.perPageKey]!,
+                resultsPerPageOptions:
+                    _filterOptions![SearchFilterGroups.perPage],
+                onResultsPerPageChanged: (value) {
+                  setState(() {
+                    currentSearchFilters[FaPageSettings.perPageKey] = value;
+                  });
+                },
+              ),
               const SizedBox(height: 20),
               _buildSortByRange(),
               const SizedBox(height: 20),
@@ -224,7 +384,8 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
       children: [
         Text('Sort Criteria',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        Row(
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             DropdownButton<String>(
               value: currentSearchFilters['order-by'],
@@ -233,10 +394,10 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
                   currentSearchFilters['order-by'] = newValue!;
                 });
               },
-              items: ['relevancy', 'date', 'popularity'].map((String value) {
+              items: _filterOptions![SearchFilterGroups.orderBy].map((option) {
                 return DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(value.capitalize()),
+                  value: option.value,
+                  child: Text(option.label.capitalize()),
                 );
               }).toList(),
             ),
@@ -248,16 +409,12 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
                   currentSearchFilters['order-direction'] = newValue!;
                 });
               },
-              items: [
-                DropdownMenuItem<String>(
-                  value: 'desc',
-                  child: Text('Descending'),
-                ),
-                DropdownMenuItem<String>(
-                  value: 'asc',
-                  child: Text('Ascending'),
-                ),
-              ],
+              items: _filterOptions![SearchFilterGroups.orderDirection]
+                  .map((option) => DropdownMenuItem<String>(
+                        value: option.value,
+                        child: Text(option.label.capitalize()),
+                      ))
+                  .toList(),
             ),
             Text(' order'),
           ],
@@ -276,10 +433,13 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
         Wrap(
           spacing: 12.0,
           runSpacing: 4.0,
-          children: searchGenderOptions.map((opt) {
-            final filterKey = 'gender-${opt['key']}';
-            return _buildCheckboxOption(opt['label']!, filterKey, '1');
-          }).toList(),
+          children: _filterOptions![SearchFilterGroups.gender]
+              .map((option) => _buildCheckboxOption(
+                    option.label,
+                    option.field,
+                    option.value,
+                  ))
+              .toList(),
         ),
       ],
     );
@@ -301,18 +461,13 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
           child: Wrap(
             spacing: 12.0,
             runSpacing: 8.0,
-            children: [
-              _buildRadioOption('1 Day', 'range', '1day'),
-              _buildRadioOption('3 Days', 'range', '3days'),
-              _buildRadioOption('7 Days', 'range', '7days'),
-              _buildRadioOption('30 Days', 'range', '30days'),
-              _buildRadioOption('90 Days', 'range', '90days'),
-              _buildRadioOption('1 Year', 'range', '1year'),
-              _buildRadioOption('3 Years', 'range', '3years'),
-              _buildRadioOption('5 Years', 'range', '5years'),
-              _buildRadioOption('All Time', 'range', 'all'),
-              _buildRadioOption('Manual', 'range', 'manual'),
-            ],
+            children: _filterOptions![SearchFilterGroups.range]
+                .map((option) => _buildRadioOption(
+                      option.label,
+                      option.field,
+                      option.value,
+                    ))
+                .toList(),
           ),
         ),
         if (currentSearchFilters['range'] == 'manual') ...[
@@ -348,11 +503,13 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         Wrap(
           spacing: 8.0,
-          children: [
-            _buildCheckboxOption('General', 'rating-general', '1'),
-            _buildCheckboxOption('Mature', 'rating-mature', '1'),
-            _buildCheckboxOption('Adult', 'rating-adult', '1'),
-          ],
+          children: _filterOptions![SearchFilterGroups.rating]
+              .map((option) => _buildCheckboxOption(
+                    option.label,
+                    option.field,
+                    option.value,
+                  ))
+              .toList(),
         ),
       ],
     );
@@ -366,14 +523,13 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         Wrap(
           spacing: 8.0,
-          children: [
-            _buildCheckboxOption('Art', 'type-art', '1'),
-            _buildCheckboxOption('Music', 'type-music', '1'),
-            _buildCheckboxOption('Story', 'type-story', '1'),
-            _buildCheckboxOption('Photos', 'type-photo', '1'),
-            _buildCheckboxOption('Flash', 'type-flash', '1'),
-            _buildCheckboxOption('Poetry', 'type-poetry', '1'),
-          ],
+          children: _filterOptions![SearchFilterGroups.type]
+              .map((option) => _buildCheckboxOption(
+                    option.label,
+                    option.field,
+                    option.value,
+                  ))
+              .toList(),
         ),
       ],
     );
@@ -393,11 +549,13 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildRadioOption('All of the words', 'mode', 'all'),
-              _buildRadioOption('Any of the words', 'mode', 'any'),
-              _buildRadioOption('Extended (See "Advanced")', 'mode', 'extended'),
-            ],
+            children: _filterOptions![SearchFilterGroups.mode]
+                .map((option) => _buildRadioOption(
+                      option.label,
+                      option.field,
+                      option.value,
+                    ))
+                .toList(),
           ),
         ),
       ],
@@ -431,12 +589,14 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
           activeColor: _applyButtonColor,
           value: value,
         ),
-        Text(
-          label,
-          style: TextStyle(
-            color: currentSearchFilters[filterKey] == value
-                ? _applyButtonColor
-                : Colors.white,
+        Flexible(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: currentSearchFilters[filterKey] == value
+                  ? _applyButtonColor
+                  : Colors.white,
+            ),
           ),
         ),
       ],
@@ -456,12 +616,14 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
             });
           },
         ),
-        Text(
-          label,
-          style: TextStyle(
-            color: currentSearchFilters[filterKey] == value
-                ? _applyButtonColor
-                : Colors.white,
+        Flexible(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: currentSearchFilters[filterKey] == value
+                  ? _applyButtonColor
+                  : Colors.white,
+            ),
           ),
         ),
       ],
@@ -492,11 +654,14 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
                           ContentRatingFilters.defaultSearchFilters(
                         sfwEnabled: widget.sfwEnabled,
                       );
+                      _pageController.text =
+                          currentSearchFilters[FaPageSettings.pageKey]!;
                       fromDate = null;
                       toDate = null;
                       currentSearchFilters['range'] = '5years';
                       currentSearchFilters['range_from'] = '';
                       currentSearchFilters['range_to'] = '';
+                      _updateCurrentFilters();
                     });
                     Navigator.pop(context, currentSearchFilters);
                   },
@@ -527,9 +692,7 @@ class _SearchFiltersScreenState extends State<SearchFiltersScreen> {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(24.0),
                   highlightColor: Colors.transparent,
-                  onTap: () {
-                    Navigator.pop(context, currentSearchFilters);
-                  },
+                  onTap: _applyFilters,
                   child: const Center(
                     child: Text(
                       'Apply',

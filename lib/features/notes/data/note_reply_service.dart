@@ -4,7 +4,7 @@ import 'package:fanotifier/core/network/fa_session_cookie_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 
-import 'package:fanotifier/core/utils/note_link_parser.dart';
+import 'package:fanotifier/features/notes/data/note_form_parser.dart';
 import 'package:fanotifier/features/notes/domain/note_reply_models.dart';
 import 'package:fanotifier/features/notes/domain/note_reply_repository.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
@@ -35,8 +35,11 @@ class NoteReplyService implements NoteReplyRepository {
   }
 
   @override
-  Future<NoteReplyContext> fetchReplyContext(String messageLink) async {
-    await _loadCookies();
+  Future<NoteReplyContext> fetchReplyContext(
+    String messageLink, {
+    required String folder,
+  }) async {
+    await _loadCookies(folder);
     await FaRequestCoordinator.instance.waitForTurn(
       label: 'GET https://www.furaffinity.net$messageLink',
     );
@@ -115,92 +118,74 @@ class NoteReplyService implements NoteReplyRepository {
       }
     }
 
+    final formRecipient = doc
+        .querySelector('form#note-form input[name="to"]')
+        ?.attributes['value']
+        ?.trim();
     return NoteReplyContext(
-      recipient: recipient,
+      recipient: formRecipient != null && formRecipient.isNotEmpty
+          ? formRecipient
+          : recipient,
       isClassicTheme: isClassicTheme,
+      form: parseNoteReplyForm(doc, response.realUri),
     );
   }
 
   @override
   Future<NoteReplySendResult> sendModernReply({
     required String messageLink,
+    required String folder,
+    required NoteReplyContext replyContext,
     required String recipient,
     required String subject,
     required String replyText,
     required String originalContent,
   }) async {
+    var postStarted = false;
+    NoteReplyContext? updatedContext;
     try {
-      await _loadCookies();
+      await _loadCookies(folder);
       final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
       final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
       if (cookieA == null || cookieB == null) {
         throw Exception('Not logged in or missing cookies.');
       }
 
-      late final String msgId;
-      late final int pageNo;
-      if (messageLink.contains('/viewmessage/')) {
-        final match = RegExp(r'/viewmessage/(\d+)/').firstMatch(messageLink);
-        if (match != null) {
-          msgId = match.group(1)!;
-          pageNo = 1;
-        } else {
-          throw Exception('Invalid message ID from link: $messageLink');
-        }
-      } else {
-        pageNo = extractPageNumber(messageLink);
-        msgId = extractMessageId(messageLink);
-        if (msgId.isEmpty) {
-          throw Exception('Invalid message ID from link: $messageLink');
-        }
+      var activeContext = replyContext;
+      if (activeContext.form == null && !activeContext.isClassicTheme) {
+        activeContext = await fetchReplyContext(messageLink, folder: folder);
+        updatedContext = activeContext;
       }
-
-      final getUrl = 'https://www.furaffinity.net/msg/pms/$pageNo/$msgId/#message';
-      await FaRequestCoordinator.instance.waitForTurn(
-        label: 'GET $getUrl',
-      );
-      final getResp = await _dio.get(
-        getUrl,
-        options: Options(
-          responseType: ResponseType.plain,
-          headers: {
-            'Referer': getUrl,
-            'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-              'a=$cookieA; b=$cookieB',
-            ),
-          },
-          followRedirects: false,
-        ),
-      );
-
-      FaRequestCoordinator.instance.recordHttpStatus(
-        statusCode: getResp.statusCode,
-        responseBody: getResp.statusCode == 403 ? getResp.data : null,
-      );
-
-      if (getResp.statusCode == 302) {
-        throw Exception("GET request was redirected (auth issue?)");
+      if (activeContext.isClassicTheme) {
+        return NoteReplySendResult(
+          success: false,
+          errorMessage: 'Please use the Classic reply form to send your reply.',
+          replyContext: activeContext,
+        );
       }
-
-      final doc = html_parser.parse(getResp.data);
-      final keyInput = doc.querySelector('form#note-form input[name="key"]');
-      final keyValue = keyInput?.attributes['value'] ?? '';
-      if (keyValue.isEmpty) {
-        throw Exception("Failed to find the 'key' hidden field in the note form.");
+      final form = activeContext.form;
+      if (form == null) {
+        return NoteReplySendResult(
+          success: false,
+          errorMessage: 'Could not load the reply form. Your reply has been kept.',
+          replyContext: updatedContext,
+          requiresContextRefresh: true,
+        );
       }
 
       final formData = {
-        'key': keyValue,
+        ...form.hiddenFields,
         'to': recipient,
         'subject': subject,
         'message': '$replyText\n\n—————————\n$originalContent',
       };
       final encodedFormData = Uri(queryParameters: formData).query;
-      const sendMessageUrl = 'https://www.furaffinity.net/msg/send/';
+      final sendMessageUrl = form.action.toString();
 
       await FaRequestCoordinator.instance.waitForTurn(
-        label: 'POST $sendMessageUrl',
+        label: 'POST https://www.furaffinity.net/msg/send/',
       );
+      postStarted = true;
       final postResp = await _dio.post(
         sendMessageUrl,
         data: encodedFormData,
@@ -209,7 +194,7 @@ class NoteReplyService implements NoteReplyRepository {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             'Origin': 'https://www.furaffinity.net',
-            'Referer': getUrl,
+            'Referer': form.documentUri.toString(),
             'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
               'a=$cookieA; b=$cookieB',
             ),
@@ -223,8 +208,30 @@ class NoteReplyService implements NoteReplyRepository {
         responseBody: postResp.statusCode == 403 ? postResp.data : null,
       );
 
-      if (postResp.statusCode == 302) {
-        return const NoteReplySendResult(success: true);
+      if (postResp.statusCode == 302 || postResp.statusCode == 303) {
+        final location = postResp.headers.value('location');
+        final redirectUri = location == null ? null : Uri.tryParse(location);
+        final destination = redirectUri == null
+            ? null
+            : form.action.resolveUri(redirectUri);
+        if (destination != null &&
+            destination.scheme == 'https' &&
+            destination.host == 'www.furaffinity.net' &&
+            destination.port == 443 &&
+            destination.userInfo.isEmpty &&
+            RegExp(r'^/msg/pms(?:/\d+)?/?$').hasMatch(destination.path)) {
+          return NoteReplySendResult(
+            success: true,
+            replyContext: updatedContext,
+          );
+        }
+        return NoteReplySendResult(
+          success: false,
+          errorMessage: 'Could not confirm the reply was sent. '
+              'Your reply has been kept. Please check your session and Sent notes.',
+          replyContext: updatedContext,
+          requiresContextRefresh: true,
+        );
       }
 
       final faMessage = parseFaSystemMessage(postResp.data);
@@ -235,23 +242,56 @@ class NoteReplyService implements NoteReplyRepository {
             retryAfter: faMessage.retryAfter,
           );
         }
+        var requiresContextRefresh = false;
+        if (!faMessage.isMaintenanceOrUnavailable &&
+            faMessage.retryAfter == null &&
+            _isReplyKeyRejected(faMessage.message)) {
+          try {
+            updatedContext = await fetchReplyContext(
+              messageLink,
+              folder: folder,
+            );
+            requiresContextRefresh = updatedContext.form == null;
+          } catch (_) {
+            requiresContextRefresh = true;
+          }
+        }
         return NoteReplySendResult(
           success: false,
           errorMessage: faMessage.message,
           retryAfterSeconds: faMessage.retryAfter?.inSeconds,
+          replyContext: updatedContext,
+          requiresContextRefresh: requiresContextRefresh ||
+              postResp.statusCode == 401 ||
+              postResp.statusCode == 403,
         );
       }
 
       return NoteReplySendResult(
         success: false,
         errorMessage: 'Failed to send reply: ${postResp.statusCode}',
+        replyContext: updatedContext,
+        requiresContextRefresh:
+            postResp.statusCode == 401 || postResp.statusCode == 403,
       );
     } catch (e) {
       return NoteReplySendResult(
         success: false,
         errorMessage: 'Error sending reply: $e',
+        replyContext: updatedContext,
+        requiresContextRefresh: !postStarted,
       );
     }
+  }
+
+  bool _isReplyKeyRejected(String message) {
+    return RegExp(r'\b(?:key|token|csrf)\b', caseSensitive: false)
+            .hasMatch(message) &&
+        RegExp(
+          r'\b(?:invalid|expired|missing|incorrect|mismatch|failed|failure)\b|'
+          r'\bnot\s+(?:valid|found)\b|\bdoes\s+not\s+match\b',
+          caseSensitive: false,
+        ).hasMatch(message);
   }
 
   void _initializeDio() {
@@ -262,12 +302,13 @@ class NoteReplyService implements NoteReplyRepository {
         status != null && status >= 200 && status < 600;
   }
 
-  Future<void> _loadCookies() async {
+  Future<void> _loadCookies(String folder) async {
     final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     final cookies = <Cookie>[];
     if (cookieA != null) cookies.add(Cookie('a', cookieA));
     if (cookieB != null) cookies.add(Cookie('b', cookieB));
+    cookies.add(Cookie('folder', folder));
 
     final uri = Uri.parse('https://www.furaffinity.net');
     await _cookieJar.saveFromResponse(

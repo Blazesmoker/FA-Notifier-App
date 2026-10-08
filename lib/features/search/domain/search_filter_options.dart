@@ -1,8 +1,10 @@
-const List<Map<String, String>> searchGenderOptions = [
-  {'key': 'male', 'label': 'Male'},
-  {'key': 'female', 'label': 'Female'},
-  {'key': 'trans_male', 'label': 'Trans Male'},
-  {'key': 'trans_female', 'label': 'Trans Female'},
-  {'key': 'intersex', 'label': 'Intersex'},
-  {'key': 'non_binary', 'label': 'Non Binary'},
-];
+abstract final class SearchFilterGroups {
+  static const orderBy = 'order-by';
+  static const orderDirection = 'order-direction';
+  static const range = 'range';
+  static const gender = 'gender';
+  static const rating = 'rating';
+  static const type = 'type';
+  static const mode = 'mode';
+  static const perPage = 'perpage';
+}

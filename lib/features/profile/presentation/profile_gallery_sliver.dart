@@ -1,4 +1,5 @@
 import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
+import 'package:fanotifier/shared/fa/domain/fa_grid_pagination.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'package:flutter/foundation.dart';
@@ -44,6 +45,9 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   late final ProfileGalleryRepository _profileGalleryRepository;
 
   final List<Map<String, dynamic>> _images = [];
+  final FaLoadedItemIds _loadedIds = FaLoadedItemIds();
+  final FaGridPaginationProgress _pagination = FaGridPaginationProgress();
+  final Map<String, int> _indexById = <String, int>{};
   bool _isLoading = false;
   bool _hasLoadError = false;
   bool _hasMore = true;
@@ -185,10 +189,8 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
         detailFetchGeneration != _detailFetchGeneration) {
       return true;
     }
-    final currentIndex = _images.indexWhere(
-      (item) => _tileId(item) == submissionId,
-    );
-    if (currentIndex < 0 || !_visibleTileIndices.contains(currentIndex)) {
+    final currentIndex = _indexById[submissionId];
+    if (currentIndex == null || !_visibleTileIndices.contains(currentIndex)) {
       return true;
     }
     final item = _images[currentIndex];
@@ -249,6 +251,8 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
     return _fetchPage();
   }
 
+  void resumePagination() => _pagination.resume();
+
   Future<void> refresh({bool force = false}) {
     if (_isDisposed) return Future<void>.value();
     if (!force &&
@@ -262,6 +266,9 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
     _resetTileRevisions();
     setState(() {
       _images.clear();
+      _loadedIds.clear();
+      _pagination.clear();
+      _indexById.clear();
       _hasMore = true;
       _isLoading = false;
       _nextPageUrl = _buildInitialUrl();
@@ -278,7 +285,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   }
 
   Future<void> _fetchPage() {
-    if (_isDisposed || !_hasMore || _nextPageUrl == null) {
+    if (_isDisposed || _pagination.paused || !_hasMore || _nextPageUrl == null) {
       return Future<void>.value();
     }
     if (_isLoading) return _pageFetchFuture ?? Future<void>.value();
@@ -290,36 +297,66 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   Future<void> _loadPage() async {
     _hasLoadError = false;
     final fetchGeneration = _fetchGeneration;
-    setState(() => _isLoading = true);
+    _isLoading = true;
+    if (_images.isEmpty) setState(() {});
 
     try {
-      final result = await _profileGalleryRepository.fetchGalleryPage(
-        url: _nextPageUrl!,
-        selectedFolderUrl: widget.selectedFolderUrl,
-        isCancelled: () => _isDisposed || fetchGeneration != _fetchGeneration,
-      );
-      if (_isDisposed || !mounted || fetchGeneration != _fetchGeneration) return;
-
-      _images.addAll(result.posts);
-      widget.onFoldersParsed(result.folders);
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      while (_nextPageUrl != null) {
+        final requestedUrl = _nextPageUrl!;
+        final result = await _profileGalleryRepository.fetchGalleryPage(
+          url: requestedUrl,
+          selectedFolderUrl: widget.selectedFolderUrl,
+          isCancelled: () => _isDisposed || fetchGeneration != _fetchGeneration,
+        );
         if (_isDisposed || !mounted || fetchGeneration != _fetchGeneration) {
           return;
         }
-        for (var post in result.posts) {
-          faNetworkImageProvider(post['thumbnailUrl']).then((provider) {
+        final batch = _loadedIds.prepare(
+          result.posts,
+          idOf: _tileId,
+        );
+        _loadedIds.commit(batch);
+        for (final post in batch.items) {
+          _indexById[_tileId(post)] = _images.length;
+          _images.add(post);
+        }
+        _pagination.record(
+          cursor: requestedUrl,
+          duplicateOnly: batch.duplicateOnly,
+        );
+        final nextUrl = result.nextPageUrl;
+        final repeatedCursor =
+            nextUrl != null && _pagination.hasCompleted(nextUrl);
+        _nextPageUrl = repeatedCursor ? null : nextUrl;
+        _hasMore = _nextPageUrl != null;
+        widget.onFoldersParsed(result.folders);
+
+        if (batch.items.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
             if (_isDisposed || !mounted || fetchGeneration != _fetchGeneration) {
               return;
             }
-            precacheImage(provider, context);
+            for (final post in batch.items) {
+              faNetworkImageProvider(post['thumbnailUrl']).then((provider) {
+                if (_isDisposed ||
+                    !mounted ||
+                    fetchGeneration != _fetchGeneration) {
+                  return;
+                }
+                precacheImage(provider, context);
+              });
+            }
           });
         }
-      });
+        if (!batch.duplicateOnly ||
+            !_hasMore ||
+            _pagination.paused ||
+            !ProfileTabScrollScope.canFetch(context)) {
+          break;
+        }
+      }
 
       setState(() {
-        _nextPageUrl = result.nextPageUrl;
-        _hasMore = (result.nextPageUrl != null);
         _isLoading = false;
       });
     } catch (e) {
@@ -376,10 +413,8 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
             fetchGeneration != _fetchGeneration) {
           return;
         }
-        final currentIndex = _images.indexWhere(
-          (item) => _tileId(item) == submissionId,
-        );
-        if (currentIndex < 0) {
+        final currentIndex = _indexById[submissionId];
+        if (currentIndex == null) {
           return;
         }
         final item = _images[currentIndex];
@@ -399,10 +434,8 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
       }).whenComplete(() {
         if (_isDisposed || fetchGeneration != _fetchGeneration) return;
         _activeFetches--;
-        final currentIndex = _images.indexWhere(
-          (item) => _tileId(item) == submissionId,
-        );
-        if (currentIndex >= 0) {
+        final currentIndex = _indexById[submissionId];
+        if (currentIndex != null) {
           final item = _images[currentIndex];
           item['detailFetchInProgress'] = false;
           if (isCancelled()) {
