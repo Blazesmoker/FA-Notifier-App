@@ -29,6 +29,7 @@ class NotificationShoutsController extends ChangeNotifier {
   bool _isEnriching = false;
   bool _serviceListenerAttached = false;
   bool _disposed = false;
+  bool _hasLoadError = false;
   Future<List<Shout>>? _refreshInFlight;
   Future<NotificationRemovalOutcome>? _notificationMutationInFlight;
   String? _enrichRequestedForSignature;
@@ -36,6 +37,14 @@ class NotificationShoutsController extends ChangeNotifier {
 
   Future<List<Shout>> get shoutsFuture => _shoutsFuture;
   bool get isEnriching => _isEnriching;
+  bool get hasLoadError => _hasLoadError;
+  bool get isBusy => _isEnriching ||
+      _refreshInFlight != null ||
+      _notificationMutationInFlight != null;
+
+  Future<void> recoverVerifiedSession() async {
+    await refresh();
+  }
   String get lightSignature => _service.shoutsLightSignature;
 
   bool get shouldBlockLightView {
@@ -99,12 +108,19 @@ class NotificationShoutsController extends ChangeNotifier {
   }
 
   Future<List<Shout>> _refreshNow() async {
-    final uniqueShouts = await _coordinator.refresh();
-    _shouts = uniqueShouts;
-    _shoutsFuture = Future.value(uniqueShouts);
-    notifyListeners();
-    _coordinator.commitRefreshedShouts(uniqueShouts);
-    return uniqueShouts;
+    _hasLoadError = false;
+    try {
+      final uniqueShouts = await _coordinator.refresh();
+      _shouts = uniqueShouts;
+      _shoutsFuture = Future.value(uniqueShouts);
+      notifyListeners();
+      _coordinator.commitRefreshedShouts(uniqueShouts);
+      return uniqueShouts;
+    } catch (_) {
+      _hasLoadError = true;
+      notifyListeners();
+      rethrow;
+    }
   }
 
   Future<void> toggleSelectAll() async {
@@ -185,12 +201,16 @@ class NotificationShoutsController extends ChangeNotifier {
     _enrichRequestedForSignature = signature;
 
     _isEnriching = true;
+    _hasLoadError = false;
     _shoutsFuture = _service
         .enrichShoutsFromProfileIfNeeded(force: true)
         .then((list) {
       final unique = deduplicateNotificationShouts(list);
       _shouts = unique;
       return unique;
+    }).onError((Object error, StackTrace stackTrace) {
+      _hasLoadError = true;
+      Error.throwWithStackTrace(error, stackTrace);
     }).whenComplete(() {
       if (_disposed) return;
       _isEnriching = false;

@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:provider/provider.dart';
@@ -418,6 +419,15 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    return FaSessionRecoveryScope(
+      needsRecovery: () => _controller.isError,
+      isBusy: () => _controller.isLoading,
+      onRecover: _fetchSubmissions,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     return VisibilityDetector(
       key: const Key('submissions_screen_visibility'),
       onVisibilityChanged: (info) {

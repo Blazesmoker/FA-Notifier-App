@@ -1,3 +1,7 @@
+import 'package:fanotifier/shared/widgets/fa_verification_required_view.dart';
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
+import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
+import 'package:fanotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:fanotifier/features/comments/presentation/comment_selection_controller.dart';
 import 'widgets/journal_body.dart';
 import 'widgets/journal_author_header.dart';
@@ -54,6 +58,8 @@ class JournalDetailsScreen extends StatefulWidget {
 
 class _JournalDetailsScreenState extends State<JournalDetailsScreen>
     with RouteAware, WidgetsBindingObserver {
+  bool _loadBlocked = false;
+  bool _fetchingDetails = false;
   final CommentComposerController _commentComposer =
       CommentComposerController();
   late final JournalDetailsController _controller;
@@ -257,7 +263,10 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
     }
   }
 
-  Future<void> _fetchPostDetailsNew() async {
+  Future<void> _fetchPostDetailsNew({bool allowChallengePrompt = true}) async {
+    if (_fetchingDetails || !mounted) return;
+    _fetchingDetails = true;
+    _loadBlocked = false;
     try {
       final loadResult = await _controller.load();
 
@@ -278,6 +287,12 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
           });
         });
         return;
+      }
+    } on CloudflareChallengeException {
+      if (!mounted) return;
+      setState(() => _loadBlocked = true);
+      if (allowChallengePrompt) {
+        await CloudflareCheckScreen.show(context, initialUrl: 'https://www.furaffinity.net/journal/${widget.journalId}/');
       }
     } catch (e) {
       debugPrint('Failed to fetch journal details: $e');
@@ -301,6 +316,9 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
           Navigator.of(context).pop();
         });
       });
+    } finally {
+      _fetchingDetails = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -523,6 +541,21 @@ class _JournalDetailsScreenState extends State<JournalDetailsScreen>
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      needsRecovery: () => _loadBlocked,
+      isBusy: () => _fetchingDetails,
+      onRecover: () => _fetchPostDetailsNew(allowChallengePrompt: false),
+      child: _loadBlocked && !(submissionTitle != null)
+          ? FaVerificationRequiredView(
+              title: 'Journal',
+              isBusy: _fetchingDetails,
+              onRetry: _fetchPostDetailsNew,
+            )
+          : _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final translatorSettings = context.watch<TranslatorSettingsProvider>();
     final commentSettings = context.watch<CommentSettingsProvider>();
     final journalTimeFormat =

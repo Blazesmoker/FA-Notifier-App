@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/features/auth/domain/cloudflare_http_access_result.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -20,25 +22,41 @@ class CloudflareHttpAccessVerifier {
 
   String get userAgent => FAHttp.userAgent;
 
-  Future<bool> verify({
+  Future<CloudflareHttpAccessResult> verify({
     required String url,
-    Future<void> Function()? beforeRetryAttempt,
+    bool Function()? isCancelled,
   }) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return false;
-
-    for (var attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) {
-        await Future.delayed(Duration(milliseconds: 250 * attempt));
-        await beforeRetryAttempt?.call();
-      }
-
-      final cookieHeader = await FaCookieHelper.appendCfClearanceToCookieHeader(
-        await _getCookieHeader(),
+    final initialUri = Uri.tryParse(url);
+    if (initialUri == null) {
+      return const CloudflareHttpAccessResult(
+        status: CloudflareHttpAccessStatus.denied,
       );
-      try {
-        final response = await FAHttp.get(
+    }
+    var uri = initialUri;
+    final visited = <Uri>{};
+    try {
+      for (var hop = 0; hop < 6; hop++) {
+        if (isCancelled?.call() ?? false) {
+          return const CloudflareHttpAccessResult(
+            status: CloudflareHttpAccessStatus.cancelled,
+          );
+        }
+        if (uri.scheme != 'https' ||
+            uri.userInfo.isNotEmpty ||
+            (uri.hasPort && uri.port != 443) ||
+            (uri.host != 'www.furaffinity.net' &&
+                uri.host != 'furaffinity.net') ||
+            !visited.add(uri)) {
+          break;
+        }
+        final cookieHeader = await FaCookieHelper.appendCfClearanceToCookieHeader(
+          await _getCookieHeader(),
+        );
+        final resolved = await FAHttp.getWithResolvedUri(
           uri,
+          followRedirects: false,
+          isCancelled: isCancelled,
+          coordinatorLabel: 'Cloudflare access verification',
           headers: {
             if (cookieHeader.isNotEmpty) HttpHeaders.cookieHeader: cookieHeader,
             'User-Agent': FAHttp.userAgent,
@@ -47,36 +65,63 @@ class CloudflareHttpAccessVerifier {
                 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           },
         );
-
-        final refreshedCf = FaCookieHelper.extractCfClearanceFromSetCookieHeader(
-          response.headers['set-cookie'],
-        );
-        if (refreshedCf != null && refreshedCf.isNotEmpty) {
-          await FaCookieHelper.writeCfClearance(refreshedCf);
+        if (isCancelled?.call() ?? false) {
+          return const CloudflareHttpAccessResult(
+            status: CloudflareHttpAccessStatus.cancelled,
+          );
         }
+        final response = resolved.response;
 
+        await FaCookieHelper.acceptCfClearanceHeaders(
+          uri: uri,
+          headers: [if (response.headers['set-cookie'] != null)
+            response.headers['set-cookie']!],
+        );
+        if ([301, 302, 303, 307, 308].contains(response.statusCode)) {
+          final location = response.headers['location'];
+          if (location == null || location.isEmpty) break;
+          uri = uri.resolve(location);
+          continue;
+        }
+        final body = utf8.decode(response.bodyBytes, allowMalformed: true);
         final isChallenge = FaCookieHelper.isCloudflareChallengePage(
-          body: response.body,
+          body: body,
           statusCode: response.statusCode,
+          headers: response.headers,
         );
-        debugPrint(
-          '[Cloudflare] HTTP verification attempt ${attempt + 1} for $url => '
-          'status=${response.statusCode}, challenge=$isChallenge',
+        final isDocument = FaCookieHelper.isFaDocument(
+          body: body,
+          statusCode: response.statusCode,
+          headers: response.headers,
         );
-        if (!isChallenge &&
-            response.statusCode >= 200 &&
-            response.statusCode < 300 &&
-            response.body.trim().isNotEmpty) {
-          return true;
+        if (kDebugMode) {
+          debugPrint(
+            '[Cloudflare] HTTP verification status=${response.statusCode}, '
+            'challenge=$isChallenge, document=$isDocument',
+          );
         }
-      } catch (e) {
-        debugPrint(
-          '[Cloudflare] HTTP verification attempt ${attempt + 1} failed: $e',
+        return CloudflareHttpAccessResult(
+          status: isDocument
+              ? CloudflareHttpAccessStatus.granted
+              : isChallenge
+                  ? CloudflareHttpAccessStatus.challenged
+                  : CloudflareHttpAccessStatus.denied,
+          statusCode: response.statusCode,
+          pageHtml: isDocument ? body : null,
+          finalUrl: isDocument ? uri.toString() : null,
         );
       }
+    } catch (_) {
+      if (kDebugMode) debugPrint('[Cloudflare] HTTP verification unavailable.');
+      return CloudflareHttpAccessResult(
+        status: (isCancelled?.call() ?? false)
+            ? CloudflareHttpAccessStatus.cancelled
+            : CloudflareHttpAccessStatus.unavailable,
+      );
     }
-
-    return false;
+    return const CloudflareHttpAccessResult(
+      status: CloudflareHttpAccessStatus.denied,
+    );
   }
 
   Future<String> _getCookieHeader() async {
@@ -84,7 +129,6 @@ class CloudflareHttpAccessVerifier {
       'a',
       'b',
       'cc',
-      'cf_clearance',
       'folder',
       'nodesc',
       'sz',

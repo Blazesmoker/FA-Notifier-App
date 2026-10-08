@@ -1,6 +1,9 @@
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/fa/fa_session_access_service.dart';
 import 'package:fanotifier/features/auth/data/cloudflare_http_access_verifier.dart';
 import 'package:fanotifier/features/auth/data/cloudflare_webview_cookie_service.dart';
 import 'package:fanotifier/features/auth/domain/cloudflare_check_gateway.dart';
+import 'package:fanotifier/features/auth/domain/cloudflare_http_access_result.dart';
 
 class CloudflareCheckGatewayImpl implements CloudflareCheckGateway {
   const CloudflareCheckGatewayImpl({
@@ -15,8 +18,17 @@ class CloudflareCheckGatewayImpl implements CloudflareCheckGateway {
   String get userAgent => _httpAccessVerifier.userAgent;
 
   @override
+  Future<void> accessVerified() =>
+      FaSessionAccessService.instance.accessVerified();
+
+  @override
   bool isFaUrl(String url) {
-    return url.contains('furaffinity.net');
+    final uri = Uri.tryParse(url);
+    return uri != null &&
+        uri.scheme == 'https' &&
+        uri.userInfo.isEmpty &&
+        (!uri.hasPort || uri.port == 443) &&
+        (uri.host == 'www.furaffinity.net' || uri.host == 'furaffinity.net');
   }
 
   @override
@@ -25,11 +37,15 @@ class CloudflareCheckGatewayImpl implements CloudflareCheckGateway {
   }
 
   @override
-  Future<void> saveCurrentCookies({
+  Future<bool> saveCurrentCookies({
+    required String url,
     CloudflareJavascriptEvaluator? evaluateJavascript,
+    bool Function()? isCancelled,
   }) {
     return _webViewCookieService.saveCurrentCookies(
+      url: url,
       evaluateJavascript: evaluateJavascript,
+      isCancelled: isCancelled,
     );
   }
 
@@ -37,18 +53,45 @@ class CloudflareCheckGatewayImpl implements CloudflareCheckGateway {
   bool isChallengePage({
     required String url,
     required String body,
+    int? statusCode,
+    Map<String, String>? headers,
   }) {
-    return _webViewCookieService.isChallengePage(url: url, body: body);
+    return _webViewCookieService.isChallengePage(
+      url: url,
+      body: body,
+      statusCode: statusCode,
+      headers: headers,
+    );
   }
 
   @override
-  Future<bool> verifyHttpAccess({
+  bool isSuccessfulPage({
     required String url,
-    Future<void> Function()? beforeRetryAttempt,
+    required String body,
+    int? statusCode,
+    Map<String, String>? headers,
   }) {
+    return isFaUrl(url) &&
+        FaCookieHelper.isFaDocument(
+          body: body,
+          statusCode: statusCode,
+          headers: headers,
+        );
+  }
+
+  @override
+  Future<CloudflareHttpAccessResult> verifyHttpAccess({
+    required String url,
+    bool Function()? isCancelled,
+  }) {
+    if (!isFaUrl(url)) {
+      return Future.value(const CloudflareHttpAccessResult(
+        status: CloudflareHttpAccessStatus.denied,
+      ));
+    }
     return _httpAccessVerifier.verify(
       url: url,
-      beforeRetryAttempt: beforeRetryAttempt,
+      isCancelled: isCancelled,
     );
   }
 }

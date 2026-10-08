@@ -1,6 +1,8 @@
 import 'package:fanotifier/features/profile/domain/user_description_webview_content.dart';
 
 abstract interface class UserDescriptionRepository {
+  Stream<int> get mediaSessionChanges;
+
   Future<String> extractInitialHtml(String html);
 
   Future<String> inlineIcons(String html);

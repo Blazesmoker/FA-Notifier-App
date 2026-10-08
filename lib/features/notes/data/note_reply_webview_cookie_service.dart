@@ -1,5 +1,6 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:fanotifier/core/fa/fa_webview_cookie_service.dart';
 
 class NoteReplyWebViewCookieService {
   const NoteReplyWebViewCookieService({
@@ -40,6 +41,11 @@ class NoteReplyWebViewCookieService {
       ),
     );
 
+    await FAWebViewCookieService(secureStorage: _secureStorage).setCookies(
+      applySfwPreference: false,
+      preserveExistingSession: true,
+      preferStoredClearance: true,
+    );
     return true;
   }
 }

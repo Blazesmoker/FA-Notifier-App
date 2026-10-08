@@ -57,6 +57,7 @@ class SearchImageService {
     final isChallenge = FaCookieHelper.isCloudflareChallengePage(
       body: response.body,
       statusCode: response.statusCode,
+      headers: response.headers,
     );
     if (isChallenge) {
       throw CloudflareChallengeException(initialUrl: uri.toString());

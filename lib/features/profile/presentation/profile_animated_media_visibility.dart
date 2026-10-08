@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 
 class ProfileAnimatedMediaVisibility extends StatefulWidget {
@@ -22,24 +24,50 @@ class ProfileAnimatedMediaVisibility extends StatefulWidget {
 }
 
 class ProfileAnimatedMediaVisibilityState
-    extends State<ProfileAnimatedMediaVisibility> {
-  Listenable? _scrollListenable;
+    extends State<ProfileAnimatedMediaVisibility> with WidgetsBindingObserver {
+  List<Listenable> _scrollListenables = [];
   Timer? _proactiveTimer;
   bool _isNearViewport = true;
   bool _visibilityCheckScheduled = false;
   bool _proactivelyResumed = false;
+  bool _isResumed = true;
 
   bool get isActive => _isNearViewport;
 
   @override
+  void initState() {
+    super.initState();
+    _isResumed = WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final nextListenable = PrimaryScrollController.maybeOf(context) ??
-        Scrollable.maybeOf(context)?.position;
-    if (!identical(_scrollListenable, nextListenable)) {
-      _scrollListenable?.removeListener(_scheduleVisibilityCheck);
-      _scrollListenable = nextListenable;
-      _scrollListenable?.addListener(_scheduleVisibilityCheck);
+    final sources = <Listenable>{};
+    final primary = PrimaryScrollController.maybeOf(context);
+    if (primary != null) sources.add(primary);
+    Scrollable.maybeOf(context);
+    context.visitAncestorElements((element) {
+      if (element is StatefulElement) {
+        final state = element.state;
+        if (state is ScrollableState &&
+            axisDirectionToAxis(state.widget.axisDirection) == Axis.vertical) {
+          sources.add(state.position);
+        }
+      }
+      return true;
+    });
+    final nextListenables = sources.toList();
+    if (!listEquals(_scrollListenables, nextListenables)) {
+      for (final source in _scrollListenables) {
+        source.removeListener(_scheduleVisibilityCheck);
+      }
+      _scrollListenables = nextListenables;
+      for (final source in _scrollListenables) {
+        source.addListener(_scheduleVisibilityCheck);
+      }
     }
     _scheduleVisibilityCheck();
   }
@@ -47,15 +75,28 @@ class ProfileAnimatedMediaVisibilityState
   @override
   void didUpdateWidget(ProfileAnimatedMediaVisibility oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.lookAhead != widget.lookAhead) {
-      _scheduleVisibilityCheck();
-    }
+    _scheduleVisibilityCheck();
+  }
+
+  @override
+  void didChangeMetrics() {
+    _scheduleVisibilityCheck();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!mounted) return;
+    setState(() => _isResumed = state == AppLifecycleState.resumed);
+    if (_isResumed) _scheduleVisibilityCheck();
   }
 
   @override
   void dispose() {
     _proactiveTimer?.cancel();
-    _scrollListenable?.removeListener(_scheduleVisibilityCheck);
+    WidgetsBinding.instance.removeObserver(this);
+    for (final source in _scrollListenables) {
+      source.removeListener(_scheduleVisibilityCheck);
+    }
     super.dispose();
   }
 
@@ -83,6 +124,7 @@ class ProfileAnimatedMediaVisibilityState
       }
       _updateViewportVisibility();
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _updateViewportVisibility() {
@@ -98,13 +140,23 @@ class ProfileAnimatedMediaVisibilityState
     );
     final bounds = Rect.fromPoints(topLeft, bottomRight);
     final size = MediaQuery.sizeOf(context);
-    final viewport = Rect.fromLTWH(
-      -widget.lookAhead,
-      -widget.lookAhead,
-      size.width + (widget.lookAhead * 2),
-      size.height + (widget.lookAhead * 2),
+    var viewport = Offset.zero & size;
+    RenderObject? ancestor = renderObject.parent;
+    while (ancestor != null) {
+      final box = ancestor;
+      if (ancestor is RenderAbstractViewport &&
+          box is RenderBox &&
+          box.attached &&
+          box.hasSize) {
+        viewport = viewport.intersect(
+          box.localToGlobal(Offset.zero) & box.size,
+        );
+      }
+      ancestor = ancestor.parent;
+    }
+    _setNearViewport(
+      !viewport.isEmpty && bounds.overlaps(viewport.inflate(widget.lookAhead)),
     );
-    _setNearViewport(bounds.overlaps(viewport));
   }
 
   void _setNearViewport(bool value) {
@@ -123,12 +175,63 @@ class ProfileAnimatedMediaVisibilityState
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.manageTickerMode) {
-      return widget.child;
-    }
-    return TickerMode(
-      enabled: TickerMode.valuesOf(context).enabled && _isNearViewport,
-      child: widget.child,
+    _scheduleVisibilityCheck();
+    final child = widget.manageTickerMode
+        ? TickerMode(
+            enabled: TickerMode.valuesOf(context).enabled &&
+                _isNearViewport && _isResumed,
+            child: widget.child,
+          )
+        : widget.child;
+    return _ProfileMediaGeometryObserver(
+      onGeometryChanged: _scheduleVisibilityCheck,
+      child: child,
     );
+  }
+}
+
+class _ProfileMediaGeometryObserver extends SingleChildRenderObjectWidget {
+  const _ProfileMediaGeometryObserver({
+    required this.onGeometryChanged,
+    required super.child,
+  });
+
+  final VoidCallback onGeometryChanged;
+
+  @override
+  _ProfileMediaGeometryRenderObject createRenderObject(BuildContext context) {
+    return _ProfileMediaGeometryRenderObject(onGeometryChanged);
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _ProfileMediaGeometryRenderObject renderObject,
+  ) {
+    renderObject.onGeometryChanged = onGeometryChanged;
+  }
+}
+
+class _ProfileMediaGeometryRenderObject extends RenderProxyBox {
+  _ProfileMediaGeometryRenderObject(this.onGeometryChanged);
+
+  VoidCallback onGeometryChanged;
+  Rect? _lastBounds;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    _lastBounds = null;
+    onGeometryChanged();
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final bounds = localToGlobal(Offset.zero) & size;
+    if (_lastBounds != bounds) {
+      _lastBounds = bounds;
+      onGeometryChanged();
+    }
+    super.paint(context, offset);
   }
 }

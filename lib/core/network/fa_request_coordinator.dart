@@ -207,13 +207,17 @@ class FaRequestCoordinator {
       return;
     }
 
+    if (_headerValue(headers, 'cf-mitigated')?.toLowerCase() == 'challenge') {
+      return;
+    }
+
     if (statusCode == 403) {
       final body = responseBody?.toString() ?? '';
-      if (body.isNotEmpty &&
-          FaCookieHelper.isCloudflareChallengePage(
-            body: body,
-            statusCode: statusCode,
-          )) {
+      if (FaCookieHelper.isCloudflareChallengePage(
+        body: body,
+        statusCode: statusCode,
+        headers: headers,
+      )) {
         return;
       }
       recordMaintenanceOrUnavailable(

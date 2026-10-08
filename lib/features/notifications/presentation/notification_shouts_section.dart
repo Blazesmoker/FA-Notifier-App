@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
@@ -192,6 +193,15 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    return FaSessionRecoveryScope(
+      needsRecovery: () => _controller.hasLoadError,
+      isBusy: () => _controller.isBusy,
+      onRecover: _controller.recoverVerifiedSession,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     return RefreshIndicator(
       color: const Color(0xFFE09321),
       backgroundColor: Colors.black,

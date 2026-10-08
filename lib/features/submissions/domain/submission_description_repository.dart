@@ -1,6 +1,8 @@
 import 'package:fanotifier/features/submissions/domain/submission_description_webview_content.dart';
 
 abstract interface class SubmissionDescriptionRepository {
+  Stream<int> get mediaSessionChanges;
+
   Future<SubmissionDescriptionWebViewContent> processInitialHtml(String html);
 
   Future<SubmissionDescriptionWebViewContent> fetchContent(

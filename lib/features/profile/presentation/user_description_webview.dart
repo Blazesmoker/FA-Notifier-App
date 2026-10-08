@@ -49,6 +49,8 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   late final UserDescriptionRepository _userDescriptionRepository;
   late Future<UserDescriptionWebViewContent> _userDescriptionFuture;
   InAppWebViewController? _controller;
+  StreamSubscription<int>? _mediaSessionSubscription;
+  int? _pendingMediaRevision;
   final Set<UserDescriptionWebViewPauseReason> _pauseReasons =
       <UserDescriptionWebViewPauseReason>{};
   final Set<UserDescriptionWebViewPauseReason> _gifPauseReasons =
@@ -69,6 +71,11 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
   void initState() {
     super.initState();
     _userDescriptionRepository = context.read<UserDescriptionRepository>();
+    _mediaSessionSubscription =
+        _userDescriptionRepository.mediaSessionChanges.listen((revision) {
+      _pendingMediaRevision = revision;
+      unawaited(_retryFailedImages());
+    });
     if (!widget.gifPlaybackEnabled) {
       _gifPauseReasons.add(UserDescriptionWebViewPauseReason.tab);
     }
@@ -81,10 +88,22 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
 
   @override
   void dispose() {
+    _mediaSessionSubscription?.cancel();
     _scrollWebViewResumeTimer?.cancel();
     _controller = null;
     widget.onDispose?.call();
     super.dispose();
+  }
+
+  Future<void> _retryFailedImages() async {
+    final controller = _controller;
+    final revision = _pendingMediaRevision;
+    if (controller == null || revision == null) return;
+    try {
+      await controller.evaluateJavascript(
+        source: faRetryFailedImagesScript(revision),
+      );
+    } catch (_) {}
   }
 
   @override
@@ -144,6 +163,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
           source: 'window.__faProfileSetGifPlayback?.call(null, $enabled);',
         );
       }
+      if (enabled) await _retryFailedImages();
     }).catchError((Object error, StackTrace stackTrace) {
       debugPrint('Failed to update profile GIF playback: $error');
     });
@@ -360,6 +380,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
                       mimeType: 'text/html',
                     ),
                     initialSettings: InAppWebViewSettings(
+                      userAgent: content?.userAgent,
                       javaScriptEnabled: true,
                       useShouldOverrideUrlLoading: true,
                       disableVerticalScroll:
@@ -391,6 +412,7 @@ class UserDescriptionWebViewState extends State<UserDescriptionWebView>
                       return true;
                     },
                     onLoadStop: (controller, url) async {
+                      await _retryFailedImages();
                       await _queueGifPlaybackUpdate();
                       String heightString =
                           await controller.evaluateJavascript(

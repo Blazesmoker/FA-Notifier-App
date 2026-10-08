@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'widgets/message_detail_actions.dart';
 import 'widgets/message_detail_header.dart';
@@ -57,6 +58,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
   late final NotesRefreshPort _notesRefreshPort;
 
   bool isLoading = true;
+  bool _messageLoadFailed = false;
   String errorMessage = '';
   String subject = '';
   String sender = '';
@@ -93,6 +95,11 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
   }
 
   Future<void> _fetchMessageDetails() async {
+    _messageLoadFailed = false;
+    setState(() {
+      isLoading = true;
+      errorMessage = '';
+    });
     try {
       final result = await _noteMessageRepository.fetchMessageDetails(
         messageLink: widget.messageLink,
@@ -102,6 +109,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
       if (!mounted) return;
       if (result.redirected) {
         setState(() {
+          _messageLoadFailed = true;
           errorMessage = 'Redirected. Possibly authentication issues.';
           isLoading = false;
         });
@@ -130,6 +138,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
         });
       } else {
         setState(() {
+          _messageLoadFailed = true;
           errorMessage = 'Failed to fetch message: ${result.statusCode}';
           isLoading = false;
         });
@@ -137,6 +146,7 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _messageLoadFailed = true;
         errorMessage = 'An error occurred: $e';
         isLoading = false;
       });
@@ -307,6 +317,15 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      needsRecovery: () => _messageLoadFailed,
+      isBusy: () => isLoading || _isMutating,
+      onRecover: _fetchMessageDetails,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final imagePreviewSettings =
         context.watch<NoteImagePreviewSettingsProvider>();
     final timeFormat =

@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'package:flutter/foundation.dart';
@@ -44,6 +45,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
   final List<Map<String, dynamic>> _images = [];
   bool _isLoading = false;
+  bool _hasLoadError = false;
   bool _hasMore = true;
   String? _nextPageUrl;
   int _fetchGeneration = 0;
@@ -286,6 +288,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
   }
 
   Future<void> _loadPage() async {
+    _hasLoadError = false;
     final fetchGeneration = _fetchGeneration;
     setState(() => _isLoading = true);
 
@@ -323,7 +326,10 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
       if (_isDisposed || !mounted || fetchGeneration != _fetchGeneration) {
         return;
       }
-      setState(() => _isLoading = false);
+      setState(() {
+        _hasLoadError = true;
+        _isLoading = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error loading gallery: $e')),
       );
@@ -432,6 +438,16 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      isSliver: true,
+      needsRecovery: () => _hasLoadError,
+      isBusy: () => _isLoading,
+      onRecover: _fetchPage,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     if (_images.isEmpty && _isLoading) {
       return SliverToBoxAdapter(
         child: SizedBox(

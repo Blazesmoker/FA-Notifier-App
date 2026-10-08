@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fanotifier/core/network/fa_request_coordinator.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 
 typedef _Call<T> = Future<T> Function();
 
@@ -123,13 +124,30 @@ class FAHttp {
         errorText.contains('software caused connection abort');
   }
 
-  static Map<String, String> _mergeHeaders(Map<String, String>? headers) {
+  static Future<Map<String, String>> _mergeHeaders(
+    Map<String, String>? headers,
+    Uri uri,
+  ) async {
     final out = <String, String>{
       HttpHeaders.acceptEncodingHeader: 'gzip',
       ...?headers,
     };
     out.removeWhere((k, _) => k.toLowerCase() == 'user-agent');
     out['User-Agent'] = userAgent;
+    final host = uri.host.toLowerCase();
+    if (uri.scheme == 'https' &&
+        (host == 'furaffinity.net' || host.endsWith('.furaffinity.net'))) {
+      final cookieHeader = out.entries
+          .where((entry) => entry.key.toLowerCase() == 'cookie')
+          .map((entry) => entry.value)
+          .join('; ');
+      out.removeWhere((name, _) => name.toLowerCase() == 'cookie');
+      final cookies = await FaCookieHelper.appendCfClearanceToCookieHeader(
+        cookieHeader,
+        uri: uri,
+      );
+      if (cookies.isNotEmpty) out['Cookie'] = cookies;
+    }
     return out;
   }
 
@@ -172,7 +190,7 @@ class FAHttp {
       }
       final client = _ensureClient(timeout: requestTimeout);
       final response =
-          await client.get(uri, headers: _mergeHeaders(headers)).timeout(requestTimeout);
+          await client.get(uri, headers: await _mergeHeaders(headers, uri)).timeout(requestTimeout);
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,
         headers: response.headers,
@@ -214,7 +232,7 @@ class FAHttp {
       return (() async {
         final request = http.Request('GET', uri)
           ..followRedirects = followRedirects
-          ..headers.addAll(_mergeHeaders(headers));
+          ..headers.addAll(await _mergeHeaders(headers, uri));
         final streamedResponse = await client.send(request);
         final resolvedUri =
             streamedResponse is http.BaseResponseWithUrl
@@ -256,7 +274,7 @@ class FAHttp {
       return (() async {
         final request = http.Request('POST', uri)
           ..followRedirects = followRedirects
-          ..headers.addAll(_mergeHeaders(headers))
+          ..headers.addAll(await _mergeHeaders(headers, uri))
           ..bodyFields = body;
         final streamedResponse = await client.send(request);
         final resolvedUri = streamedResponse is http.BaseResponseWithUrl
@@ -282,7 +300,7 @@ class FAHttp {
     return _withOneRetry(
       () async {
         final client = _ensureClient(timeout: requestTimeout);
-        return client.get(uri, headers: _mergeHeaders(headers)).timeout(requestTimeout);
+        return client.get(uri, headers: await _mergeHeaders(headers, uri)).timeout(requestTimeout);
       },
       recordRecoverableFailure: false,
     );
@@ -303,7 +321,7 @@ class FAHttp {
       );
       final client = _ensureClient(timeout: requestTimeout);
       final response = await client
-          .post(uri, headers: _mergeHeaders(headers), body: body, encoding: encoding)
+          .post(uri, headers: await _mergeHeaders(headers, uri), body: body, encoding: encoding)
           .timeout(requestTimeout);
       FaRequestCoordinator.instance.recordHttpStatus(
         statusCode: response.statusCode,

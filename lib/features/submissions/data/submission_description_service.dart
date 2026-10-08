@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:fanotifier/features/submissions/data/submission_description_parser.dart';
 import 'package:fanotifier/features/submissions/domain/submission_description_webview_content.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/fa/fa_media_auth.dart';
+import 'package:fanotifier/core/fa/fa_webview_cookie_service.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
 import 'package:fanotifier/shared/fa/fa_theme_css_loader.dart';
 import 'package:fanotifier/shared/utils/fa_icon_image_inliner.dart';
@@ -23,6 +25,8 @@ class SubmissionDescriptionService {
 
   final FlutterSecureStorage _secureStorage;
 
+  Stream<int> get mediaSessionChanges => FaMediaAuth.sessionChanges;
+
   Future<String> extractInitialHtml(String html) {
     return compute(extractSubmissionDescriptionHtmlWithBodyFallback, html);
   }
@@ -34,9 +38,14 @@ class SubmissionDescriptionService {
   Future<SubmissionDescriptionWebViewContent> buildWebViewContent(
     String html,
   ) async {
+    await FAWebViewCookieService(secureStorage: _secureStorage).setCookies(
+      applySfwPreference: false,
+      preserveExistingSession: true,
+    );
     return SubmissionDescriptionWebViewContent(
       html: html,
       faThemeCss: await loadFaThemeCss(),
+      userAgent: FAHttp.userAgent,
     );
   }
 

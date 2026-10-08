@@ -46,6 +46,7 @@ class SearchImageController {
   bool _sfwEnabled = true;
   late final Future<void> _sfwLoadFuture;
   bool _isHandlingCloudflareChallenge = false;
+  bool _cloudflareRecoveryCancelled = false;
   double _nextPageTriggerOffset = double.infinity;
   bool _pendingNextPageFetch = false;
   bool _isNextPageFetchQueued = false;
@@ -58,6 +59,14 @@ class SearchImageController {
   }
 
   bool get sfwEnabled => _sfwEnabled;
+  bool get isHandlingChallenge => _isHandlingCloudflareChallenge;
+
+  Future<void> recoverVerifiedSession() async {
+    if (!_isMounted() || isLoading || _isHandlingCloudflareChallenge) return;
+    _cloudflareRecoveryCancelled = false;
+    hasMore = true;
+    await fetchImages(currentPage, remainingCloudflareRecoveries: 0);
+  }
 
   Future<void> _loadSfwEnabled() async {
     _sfwEnabled = await _sfwModePreference.loadSfwEnabled();
@@ -84,6 +93,7 @@ class SearchImageController {
     required Map<String, String> selectedFilters,
     required String searchQuery,
   }) async {
+    _cloudflareRecoveryCancelled = false;
     _selectedFilters = selectedFilters;
     _searchQuery = searchQuery;
     images.clear();
@@ -147,7 +157,7 @@ class SearchImageController {
     bool isRefresh = false,
     int remainingCloudflareRecoveries = 2,
   }) async {
-    if (isLoading || !hasMore) return;
+    if (isLoading || !hasMore || _cloudflareRecoveryCancelled) return;
     kDebugPrint(
       '[Search] Fetching page $pageNumber${isRefresh ? ' (refresh)' : ''}',
     );
@@ -194,31 +204,30 @@ class SearchImageController {
       }
 
       if (remainingCloudflareRecoveries <= 0) {
+        _cloudflareRecoveryCancelled = true;
+        hasMore = false;
+        isError = true;
+        errorMessage = 'Fur Affinity access could not be verified. Pull to retry.';
         _pendingNextPageFetch = false;
         _isNextPageFetchQueued = false;
         _nextPageTriggerOffset = scrollController.hasClients
             ? scrollController.position.pixels + 1
             : double.infinity;
+        _notifyIfMounted();
         return;
       }
       final result = await _requestCloudflareCheck(initialUrl: e.initialUrl);
       if (result?.passed != true || !_isMounted()) {
+        _cloudflareRecoveryCancelled = true;
+        hasMore = false;
+        isError = true;
+        errorMessage = 'Verification was closed. Pull to retry.';
         _pendingNextPageFetch = false;
         _isNextPageFetchQueued = false;
         _nextPageTriggerOffset = scrollController.hasClients
             ? scrollController.position.pixels + 1
             : double.infinity;
-        return;
-      }
-
-      final recoveredHtml = result?.pageHtml;
-      if (recoveredHtml != null && recoveredHtml.isNotEmpty) {
-        final recoveredImages =
-            await _repository.parseRecoveredHtml(recoveredHtml);
-        await _appendImages(
-          recoveredImages,
-          previousMaxScrollExtent: previousMaxScrollExtent,
-        );
+        _notifyIfMounted();
         return;
       }
 

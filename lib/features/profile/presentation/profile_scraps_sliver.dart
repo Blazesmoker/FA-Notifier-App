@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'dart:async';
@@ -36,6 +37,7 @@ class ProfileScrapsSliver extends StatefulWidget {
 class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   String? _nextPageUrl;
   bool _isLoading = false;
+  bool _hasLoadError = false;
   bool _hasMore = true;
   int _fetchGeneration = 0;
   int _refreshGeneration = 0;
@@ -232,6 +234,7 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
   }
 
   Future<void> _loadPage() async {
+    _hasLoadError = false;
     final fetchGeneration = _fetchGeneration;
     setState(() => _isLoading = true);
 
@@ -256,7 +259,10 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
       });
     } catch (e) {
       if (!mounted || fetchGeneration != _fetchGeneration) return;
-      setState(() => _isLoading = false);
+      setState(() {
+        _hasLoadError = true;
+        _isLoading = false;
+      });
       debugPrint("Error fetching scraps: $e");
     }
   }
@@ -370,6 +376,16 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      isSliver: true,
+      needsRecovery: () => _hasLoadError,
+      isBusy: () => _isLoading,
+      onRecover: _fetchImages,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     if (_images.isEmpty && _isLoading) {
       return SliverToBoxAdapter(
         child: SizedBox(

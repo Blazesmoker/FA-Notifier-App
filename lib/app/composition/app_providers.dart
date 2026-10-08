@@ -89,6 +89,7 @@ import 'package:fanotifier/features/upload/domain/upload_webview_script_reposito
 import 'package:fanotifier/features/upload/domain/upload_webview_session_gateway.dart';
 import 'package:fanotifier/features/upload/upload_feature.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
+import 'package:fanotifier/shared/fa/domain/fa_session_access.dart';
 
 class AppProviders extends StatelessWidget {
   const AppProviders({
@@ -110,6 +111,7 @@ class AppProviders extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        Provider<FaSessionAccess>.value(value: AuthFeature.sessionAccess),
         Provider<FaLinkNavigator>(
           create: (_) => const AppFaLinkNavigator(),
         ),

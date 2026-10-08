@@ -1,3 +1,5 @@
+import 'package:fanotifier/shared/fa/domain/fa_session_access.dart';
+import 'package:provider/provider.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -112,6 +114,7 @@ class _InfoWebViewDialogState extends State<InfoWebViewDialog> {
                     mimeType: 'text/html',
                   ),
                   initialSettings: InAppWebViewSettings(
+                    userAgent: context.read<FaSessionAccess>().userAgent,
                     javaScriptEnabled: true,
                     verticalScrollBarEnabled: true,
                     horizontalScrollBarEnabled: false,

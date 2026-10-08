@@ -2,6 +2,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:fanotifier/core/fa/fa_media_auth.dart';
+import 'package:fanotifier/core/fa/fa_webview_cookie_service.dart';
 
 class HomeAuthCookieService {
   const HomeAuthCookieService({
@@ -31,11 +32,15 @@ class HomeAuthCookieService {
     );
 
     for (final cookie in cookies) {
+      if (cookie.name == 'cf_clearance') continue;
       await _secureStorage.write(
         key: 'fa_cookie_${cookie.name}',
         value: cookie.value,
       );
     }
+    await FAWebViewCookieService(secureStorage: _secureStorage).captureCookies(
+      url: 'https://www.furaffinity.net/',
+    );
     FaMediaAuth.invalidate();
   }
 
@@ -51,6 +56,11 @@ class HomeAuthCookieService {
       'sfw'
     ];
     for (final key in cookieKeys) {
+      if (key == 'cf_clearance') {
+        await FAWebViewCookieService(secureStorage: _secureStorage)
+            .restoreClearance();
+        continue;
+      }
       final storageKey = 'fa_cookie_$key';
       final cookieValue = await _secureStorage.read(key: storageKey);
       if (cookieValue != null && cookieValue.isNotEmpty) {

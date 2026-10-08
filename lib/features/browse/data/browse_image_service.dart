@@ -119,6 +119,7 @@ class BrowseImageService {
     final isChallenge = FaCookieHelper.isCloudflareChallengePage(
       body: resp.body,
       statusCode: resp.statusCode,
+      headers: resp.headers,
     );
     if (isChallenge) {
       throw CloudflareChallengeException(initialUrl: currentUri.toString());

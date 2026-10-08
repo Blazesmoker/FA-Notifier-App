@@ -1,3 +1,5 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
+import 'package:fanotifier/shared/fa/domain/fa_session_access.dart';
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
@@ -188,7 +190,17 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    return FaSessionRecoveryScope(
+      needsRecovery: () => true,
+      isBusy: () => false,
+      onRecover: context.read<FaSessionAccess>().synchronizeWebViewSession,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final settings = InAppWebViewSettings(
+      userAgent: context.read<FaSessionAccess>().userAgent,
       javaScriptEnabled: true,
       useShouldOverrideUrlLoading: true,
       supportMultipleWindows: true,
@@ -213,7 +225,7 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
           children: [
             InAppWebView(
               key: webViewKey,
-              initialUrlRequest: URLRequest(url: WebUri(initialUrl)),
+              initialUrlRequest: URLRequest(url: WebUri('about:blank')),
               initialSettings: settings,
               initialUserScripts: _adController.initialUserScripts,
               contextMenu: _buildContextMenu(),
@@ -221,6 +233,10 @@ class _CreateJournalScreenState extends State<CreateJournalScreen>
                 _webViewController = controller;
                 _adController.attach(controller);
                 await _createJournalRepository.prepareWebViewSession();
+                if (!mounted) return;
+                await controller.loadUrl(
+                  urlRequest: URLRequest(url: WebUri(initialUrl)),
+                );
               },
               onLoadStart: (controller, uri) async {
                 _webViewController = controller;

@@ -11,6 +11,9 @@ class SubmissionDescriptionRepositoryImpl
   final SubmissionDescriptionService _service;
 
   @override
+  Stream<int> get mediaSessionChanges => _service.mediaSessionChanges;
+
+  @override
   Future<SubmissionDescriptionWebViewContent> processInitialHtml(
     String html,
   ) async {

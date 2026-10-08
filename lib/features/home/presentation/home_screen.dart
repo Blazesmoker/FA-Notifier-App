@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/fa/domain/fa_session_access.dart';
 import 'dart:async';
 import 'package:fanotifier/features/notifications/presentation/notification_navigation_provider.dart';
 import 'package:fanotifier/features/browse/presentation/browse_image_grid.dart';
@@ -45,7 +46,6 @@ import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/core/preferences/privacy_settings_provider.dart';
 import 'package:fanotifier/features/settings/presentation/privacy_consent_screen.dart';
 
-import '../../auth/domain/cloudflare_check_result.dart';
 import 'home_profile_controller.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -68,6 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
   DrawerIndex drawerIndex = DrawerIndex.home;
   int _selectedIndex = 0;
   bool isCheckingLoginStatus = true;
+  bool _startupAccessBlocked = false;
   bool isLoggedIn = false;
   bool _sfwEnabled = true;
   final SfwModePreference _sfwModePreference = SfwModePreference();
@@ -222,6 +223,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _initializeAndLoadLoginState() async {
+    if (_startupAccessBlocked) {
+      setState(() {
+        _startupAccessBlocked = false;
+        isCheckingLoginStatus = true;
+      });
+    }
     await _privacySettings.load();
     await _loadSfwEnabled();
     await _loadLoginState();
@@ -230,10 +237,11 @@ class _HomeScreenState extends State<HomeScreen> {
       await _profileController.loadCachedUserProfile();
     }
     final canProceed = await _runStartupCloudflareCheck();
+    if (!mounted) return;
     if (!canProceed) {
       setState(() {
         isCheckingLoginStatus = false;
-        isLoggedIn = false;
+        _startupAccessBlocked = true;
       });
       _logSelectedHomeScreen();
       return;
@@ -241,11 +249,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (isLoggedIn) {
       await _setCookiesFromPrefs();
+      if (!mounted) return;
       _startActivitiesPolling(triggerImmediate: false);
 
       setState(() {
         isCheckingLoginStatus = false;
       });
+      _maybeOpenStartupProfile();
       _logSelectedHomeScreen();
 
       if (!_profileFetched) {
@@ -270,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final check = await _startupCloudflareChecker.checkHome();
     _profileController.setStartupHomeHtml(isLoggedIn ? check.homeHtml : null);
     if (!check.needsChallenge) {
-      return true;
+      return check.accessGranted;
     }
     if (!mounted) {
       return false;
@@ -280,13 +290,13 @@ class _HomeScreenState extends State<HomeScreen> {
       return false;
     }
 
-    final result = await Navigator.of(context).push<CloudflareCheckResult>(
-      MaterialPageRoute<CloudflareCheckResult>(
-        settings:
-            const AnalyticsRouteSettings(AppScreens.cloudflareCheck),
-        builder: (_) => const CloudflareCheckScreen(),
-      ),
+    final result = await CloudflareCheckScreen.show(
+      context,
+      returnPageHtml: true,
     );
+    if (mounted && result?.passed == true) {
+      _profileController.setStartupHomeHtml(isLoggedIn ? result?.pageHtml : null);
+    }
     return result?.passed == true;
   }
 
@@ -448,6 +458,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _maybeOpenStartupProfile() {
     if (!mounted ||
+        isCheckingLoginStatus ||
+        _startupAccessBlocked ||
         _isOpeningStartupProfile ||
         _didOpenStartupProfile ||
         !_privacySettings.consentShown ||
@@ -497,6 +509,7 @@ class _HomeScreenState extends State<HomeScreen> {
         baseUrl: WebUri('about:blank'),
       ),
       initialSettings: InAppWebViewSettings(
+        userAgent: context.read<FaSessionAccess>().userAgent,
         transparentBackground: defaultTargetPlatform == TargetPlatform.iOS,
         underPageBackgroundColor:
             defaultTargetPlatform == TargetPlatform.iOS ? Colors.black : null,
@@ -1052,9 +1065,32 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             )
-          : isLoggedIn
-              ? _buildMainAppScreen(context)
-              : _buildWebView(),
+          : _startupAccessBlocked
+              ? SafeArea(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Fur Affinity access could not be verified. '
+                            'Please try again.',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            onPressed: _initializeAndLoadLoginState,
+                            child: const Text('Retry verification'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              : isLoggedIn
+                  ? _buildMainAppScreen(context)
+                  : _buildWebView(),
       builder: (context, settings, faNotificationService, child) {
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: const SystemUiOverlayStyle(
@@ -1080,7 +1116,10 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Scaffold(
             body: child,
             bottomNavigationBar:
-                _shouldHoldForStartupProfile || !_privacySettings.consentShown
+                isCheckingLoginStatus ||
+                        _startupAccessBlocked ||
+                        _shouldHoldForStartupProfile ||
+                        !_privacySettings.consentShown
                     ? null
                     : ValueListenableBuilder<int>(
                         valueListenable: _unreadCount,

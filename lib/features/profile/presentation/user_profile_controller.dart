@@ -83,6 +83,8 @@ class UserProfileController {
   }
 
   Future<UserProfileLoadResult> loadProfile(String nickname) async {
+    _isLoading = true;
+    _errorMessage = '';
     try {
       final result = await _repository.loadProfile(
         nickname: nickname,

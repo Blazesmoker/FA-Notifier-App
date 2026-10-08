@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'dart:async';
 import 'package:fanotifier/features/drawer/presentation/home_drawer_shell.dart';
 import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
@@ -613,6 +614,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      needsRecovery: () => context.read<FaNotificationsController>().errorMessage != null,
+      isBusy: () => context.read<FaNotificationsController>().isLoading || _destructiveActionBusy,
+      onRecover: () => _activitiesController.refresh(source: 'cloudflare_recovery'),
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     return VisibilityDetector(
       key: const Key('notifications_screen_visibility'),
       onVisibilityChanged: (info) {

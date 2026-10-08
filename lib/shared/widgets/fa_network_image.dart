@@ -59,11 +59,16 @@ class _FaNetworkImageState extends State<FaNetworkImage> {
   late String _resolvedUrl;
   late bool _requiresHeaders;
   late Future<Map<String, String>?> _headersFuture;
+  bool _loadFailed = false;
+  bool _authRefreshScheduled = false;
+  int _imageGeneration = 0;
+  int _mediaRevision = 0;
 
   @override
   void initState() {
     super.initState();
     _configure();
+    FaMediaAuth.changes.addListener(_handleAuthChanged);
   }
 
   @override
@@ -75,14 +80,47 @@ class _FaNetworkImageState extends State<FaNetworkImage> {
   }
 
   void _configure() {
+    _loadFailed = false;
+    _mediaRevision = FaMediaAuth.changes.value;
     _resolvedUrl = FaMediaAuth.normalizeUrl(widget.src);
     _requiresHeaders = FaMediaAuth.isFaUrl(_resolvedUrl);
     _headersFuture = FaMediaAuth.headersForUrl(_resolvedUrl);
   }
 
+  void _handleAuthChanged() {
+    if (!_requiresHeaders ||
+        !_loadFailed ||
+        _mediaRevision == FaMediaAuth.changes.value ||
+        _authRefreshScheduled) {
+      return;
+    }
+    _authRefreshScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _authRefreshScheduled = false;
+      if (!mounted ||
+          !_requiresHeaders ||
+          !_loadFailed ||
+          _mediaRevision == FaMediaAuth.changes.value) {
+        return;
+      }
+      setState(() {
+        _imageGeneration++;
+        _configure();
+      });
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  @override
+  void dispose() {
+    FaMediaAuth.changes.removeListener(_handleAuthChanged);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, String>?>(
+      key: ValueKey<int>(_imageGeneration),
       future: _headersFuture,
       builder: (context, snapshot) {
         if (_requiresHeaders &&
@@ -92,6 +130,7 @@ class _FaNetworkImageState extends State<FaNetworkImage> {
         }
         return Image.network(
           _resolvedUrl,
+          key: ValueKey<int>(_imageGeneration),
           headers: snapshot.data,
           width: widget.width,
           height: widget.height,
@@ -106,9 +145,23 @@ class _FaNetworkImageState extends State<FaNetworkImage> {
           color: widget.color,
           opacity: widget.opacity,
           colorBlendMode: widget.colorBlendMode,
-          frameBuilder: widget.frameBuilder,
+          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+            if (frame != null) {
+              _loadFailed = false;
+            }
+            return widget.frameBuilder?.call(
+                  context, child, frame, wasSynchronouslyLoaded,
+                ) ??
+                child;
+          },
           loadingBuilder: widget.loadingBuilder,
-          errorBuilder: widget.errorBuilder,
+          errorBuilder: (context, error, stackTrace) {
+            _loadFailed = true;
+            _handleAuthChanged();
+            final builder = widget.errorBuilder;
+            if (builder != null) return builder(context, error, stackTrace);
+            return SizedBox(width: widget.width, height: widget.height);
+          },
           semanticLabel: widget.semanticLabel,
           excludeFromSemantics: widget.excludeFromSemantics,
           cacheWidth: widget.cacheWidth,

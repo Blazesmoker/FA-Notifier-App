@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'package:flutter/material.dart';
 
 class ProfileBannerHeader extends StatefulWidget {
@@ -31,6 +32,8 @@ class _ProfileBannerHeaderState extends State<ProfileBannerHeader> {
   );
 
   late Future<ImageProvider> _imageProviderFuture;
+  bool _loadFailed = false;
+  bool _imageReady = false;
 
   @override
   void initState() {
@@ -48,11 +51,27 @@ class _ProfileBannerHeaderState extends State<ProfileBannerHeader> {
   }
 
   void _resolveImageProvider() {
+    _loadFailed = false;
+    _imageReady = false;
     _imageProviderFuture = faNetworkImageProvider(widget.imageUrl);
+  }
+
+  Future<void> _recoverImage() async {
+    if (!mounted) return;
+    setState(_resolveImageProvider);
   }
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      needsRecovery: () => _loadFailed,
+      isBusy: () => !_imageReady,
+      onRecover: _recoverImage,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double topInset = MediaQuery.viewPaddingOf(context).top;
@@ -92,6 +111,8 @@ class _ProfileBannerHeaderState extends State<ProfileBannerHeader> {
                   future: _imageProviderFuture,
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
+                      _loadFailed = true;
+                      _imageReady = true;
                       return const ColoredBox(color: Colors.grey);
                     }
                     final ImageProvider? imageProvider = snapshot.data;
@@ -169,6 +190,8 @@ class _ProfileBannerHeaderState extends State<ProfileBannerHeader> {
                     filterQuality: FilterQuality.low,
                     gaplessPlayback: true,
                     errorBuilder: (context, error, stackTrace) {
+                      _loadFailed = true;
+                      _imageReady = true;
                       return const ColoredBox(color: Colors.grey);
                     },
                   ),
@@ -179,6 +202,13 @@ class _ProfileBannerHeaderState extends State<ProfileBannerHeader> {
         Positioned.fill(
           child: Image(
             image: imageProvider,
+            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+              if (frame != null) {
+                _imageReady = true;
+                _loadFailed = false;
+              }
+              return child;
+            },
             fit: BoxFit.contain,
             alignment: Alignment.bottomCenter,
             filterQuality: FilterQuality.medium,
@@ -200,6 +230,8 @@ class _ProfileBannerHeaderState extends State<ProfileBannerHeader> {
               );
             },
             errorBuilder: (context, error, stackTrace) {
+              _loadFailed = true;
+              _imageReady = true;
               return const ColoredBox(color: Colors.grey);
             },
           ),

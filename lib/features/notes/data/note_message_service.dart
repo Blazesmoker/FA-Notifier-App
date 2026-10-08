@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:fanotifier/core/network/fa_session_cookie_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:fanotifier/features/notes/data/message_detail_parser.dart';
@@ -131,7 +131,7 @@ class NoteMessageService implements NoteMessageRepository {
   }
 
   void _initializeDio() {
-    _dio.interceptors.add(CookieManager(_cookieJar));
+    _dio.interceptors.add(FaSessionCookieManager(_cookieJar));
     _dio.options.headers['User-Agent'] = FAHttp.userAgent;
     _dio.options.followRedirects = true;
     _dio.options.validateStatus = (status) {
@@ -149,7 +149,7 @@ class NoteMessageService implements NoteMessageRepository {
     cookies.add(Cookie('folder', folder));
 
     final uri = Uri.parse('https://www.furaffinity.net');
-    _cookieJar.saveFromResponse(
+    await _cookieJar.saveFromResponse(
       uri,
       await FaCookieHelper.addCfClearanceCookie(cookies),
     );

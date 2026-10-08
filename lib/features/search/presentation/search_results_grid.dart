@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:fanotifier/shared/widgets/scroll_return_controller.dart';
@@ -111,14 +112,11 @@ class SearchResultsGridState extends State<SearchResultsGrid> {
   Future<CloudflareCheckResult?> _showCloudflareDialog({
     String? initialUrl,
   }) async {
-    return showDialog<CloudflareCheckResult>(
-      context: context,
-      barrierDismissible: false,
-      useSafeArea: false,
-      builder: (_) => CloudflareCheckScreen(
-        initialUrl: initialUrl ?? 'https://www.furaffinity.net/',
-        returnPageHtml: true,
-      ),
+    if (!mounted) return null;
+    return CloudflareCheckScreen.show(
+      context,
+      initialUrl: initialUrl ?? 'https://www.furaffinity.net/',
+      asDialog: true,
     );
   }
 
@@ -129,6 +127,15 @@ class SearchResultsGridState extends State<SearchResultsGrid> {
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      needsRecovery: () => _controller.isError,
+      isBusy: () => _controller.isLoading || _controller.isHandlingChallenge,
+      onRecover: _controller.recoverVerifiedSession,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final maxHeight = screenHeight * 0.4;
     final errorMessage = _errorMessage;

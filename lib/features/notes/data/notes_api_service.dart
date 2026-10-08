@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:fanotifier/core/network/fa_session_cookie_manager.dart';
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/dom.dart' as dom;
@@ -311,7 +311,7 @@ class NotesApiService implements ManagedNotesRepository {
     }
     final dio = Dio();
     final cookieJar = CookieJar();
-    dio.interceptors.add(CookieManager(cookieJar));
+    dio.interceptors.add(FaSessionCookieManager(cookieJar));
     cookieJar.saveFromResponse(
       Uri.parse('https://www.furaffinity.net'),
       await FaCookieHelper.addCfClearanceCookie(

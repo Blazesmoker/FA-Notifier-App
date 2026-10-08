@@ -1,3 +1,7 @@
+import 'package:fanotifier/shared/widgets/fa_verification_required_view.dart';
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
+import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
+import 'package:fanotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:fanotifier/shared/navigation/edge_back_swipe_controller.dart';
 import 'package:fanotifier/features/comments/presentation/comment_selection_controller.dart';
 import 'widgets/submission_detail_sections.dart';
@@ -106,6 +110,8 @@ class SubmissionDetailsScreen extends StatefulWidget {
 class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
     with RouteAware, WidgetsBindingObserver, TickerProviderStateMixin
     implements DetachableWebViewRouteOwner {
+  bool _loadBlocked = false;
+  bool _fetchingDetails = false;
   late final EdgeBackSwipeController _backSwipe;
   bool _showFullPublicationDate = false;
   final CommentComposerController _commentComposer =
@@ -664,19 +670,24 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
     }
   }
 
-  Future<void> _fetchPostDetails() async {
-    setState(_controller.startLoading);
-
-    if (!await _controller.hasAuthCookies()) {
-      setState(_controller.stopLoading);
-      return;
-    }
-
+  Future<void> _fetchPostDetails({bool allowChallengePrompt = true}) async {
+    if (_fetchingDetails || !mounted) return;
+    _fetchingDetails = true;
+    _loadBlocked = false;
     try {
+      setState(_controller.startLoading);
+
+      if (!await _controller.hasAuthCookies()) {
+        if (mounted) setState(_controller.stopLoading);
+        return;
+      }
+      if (!mounted) return;
+
       final result = await _controller.loadDetails(
         confirmNsfw: _showNSFWConfirmationDialog,
         onNsfwAllowed: () => setState(() {}),
       );
+      if (!mounted) return;
       _observedFavoriteState = isFavorited;
       setState(() {});
 
@@ -711,8 +722,15 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
       }
 
       debugPrint('Post loaded successfully: $submissionTitle');
+    } on CloudflareChallengeException {
+      if (!mounted) return;
+      setState(() => _loadBlocked = true);
+      if (allowChallengePrompt) {
+        await CloudflareCheckScreen.show(context, initialUrl: 'https://www.furaffinity.net/view/${widget.submissionId}/');
+      }
     } catch (e) {
       debugPrint('Error fetching post details: $e');
+      if (!mounted) return;
       setState(() {});
 
       if (mounted) {
@@ -739,6 +757,9 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
           }
         });
       }
+    } finally {
+      _fetchingDetails = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -1357,6 +1378,21 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      needsRecovery: () => _loadBlocked,
+      isBusy: () => _fetchingDetails,
+      onRecover: () => _fetchPostDetails(allowChallengePrompt: false),
+      child: _loadBlocked && !(_detailsLoaded)
+          ? FaVerificationRequiredView(
+              title: 'Post',
+              isBusy: _fetchingDetails,
+              onRetry: _fetchPostDetails,
+            )
+          : _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final translatorSettings = context.watch<TranslatorSettingsProvider>();
     final commentSettings = context.watch<CommentSettingsProvider>();
     final submissionTimeFormat =

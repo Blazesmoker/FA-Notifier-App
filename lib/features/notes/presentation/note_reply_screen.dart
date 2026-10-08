@@ -1,3 +1,5 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
+import 'package:fanotifier/shared/fa/domain/fa_session_access.dart';
 import 'dart:async';
 
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
@@ -57,6 +59,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
   late String recipient;
   bool _isMessageDetailsLoading = true;
+  bool _contextLoadFailed = false;
   String errorMessage = '';
 
   WebViewController? _webViewController;
@@ -100,6 +103,11 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
   }
 
   Future<void> _fetchMessageDetails() async {
+    _contextLoadFailed = false;
+    setState(() {
+      _isMessageDetailsLoading = true;
+      errorMessage = '';
+    });
     try {
       final details = await _noteReplyRepository.fetchReplyContext(
         widget.messageLink,
@@ -115,6 +123,7 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
+          _contextLoadFailed = true;
           errorMessage = 'Error fetching details: $e';
           _isMessageDetailsLoading = false;
         });
@@ -122,16 +131,25 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
     }
   }
 
+  Future<void> _recoverSession() async {
+    await context.read<FaSessionAccess>().synchronizeWebViewSession();
+    if (!mounted) return;
+    await _webViewGateway.setAuthCookies();
+    if (!mounted || !_contextLoadFailed) return;
+    await _fetchMessageDetails();
+  }
+
   Future<void> _initializeWebView() async {
     final hasCookies = await _webViewGateway.setAuthCookies();
+    if (!mounted) {
+      return;
+    }
 
     if (!hasCookies) {
-      if (mounted) {
-        setState(() {
-          errorMessage = 'Not logged in or missing cookies.';
-          _useWebView = false;
-        });
-      }
+      setState(() {
+        errorMessage = 'Not logged in or missing cookies.';
+        _useWebView = false;
+      });
       return;
     }
 
@@ -139,8 +157,9 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
     final WebViewController controller = _webViewControllerFactory.create();
 
-    _webViewControllerFactory.configure(
+    await _webViewControllerFactory.configure(
       controller,
+      userAgent: context.read<FaSessionAccess>().userAgent,
       navigationDelegate: NavigationDelegate(
           onPageStarted: (String url) {
             debugPrint('DEBUG: WebView page started: $url');
@@ -368,6 +387,15 @@ class _NoteReplyScreenState extends State<NoteReplyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      needsRecovery: () => true,
+      isBusy: () => _isSending || _isMessageDetailsLoading,
+      onRecover: _recoverSession,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     debugPrint('DEBUG: NoteReplyScreen build() - _replySentSuccessfully: $_replySentSuccessfully, _useWebView: $_useWebView, _hasPopped: $_hasPopped');
 
     // If reply was sent successfully via WebView, show success and close

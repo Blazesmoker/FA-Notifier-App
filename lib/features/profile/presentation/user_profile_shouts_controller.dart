@@ -30,6 +30,9 @@ class UserProfileShoutsController {
     false,
   );
   final ValueNotifier<int> _shoutsRevision = ValueNotifier<int>(0);
+  bool _hasLoadError = false;
+
+  bool get hasLoadError => _hasLoadError;
 
   ValueListenable<bool> get isLoadingMore => _isLoadingMoreShouts;
 
@@ -180,6 +183,7 @@ class UserProfileShoutsController {
     }
 
     _isLoadingMoreShouts.value = true;
+    _hasLoadError = false;
 
     try {
       final nextPage = _profileController.currentShoutPage + 1;
@@ -205,6 +209,7 @@ class UserProfileShoutsController {
     } catch (e) {
       debugPrint('Error loading more shouts: $e');
       if (!_isMounted()) return;
+      _hasLoadError = true;
       _showMessage('Failed to load more shouts', color: Colors.red);
     } finally {
       if (_isMounted()) {

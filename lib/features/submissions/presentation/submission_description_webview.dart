@@ -55,6 +55,8 @@ class SubmissionDescriptionWebViewState
   late Future<SubmissionDescriptionWebViewContent>
       _submissionDescriptionFuture;
   InAppWebViewController? _controller;
+  StreamSubscription<int>? _mediaSessionSubscription;
+  int? _pendingMediaRevision;
   double _webViewHeight = 50.0;
   static const Duration _scrollWebViewResumeDelay =
       Duration(milliseconds: 50);
@@ -69,6 +71,11 @@ class SubmissionDescriptionWebViewState
     super.initState();
     _submissionDescriptionRepository = widget.repository ??
         context.read<SubmissionDescriptionRepository>();
+    _mediaSessionSubscription =
+        _submissionDescriptionRepository.mediaSessionChanges.listen((revision) {
+      _pendingMediaRevision = revision;
+      unawaited(_retryFailedImages());
+    });
     _mountWebView = !widget.routeDetached;
     if (widget.initialHtml != null) {
       _submissionDescriptionFuture = _processInitialHtml(widget.initialHtml!);
@@ -100,12 +107,24 @@ class SubmissionDescriptionWebViewState
 
   @override
   void dispose() {
+    _mediaSessionSubscription?.cancel();
     _scrollWebViewResumeTimer?.cancel();
     _controller = null;
     if (widget.onDispose != null) {
       widget.onDispose!();
     }
     super.dispose();
+  }
+
+  Future<void> _retryFailedImages() async {
+    final controller = _controller;
+    final revision = _pendingMediaRevision;
+    if (controller == null || revision == null) return;
+    try {
+      await controller.evaluateJavascript(
+        source: faRetryFailedImagesScript(revision),
+      );
+    } catch (_) {}
   }
 
   @override
@@ -306,6 +325,7 @@ class SubmissionDescriptionWebViewState
                 mimeType: 'text/html',
               ),
               initialSettings: InAppWebViewSettings(
+                userAgent: content?.userAgent,
                 javaScriptEnabled: true,
                 useShouldOverrideUrlLoading: true,
                 disableVerticalScroll: false,
@@ -328,6 +348,7 @@ class SubmissionDescriptionWebViewState
                 return true;
               },
               onLoadStop: (controller, url) async {
+                await _retryFailedImages();
                 String heightString = await controller.evaluateJavascript(
                   source: faDocumentBodyScrollHeightScript,
                 );

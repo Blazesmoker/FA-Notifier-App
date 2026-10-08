@@ -1,3 +1,5 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
+import 'package:fanotifier/shared/fa/domain/fa_session_access.dart';
 import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -171,7 +173,17 @@ class _EditSubmissionScreenState extends State<EditSubmissionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      needsRecovery: () => true,
+      isBusy: () => false,
+      onRecover: context.read<FaSessionAccess>().synchronizeWebViewSession,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final settings = InAppWebViewSettings(
+      userAgent: context.read<FaSessionAccess>().userAgent,
       javaScriptEnabled: true,
       useShouldOverrideUrlLoading: true,
       supportMultipleWindows: true,

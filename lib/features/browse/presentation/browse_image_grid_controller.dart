@@ -9,7 +9,6 @@ import 'package:fanotifier/features/browse/domain/browse_repository.dart';
 import 'package:fanotifier/features/browse/presentation/browse_ad_scroll_controller.dart';
 import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:fanotifier/shared/fa/fa_thumbnail_processing.dart';
-import 'package:fanotifier/shared/utils/content_rating_filters.dart';
 
 typedef BrowseCloudflareChallengeHandler = Future<CloudflareCheckResult?>
     Function(String? initialUrl);
@@ -42,6 +41,7 @@ class BrowseImageGridController extends ChangeNotifier {
   int _requestGeneration = 0;
   int _sectionsRevision = 0;
   bool _isHandlingCloudflareChallenge = false;
+  bool _cloudflareRecoveryCancelled = false;
   double _nextPageTriggerOffset = double.infinity;
   bool _pendingNextPageFetch = false;
   bool _isNextPageFetchQueued = false;
@@ -57,6 +57,14 @@ class BrowseImageGridController extends ChangeNotifier {
   List<Map<String, dynamic>> get normalImagesQueue => _normalImagesQueue;
   bool get sfwEnabled => _sfwEnabled;
   bool get isLoading => _isLoading;
+  bool get isHandlingChallenge => _isHandlingCloudflareChallenge;
+
+  Future<void> recoverVerifiedSession() async {
+    if (_disposed || _isLoading || _isHandlingCloudflareChallenge) return;
+    _cloudflareRecoveryCancelled = false;
+    _hasMore = true;
+    await _fetchImages(_currentPage, remainingCloudflareRecoveries: 0);
+  }
   bool get isError => _isError;
   String? get errorMessage => _errorMessage;
 
@@ -101,6 +109,7 @@ class BrowseImageGridController extends ChangeNotifier {
   }) async {
     _requestGeneration++;
     _isLoading = false;
+    _cloudflareRecoveryCancelled = false;
     _sfwEnabled = sfwEnabled;
     _selectedFilters = selectedFilters;
     _images.clear();
@@ -131,7 +140,7 @@ class BrowseImageGridController extends ChangeNotifier {
     bool isRefresh = false,
     int remainingCloudflareRecoveries = 2,
   }) async {
-    if (_isLoading || !_hasMore) return;
+    if (_isLoading || !_hasMore || _cloudflareRecoveryCancelled) return;
     final generation = _requestGeneration;
     final filters = Map<String, String>.from(_selectedFilters);
     final sfwEnabled = _sfwEnabled;
@@ -180,51 +189,32 @@ class BrowseImageGridController extends ChangeNotifier {
       _notifyChanged();
 
       if (remainingCloudflareRecoveries <= 0) {
+        _cloudflareRecoveryCancelled = true;
+        _hasMore = false;
+        _isError = true;
+        _errorMessage = 'Fur Affinity access could not be verified. Pull to retry.';
         _pendingNextPageFetch = false;
         _isNextPageFetchQueued = false;
         _nextPageTriggerOffset = scrollController.hasClients
             ? scrollController.position.pixels + 1
             : double.infinity;
+        _notifyChanged();
         return;
       }
 
       final result = await _showCloudflareDialog(initialUrl: e.initialUrl);
       if (stale()) return;
       if (result?.passed != true) {
+        _cloudflareRecoveryCancelled = true;
+        _hasMore = false;
+        _isError = true;
+        _errorMessage = 'Verification was closed. Pull to retry.';
         _pendingNextPageFetch = false;
         _isNextPageFetchQueued = false;
         _nextPageTriggerOffset = scrollController.hasClients
             ? scrollController.position.pixels + 1
             : double.infinity;
-        return;
-      }
-
-      final recoveredHtml = result?.pageHtml;
-      if (recoveredHtml != null && recoveredHtml.isNotEmpty) {
-        final recoveredPage = await _repository.parseRecoveredHtml(
-          recoveredHtml,
-          documentUri: Uri.parse(result?.finalUrl ?? e.initialUrl ??
-              'https://www.furaffinity.net/browse/$pageNumber'),
-          effectiveSfwEnabled: ContentRatingFilters.effectiveSfwCookieValue(
-                globalSfwEnabled: sfwEnabled,
-                filters: filters,
-              ) == '1',
-        );
-        if (stale()) return;
-        if (!recoveredPage.modeMatchesRequest) {
-          await _fetchImages(
-            pageNumber,
-            isRefresh: isRefresh,
-            remainingCloudflareRecoveries: remainingCloudflareRecoveries - 1,
-          );
-          return;
-        }
-        await _appendImages(
-          recoveredPage,
-          pageNumber: pageNumber,
-          generation: generation,
-          previousMaxScrollExtent: previousMaxScrollExtent,
-        );
+        _notifyChanged();
         return;
       }
 

@@ -8,6 +8,8 @@ import 'package:fanotifier/features/profile/data/user_description_webview_html_b
 import 'package:fanotifier/features/profile/domain/user_description_webview_content.dart';
 import 'package:fanotifier/features/profile/domain/user_description_repository.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/fa/fa_media_auth.dart';
+import 'package:fanotifier/core/fa/fa_webview_cookie_service.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
 import 'package:fanotifier/shared/fa/fa_theme_css_loader.dart';
 import 'package:fanotifier/shared/utils/fa_icon_image_inliner.dart';
@@ -26,6 +28,9 @@ class UserDescriptionService implements UserDescriptionRepository {
   final FlutterSecureStorage _secureStorage;
 
   @override
+  Stream<int> get mediaSessionChanges => FaMediaAuth.sessionChanges;
+
+  @override
   Future<String> extractInitialHtml(String html) {
     return compute(extractUserDescriptionHtmlWithBodyFallback, html);
   }
@@ -39,9 +44,14 @@ class UserDescriptionService implements UserDescriptionRepository {
   Future<UserDescriptionWebViewContent> buildWebViewContent(
     String html,
   ) async {
+    await FAWebViewCookieService(secureStorage: _secureStorage).setCookies(
+      applySfwPreference: false,
+      preserveExistingSession: true,
+    );
     return UserDescriptionWebViewContent(
       html: html,
       faThemeCss: await loadFaThemeCss(),
+      userAgent: FAHttp.userAgent,
     );
   }
 

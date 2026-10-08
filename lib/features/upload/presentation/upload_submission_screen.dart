@@ -1,3 +1,5 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
+import 'package:fanotifier/shared/fa/domain/fa_session_access.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
@@ -526,6 +528,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
 
   Widget _buildWebView() {
     final settings = InAppWebViewSettings(
+      userAgent: context.read<FaSessionAccess>().userAgent,
       javaScriptEnabled: true,
       useShouldOverrideUrlLoading: true,
       supportMultipleWindows: true,
@@ -539,7 +542,7 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
 
     return InAppWebView(
       key: webViewKey,
-      initialUrlRequest: URLRequest(url: WebUri(initialUrl)),
+      initialUrlRequest: URLRequest(url: WebUri('about:blank')),
       initialSettings: settings,
       initialUserScripts: _adController.initialUserScripts,
       contextMenu: _buildContextMenu(),
@@ -559,6 +562,10 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
             }
             await _selectAndInjectFile(inputName);
           },
+        );
+        if (!mounted) return;
+        await controller.loadUrl(
+          urlRequest: URLRequest(url: WebUri(initialUrl)),
         );
       },
 
@@ -740,6 +747,15 @@ class _UploadSubmissionScreenState extends State<UploadSubmissionScreen> with Ti
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      needsRecovery: () => true,
+      isBusy: () => false,
+      onRecover: context.read<FaSessionAccess>().synchronizeWebViewSession,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final menuVisible = _isFinalizeReady && (_toolsMenuOpen || _toolsMenuController.value > 0);
     return SafeArea(
       top: false,

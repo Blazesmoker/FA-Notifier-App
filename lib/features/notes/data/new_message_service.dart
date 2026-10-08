@@ -1,6 +1,6 @@
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:fanotifier/core/network/fa_session_cookie_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:fanotifier/features/notes/data/note_form_parser.dart';
@@ -138,7 +138,7 @@ class NewMessageService implements NewMessageRepository {
   }
 
   Future<void> _initialize() async {
-    _dio.interceptors.add(CookieManager(_cookieJar));
+    _dio.interceptors.add(FaSessionCookieManager(_cookieJar));
     _dio.options.headers['User-Agent'] = FAHttp.userAgent;
     _dio.options.headers['Accept'] =
         'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8';

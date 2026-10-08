@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
@@ -256,19 +257,24 @@ class BrowseImageGridState extends State<BrowseImageGrid>
     String? initialUrl,
   }) async {
     if (!mounted) return null;
-    return showDialog<CloudflareCheckResult>(
-      context: context,
-      barrierDismissible: false,
-      useSafeArea: false,
-      builder: (_) => CloudflareCheckScreen(
-        initialUrl: initialUrl ?? 'https://www.furaffinity.net/',
-        returnPageHtml: true,
-      ),
+    return CloudflareCheckScreen.show(
+      context,
+      initialUrl: initialUrl ?? 'https://www.furaffinity.net/',
+      asDialog: true,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      needsRecovery: () => _controller.isError,
+      isBusy: () => _controller.isLoading || _controller.isHandlingChallenge,
+      onRecover: _controller.recoverVerifiedSession,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     FaAdsLog.event(FaAdsLogCategory.perf, 'browse_grid_build',
         counts: {'artworkRows': imageRows.length, 'sections': _controller.sections.length});
     final screenHeight = MediaQuery.of(context).size.height;

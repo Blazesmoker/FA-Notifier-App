@@ -1,6 +1,6 @@
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:fanotifier/core/network/fa_session_cookie_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:fanotifier/features/profile/data/shout_form_parser.dart';
@@ -45,7 +45,7 @@ class ShoutService implements ProfileShoutRepository {
   }
 
   Future<void> _initialize() async {
-    _dio.interceptors.add(CookieManager(_cookieJar));
+    _dio.interceptors.add(FaSessionCookieManager(_cookieJar));
     _dio.options.headers['User-Agent'] = FAHttp.userAgent;
     _dio.options.followRedirects = false;
     _dio.options.validateStatus = (status) {

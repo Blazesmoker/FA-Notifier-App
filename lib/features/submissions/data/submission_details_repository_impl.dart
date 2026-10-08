@@ -1,4 +1,6 @@
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
+import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:fanotifier/shared/fa/domain/submission_comment_repository.dart';
 import 'package:fanotifier/features/submissions/data/submission_action_service.dart';
 import 'package:fanotifier/features/submissions/data/submission_cookie_service.dart';
@@ -73,6 +75,13 @@ class SubmissionDetailsRepositoryImpl implements SubmissionDetailsRepository {
       skipSfw: skipSfw,
     );
 
+    if (FaCookieHelper.isCloudflareChallengePage(
+      body: response.body,
+      statusCode: response.statusCode,
+      headers: response.headers,
+    )) {
+      throw const CloudflareChallengeException();
+    }
     final contentType =
         (response.headers['content-type'] ?? '').toLowerCase();
     final isHtml = response.statusCode == 200 &&

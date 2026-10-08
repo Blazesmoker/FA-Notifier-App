@@ -1,4 +1,5 @@
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/fa/fa_webview_cookie_service.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
 import 'package:fanotifier/features/auth/domain/startup_cloudflare_checker.dart';
 import 'package:flutter/foundation.dart';
@@ -28,6 +29,13 @@ class StartupCloudflareCheckService implements StartupCloudflareChecker {
   Future<StartupCloudflareCheckResult> checkHome({
     String url = 'https://www.furaffinity.net/',
   }) async {
+    try {
+      await FAWebViewCookieService(secureStorage: _secureStorage).captureCookies(
+        url: url,
+      );
+    } catch (_) {
+      if (kDebugMode) debugPrint('[Cloudflare] Browser session read unavailable.');
+    }
     final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     final rawCookieHeader =
@@ -57,13 +65,20 @@ class StartupCloudflareCheckService implements StartupCloudflareChecker {
       final needsChallenge = FaCookieHelper.isCloudflareChallengePage(
         body: response.body,
         statusCode: response.statusCode,
+        headers: response.headers,
+      );
+      final accessGranted = FaCookieHelper.isFaDocument(
+        body: response.body,
+        statusCode: response.statusCode,
+        headers: response.headers,
       );
       return StartupCloudflareCheckResult(
         needsChallenge: needsChallenge,
-        homeHtml: needsChallenge ? null : response.body,
+        accessGranted: accessGranted,
+        homeHtml: accessGranted ? response.body : null,
       );
-    } catch (e) {
-      debugPrint('[Cloudflare] Startup check request failed: $e');
+    } catch (_) {
+      if (kDebugMode) debugPrint('[Cloudflare] Startup check unavailable.');
       return const StartupCloudflareCheckResult(needsChallenge: false);
     }
   }

@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'package:material_ui/material_ui.dart';
 import 'dart:async';
 import 'package:flutter_html/flutter_html.dart';
@@ -25,6 +26,7 @@ class ProfileJournals extends StatefulWidget {
 class ProfileJournalsState extends State<ProfileJournals> {
   int currentPage = 1;
   bool isLoading = false;
+  bool _hasLoadError = false;
   List<Map<String, dynamic>> journals = [];
   bool hasMore = true;
   int _fetchGeneration = 0;
@@ -118,6 +120,7 @@ class ProfileJournalsState extends State<ProfileJournals> {
   }
 
   Future<void> _loadPage(int pageNumber) async {
+    _hasLoadError = false;
     if (!mounted) {
       return;
     }
@@ -152,7 +155,10 @@ class ProfileJournalsState extends State<ProfileJournals> {
       if (!mounted || fetchGeneration != _fetchGeneration) {
         return;
       }
-      isLoading = false;
+      setState(() {
+        _hasLoadError = true;
+        isLoading = false;
+      });
       if (loadingMore) {
         _isLoadingMore.value = false;
       } else {
@@ -166,6 +172,16 @@ class ProfileJournalsState extends State<ProfileJournals> {
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      isSliver: true,
+      needsRecovery: () => _hasLoadError,
+      isBusy: () => isLoading,
+      onRecover: () => _fetchJournals(currentPage),
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final timeFormat =
         context.select<TimeDisplaySettingsProvider, TimeDisplayFormat>(
       (settings) => settings.formatFor(TimeDisplayOccasion.profileJournal),

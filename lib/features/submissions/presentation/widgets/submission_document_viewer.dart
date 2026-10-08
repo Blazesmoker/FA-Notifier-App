@@ -1,3 +1,5 @@
+import 'package:fanotifier/shared/fa/domain/fa_session_access.dart';
+import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -254,6 +256,11 @@ class _SubmissionDocumentViewerState extends State<SubmissionDocumentViewer> {
     };
   }
 
+  bool get _usesFaSession {
+    final host = Uri.tryParse(widget.attachment.viewerUrl ?? '')?.host ?? '';
+    return _isOdt || host == 'furaffinity.net' || host.endsWith('.furaffinity.net');
+  }
+
   @override
   Widget build(BuildContext context) {
     final fullReaderText = _fullReaderText;
@@ -350,6 +357,9 @@ class _SubmissionDocumentViewerState extends State<SubmissionDocumentViewer> {
                         url: WebUri(widget.attachment.viewerUrl!),
                       ),
                 initialSettings: InAppWebViewSettings(
+                  userAgent: _usesFaSession
+                      ? context.read<FaSessionAccess>().userAgent
+                      : null,
                   javaScriptEnabled: true,
                   useShouldOverrideUrlLoading: true,
                   disableVerticalScroll:

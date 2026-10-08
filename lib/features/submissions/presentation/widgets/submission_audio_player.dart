@@ -1,3 +1,5 @@
+import 'package:fanotifier/shared/fa/domain/fa_session_access.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -50,6 +52,7 @@ class SubmissionAudioPlayer extends StatelessWidget {
               mimeType: 'text/html',
             ),
             initialSettings: InAppWebViewSettings(
+              userAgent: context.read<FaSessionAccess>().userAgent,
               javaScriptEnabled: true,
               mediaPlaybackRequiresUserGesture: true,
               allowsInlineMediaPlayback: true,

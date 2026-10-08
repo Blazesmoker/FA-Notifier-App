@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'package:fanotifier/shared/navigation/edge_back_swipe_controller.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'user_profile_shouts_controller.dart';
@@ -1313,6 +1314,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
   /// Builds the main UI of the screen with unified scrolling.
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      needsRecovery: () => _profileController.errorMessage.isNotEmpty,
+      isBusy: () => _profileController.isLoading,
+      onRecover: _fetchUserProfile,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     const double avatarLeft = 16.0;
     const double avatarWidth = 90.0;
     const double marginBetweenAvatarAndText = 0.0;
@@ -1834,6 +1844,15 @@ class UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Widget _buildHomeSection() {
+    return FaSessionRecoveryScope(
+      needsRecovery: () => _shoutsController.hasLoadError,
+      isBusy: () => _shoutsController.isLoadingMore.value || _shoutsController.isDeleting.value,
+      onRecover: _shoutsController.loadMoreShouts,
+      child: _buildHomeSectionContent(),
+    );
+  }
+
+  Widget _buildHomeSectionContent() {
     final webViewKey = _webViewKey;
     return UserProfileHomeSection(
       hasRealUserProfile: _profileController.hasRealUserProfile,

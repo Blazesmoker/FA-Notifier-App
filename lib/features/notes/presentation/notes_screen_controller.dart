@@ -31,6 +31,9 @@ class NotesScreenController {
   int _currentSentPage = 1;
   bool _hasLoadedSent = false;
   bool _sentNeedsRefresh = true;
+  int? _failedInboxPage;
+  int? _failedSentPage;
+  bool _sentSessionRecoveryPending = false;
   bool _didFirstRunSkip = false;
   NotesPageResult? _pendingFirstRunPage1;
   Future<void>? _inFlightInboxPageOne;
@@ -105,6 +108,11 @@ class NotesScreenController {
 
   Future<void> ensureSentLoaded({bool force = false}) async {
     if (_state.isLoadingSent) return;
+    if (_sentSessionRecoveryPending && _failedSentPage != null) {
+      _sentSessionRecoveryPending = false;
+      await _recoverSentPage();
+      return;
+    }
     if (!force && _hasLoadedSent && !_sentNeedsRefresh) return;
 
     resetSentPagination();
@@ -115,6 +123,35 @@ class NotesScreenController {
       _sentNeedsRefresh = false;
     } else {
       _sentNeedsRefresh = true;
+    }
+  }
+
+  Future<void> recoverVerifiedSession({required bool sentVisible}) async {
+    final inboxPage = _failedInboxPage;
+    if (inboxPage != null && _state.errorInbox.isNotEmpty) {
+      _setState(() {
+        _state = _state.copyWith(errorInbox: '', hasMoreInbox: true);
+      });
+      await fetchInbox(page: inboxPage, clearOld: false);
+    }
+    if (_failedSentPage == null || _state.errorSent.isEmpty) return;
+    if (sentVisible) {
+      await _recoverSentPage();
+    } else {
+      _sentSessionRecoveryPending = true;
+    }
+  }
+
+  Future<void> _recoverSentPage() async {
+    final page = _failedSentPage;
+    if (page == null) return;
+    _setState(() {
+      _state = _state.copyWith(errorSent: '', hasMoreSent: true);
+    });
+    await fetchSent(page: page, clearOld: false);
+    if (_state.errorSent.isEmpty) {
+      _hasLoadedSent = true;
+      _sentNeedsRefresh = false;
     }
   }
 
@@ -272,6 +309,7 @@ class NotesScreenController {
     required bool suppressNewUnreadNotifications,
     required Set<String> manuallyMarkedUnreadIds,
   }) async {
+    var pageApplied = false;
     if (page == 1) {
       _setState(() {
         _state = _state.copyWith(
@@ -327,6 +365,8 @@ class NotesScreenController {
         });
       }
 
+      pageApplied = true;
+      _failedInboxPage = null;
       _setState(() {
         _state = _state.copyWith(isLoadingInbox: false);
       });
@@ -351,6 +391,7 @@ class NotesScreenController {
       }
       await _repository.markMessagesAsSeen(newMessages);
     } catch (e) {
+      if (!pageApplied) _failedInboxPage = page;
       _setState(() {
         _state = _state.copyWith(
           errorInbox: '$e',
@@ -375,6 +416,7 @@ class NotesScreenController {
   }
 
   Future<void> fetchSent({int page = 1, bool clearOld = false}) async {
+    var pageApplied = false;
     if (page == 1) {
       _setState(() {
         _state = _state.copyWith(
@@ -405,6 +447,8 @@ class NotesScreenController {
         });
       }
 
+      pageApplied = true;
+      _failedSentPage = null;
       _setState(() {
         _state = _state.copyWith(isLoadingSent: false);
       });
@@ -419,6 +463,7 @@ class NotesScreenController {
         });
       }
     } catch (e) {
+      if (!pageApplied) _failedSentPage = page;
       _setState(() {
         _state = _state.copyWith(
           errorSent: '$e',

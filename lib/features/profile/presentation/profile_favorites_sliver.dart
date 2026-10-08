@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
@@ -36,6 +37,7 @@ class ProfileFavoritesSliver extends StatefulWidget {
 class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
   String? _nextPageUrl;
   bool _isLoading = false;
+  bool _hasLoadError = false;
   bool _hasMore = true;
   int _fetchGeneration = 0;
   int _refreshGeneration = 0;
@@ -256,6 +258,7 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
   }
 
   Future<void> _loadPage() async {
+    _hasLoadError = false;
     final fetchGeneration = _fetchGeneration;
     setState(() => _isLoading = true);
 
@@ -279,7 +282,10 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
       });
     } catch (e) {
       if (!mounted || fetchGeneration != _fetchGeneration) return;
-      setState(() => _isLoading = false);
+      setState(() {
+        _hasLoadError = true;
+        _isLoading = false;
+      });
       debugPrint("Error fetching favorites: $e");
     }
   }
@@ -402,6 +408,16 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      isSliver: true,
+      needsRecovery: () => _hasLoadError,
+      isBusy: () => _isLoading,
+      onRecover: _fetchImages,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     if (_images.isEmpty && _isLoading) {
       return SliverToBoxAdapter(
         child: SizedBox(

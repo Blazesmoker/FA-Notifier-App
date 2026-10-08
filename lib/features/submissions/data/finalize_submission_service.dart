@@ -10,7 +10,7 @@ import 'package:fanotifier/core/network/fa_http.dart';
 import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:fanotifier/core/network/fa_session_cookie_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -45,7 +45,7 @@ class FinalizeSubmissionService implements FinalizeSubmissionRepository {
       return status != null && status >= 200 && status < 600;
     };
 
-    _dio.interceptors.add(CookieManager(_cookieJar));
+    _dio.interceptors.add(FaSessionCookieManager(_cookieJar));
   }
 
   @override

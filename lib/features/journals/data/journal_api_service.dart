@@ -12,6 +12,7 @@ import 'package:fanotifier/features/journals/data/journal_delete_link_parser.dar
 import 'package:fanotifier/features/journals/data/journal_url_builder.dart';
 import 'package:fanotifier/features/journals/domain/journal_fetch_result.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
 import 'package:fanotifier/shared/fa/user_submitted_html_linkifier.dart';
 
@@ -51,6 +52,13 @@ class JournalApiService {
       },
     );
 
+    if (FaCookieHelper.isCloudflareChallengePage(
+      body: response.body,
+      statusCode: response.statusCode,
+      headers: response.headers,
+    )) {
+      throw const CloudflareChallengeException();
+    }
     if (response.statusCode != 200) {
       throw Exception(
           'Failed to fetch journal ($journalId): ${response.statusCode}');

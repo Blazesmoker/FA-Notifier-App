@@ -89,6 +89,10 @@ class JournalDetailsController extends ChangeNotifier {
   List<String> get keywords => _keywords;
 
   Future<JournalLoadResult> load() async {
+    if (_submissionTitle == null && !_disposed) {
+      _isLoading = true;
+      _notifyChanged();
+    }
     try {
       final loadResult = await _repository.loadJournal(journalId);
       if (_disposed) {

@@ -1,3 +1,4 @@
+import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -132,6 +133,12 @@ class NotesScreenState extends State<NotesScreen>
       await _initInboxAndSent();
       _initialInboxLoadCompleted = true;
     });
+  }
+
+  Future<void> _recoverSession() async {
+    await _notesController.recoverVerifiedSession(
+      sentVisible: _tabController.index == 1,
+    );
   }
 
   void _refreshFromSignal() {
@@ -694,6 +701,15 @@ class NotesScreenState extends State<NotesScreen>
 
   @override
   Widget build(BuildContext context) {
+    return FaSessionRecoveryScope(
+      needsRecovery: () => errorInbox.isNotEmpty || errorSent.isNotEmpty,
+      isBusy: () => isLoadingInbox || isLoadingSent || isLoadingMoreInbox || isLoadingMoreSent || _isMutating,
+      onRecover: _recoverSession,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     return VisibilityDetector(
       key: const Key('notes_screen_visibility'),
       onVisibilityChanged: (info) {
