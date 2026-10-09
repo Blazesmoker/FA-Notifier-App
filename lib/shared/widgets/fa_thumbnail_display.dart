@@ -4,6 +4,8 @@ import 'package:fanotifier/shared/theme/app_theme.dart';
 import 'package:fanotifier/core/preferences/thumbnail_display_settings_provider.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
+import 'package:fanotifier/shared/widgets/fa_content_blur.dart';
 
 /// Applies an optional rating outline around the thumbnail.
 ///
@@ -13,6 +15,9 @@ class FaThumbnailOutline extends StatelessWidget {
   final String? rating; // "general" | "mature" | "adult" | null
   final double borderRadius;
   final BorderRadius? outlineBorderRadius;
+  final String? submissionId;
+  final FaContentBlockData contentBlock;
+  final bool lookupMissingTags;
 
   const FaThumbnailOutline({
     super.key,
@@ -20,6 +25,9 @@ class FaThumbnailOutline extends StatelessWidget {
     required this.rating,
     this.borderRadius = 8.0,
     this.outlineBorderRadius,
+    this.submissionId,
+    this.contentBlock = const FaContentBlockData(),
+    this.lookupMissingTags = true,
   });
 
   @override
@@ -32,7 +40,19 @@ class FaThumbnailOutline extends StatelessWidget {
 
     return Stack(
       children: [
-        child,
+        if (submissionId == null)
+          child
+        else
+          ClipRRect(
+            borderRadius:
+                outlineBorderRadius ?? BorderRadius.circular(borderRadius),
+            child: FaContentBlur(
+              submissionId: submissionId!,
+              data: contentBlock,
+              lookupMissingTags: lookupMissingTags,
+              child: child,
+            ),
+          ),
         if (showOutline && outlineColor != null)
           Positioned.fill(
             child: IgnorePointer(

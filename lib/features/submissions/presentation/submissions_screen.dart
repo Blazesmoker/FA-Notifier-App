@@ -1,6 +1,7 @@
 import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
@@ -72,6 +73,7 @@ class SubmissionsScreenState extends State<SubmissionsScreen>
     _activitiesPollingPort = context.read<FaActivitiesPollingPort>();
     _controller = SubmissionsController(
       repository: context.read<SubmissionsRepository>(),
+      contentBlockController: context.read<FaContentBlockController>(),
     );
     _controller.addListener(_handleControllerChanged);
     _scrollController.addListener(_scrollListenerForPagination);

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 
 import 'package:fanotifier/core/fa/fa_media_auth.dart';
@@ -260,6 +261,7 @@ class FaCookieHelper {
     required String body,
     int? statusCode,
     Map<String, dynamic>? headers,
+    html_dom.Document? parsedDocument,
   }) {
     if (body.trim().isEmpty ||
         (statusCode != null &&
@@ -272,7 +274,7 @@ class FaCookieHelper {
         )) {
       return false;
     }
-    final document = html_parser.parse(body);
+    final document = parsedDocument ?? html_parser.parse(body);
     final title = document.querySelector('title')?.text.toLowerCase() ?? '';
     return title.contains('fur affinity') &&
         document.querySelector(

@@ -24,12 +24,32 @@ class FaMaintenanceUnavailableException implements Exception {
   String toString() => message;
 }
 
-FaSystemMessage? parseFaSystemMessage(Object? html, {Document? parsedDocument}) {
+FaSystemMessage? parseFaSystemMessage(
+  Object? html, {
+  Document? parsedDocument,
+  bool allowBodyFallback = true,
+}) {
   if (html == null) return null;
   final raw = html.toString();
   if (raw.trim().isEmpty) return null;
 
   final document = parsedDocument ?? html_parser.parse(raw);
+  final title = document.querySelector('title')?.text.trim().toLowerCase();
+  final offlineHeading = document
+      .querySelector('h1#content-title')
+      ?.text
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim()
+      .toLowerCase();
+  if (title == 'fa is temporarily offline!' &&
+      offlineHeading == 'fur affinity will return shortly' &&
+      !_hasNormalFaContent(raw)) {
+    return const FaSystemMessage(
+      message: 'Fur Affinity is temporarily unavailable and will return shortly. '
+          'Please try again later.',
+      isMaintenanceOrUnavailable: true,
+    );
+  }
   final redirectMessage = document.querySelector('.redirect-message');
   final noticeSection = document.querySelector('section.notice-message') ??
       document.querySelector('.notice-message');
@@ -46,7 +66,7 @@ FaSystemMessage? parseFaSystemMessage(Object? html, {Document? parsedDocument}) 
         standardPage != null &&
         h2.text.toLowerCase().contains('system message')) {
       text = standardPage.text;
-    } else {
+    } else if (allowBodyFallback) {
       final bodyText = document.body?.text;
       if (bodyText != null &&
           !_hasNormalFaContent(raw) &&
@@ -136,10 +156,13 @@ Duration? parseFaRetryAfter(String text) {
   return null;
 }
 
-bool isFaMaintenanceOrUnavailableText(String text) {
+bool isFaMaintenanceOrUnavailableText(
+  String text, {
+  bool includeHttp403 = true,
+}) {
   final lower = text.toLowerCase();
   if (parseFaRetryAfter(text) != null) return false;
-  if (RegExp(r'\b403\b').hasMatch(lower)) return true;
+  if (includeHttp403 && RegExp(r'\b403\b').hasMatch(lower)) return true;
   if (lower.contains('under maintenance')) return true;
   if (lower.contains('maintenance') &&
       (lower.contains('furaffinity') ||

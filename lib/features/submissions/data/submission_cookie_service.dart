@@ -50,6 +50,7 @@ class SubmissionCookieService {
     Map<String, String>? additionalHeaders,
     bool skipSfw = false,
     Duration? timeout,
+    bool Function()? isCancelled,
   }) async {
     final headers = await _buildHeaders(
       sfwEnabled: sfwEnabled,
@@ -61,6 +62,7 @@ class SubmissionCookieService {
       Uri.parse(url),
       headers: headers,
       timeout: timeout,
+      isCancelled: isCancelled,
     );
   }
 
@@ -82,6 +84,7 @@ class SubmissionCookieService {
       Uri.parse(url),
       headers: headers,
       timeout: timeout,
+      queueFaRequest: true,
     );
   }
 

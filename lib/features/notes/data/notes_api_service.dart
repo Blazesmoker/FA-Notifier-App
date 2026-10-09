@@ -22,16 +22,28 @@ import 'package:fanotifier/shared/utils/notes_notifications_text_edit.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
 import 'package:fanotifier/core/network/fa_request_coordinator.dart';
+import 'package:fanotifier/core/network/fa_page_counter_observer.dart';
 import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
 
 class NotesPageSnapshot {
   const NotesPageSnapshot({
     required this.messages,
     required this.topbarCounts,
+    required this.startedAtMilliseconds,
+    required this.completedAtMilliseconds,
   });
 
   final List<Message> messages;
   final NotificationCounts? topbarCounts;
+  final int startedAtMilliseconds;
+  final int completedAtMilliseconds;
+}
+
+class _NotesPageResponse {
+  const _NotesPageResponse(this.response, this.startedAtMilliseconds);
+
+  final http.Response response;
+  final int startedAtMilliseconds;
 }
 
 class NotesApiService implements ManagedNotesRepository {
@@ -47,7 +59,7 @@ class NotesApiService implements ManagedNotesRepository {
 
   final FlutterSecureStorage _secureStorage;
 
-  Future<http.Response> _faGet({
+  Future<_NotesPageResponse> _faGet({
     required String url,
     required String cookieA,
     required String cookieB,
@@ -61,12 +73,17 @@ class NotesApiService implements ManagedNotesRepository {
       await FaRequestCoordinator.instance.waitForTurn(
         label: 'GET $url',
       );
+      final cookieHeader = await FaCookieHelper.appendCfClearanceToCookieHeader(
+        'a=$cookieA; b=$cookieB; folder=$folder',
+      );
+      final startedAt = DateTime.now().millisecondsSinceEpoch;
+      final counterRequest = folder == 'inbox'
+          ? null
+          : FaPageCounterObserver.instance.capture(Uri.parse(url), allowNotesList: true);
       final response = await client.get(
         Uri.parse(url),
         headers: {
-          'Cookie': await FaCookieHelper.appendCfClearanceToCookieHeader(
-            'a=$cookieA; b=$cookieB; folder=$folder',
-          ),
+          'Cookie': cookieHeader,
           'User-Agent': FAHttp.userAgent,
           HttpHeaders.connectionHeader: 'close',
           'Accept':
@@ -78,7 +95,13 @@ class NotesApiService implements ManagedNotesRepository {
         headers: response.headers,
         responseBody: response.statusCode == 403 ? response.body : null,
       );
-      return response;
+      FaPageCounterObserver.instance.acceptBytes(
+        request: counterRequest,
+        uri: Uri.parse(url),
+        statusCode: response.statusCode,
+        bytes: response.bodyBytes,
+      );
+      return _NotesPageResponse(response, startedAt);
     } finally {
       client.close();
       ioHttp.close(force: true);
@@ -109,12 +132,13 @@ class NotesApiService implements ManagedNotesRepository {
     debugPrint("Fetching page $page in notes screen");
     while (true) {
       try {
-        final response = await _faGet(
+        final pageResponse = await _faGet(
           url: 'https://www.furaffinity.net/msg/pms/$page/',
           cookieA: cookieA,
           cookieB: cookieB,
           folder: folder,
         );
+        final response = pageResponse.response;
 
         if (response.statusCode == 200) {
           final decoded = utf8.decode(response.bodyBytes, allowMalformed: true);
@@ -133,6 +157,8 @@ class NotesApiService implements ManagedNotesRepository {
           return NotesPageSnapshot(
             messages: _parseMessages(doc),
             topbarCounts: _parseTopbarCounts(doc),
+            startedAtMilliseconds: pageResponse.startedAtMilliseconds,
+            completedAtMilliseconds: DateTime.now().millisecondsSinceEpoch,
           );
         } else if (response.statusCode == 503) {
           retry++;
@@ -298,12 +324,15 @@ class NotesApiService implements ManagedNotesRepository {
   }
 
   int _extractTopbarCount(String text) {
-    final match = RegExp(r'\d{1,3}(?:[,.]\d{3})*|\d+').firstMatch(text);
+    final match = RegExp(r'\d+(?:[,.]\d{3})*').firstMatch(text);
     if (match == null) return 0;
     return int.tryParse(match.group(0)!.replaceAll(RegExp(r'[,.]'), '')) ?? 0;
   }
 
-  Future<String> fetchMessageContent(String link) async {
+  Future<String> fetchMessageContent(String link, {CancelToken? cancelToken}) async {
+    if (cancelToken?.isCancelled ?? false) {
+      throw StateError('Note fetch cancelled');
+    }
     final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
     final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
     if (cookieA == null || cookieB == null) {
@@ -319,11 +348,15 @@ class NotesApiService implements ManagedNotesRepository {
       ),
     );
     final url = 'https://www.furaffinity.net$link';
-    await FaRequestCoordinator.instance.waitForTurn(label: 'GET $url');
+    await FaRequestCoordinator.instance.waitForTurn(
+      label: 'GET $url', isCancelled: () => cancelToken?.isCancelled ?? false,
+    );
     final response = await dio.get(
       url,
+      cancelToken: cancelToken,
       options: Options(
         responseType: ResponseType.plain,
+        extra: const {'observeFaCounters': false},
         headers: {
           'User-Agent': FAHttp.userAgent,
           'Accept':

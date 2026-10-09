@@ -7,6 +7,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:fanotifier/features/profile/domain/profile_posts_parse_result.dart';
 import 'package:fanotifier/features/profile/domain/fa_folder.dart';
 import 'package:fanotifier/shared/fa/fa_thumbnail_parser.dart';
+import 'package:fanotifier/shared/fa/data/fa_content_block_parser.dart';
 
 class ProfileGalleryHtmlParseResult {
   final List<Map<String, dynamic>> posts;
@@ -89,10 +90,14 @@ ProfileGalleryHtmlParseResult parseProfileGalleryHtml(
 }) {
   final document = html_parser.parse(html);
   final figures = FaThumbnailParser.selectThumbnailFigures(document);
+  final contentBlockSnapshot = parseFaContentBlockSnapshot(document);
   final posts = <Map<String, dynamic>>[];
 
   for (final fig in figures) {
-    final data = FaThumbnailParser.extract(fig);
+    final data = FaThumbnailParser.extract(
+      fig,
+      contentBlockSnapshot: contentBlockSnapshot,
+    );
     if (data == null) continue;
     posts.add({
       'postUrl': data['postUrl'],
@@ -105,6 +110,7 @@ ProfileGalleryHtmlParseResult parseProfileGalleryHtml(
       'author': data['author'],
       'authorProfileUrl': data['authorProfileUrl'],
       'initialIsFav': null,
+      'contentBlock': data['contentBlock'],
     });
   }
 
@@ -140,10 +146,14 @@ ProfilePostsParseResult _parseProfileGridPostsHtml(
 }) {
   final document = html_parser.parse(html);
   final figures = FaThumbnailParser.selectThumbnailFigures(document);
+  final contentBlockSnapshot = parseFaContentBlockSnapshot(document);
   final posts = <Map<String, dynamic>>[];
 
   for (final fig in figures) {
-    final data = FaThumbnailParser.extract(fig);
+    final data = FaThumbnailParser.extract(
+      fig,
+      contentBlockSnapshot: contentBlockSnapshot,
+    );
     if (data == null) continue;
     final favoriteId = fig.attributes['data-fav-id']?.trim();
     posts.add({
@@ -156,6 +166,7 @@ ProfilePostsParseResult _parseProfileGridPostsHtml(
       'title': data['title'],
       'author': data['author'],
       'authorProfileUrl': data['authorProfileUrl'],
+      'contentBlock': data['contentBlock'],
       if (includeFavoriteId &&
           favoriteId != null &&
           RegExp(r'^\d+$').hasMatch(favoriteId))

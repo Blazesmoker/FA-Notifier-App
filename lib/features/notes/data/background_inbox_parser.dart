@@ -146,7 +146,7 @@ String? _backgroundTopbarTypeKey({
 }
 
 int _extractBackgroundTopbarCount(String text) {
-  final match = RegExp(r'\d{1,3}(?:[,.]\d{3})*|\d+').firstMatch(text);
+  final match = RegExp(r'\d+(?:[,.]\d{3})*').firstMatch(text);
   if (match == null) return 0;
   return int.tryParse(match.group(0)!.replaceAll(RegExp(r'[,.]'), '')) ?? 0;
 }

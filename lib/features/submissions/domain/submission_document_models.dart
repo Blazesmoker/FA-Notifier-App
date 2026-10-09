@@ -1,4 +1,5 @@
 import 'package:fanotifier/features/submissions/domain/submission_attachment.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
 
 class SubmissionParseResult {
   SubmissionParseResult({
@@ -31,6 +32,7 @@ class SubmissionParseResult {
     required this.imageWidth,
     required this.imageHeight,
     required this.submissionAttachment,
+    this.contentBlock = const FaContentBlockData(),
   });
 
   final String? currentUsername;
@@ -62,6 +64,7 @@ class SubmissionParseResult {
   final double? imageWidth;
   final double? imageHeight;
   final SubmissionAttachment? submissionAttachment;
+  final FaContentBlockData contentBlock;
 }
 
 class SubmissionFolderLink {

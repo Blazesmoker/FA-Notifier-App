@@ -8,6 +8,7 @@ import 'package:http_parser/http_parser.dart';
 
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/network/fa_page_counter_observer.dart';
 import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/features/settings/domain/fur_affinity_settings_models.dart';
@@ -119,6 +120,7 @@ class FurAffinitySettingsRemoteDataSource {
           requireAuthentication: true,
         ))
         ..headers['User-Agent'] = FAHttp.userAgent;
+      final counterRequest = FaPageCounterObserver.instance.capture(uri);
       final response = await http.Response.fromStream(
         await client.send(request).timeout(FAHttp.defaultTimeout),
       );
@@ -126,6 +128,12 @@ class FurAffinitySettingsRemoteDataSource {
         statusCode: response.statusCode,
         headers: response.headers,
         responseBody: response.statusCode == 403 ? response.body : null,
+      );
+      FaPageCounterObserver.instance.acceptBytes(
+        request: counterRequest,
+        uri: uri,
+        statusCode: response.statusCode,
+        bytes: response.bodyBytes,
       );
       return _toResponse(response);
     } catch (error) {

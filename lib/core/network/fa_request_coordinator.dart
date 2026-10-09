@@ -280,7 +280,31 @@ class FaRequestCoordinator {
   void recordMaintenanceOrUnavailable({
     required String message,
     Duration? retryAfter,
+    bool preserveExistingBackoff = false,
   }) {
+    final now = DateTime.now();
+    final blockedUntil = _blockedUntil;
+    if (preserveExistingBackoff &&
+        blockedUntil != null &&
+        blockedUntil.isAfter(now)) {
+      var allowedAt = blockedUntil;
+      if (retryAfter != null) {
+        final requestedRetryAt = now.add(retryAfter);
+        if (requestedRetryAt.isAfter(allowedAt)) {
+          allowedAt = requestedRetryAt;
+        }
+      }
+      _blockedUntil = allowedAt;
+      _blockedMessage = message;
+      _setStatus(
+        FaRequestSnapshot(
+          state: FaRequestCoordinatorState.maintenanceOrUnavailable,
+          allowedAt: allowedAt,
+          message: message,
+        ),
+      );
+      return;
+    }
     _unavailableFailureCount++;
     final delay = retryAfter ??
         Duration(
@@ -289,7 +313,7 @@ class FaRequestCoordinator {
             30 * math.pow(2, _unavailableFailureCount - 1).toInt(),
           ),
         );
-    final allowedAt = DateTime.now().add(delay);
+    final allowedAt = now.add(delay);
     _blockedUntil = allowedAt;
     _blockedMessage = message;
     _setStatus(

@@ -336,6 +336,7 @@ class FaAdSectionController {
           'availableWidth': availableWidth,
           'scalePermille': (width / slot.effectiveSize.width * 1000).round()},
         checks: {'scaledDown': width < slot.effectiveSize.width,
+          'scaledUp': width > slot.effectiveSize.width,
           'hasKnownCreativeSize': slot.hasResolvedSize, 'countingRequest': false});
   }
 

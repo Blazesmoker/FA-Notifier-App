@@ -1,7 +1,7 @@
 import 'package:html/dom.dart' as dom;
 
 int extractNotificationCount(String source) {
-  final match = RegExp(r'\d{1,3}(?:[,.]\d{3})*|\d+').firstMatch(source);
+  final match = RegExp(r'\d+(?:[,.]\d{3})*').firstMatch(source);
   if (match == null) return 0;
   return int.tryParse(
         match.group(0)!.replaceAll(RegExp(r'[,.]'), ''),

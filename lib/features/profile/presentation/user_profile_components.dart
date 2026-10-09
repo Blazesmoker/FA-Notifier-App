@@ -1,5 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
+import 'package:fanotifier/shared/widgets/fa_content_blur.dart';
 
 class ProfileStatItem extends StatelessWidget {
   final String count;
@@ -124,12 +126,16 @@ class ContactInformationSection extends StatelessWidget {
 }
 
 class FeaturedSubmissionSection extends StatelessWidget {
+  final String submissionId;
+  final FaContentBlockData contentBlock;
   final String imageUrl;
   final String title;
   final VoidCallback onTap;
 
   const FeaturedSubmissionSection({
     super.key,
+    this.submissionId = '',
+    this.contentBlock = const FaContentBlockData(),
     required this.imageUrl,
     required this.title,
     required this.onTap,
@@ -157,34 +163,37 @@ class FeaturedSubmissionSection extends StatelessWidget {
               onTap: onTap,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8.0),
-                child: FaNetworkImage(
-                  imageUrl,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) {
-                      return child;
-                    }
-                    return const SizedBox(
-                      height: 200,
-                      child: Center(
-                        child: CircularProgressIndicator(),
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return const SizedBox(
-                      height: 200,
-                      child: Center(
-                        child: Icon(
-                          Icons.broken_image,
-                          size: 100,
-                          color: Colors.redAccent,
+                child: FaContentBlur(
+                  submissionId: submissionId,
+                  data: contentBlock,
+                  child: FaNetworkImage(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) {
+                        return child;
+                      }
+                      return const SizedBox(
+                        height: 200,
+                        child: Center(
+                          child: CircularProgressIndicator(),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return const SizedBox(
+                        height: 200,
+                        child: Center(
+                          child: Icon(
+                            Icons.broken_image,
+                            size: 100,
+                            color: Colors.redAccent,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
-
               ),
             ),
             const SizedBox(height: 8.0),

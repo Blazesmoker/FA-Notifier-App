@@ -15,7 +15,7 @@ class NotificationShoutMergePolicy {
     required String? enrichedSignature,
   }) {
     if (shoutSectionIndex(sections) == -1) return false;
-    if (appearsEnriched(sections)) return false;
+    if (!needsProfileContent(sections)) return false;
     if (lightSignature.isEmpty) return false;
     return enrichedSignature != lightSignature;
   }
@@ -52,6 +52,10 @@ class NotificationShoutMergePolicy {
   }) {
     final rebuilt = <NotificationItem>[];
     for (final item in existingItems) {
+      if (item.content.trim().isNotEmpty) {
+        rebuilt.add(item);
+        continue;
+      }
       final previous = previousItemsById[item.id];
       final mergedContent = previous != null && previous.content.isNotEmpty
           ? previous.content
@@ -97,6 +101,18 @@ class NotificationShoutMergePolicy {
       final removed = _isRemoved(item.content);
       if (removed) return false;
       return item.content.trim().isNotEmpty;
+    });
+  }
+
+  bool needsProfileContent(List<NotificationSection> sections) {
+    final index = shoutSectionIndex(sections);
+    if (index == -1) {
+      return false;
+    }
+    return sections[index].items.any((item) {
+      return !_isRemoved(item.content) &&
+          item.content.trim().isEmpty &&
+          (item.avatarUrl ?? '').trim().isEmpty;
     });
   }
 

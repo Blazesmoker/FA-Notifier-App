@@ -3,6 +3,7 @@ import 'package:fanotifier/features/notifications/presentation/fa_notifications_
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_shouts_controller.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_tab_scroll_view.dart';
 import 'package:fanotifier/features/notifications/domain/notification_removal_outcome.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/features/settings/domain/time_display_models.dart';
@@ -103,9 +104,12 @@ class AvatarWidget extends StatelessWidget {
 
 class ShoutsSectionWidget extends StatefulWidget {
   final ScrollReturnController scrollReturn;
+  final Widget actions;
   final FaNotificationsController service;
   final FaActivitiesPollingPort pollingService;
   final bool isActive;
+  final Future<void> Function(int previousPageRevision)? onRefreshed;
+  final VoidCallback? onContentOpened;
 
   const ShoutsSectionWidget({
     super.key,
@@ -113,6 +117,9 @@ class ShoutsSectionWidget extends StatefulWidget {
     required this.pollingService,
     required this.isActive,
     required this.scrollReturn,
+    required this.actions,
+    this.onRefreshed,
+    this.onContentOpened,
   });
 
   @override
@@ -150,24 +157,41 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
     setState(() {});
   }
 
-  Widget _buildLoadingList(String label) {
-    return ListView(
-      key: const PageStorageKey('notification-shouts'),
-      controller: widget.scrollReturn.scrollController,
-      physics: const AlwaysScrollableScrollPhysics(),
-      children: [
-        const SizedBox(height: 180),
-        Center(
-          child: Column(
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 12),
-              Text(label, style: const TextStyle(color: Colors.white70)),
-            ],
-          ),
-        ),
-      ],
+  Future<void> _refreshWithAds() async {
+    final revision = widget.service.adPageRevision;
+    await _controller.refresh();
+    if (mounted && widget.service.adPageRevision > revision) {
+      await widget.onRefreshed?.call(revision);
+    }
+  }
+
+  Future<T?> _openRoute<T>(BuildContext context, Route<T> route) {
+    widget.onContentOpened?.call();
+    return Navigator.push<T>(context, route);
+  }
+
+  Widget _buildScrollView(List<Widget> slivers) {
+    return NotificationTabScrollView(
+      storageKey: const PageStorageKey('notification-shouts'),
+      scrollController: widget.scrollReturn.scrollController,
+      actions: widget.actions,
+      slivers: slivers,
     );
+  }
+
+  Widget _buildLoadingList(String label) {
+    return _buildScrollView([
+      SliverToBoxAdapter(
+        child: Column(
+          children: [
+            const SizedBox(height: 180),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 12),
+            Text(label, style: const TextStyle(color: Colors.white70)),
+          ],
+        ),
+      ),
+    ]);
   }
 
   @override
@@ -196,7 +220,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
     return FaSessionRecoveryScope(
       needsRecovery: () => _controller.hasLoadError,
       isBusy: () => _controller.isBusy,
-      onRecover: _controller.recoverVerifiedSession,
+      onRecover: _refreshWithAds,
       child: _buildContent(context),
     );
   }
@@ -207,13 +231,9 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
       backgroundColor: Colors.black,
       onRefresh: () {
         widget.scrollReturn.reset();
-        return _controller.refresh();
+        return _refreshWithAds();
       },
-      child: Column(
-        children: [
-          const Divider(height: 4.0, color: Color(0xFF111111), thickness: 4.0),
-          Expanded(
-            child: FutureBuilder<List<Shout>>(
+      child: FutureBuilder<List<Shout>>(
               future: _controller.shoutsFuture,
               builder: (ctx, snapshot) {
                 // If we know we need enrichment, show a loader immediately and don't
@@ -241,20 +261,19 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                   return _buildLoadingList('Loading…');
                 }
                 if (snapshot.hasError) {
-                  return ListView(
-                    key: const PageStorageKey('notification-shouts'),
-                    controller: widget.scrollReturn.scrollController,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    children: [
-                      const SizedBox(height: 200),
-                      Center(
-                        child: Text(
-                          'Error loading shouts: ${snapshot.error}',
-                          style: const TextStyle(color: Colors.red),
-                        ),
+                  return _buildScrollView([
+                    SliverToBoxAdapter(
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 200),
+                          Text(
+                            'Error loading shouts: ${snapshot.error}',
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        ],
                       ),
-                    ],
-                  );
+                    ),
+                  ]);
                 }
 
                 final data = snapshot.data ?? [];
@@ -262,12 +281,9 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                 widget.scrollReturn.updateContent(shouts);
 
                 if (shouts.isEmpty) {
-                  return ListView(
-                    key: const PageStorageKey('notification-shouts'),
-                    controller: widget.scrollReturn.scrollController,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    children: const [
-                      SizedBox(
+                  return _buildScrollView([
+                    const SliverToBoxAdapter(
+                      child: SizedBox(
                         height: 200,
                         child: Center(
                           child: Text(
@@ -276,16 +292,13 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                           ),
                         ),
                       ),
-                    ],
-                  );
+                    ),
+                  ]);
                 }
 
-                return ListView.builder(
-                  key: const PageStorageKey('notification-shouts'),
-                  controller: widget.scrollReturn.scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  itemCount: shouts.length,
-                  itemBuilder: (ctx2, index) {
+                return _buildScrollView([
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate((ctx2, index) {
                     final shout = shouts[index];
 
                     return Padding(
@@ -299,7 +312,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                         behavior: HitTestBehavior.opaque,
                         onTap: () {
                           // Tapping the row => open user profile
-                          Navigator.push(
+                          _openRoute(
                             context,
                             UserProfileScreen.route(
                               nickname: widget.service.currentUsernameFromLink!,
@@ -364,7 +377,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                       .contains("shout has been removed"))
                                     GestureDetector(
                                       onTap: () {
-                                        Navigator.push(
+                                        _openRoute(
                                           context,
                                           UserProfileScreen.route(
                                             nickname: shout.nicknameLink,
@@ -411,7 +424,7 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                                                     recognizer:
                                                         TapGestureRecognizer()
                                                           ..onTap = () {
-                                                            Navigator.push(
+                                                            _openRoute(
                                                               context,
                                                               UserProfileScreen
                                                                   .route(
@@ -475,12 +488,10 @@ class ShoutsSectionWidgetState extends State<ShoutsSectionWidget>
                         ),
                       ),
                     );
-                  },
-                );
+                    }, childCount: shouts.length),
+                  ),
+                ]);
               },
-            ),
-          ),
-        ],
       ),
     );
   }

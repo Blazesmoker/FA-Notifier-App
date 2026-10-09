@@ -9,6 +9,9 @@ import 'package:fanotifier/features/submissions/domain/submission_details_reposi
 import 'package:fanotifier/features/submissions/domain/submission_tag_block_state.dart';
 import 'package:fanotifier/features/submissions/domain/submission_attachment.dart';
 import 'package:flutter/foundation.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
+import 'package:fanotifier/shared/fa/domain/fa_author_watch_state_store.dart';
 
 enum SubmissionWatchOutcome { missingAuth, success, failed, error }
 
@@ -21,11 +24,13 @@ class SubmissionDetailsController {
     required this._reloadUserActions,
     required this._reloadDetails,
     required this._showActionMessage,
+    required this._authorWatchStateStore,
+    this.contentBlockController,
   });
 
   final bool Function() _isMounted;
   final void Function(VoidCallback update) _updateState;
-  final Future<void> Function() _reloadUserActions;
+  final Future<void> Function({required bool forceRefresh}) _reloadUserActions;
   final Future<void> Function() _reloadDetails;
   final void Function(String message, {required bool isError}) _showActionMessage;
   final Set<String> _tagToggleInFlight = <String>{};
@@ -33,6 +38,10 @@ class SubmissionDetailsController {
 
   final String submissionId;
   final SubmissionDetailsRepository _repository;
+  final FaAuthorWatchStateStore _authorWatchStateStore;
+  int? _watchStateRevision;
+  final FaContentBlockController? contentBlockController;
+  FaContentBlockData _contentBlock = const FaContentBlockData();
 
   String? _profileImageUrl;
   String? _username;
@@ -129,6 +138,7 @@ class SubmissionDetailsController {
   bool get detailsLoaded => _detailsLoaded;
   bool get sfwEnabled => _sfwEnabled;
   bool get nsfwAllowed => _nsfwAllowed;
+  FaContentBlockData get contentBlock => _contentBlock;
 
   Future<void> toggleTagBlock(FaPostTag tag) async {
     if (_tagToggleInFlight.contains(tag.name)) return;
@@ -194,7 +204,7 @@ class SubmissionDetailsController {
     // When we skipped initial fetch, load links on first use (same as Watch)
     if (blockLink == null && unblockLink == null && username != null) {
       _updateState(() => _watchLinksLoading = true);
-      await _reloadUserActions();
+      await _reloadUserActions(forceRefresh: true);
       if (!_isMounted()) return;
       _updateState(() => _watchLinksLoading = false);
     }
@@ -252,7 +262,7 @@ class SubmissionDetailsController {
       }
 
       if (result.status == SubmissionActionStatus.success) {
-        await _reloadUserActions();
+        await _reloadUserActions(forceRefresh: true);
         if (!_isMounted()) return;
         _showActionMessage(
           shouldBlock ? 'Author blocked' : 'Author unblocked',
@@ -281,7 +291,7 @@ class SubmissionDetailsController {
         return SubmissionWatchOutcome.missingAuth;
       }
       if (result.status == SubmissionActionStatus.success) {
-        await _reloadUserActions();
+        await _reloadUserActions(forceRefresh: true);
         return SubmissionWatchOutcome.success;
       }
       debugPrint(
@@ -300,11 +310,12 @@ class SubmissionDetailsController {
     }) onOutcome,
   }) async {
     if (_watchRequestInFlight) return;
+    restoreCachedAuthorWatchState();
     // When we skipped initial fetch (Browse/Search), fetch links on first tap
     if (watchLink == null && unwatchLink == null && username != null) {
       if (_watchLinksLoading) return;
       _updateState(() => _watchLinksLoading = true);
-      await _reloadUserActions();
+      await _reloadUserActions(forceRefresh: false);
       if (!_isMounted()) return;
       _updateState(() => _watchLinksLoading = false);
       // After fetch: if already watching, button will show -Watch; else send watch request below
@@ -347,6 +358,7 @@ class SubmissionDetailsController {
       nsfwAllowed: nsfwAllowed,
       additionalHeaders: additionalHeaders,
       skipSfw: skipSfw,
+      isCancelled: () => !_isMounted(),
     );
 
     debugPrint('Response status: ${response.statusCode}');
@@ -409,9 +421,14 @@ class SubmissionDetailsController {
   Future<bool> loadUserActions({
     required Future<bool> Function() confirmNsfw,
     required void Function() onNsfwAllowed,
+    bool forceRefresh = false,
   }) async {
     final author = username;
     if (author == null) return false;
+    if (!forceRefresh && restoreCachedAuthorWatchState()) {
+      return true;
+    }
+    final watchRevision = _authorWatchStateStore.revision;
 
     final result = await _repository.loadUserActions(
       author: author,
@@ -422,6 +439,10 @@ class SubmissionDetailsController {
       ),
     );
     final actions = result.actions;
+    if (!_isMounted()) return false;
+    if (watchRevision != _authorWatchStateStore.revision) {
+      return restoreCachedAuthorWatchState();
+    }
     if (actions == null) {
       debugPrint('Failed to fetch user page links: ${result.statusCode}');
       return false;
@@ -436,7 +457,53 @@ class SubmissionDetailsController {
     _isClassicUserPage = actions.isClassic;
     _isWatching = actions.isWatching;
     _isBlocked = actions.isBlocked;
+    _authorWatchStateStore.write(
+      linkUsername ?? author,
+      FaAuthorWatchState(
+        isWatching: actions.isWatching,
+        watchLink: actions.watchLink,
+        unwatchLink: actions.unwatchLink,
+        isBlocked: actions.isBlocked,
+      ),
+      expectedRevision: watchRevision,
+    );
+    _watchStateRevision = _authorWatchStateStore.revision;
     return true;
+  }
+
+  bool restoreCachedAuthorWatchState() {
+    final author = linkUsername ?? username;
+    if (author == null) {
+      return false;
+    }
+    final cached = _authorWatchStateStore.read(author);
+    if (cached == null) {
+      if (_watchStateRevision != null &&
+          _watchStateRevision != _authorWatchStateStore.revision) {
+        _watchLink = null;
+        _unwatchLink = null;
+        _clearAuthorBlockActions();
+      }
+      return false;
+    }
+    _watchLink = cached.watchLink;
+    _unwatchLink = cached.unwatchLink;
+    _isWatching = cached.isWatching;
+    if ((_watchStateRevision != null &&
+            _watchStateRevision != _authorWatchStateStore.revision) ||
+        (cached.isBlocked != null && cached.isBlocked != _isBlocked)) {
+      _clearAuthorBlockActions();
+    }
+    _isBlocked = cached.isBlocked ?? _isBlocked;
+    _watchStateRevision = _authorWatchStateStore.revision;
+    return true;
+  }
+
+  void _clearAuthorBlockActions() {
+    _blockLink = null;
+    _unblockLink = null;
+    _blockKey = null;
+    _unblockKey = null;
   }
 
   void startLoading() {
@@ -455,6 +522,7 @@ class SubmissionDetailsController {
     required Future<bool> Function() confirmNsfw,
     required void Function() onNsfwAllowed,
   }) async {
+    final contentBlockRevision = contentBlockController?.revision ?? 0;
     try {
       final result = await _repository.loadDetails(
         submissionId: submissionId,
@@ -471,6 +539,12 @@ class SubmissionDetailsController {
       }
 
       _applyLoadedDetails(result.parsedPost!, result.comments!);
+      if (_isMounted()) {
+        contentBlockController?.acceptSnapshot(
+          _contentBlock.snapshot,
+          expectedRevision: contentBlockRevision,
+        );
+      }
       return result;
     } catch (_) {
       _isLoading = false;
@@ -485,9 +559,11 @@ class SubmissionDetailsController {
     _currentUsername = parsedPost.currentUsername;
     _username = parsedPost.username;
     _linkUsername = parsedPost.linkUsername;
+    restoreCachedAuthorWatchState();
     _profileImageUrl = parsedPost.profileImageUrl;
     _submissionTitle = parsedPost.submissionTitle;
     _fullViewImageUrl = parsedPost.fullViewImageUrl;
+    _contentBlock = parsedPost.contentBlock;
     _submissionDescription = parsedPost.submissionDescription;
     _rating = parsedPost.rating;
 
@@ -563,6 +639,7 @@ class SubmissionDetailsController {
     String tagName, {
     required bool shouldBlock,
   }) async {
+    final sessionEpoch = contentBlockController?.sessionEpoch ?? 0;
     final nonce = tagBlocklistNonce;
     if (nonce == null || nonce.isEmpty) {
       throw Exception('Missing tag blocklist nonce.');
@@ -581,6 +658,11 @@ class SubmissionDetailsController {
     if (result.status != SubmissionActionStatus.success) {
       throw Exception('Tag blocklist request failed: ${result.statusCode}');
     }
+    contentBlockController?.setTagBlocked(
+      result.confirmedTagName ?? tagName,
+      blocked: shouldBlock,
+      expectedSessionEpoch: sessionEpoch,
+    );
   }
 
   String? blockActionKey({required bool shouldBlock}) {
@@ -593,6 +675,7 @@ class SubmissionDetailsController {
     String urlPath,
     String keyValue,
   ) {
+    _authorWatchStateStore.invalidate(linkUsername ?? username ?? '');
     return _repository.performBlockUnblock(
       urlPath: urlPath,
       keyValue: keyValue,
@@ -602,6 +685,7 @@ class SubmissionDetailsController {
   }
 
   Future<SubmissionActionResult> performWatchUnwatch(String urlPath) {
+    _authorWatchStateStore.invalidate(linkUsername ?? username ?? '');
     return _repository.performWatchUnwatch(
       urlPath: urlPath,
       sfwEnabled: sfwEnabled,

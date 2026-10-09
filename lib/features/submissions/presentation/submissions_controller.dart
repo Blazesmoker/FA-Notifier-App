@@ -8,16 +8,19 @@ import 'package:fanotifier/features/submissions/domain/submission_image_group.da
 import 'package:fanotifier/features/submissions/domain/submission_list_item.dart';
 import 'package:fanotifier/features/submissions/domain/submissions_listing_parse_result.dart';
 import 'package:fanotifier/features/submissions/domain/submissions_repository.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 
 class SubmissionsController extends ChangeNotifier {
   SubmissionsController({
     required this._repository,
+    this.contentBlockController,
     SfwModePreference? sfwModePreference,
   }) : _sfwModePreference = sfwModePreference ?? SfwModePreference();
 
   static const int _maxConcurrentFetches = 5;
 
   final SubmissionsRepository _repository;
+  final FaContentBlockController? contentBlockController;
   final SfwModePreference _sfwModePreference;
   final List<DateImageGroup> _dateGroups = [];
   final List<Map<String, dynamic>> _flatSubmissionsList = [];
@@ -73,6 +76,7 @@ class SubmissionsController extends ChangeNotifier {
 
   Future<void> fetchSubmissions({required VoidCallback onListingApplied}) async {
     if (_isLoading || !_hasMore) return;
+    final contentBlockRevision = contentBlockController?.revision ?? 0;
     _isLoading = true;
     _isError = false;
     _errorMessage = null;
@@ -92,6 +96,11 @@ class SubmissionsController extends ChangeNotifier {
         nextPageUrl: _nextPageUrl,
         baseSubmissionsUrl: _baseSubmissionsUrl,
         sfwEnabled: _sfwEnabled,
+      );
+      if (_disposed) return;
+      contentBlockController?.acceptItems(
+        parsed.dateGroups.expand((group) => group.images),
+        expectedRevision: contentBlockRevision,
       );
       _applyListing(parsed);
       onListingApplied();
@@ -393,6 +402,7 @@ class SubmissionsController extends ChangeNotifier {
           '[Submissions] Start detail fetch for $postUrl. Active: $_activeFetches');
 
       final detailFetchGeneration = _detailFetchGeneration;
+      final contentBlockRevision = contentBlockController?.revision ?? 0;
       final visibilityGeneration =
           queuedItem['detailFetchVisibilityGeneration'] as int? ?? 0;
       bool isCancelled() => _isDetailFetchCancelled(
@@ -408,6 +418,13 @@ class SubmissionsController extends ChangeNotifier {
         final index = _indexOfSubmission(queueItem.submissionId);
         if (index >= 0) {
           final item = _flatSubmissionsList[index];
+          if (data.contentBlock.tagsKnown) {
+            item['contentBlock'] = data.contentBlock;
+          }
+          contentBlockController?.acceptSnapshot(
+            data.contentBlock.snapshot,
+            expectedRevision: contentBlockRevision,
+          );
           item['hqUrl'] = data.hqUrl;
           item['isFav'] = data.isFav;
           item['initialIsFav'] = data.isFav;

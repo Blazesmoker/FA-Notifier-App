@@ -12,6 +12,8 @@ class FaPaginationFilterFields extends StatelessWidget {
     required this.resultsPerPage,
     required this.resultsPerPageOptions,
     required this.onResultsPerPageChanged,
+    this.accentColor,
+    this.pageTextColor,
   });
 
   final GlobalKey<FormState> formKey;
@@ -19,9 +21,14 @@ class FaPaginationFilterFields extends StatelessWidget {
   final String resultsPerPage;
   final List<FaFilterOption> resultsPerPageOptions;
   final ValueChanged<String> onResultsPerPageChanged;
+  final Color? accentColor;
+  final Color? pageTextColor;
 
   @override
   Widget build(BuildContext context) {
+    final accentBorder = accentColor == null
+        ? null
+        : OutlineInputBorder(borderSide: BorderSide(color: accentColor!));
     return Form(
       key: formKey,
       child: Column(
@@ -29,16 +36,25 @@ class FaPaginationFilterFields extends StatelessWidget {
         children: [
           TextFormField(
             controller: pageController,
+            style: pageTextColor == null
+                ? null
+                : TextStyle(color: pageTextColor),
+            cursorColor: accentColor,
             keyboardType: TextInputType.number,
             textInputAction: TextInputAction.done,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Page',
+              labelStyle: accentColor == null
+                  ? null
+                  : TextStyle(color: accentColor),
               helperText: 'Start loading from this page.',
               helperMaxLines: 3,
               errorMaxLines: 3,
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
+              enabledBorder: accentBorder,
+              focusedBorder: accentBorder,
             ),
             validator: (value) {
               if (FaPageSettings.positiveInteger(value) == null) {
@@ -49,13 +65,19 @@ class FaPaginationFilterFields extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           InputDecorator(
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Results per page',
-              border: OutlineInputBorder(),
+              labelStyle: accentColor == null
+                  ? null
+                  : TextStyle(color: accentColor),
+              border: const OutlineInputBorder(),
+              enabledBorder: accentBorder,
+              focusedBorder: accentBorder,
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: resultsPerPage,
+                iconEnabledColor: accentColor,
                 isDense: true,
                 isExpanded: true,
                 items: resultsPerPageOptions

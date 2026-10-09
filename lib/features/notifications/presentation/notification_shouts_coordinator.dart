@@ -29,9 +29,20 @@ class NotificationShoutsCoordinator {
   }
 
   Future<List<Shout>> refresh() async {
-    _pollingService.resetSchedule();
-    final fetched = await _service.fetchMsgCenterShouts();
-    return deduplicateNotificationShouts(fetched);
+    await _pollingService.triggerNow(
+      resetTimer: true,
+      source: 'notification_shouts_refresh',
+    );
+    if (_service.errorMessage != null ||
+        !_service.hasValidLatestCountsSnapshot) {
+      throw StateError('Notifications could not be refreshed.');
+    }
+    if (_service.shoutsPageNeedsProfile || _service.shoutsNeedEnrich) {
+      await _service.enrichShoutsFromProfileIfNeeded(
+        force: _service.shoutsPageNeedsProfile,
+      );
+    }
+    return currentShouts();
   }
 
   void commitRefreshedShouts(List<Shout> shouts) {

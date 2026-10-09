@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:fanotifier/features/submissions/data/submission_delete_response_parser.dart';
 import 'package:fanotifier/features/submissions/data/submission_url_builder.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
@@ -26,14 +28,19 @@ class SubmissionActionService {
     required String submissionId,
     required bool sfwEnabled,
   }) async {
-    final statusCode = await sendTagBlocklistRequest(
+    final response = await sendTagBlocklistRequest(
       tagName: tagName,
       shouldBlock: shouldBlock,
       nonce: nonce,
       submissionId: submissionId,
       sfwEnabled: sfwEnabled,
     );
-    return _classifyActionStatus(statusCode, const {200});
+    final action = _classifyActionStatus(response.statusCode, const {200});
+    return SubmissionActionResult(
+      status: action.status,
+      statusCode: action.statusCode,
+      confirmedTagName: response.tagName,
+    );
   }
 
   Future<SubmissionActionResult> performBlockUnblockRequest({
@@ -62,7 +69,7 @@ class SubmissionActionService {
     return _classifyActionStatus(statusCode, const {200});
   }
 
-  Future<int?> sendTagBlocklistRequest({
+  Future<({int? statusCode, String? tagName})> sendTagBlocklistRequest({
     required String tagName,
     required bool shouldBlock,
     required String nonce,
@@ -70,7 +77,7 @@ class SubmissionActionService {
     required bool sfwEnabled,
   }) async {
     final cookieHeader = await _buildAuthCookieHeader(sfwEnabled: sfwEnabled);
-    if (cookieHeader == null) return null;
+    if (cookieHeader == null) return (statusCode: null, tagName: null);
 
     final response = await FAHttp.post(
       Uri.parse(submissionTagBlockingUrl),
@@ -89,7 +96,18 @@ class SubmissionActionService {
       },
     );
 
-    return response.statusCode;
+    if (response.statusCode == 200) {
+      final result = jsonDecode(utf8.decode(response.bodyBytes));
+      if (result is! Map || result['success'] != true) {
+        throw StateError('Fur Affinity did not confirm the tag blocklist update.');
+      }
+      final confirmedTagName = result['result'];
+      if (confirmedTagName is! String || confirmedTagName.trim().isEmpty) {
+        throw StateError('Fur Affinity did not return the updated tag.');
+      }
+      return (statusCode: response.statusCode, tagName: confirmedTagName);
+    }
+    return (statusCode: response.statusCode, tagName: null);
   }
 
   Future<int?> sendBlockUnblockRequest({

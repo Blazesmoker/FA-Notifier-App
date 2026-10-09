@@ -8,6 +8,7 @@ import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:fanotifier/shared/fa/domain/fa_grid_pagination.dart';
 import 'package:fanotifier/shared/fa/domain/fa_page_settings.dart';
 import 'package:fanotifier/shared/fa/fa_thumbnail_processing.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 import 'package:material_ui/material_ui.dart';
 
 typedef SearchCloudflareCheck = Future<CloudflareCheckResult?> Function({
@@ -22,6 +23,7 @@ class SearchImageController {
     required this._notifyView,
     required this._showCloudflareCheck,
     required this._repository,
+    this.contentBlockController,
     SfwModePreference? sfwModePreference,
   }) : _sfwModePreference = sfwModePreference ?? SfwModePreference();
 
@@ -33,6 +35,7 @@ class SearchImageController {
   final VoidCallback _notifyView;
   final SearchCloudflareCheck _showCloudflareCheck;
   final SearchRepository _repository;
+  final FaContentBlockController? contentBlockController;
   final SfwModePreference _sfwModePreference;
 
   int currentPage = 1;
@@ -194,6 +197,7 @@ class SearchImageController {
     final generation = _requestGeneration;
     final filters = Map<String, String>.from(_selectedFilters);
     final query = _searchQuery;
+    final contentBlockRevision = contentBlockController?.revision ?? 0;
     bool stale() =>
         _disposed || !_isMounted() || generation != _requestGeneration;
     kDebugPrint(
@@ -233,6 +237,10 @@ class SearchImageController {
         isCancelled: stale,
       );
       if (stale()) return;
+      contentBlockController?.acceptItems(
+        page.images,
+        expectedRevision: contentBlockRevision,
+      );
       final continueLoading = await _appendImages(
         page.images,
         pageNumber: pageNumber,
@@ -272,7 +280,8 @@ class SearchImageController {
         _cloudflareRecoveryCancelled = true;
         hasMore = false;
         isError = true;
-        errorMessage = 'Verification was closed. Pull to retry.';
+        errorMessage = result?.siteUnavailableMessage ??
+            'Verification was closed. Pull to retry.';
         _pendingNextPageFetch = false;
         _isNextPageFetchQueued = false;
         _nextPageTriggerOffset = scrollController.hasClients

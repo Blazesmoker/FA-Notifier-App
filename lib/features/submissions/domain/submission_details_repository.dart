@@ -19,6 +19,7 @@ abstract interface class SubmissionDetailsRepository {
     required bool nsfwAllowed,
     Map<String, String>? additionalHeaders,
     bool skipSfw = false,
+    bool Function()? isCancelled,
   });
 
   Future<SubmissionDetailsLoadResult> loadDetails({

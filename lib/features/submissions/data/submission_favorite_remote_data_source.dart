@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/network/fa_page_counter_observer.dart';
 import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/features/submissions/domain/submission_favorite_repository.dart';
@@ -66,10 +67,17 @@ class SubmissionFavoriteRemoteDataSource {
           includeContentType: false,
         );
         await waitForTurn(label: 'GET $viewUri');
+        final counterRequest = FaPageCounterObserver.instance.capture(viewUri);
         final response = await client
             .get(viewUri, headers: headers)
             .timeout(FAHttp.defaultTimeout);
         _recordResponse(response);
+        FaPageCounterObserver.instance.acceptBytes(
+          request: counterRequest,
+          uri: viewUri,
+          statusCode: response.statusCode,
+          bytes: response.bodyBytes,
+        );
         if (response.statusCode != 200) {
           return SubmissionFavoriteMutationResult(
             success: false,

@@ -11,7 +11,7 @@ class TagBlocklistRepositoryImpl implements TagBlocklistRepository {
   }
 
   @override
-  Future<void> updateTag({
+  Future<String> updateTag({
     required bool sfwEnabled,
     required String nonce,
     required String tagName,

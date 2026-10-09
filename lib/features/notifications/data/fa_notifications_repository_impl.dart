@@ -17,12 +17,17 @@ class FaNotificationsRepositoryImpl implements FaNotificationsRepository {
     FaNotificationsRemoteDataSource? remoteDataSource,
     FaNotificationShoutRepository? shoutRepository,
     FaNotificationMediaRepository? mediaRepository,
+    Future<void> Function({
+      required Uri documentUri,
+      required String? setCookieHeader,
+    })? onDocumentCookies,
   }) {
     final semaphore = SimpleSemaphore(3);
     const cookieHeaderProvider = FaNotificationCookieHeaderProvider();
     return FaNotificationsRepositoryImpl._(
       remoteDataSource:
-          remoteDataSource ?? FaNotificationsRemoteDataSource(),
+          remoteDataSource ??
+              FaNotificationsRemoteDataSource(onDocumentCookies: onDocumentCookies),
       shoutRepository: shoutRepository ??
           FaNotificationShoutRepository(
             semaphore: semaphore,
@@ -50,13 +55,24 @@ class FaNotificationsRepositoryImpl implements FaNotificationsRepository {
   Future<FaNotificationsPageSnapshot> fetchNotifications({
     required Map<String, int> messageBarCounts,
     required FaNotificationsPageParserState parserState,
+    bool? sfwEnabled,
+    bool Function()? canAcceptAdContext,
   }) async {
     final session = await _remoteDataSource.createAuthenticatedSession();
-    final response = await _remoteDataSource.fetchNotificationsPage(session);
+    final response = await _remoteDataSource.fetchNotificationsPage(
+      session, sfwEnabled: sfwEnabled,
+      canAcceptAdContext: canAcceptAdContext,
+    );
     return parseFaNotificationsPage(
       response.htmlBody,
       messageBarCounts: messageBarCounts,
       sideState: parserState,
+      startedAtMilliseconds: response.startedAtMilliseconds,
+      documentUri: response.adCookiesAccepted &&
+              canAcceptAdContext?.call() != false
+          ? response.documentUri
+          : null,
+      sfwEnabled: response.sfwEnabled,
     );
   }
 
@@ -195,6 +211,11 @@ class FaNotificationsRepositoryImpl implements FaNotificationsRepository {
   @override
   Future<String?> fetchSubmissionPreview(String submissionId) {
     return _mediaRepository.fetchSubmissionPreview(submissionId);
+  }
+
+  @override
+  void refreshSubmissionPreviews() {
+    _mediaRepository.refreshSubmissionPreviews();
   }
 
   FaNotificationsRemoteSession _remoteSession(

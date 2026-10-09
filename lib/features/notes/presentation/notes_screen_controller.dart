@@ -7,6 +7,7 @@ import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/features/notes/domain/note_activity_snapshot.dart';
 import 'package:fanotifier/features/notes/domain/note_management.dart';
 import 'package:fanotifier/features/notes/domain/notes_page_result.dart';
+import 'package:fanotifier/features/notes/domain/notes_inbox_snapshot.dart';
 import 'package:fanotifier/features/notes/domain/notes_repository.dart';
 import 'package:fanotifier/features/notes/domain/notes_screen_view_state.dart';
 
@@ -36,8 +37,11 @@ class NotesScreenController {
   bool _sentSessionRecoveryPending = false;
   bool _didFirstRunSkip = false;
   NotesPageResult? _pendingFirstRunPage1;
+  int? _pendingFirstRunPage1StartedAt;
+  NoteActivitySnapshot? _pendingFirstRunActivity;
   Future<void>? _inFlightInboxPageOne;
   Future<void> _newUnreadHandlingQueue = Future<void>.value();
+  NotesInboxSnapshot? _lastInboxSnapshot;
 
   bool get isFetchingMoreInbox => _isFetchingMoreInbox;
   bool get isFetchingMoreSent => _isFetchingMoreSent;
@@ -50,31 +54,96 @@ class NotesScreenController {
     _repository.setScreenVisible(visible);
   }
 
+  void bindInboxRefresh() {
+    _repository.bindInboxRefresh(refreshInboxForPolling);
+  }
+
+  void unbindInboxRefresh() {
+    _repository.unbindInboxRefresh(refreshInboxForPolling);
+  }
+
+  Future<NotesInboxSnapshot?> refreshInboxForPolling() async {
+    _lastInboxSnapshot = null;
+    _didFirstRunSkip = await _repository.loadDidFirstRunSkip();
+    if (!_didFirstRunSkip) {
+      final baseline = await _fetchTwoPagesAndSkip();
+      if (baseline == null) {
+        return null;
+      }
+      _pendingFirstRunPage1 = baseline.page;
+      _pendingFirstRunPage1StartedAt = baseline.activity.startedAtMilliseconds;
+      _pendingFirstRunActivity = baseline.activity;
+    }
+    await fetchInbox(
+      checkSecondPage: true,
+      reportActivities: false,
+      preserveLoadedPages: true,
+    );
+    return _lastInboxSnapshot;
+  }
+
   void _setState(VoidCallback update) {
     _updateState(update);
   }
 
   Future<void> initialize() async {
     _didFirstRunSkip = await _repository.loadDidFirstRunSkip();
+    final cached = _repository.latestInboxSnapshot;
+    if (cached != null &&
+        DateTime.now().millisecondsSinceEpoch -
+            (cached.activity.completedAtMilliseconds ??
+                cached.activity.startedAtMilliseconds) < 240000) {
+      _pendingFirstRunPage1 = cached.page;
+      _pendingFirstRunPage1StartedAt = cached.activity.startedAtMilliseconds;
+      _pendingFirstRunActivity = cached.activity;
+      _didFirstRunSkip = await _repository.loadDidFirstRunSkip();
+      return;
+    }
     if (!_didFirstRunSkip) {
-      await _fetchTwoPagesAndSkip();
+      final snapshot = await _repository.refreshInbox(_fetchTwoPagesAndSkip);
+      _didFirstRunSkip = await _repository.loadDidFirstRunSkip();
+      if (snapshot != null) {
+        _pendingFirstRunPage1 = snapshot.page;
+        _pendingFirstRunPage1StartedAt = snapshot.activity.startedAtMilliseconds;
+        _pendingFirstRunActivity = snapshot.activity;
+      }
     }
   }
 
-  Future<void> _fetchTwoPagesAndSkip() async {
+  Future<NotesInboxSnapshot?> _fetchTwoPagesAndSkip() async {
+    final generation = _repository.inboxGeneration;
     try {
       final combined = <Message>[];
+      final startedAt = DateTime.now().millisecondsSinceEpoch;
       final page1 = await _repository.fetchPage(folder: 'inbox', page: 1);
+      if (page1.topbarCounts == null) {
+        return null;
+      }
       _pendingFirstRunPage1 = page1;
+      _pendingFirstRunPage1StartedAt = startedAt;
       combined.addAll(page1.messages);
       combined.addAll(
         await _repository.fetchMessages(folder: 'inbox', page: 2),
       );
+      if (generation != _repository.inboxGeneration) {
+        return null;
+      }
       await _repository.markUnreadMessagesAsShown(combined);
       await _repository.markMessagesAsSeen(combined);
       await _repository.setFirstRunSkipDone();
       _didFirstRunSkip = true;
+      return NotesInboxSnapshot(
+        page: page1,
+        activity: NoteActivitySnapshot(
+          messages: List<Message>.unmodifiable(combined),
+          startedAtMilliseconds: page1.startedAtMilliseconds ?? startedAt,
+          completedAtMilliseconds: DateTime.now().millisecondsSinceEpoch,
+          unreadCount: page1.topbarCounts?.notes ?? 0,
+          fetchedPage2: true,
+        ),
+      );
     } catch (_) {}
+    return null;
   }
 
   void resetInboxPagination() {
@@ -254,7 +323,9 @@ class NotesScreenController {
     bool clearOld = false,
     bool suppressNewUnreadNotifications = false,
     Set<String> manuallyMarkedUnreadIds = const <String>{},
-    bool checkSecondPage = false,
+    bool checkSecondPage = true,
+    bool reportActivities = true,
+    bool preserveLoadedPages = false,
   }) {
     final shouldCoalesce = page == 1 &&
         !clearOld &&
@@ -271,6 +342,8 @@ class NotesScreenController {
       suppressNewUnreadNotifications: suppressNewUnreadNotifications,
       manuallyMarkedUnreadIds: manuallyMarkedUnreadIds,
       checkSecondPage: checkSecondPage,
+      reportActivities: reportActivities,
+      preserveLoadedPages: preserveLoadedPages,
     );
     if (!shouldCoalesce) return operation;
 
@@ -290,7 +363,10 @@ class NotesScreenController {
     required bool suppressNewUnreadNotifications,
     required Set<String> manuallyMarkedUnreadIds,
     required bool checkSecondPage,
+    required bool reportActivities,
+    required bool preserveLoadedPages,
   }) async {
+    final generation = _repository.inboxGeneration;
     var pageApplied = false;
     if (page == 1) {
       _setState(() {
@@ -298,26 +374,54 @@ class NotesScreenController {
           inboxMessages: clearOld ? <Message>[] : _state.inboxMessages,
           isLoadingInbox: true,
           errorInbox: '',
-          hasMoreInbox: true,
+          hasMoreInbox: preserveLoadedPages ? _state.hasMoreInbox : true,
         );
       });
     }
 
     try {
       final NotesPageResult result;
-      final snapshotStartedAt = DateTime.now().millisecondsSinceEpoch;
+      final int snapshotStartedAt;
+      NoteActivitySnapshot? cachedActivity;
       if (page == 1 &&
           _pendingFirstRunPage1 != null &&
           manuallyMarkedUnreadIds.isEmpty) {
         result = _pendingFirstRunPage1!;
+        snapshotStartedAt = _pendingFirstRunPage1StartedAt!;
         _pendingFirstRunPage1 = null;
+        _pendingFirstRunPage1StartedAt = null;
+        cachedActivity = _pendingFirstRunActivity;
+        _pendingFirstRunActivity = null;
       } else {
         if (page == 1 && manuallyMarkedUnreadIds.isNotEmpty) {
           _pendingFirstRunPage1 = null;
+          _pendingFirstRunPage1StartedAt = null;
+          _pendingFirstRunActivity = null;
         }
-        result = await _repository.fetchPage(folder: 'inbox', page: page);
+        result = await _repository.fetchPage(
+          folder: 'inbox', page: page,
+          requireFresh: manuallyMarkedUnreadIds.isNotEmpty,
+        );
+        snapshotStartedAt = result.startedAtMilliseconds ??
+            DateTime.now().millisecondsSinceEpoch;
+      }
+      if (generation != _repository.inboxGeneration) {
+        return;
       }
       final newMessages = result.messages;
+      var activityMessages = page == 1 && result.topbarCounts != null
+          ? newMessages
+              .map((message) => Message(
+                    id: message.id,
+                    subject: message.subject,
+                    sender: message.sender,
+                    recipient: message.recipient,
+                    date: message.date,
+                    link: message.link,
+                    isUnread: message.isUnread,
+                  ))
+              .toList(growable: false)
+          : const <Message>[];
 
       if (page == 1 &&
           manuallyMarkedUnreadIds.isNotEmpty &&
@@ -325,7 +429,7 @@ class NotesScreenController {
         await _repository.reconcileManualUnread(
           noteIds: manuallyMarkedUnreadIds,
           snapshot: NoteActivitySnapshot(
-            messages: newMessages,
+            messages: activityMessages,
             startedAtMilliseconds: snapshotStartedAt,
             unreadCount: result.topbarCounts!.notes,
           ),
@@ -334,14 +438,23 @@ class NotesScreenController {
 
       if (page == 1) {
         _setState(() {
-          _state = _state.copyWith(inboxMessages: newMessages);
+          final ids = newMessages.map((message) => message.id).toSet();
+          _state = _state.copyWith(
+            inboxMessages: preserveLoadedPages && _currentInboxPage > 1
+                ? <Message>[
+                    ...newMessages,
+                    ..._state.inboxMessages.where((message) => ids.add(message.id)),
+                  ]
+                : newMessages,
+          );
         });
       } else {
         _setState(() {
+          final ids = _state.inboxMessages.map((message) => message.id).toSet();
           _state = _state.copyWith(
             inboxMessages: <Message>[
               ..._state.inboxMessages,
-              ...newMessages,
+              ...newMessages.where((message) => ids.add(message.id)),
             ],
           );
         });
@@ -359,9 +472,13 @@ class NotesScreenController {
         });
       }
 
-      var observedMessages = newMessages;
+      var observedMessages = cachedActivity?.messages ?? newMessages;
+      var fetchedPage2 = cachedActivity?.fetchedPage2 ?? false;
+      if (cachedActivity != null) {
+        activityMessages = cachedActivity.messages;
+      }
       if (page == 1 && !suppressNewUnreadNotifications) {
-        if (checkSecondPage) {
+        if (checkSecondPage && !fetchedPage2) {
           final shownIds = await _repository.getShownNoteIds();
           final seenIds = await _repository.getSeenNoteIds();
           if (shouldFetchSecondInboxPage(
@@ -376,14 +493,42 @@ class NotesScreenController {
                 page: 2,
               );
               observedMessages = <Message>[...newMessages, ...page2];
+              activityMessages = <Message>[...activityMessages, ...page2];
+              fetchedPage2 = true;
             } catch (_) {}
           }
         }
+        if (generation != _repository.inboxGeneration) {
+          return;
+        }
+        if (result.topbarCounts != null) {
+          _lastInboxSnapshot = NotesInboxSnapshot(
+            page: result,
+            activity: NoteActivitySnapshot(
+              messages: List<Message>.unmodifiable(activityMessages),
+              startedAtMilliseconds: snapshotStartedAt,
+              completedAtMilliseconds: cachedActivity?.completedAtMilliseconds ??
+                  (fetchedPage2
+                      ? DateTime.now().millisecondsSinceEpoch
+                      : result.completedAtMilliseconds),
+              unreadCount: result.topbarCounts!.notes,
+              fetchedPage2: fetchedPage2,
+            ),
+          );
+          _repository.rememberInboxSnapshot(_lastInboxSnapshot!);
+        }
+        if (!reportActivities) {
+          unawaited(_finishInboxArrivals(observedMessages, generation));
+          return;
+        }
         await _handleNewUnreadMessages(observedMessages);
-        await _repository.handleTopbarCounts(
-          result.topbarCounts,
-          source: 'notes_screen_inbox_refresh',
-        );
+        if (reportActivities) {
+          await _repository.handleTopbarCounts(
+            result.topbarCounts,
+            source: 'notes_screen_inbox_refresh',
+            noteActivitySnapshot: _lastInboxSnapshot?.activity,
+          );
+        }
       } else {
         await _repository.markUnreadMessagesAsShown(newMessages);
         if (page == 1 && newMessages.isNotEmpty) {
@@ -391,6 +536,13 @@ class NotesScreenController {
         }
       }
       await _repository.markMessagesAsSeen(observedMessages);
+      if (page > 1) {
+        await _repository.handleTopbarCounts(
+          result.topbarCounts,
+          source: 'notes_screen_inbox_page',
+          startedAtMilliseconds: snapshotStartedAt,
+        );
+      }
     } catch (e) {
       if (!pageApplied) _failedInboxPage = page;
       _setState(() {
@@ -414,6 +566,15 @@ class NotesScreenController {
       _state = _state.copyWith(isLoadingMoreInbox: false);
     });
     _isFetchingMoreInbox = false;
+  }
+
+  Future<void> _finishInboxArrivals(List<Message> messages, int generation) async {
+    try {
+      await _handleNewUnreadMessages(messages);
+      if (generation == _repository.inboxGeneration) {
+        await _repository.markMessagesAsSeen(messages);
+      }
+    } catch (_) {}
   }
 
   Future<void> fetchSent({int page = 1, bool clearOld = false}) async {

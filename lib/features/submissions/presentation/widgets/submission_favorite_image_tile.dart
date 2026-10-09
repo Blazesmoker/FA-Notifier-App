@@ -5,6 +5,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
 import 'package:fanotifier/shared/widgets/heart_animation_optimized.dart';
 
 class SubmissionFavoriteImageTile extends StatelessWidget {
@@ -84,6 +85,10 @@ class SubmissionFavoriteImageTile extends StatelessWidget {
                       containerWidth: width,
                       containerHeight: height,
                       child: FaThumbnailOutline(
+                        submissionId: submissionId,
+                        contentBlock: item['contentBlock'] as FaContentBlockData? ??
+                            const FaContentBlockData(),
+                        lookupMissingTags: false,
                         rating: rating,
                         borderRadius: 8.0,
                         child: ClipRRect(

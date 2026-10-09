@@ -5,6 +5,7 @@ import 'package:fanotifier/features/submissions/presentation/widgets/submission_
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_management_shrinkable_text.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_management_styles.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_content_blur.dart';
 
 class SubmissionActionDialogBody extends StatelessWidget {
   const SubmissionActionDialogBody({
@@ -104,21 +105,25 @@ class _SelectedSubmissionsList extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(6),
-                  child: FaNetworkImage(
-                    submission.thumbnailUri.toString(),
-                    width: 54,
-                    height: 54,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const ColoredBox(
-                        color: Color(0xFF2A2A2A),
-                        child: SizedBox(
-                          width: 54,
-                          height: 54,
-                          child: Icon(Icons.broken_image_outlined),
-                        ),
-                      );
-                    },
+                  child: FaContentBlur(
+                    submissionId: submission.id,
+                    data: submission.contentBlock,
+                    child: FaNetworkImage(
+                      submission.thumbnailUri.toString(),
+                      width: 54,
+                      height: 54,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const ColoredBox(
+                          color: Color(0xFF2A2A2A),
+                          child: SizedBox(
+                            width: 54,
+                            height: 54,
+                            child: Icon(Icons.broken_image_outlined),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),

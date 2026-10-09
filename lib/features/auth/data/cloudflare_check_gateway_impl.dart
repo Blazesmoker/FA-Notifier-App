@@ -1,7 +1,9 @@
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/fa/fa_session_access_service.dart';
+import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 import 'package:fanotifier/features/auth/data/cloudflare_http_access_verifier.dart';
 import 'package:fanotifier/features/auth/data/cloudflare_webview_cookie_service.dart';
+import 'package:fanotifier/features/auth/data/fa_access_page_classifier.dart';
 import 'package:fanotifier/features/auth/domain/cloudflare_check_gateway.dart';
 import 'package:fanotifier/features/auth/domain/cloudflare_http_access_result.dart';
 
@@ -20,6 +22,14 @@ class CloudflareCheckGatewayImpl implements CloudflareCheckGateway {
   @override
   Future<void> accessVerified() =>
       FaSessionAccessService.instance.accessVerified();
+
+  @override
+  Future<void> waitForSiteRetry({bool Function()? isCancelled}) {
+    return FaRequestCoordinator.instance.waitForTurn(
+      label: 'FA availability retry',
+      isCancelled: isCancelled,
+    );
+  }
 
   @override
   bool isFaUrl(String url) {
@@ -77,6 +87,23 @@ class CloudflareCheckGatewayImpl implements CloudflareCheckGateway {
           statusCode: statusCode,
           headers: headers,
         );
+  }
+
+  @override
+  CloudflareHttpAccessResult classifyPage({
+    required String url,
+    required String body,
+    int? statusCode,
+    Map<String, String>? headers,
+  }) {
+    final result = classifyFaAccessPage(
+      url: url,
+      body: body,
+      statusCode: statusCode,
+      headers: headers,
+    );
+    recordFaAccessAvailability(result);
+    return result;
   }
 
   @override

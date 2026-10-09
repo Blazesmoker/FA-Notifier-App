@@ -6,22 +6,40 @@ import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart'
 import 'package:fanotifier/features/profile/domain/user_profile_load_result.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_repository.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_shout_deletion_result.dart';
+import 'package:fanotifier/shared/fa/domain/fa_author_watch_state_store.dart';
 
 class UserProfileRepositoryImpl implements UserProfileRepository {
-  UserProfileRepositoryImpl({UserProfileApiService? api})
-      : _api = api ?? UserProfileApiService();
+  UserProfileRepositoryImpl({
+    UserProfileApiService? api,
+    required this._authorWatchStateStore,
+  }) : _api = api ?? UserProfileApiService();
 
   final UserProfileApiService _api;
+  final FaAuthorWatchStateStore _authorWatchStateStore;
 
   @override
   Future<UserProfileLoadResult> loadProfile({
     required String nickname,
     required bool sfwEnabled,
-  }) {
-    return UserProfileLoader(api: _api).load(
+  }) async {
+    final watchRevision = _authorWatchStateStore.revision;
+    final result = await UserProfileLoader(api: _api).load(
       nickname: nickname,
       sfwEnabled: sfwEnabled,
     );
+    if (result.parsed.hasRealUserProfile) {
+      _authorWatchStateStore.write(
+        result.sanitizedUsername,
+        FaAuthorWatchState(
+          isWatching: result.parsed.isWatching,
+          watchLink: result.parsed.watchLink,
+          unwatchLink: result.parsed.unwatchLink,
+          isBlocked: result.parsed.isBlocked,
+        ),
+        expectedRevision: watchRevision,
+      );
+    }
+    return result;
   }
 
   @override
@@ -47,6 +65,10 @@ class UserProfileRepositoryImpl implements UserProfileRepository {
     required bool shouldWatch,
     required bool sfwEnabled,
   }) {
+    final segments = Uri.parse(urlPath).pathSegments;
+    if (segments.length > 1) {
+      _authorWatchStateStore.invalidate(segments[1]);
+    }
     return _api.sendWatchUnwatchRequest(
       urlPath,
       shouldWatch: shouldWatch,
@@ -63,6 +85,7 @@ class UserProfileRepositoryImpl implements UserProfileRepository {
     required bool sfwEnabled,
     required String sanitizedUsername,
   }) {
+    _authorWatchStateStore.invalidate(sanitizedUsername);
     return _api.sendBlockUnblockRequest(
       urlOrPath,
       keyValue,

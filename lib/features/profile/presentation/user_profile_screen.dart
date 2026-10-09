@@ -40,6 +40,7 @@ import 'package:fanotifier/features/profile/domain/user_profile_action_key.dart'
 import 'package:fanotifier/features/profile/presentation/profile_banner_header.dart';
 import 'package:fanotifier/features/profile/presentation/profile_avatar_transparency_detector.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_controller.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_sliver_helpers.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_favorites_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_gallery_section.dart';
@@ -323,6 +324,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
     _profileRepository = profileRepository;
     _profileController = UserProfileController(
       repository: profileRepository,
+      contentBlockController: context.read<FaContentBlockController>(),
       nickname: widget.nickname,
     );
     _shoutsController = UserProfileShoutsController(
@@ -1909,6 +1911,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       featuredImageUrl: _profileController.featuredImageUrl,
       featuredImageTitle: _profileController.featuredImageTitle,
       featuredPostNumber: _profileController.featuredPostNumber,
+      featuredContentBlock: _profileController.featuredContentBlock,
       onOpenSubmission: (context, imageUrl, submissionId) {
         Navigator.push(
           context,
@@ -1920,6 +1923,7 @@ class UserProfileScreenState extends State<UserProfileScreen>
       },
       userProfileImageUrl: _profileController.userProfileImageUrl,
       userProfilePostNumber: _profileController.userProfilePostNumber,
+      userProfileContentBlock: _profileController.userProfileContentBlock,
       userProfileTexts: _profileController.userProfileTexts,
       isClassicMarkup: _profileController.isClassicMarkup,
       acceptingTrades: _profileController.acceptingTrades,

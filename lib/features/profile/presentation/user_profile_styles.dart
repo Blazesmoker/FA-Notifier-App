@@ -1,4 +1,7 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:fanotifier/core/fa/fa_media_auth.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
+import 'package:fanotifier/shared/widgets/fa_content_blur.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 
@@ -113,7 +116,11 @@ Map<String, html_pkg.Style> userProfileHtmlStylesCompact() {
   };
 }
 
-List<html_pkg.HtmlExtension> buildUserProfileBBCodeExtensions() {
+List<html_pkg.HtmlExtension> buildUserProfileBBCodeExtensions({
+  String? submissionImageUrl,
+  String? submissionId,
+  FaContentBlockData contentBlock = const FaContentBlockData(),
+}) {
   return [
     html_pkg.TagExtension(
       tagsToExtend: {"i"},
@@ -201,7 +208,7 @@ List<html_pkg.HtmlExtension> buildUserProfileBBCodeExtensions() {
 
         final resolvedUrl = src.startsWith('//') ? 'https:$src' : src;
 
-        return FaNetworkImage(
+        final image = FaNetworkImage(
           resolvedUrl,
           width: 50,
           height: 50,
@@ -225,7 +232,17 @@ List<html_pkg.HtmlExtension> buildUserProfileBBCodeExtensions() {
             );
           },
         );
-
+        if (submissionImageUrl != null &&
+            submissionId != null &&
+            FaMediaAuth.normalizeUrl(resolvedUrl) ==
+                FaMediaAuth.normalizeUrl(submissionImageUrl)) {
+          return FaContentBlur(
+            submissionId: submissionId,
+            data: contentBlock,
+            child: image,
+          );
+        }
+        return image;
       },
     ),
   ];

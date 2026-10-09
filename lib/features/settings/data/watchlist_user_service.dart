@@ -40,8 +40,10 @@ Future<List<UserLink>?> fetchWatchlistUsersPage({
   required int maxRetries,
   required Duration retryDelay,
   WatchlistRetryCallback? onRetry,
+  bool Function()? isCancelled,
 }) async {
   for (int attempt = 1; attempt <= maxRetries; attempt++) {
+    if (isCancelled?.call() ?? false) return null;
     if (attempt > 1) {
       onRetry?.call('Retrying page $page ($attempt/$maxRetries)...');
     }
@@ -55,17 +57,20 @@ Future<List<UserLink>?> fetchWatchlistUsersPage({
             page: page,
           ),
         ),
+        isCancelled: isCancelled,
         headers: {
           'Cookie': cookieHeader,
           'User-Agent': FAHttp.userAgent,
         },
       );
 
+      if (isCancelled?.call() ?? false) return null;
       if (response.statusCode == 200) {
         return parseWatchlistUsers(response.body);
       }
     } catch (_) {}
 
+    if (isCancelled?.call() ?? false) return null;
     if (attempt < maxRetries) {
       await Future.delayed(retryDelay);
     }

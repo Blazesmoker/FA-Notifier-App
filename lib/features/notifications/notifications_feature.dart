@@ -1,4 +1,5 @@
 import 'package:fanotifier/core/notifications/domain/local_notification_gateway.dart';
+import 'package:fanotifier/features/ads/domain/fa_ads_repository.dart';
 import 'package:fanotifier/features/notifications/data/fa_notifications_repository_impl.dart';
 import 'package:fanotifier/features/notifications/data/notification_service.dart';
 import 'package:fanotifier/features/notifications/data/notification_settings_service.dart';
@@ -21,9 +22,13 @@ class NotificationsFeature {
     );
   }
 
-  static FaNotificationsController createNotificationService() {
+  static FaNotificationsController createNotificationService({
+    required FaAdsRepository adsRepository,
+  }) {
     return FaNotificationsController(
-      repository: FaNotificationsRepositoryImpl(),
+      repository: FaNotificationsRepositoryImpl(
+        onDocumentCookies: adsRepository.acceptDocumentCookies,
+      ),
     );
   }
 

@@ -2,6 +2,8 @@ import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/features/settings/domain/tag_blocklist_repository.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 
@@ -51,6 +53,8 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
   }
 
   Future<void> _fetchBlocklist() async {
+    final contentBlockController = context.read<FaContentBlockController>();
+    final contentBlockRevision = contentBlockController.revision;
     setState(() => _loading = true);
     try {
       final parsed = await _tagBlocklistRepository.fetch(
@@ -58,6 +62,12 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
       );
 
       if (!mounted) return;
+      contentBlockController.acceptSnapshot(
+        FaContentBlockSnapshot(
+          blockedTags: Set<String>.unmodifiable(parsed.blockedTags),
+        ),
+        expectedRevision: contentBlockRevision,
+      );
       setState(() {
         _nonce = parsed.nonce;
         _total = parsed.total;
@@ -79,15 +89,22 @@ class _TagBlocklistScreenState extends State<TagBlocklistScreen> {
   }
 
   Future<void> _sendTagBlocklistRequest(String tagName, {required bool shouldBlock}) async {
+    final contentBlockController = context.read<FaContentBlockController>();
+    final sessionEpoch = contentBlockController.sessionEpoch;
     if (_nonce == null || _nonce!.isEmpty) {
       throw Exception('Missing tag blocklist nonce.');
     }
 
-    await _tagBlocklistRepository.updateTag(
+    final confirmedTagName = await _tagBlocklistRepository.updateTag(
       sfwEnabled: _sfwEnabled,
       nonce: _nonce!,
       tagName: tagName,
       shouldBlock: shouldBlock,
+    );
+    contentBlockController.setTagBlocked(
+      confirmedTagName,
+      blocked: shouldBlock,
+      expectedSessionEpoch: sessionEpoch,
     );
   }
 

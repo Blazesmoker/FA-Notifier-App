@@ -15,6 +15,8 @@ import 'package:fanotifier/features/profile/presentation/profile_tab_scroll_scop
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/shared/widgets/heart_animation_optimized.dart';
 import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_details_screen.dart';
 
 /// Callback used to report the list of folders to a parent widget.
@@ -302,6 +304,8 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
 
     try {
       while (_nextPageUrl != null) {
+        final contentBlockController = context.read<FaContentBlockController>();
+        final contentBlockRevision = contentBlockController.revision;
         final requestedUrl = _nextPageUrl!;
         final result = await _profileGalleryRepository.fetchGalleryPage(
           url: requestedUrl,
@@ -311,6 +315,10 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
         if (_isDisposed || !mounted || fetchGeneration != _fetchGeneration) {
           return;
         }
+        contentBlockController.acceptItems(
+          result.posts,
+          expectedRevision: contentBlockRevision,
+        );
         final batch = _loadedIds.prepare(
           result.posts,
           idOf: _tileId,
@@ -398,6 +406,8 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
       final postUrl = queuedItem['postUrl'] as String;
       final fetchGeneration = _fetchGeneration;
       final detailFetchGeneration = _detailFetchGeneration;
+      final contentBlockController = context.read<FaContentBlockController>();
+      final contentBlockRevision = contentBlockController.revision;
       final visibilityGeneration =
           queuedItem['detailFetchVisibilityGeneration'] as int? ?? 0;
       bool isCancelled() => _isDetailFetchCancelled(
@@ -418,6 +428,13 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
           return;
         }
         final item = _images[currentIndex];
+        if (data.contentBlock.tagsKnown) {
+          item['contentBlock'] = data.contentBlock;
+        }
+        contentBlockController.acceptSnapshot(
+          data.contentBlock.snapshot,
+          expectedRevision: contentBlockRevision,
+        );
         item['hqUrl'] = data.hqUrl;
         item['isFav'] = data.isFav;
         item['favUrl'] = data.favUrl;
@@ -531,6 +548,8 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
                   _onTileVisibilityChanged(index, info.visibleFraction > 0.2);
                 },
                 child: _FavImageTile(
+                  contentBlock: item['contentBlock'] as FaContentBlockData? ??
+                      const FaContentBlockData(),
                   key: ValueKey(item['uniqueNumber']),
                   width: item['width'] as double,
                   height: item['height'] as double,
@@ -567,6 +586,7 @@ class ProfileGallerySliverState extends State<ProfileGallerySliver> {
 }
 
 class _FavImageTile extends StatelessWidget {
+  final FaContentBlockData contentBlock;
   final double width;
   final double height;
   final double aspectRatio;
@@ -582,6 +602,7 @@ class _FavImageTile extends StatelessWidget {
   final String? author;
   final VoidCallback onTap;
   const _FavImageTile({
+    this.contentBlock = const FaContentBlockData(),
     super.key,
     required this.width,
     required this.height,
@@ -650,6 +671,9 @@ class _FavImageTile extends StatelessWidget {
                   width: displayedWidth,
                   height: displayedHeight,
                   child: FaThumbnailOutline(
+                    submissionId: submissionId,
+                    contentBlock: contentBlock,
+                    lookupMissingTags: false,
                     rating: rating,
                     borderRadius: 8.0,
                     child: imageStack,

@@ -1,3 +1,5 @@
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
+
 enum SubmissionManagementActionType {
   assignToFolder,
   createFolder,
@@ -74,6 +76,7 @@ class FaManagedSubmission {
     required this.height,
     required this.missingTags,
     required Iterable<String> assignedFolders,
+    this.contentBlock = const FaContentBlockData(),
   }) : assignedFolders = List<String>.unmodifiable(assignedFolders);
 
   final String id;
@@ -85,6 +88,7 @@ class FaManagedSubmission {
   final double height;
   final bool missingTags;
   final List<String> assignedFolders;
+  final FaContentBlockData contentBlock;
 }
 
 class FaSubmissionManagementPage {

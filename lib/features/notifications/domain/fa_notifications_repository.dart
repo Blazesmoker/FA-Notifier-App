@@ -9,6 +9,8 @@ abstract interface class FaNotificationsRepository {
   Future<FaNotificationsPageSnapshot> fetchNotifications({
     required Map<String, int> messageBarCounts,
     required FaNotificationsPageParserState parserState,
+    bool? sfwEnabled,
+    bool Function()? canAcceptAdContext,
   });
 
   Future<FaNotificationsMutationSession> createMutationSession();
@@ -47,4 +49,6 @@ abstract interface class FaNotificationsRepository {
   Future<String?> fetchAvatarUrl(String username);
 
   Future<String?> fetchSubmissionPreview(String submissionId);
+
+  void refreshSubmissionPreviews();
 }

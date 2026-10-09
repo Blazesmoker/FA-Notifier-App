@@ -11,6 +11,7 @@ import 'package:fanotifier/shared/fa/cloudflare_challenge_exception.dart';
 import 'package:fanotifier/shared/fa/domain/fa_grid_pagination.dart';
 import 'package:fanotifier/shared/fa/domain/fa_page_settings.dart';
 import 'package:fanotifier/shared/fa/fa_thumbnail_processing.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 
 typedef BrowseCloudflareChallengeHandler = Future<CloudflareCheckResult?>
     Function(String? initialUrl);
@@ -21,12 +22,14 @@ class BrowseImageGridController extends ChangeNotifier {
     required this._onCloudflareChallenge,
     required this._repository,
     required this._sfwEnabled,
+    this.contentBlockController,
   });
 
   static const double _nextPageLeadScreens = 2.5;
 
   final BrowseCloudflareChallengeHandler _onCloudflareChallenge;
   final BrowseRepository _repository;
+  final FaContentBlockController? contentBlockController;
   final BrowseAdScrollController scrollController = BrowseAdScrollController();
   final List<Map<String, dynamic>> _images = [];
   final List<List<Map<String, dynamic>>> _imageRows = [];
@@ -152,6 +155,7 @@ class BrowseImageGridController extends ChangeNotifier {
     final generation = _requestGeneration;
     final filters = Map<String, String>.from(_selectedFilters);
     final sfwEnabled = _sfwEnabled;
+    final contentBlockRevision = contentBlockController?.revision ?? 0;
     bool stale() => _disposed || generation != _requestGeneration;
     kDebugPrint('[Browse] Fetching page $pageNumber${isRefresh ? ' (refresh)' : ''}');
     final previousMaxScrollExtent = isRefresh || !scrollController.hasClients
@@ -186,6 +190,10 @@ class BrowseImageGridController extends ChangeNotifier {
         isCancelled: stale,
       );
       if (stale()) return;
+      contentBlockController?.acceptItems(
+        page.images,
+        expectedRevision: contentBlockRevision,
+      );
       final continueLoading = await _appendImages(
         page,
         pageNumber: pageNumber,
@@ -222,7 +230,8 @@ class BrowseImageGridController extends ChangeNotifier {
         _cloudflareRecoveryCancelled = true;
         _hasMore = false;
         _isError = true;
-        _errorMessage = 'Verification was closed. Pull to retry.';
+        _errorMessage = result?.siteUnavailableMessage ??
+            'Verification was closed. Pull to retry.';
         _pendingNextPageFetch = false;
         _isNextPageFetchQueued = false;
         _nextPageTriggerOffset = scrollController.hasClients

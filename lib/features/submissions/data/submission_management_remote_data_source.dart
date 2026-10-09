@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/network/fa_page_counter_observer.dart';
 import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
@@ -132,6 +133,7 @@ class SubmissionManagementRemoteDataSource {
           includeContentType: false,
         );
         getHeaders['User-Agent'] = FAHttp.userAgent;
+        final counterRequest = FaPageCounterObserver.instance.capture(getUri);
         final getResponse = await client
             .get(
               getUri,
@@ -142,6 +144,12 @@ class SubmissionManagementRemoteDataSource {
           statusCode: getResponse.statusCode,
           headers: getResponse.headers,
           responseBody: getResponse.statusCode == 403 ? getResponse.body : null,
+        );
+        FaPageCounterObserver.instance.acceptBytes(
+          request: counterRequest,
+          uri: getUri,
+          statusCode: getResponse.statusCode,
+          bytes: getResponse.bodyBytes,
         );
         final parsedGetResponse = _toResponse(getResponse);
         final postRequest = buildPostRequest(parsedGetResponse);

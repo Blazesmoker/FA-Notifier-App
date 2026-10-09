@@ -4,6 +4,7 @@ import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/features/notes/domain/note_activity_snapshot.dart';
 import 'package:fanotifier/features/notes/domain/note_management.dart';
 import 'package:fanotifier/features/notes/domain/notes_page_result.dart';
+import 'package:fanotifier/features/notes/domain/notes_inbox_snapshot.dart';
 import 'package:fanotifier/features/notes/domain/notes_unread_notification_result.dart';
 import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 
@@ -14,11 +15,26 @@ abstract class NotesRepository {
 
   bool takePendingRefresh();
 
+  NotesInboxSnapshot? get latestInboxSnapshot;
+
+  int get inboxGeneration;
+
+  Future<NotesInboxSnapshot?> refreshInbox(
+    Future<NotesInboxSnapshot?> Function() fallback,
+  );
+
+  void bindInboxRefresh(Future<NotesInboxSnapshot?> Function() handler);
+
+  void unbindInboxRefresh(Future<NotesInboxSnapshot?> Function() handler);
+
+  void rememberInboxSnapshot(NotesInboxSnapshot snapshot);
+
   void setScreenVisible(bool visible);
 
   Future<NotesPageResult> fetchPage({
     required String folder,
     required int page,
+    bool requireFresh = false,
   });
 
   Future<List<Message>> fetchMessages({
@@ -47,6 +63,8 @@ abstract class NotesRepository {
   Future<void> handleTopbarCounts(
     NotificationCounts? counts, {
     required String source,
+    NoteActivitySnapshot? noteActivitySnapshot,
+    int? startedAtMilliseconds,
   });
 
   Future<void> markAsUnreadWithoutRefetch(Message message);

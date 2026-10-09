@@ -1,5 +1,14 @@
 import 'package:fanotifier/shared/widgets/fa_session_recovery_scope.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
+import 'package:fanotifier/app/navigation/app_navigation.dart';
+import 'package:fanotifier/core/logging/fa_ads_logging.dart';
+import 'package:fanotifier/features/ads/domain/fa_ad_models.dart';
+import 'package:fanotifier/features/ads/domain/fa_ads_repository.dart';
+import 'package:fanotifier/features/ads/presentation/fa_ad_panel.dart';
+import 'package:fanotifier/features/ads/presentation/fa_ad_panel_controller.dart';
+import 'package:fanotifier/features/ads/presentation/fa_ad_section_controller.dart';
+import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/features/drawer/presentation/home_drawer_shell.dart';
 import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
 import 'package:fanotifier/core/analytics/app_analytics.dart';
@@ -23,10 +32,16 @@ class NotificationsScreen extends StatefulWidget {
   final String? initialSection;
   final GlobalKey<HomeDrawerShellState> drawerKey;
   final ScrollReturnActionPort? scrollActionPort;
+  final bool isActive;
+  final bool sfwEnabled;
+  final ValueListenable<bool> sessionClosing;
 
   const NotificationsScreen({
     super.key,
     required this.drawerKey,
+    required this.isActive,
+    required this.sfwEnabled,
+    required this.sessionClosing,
     this.initialSection,
     this.scrollActionPort,
   });
@@ -36,17 +51,39 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, RouteAware, WidgetsBindingObserver {
   TabController? _tabController;
   int _initialTabIndex = 0;
   bool _isDraggingFromEdge = false;
-  int _previousSectionCount = 0;
+  List<String> _tabSectionTitles = const [];
+  bool _tabSynchronizationScheduled = false;
   int _lastTabIndex = -1;
   late NotificationActivitiesController _activitiesController;
   late FaActivitiesPollingPort _activitiesPollingPort;
   bool _activitiesControllerInitialized = false;
+  late final FaAdPanelController _ads;
+  final GlobalKey _adViewportKey = GlobalKey();
+  FaNotificationsController? _notificationsService;
+  ModalRoute<dynamic>? _route;
+  int _lastAdPageRevision = -1;
+  int _adConfigurationPageRevision = -1;
+  int _adRenewalPageRevision = -1;
+  bool _adsSyncScheduled = false;
+  bool _renewAdsPending = false;
+  bool _routeVisible = true;
+  bool _screenVisible = false;
+  bool _appResumed = true;
+  bool _contentExcursion = false;
+  bool _adExcursion = false;
+  bool _adHandoff = false;
+  bool _adTapPending = false;
+  VoidCallback? _pendingRemovalAdRenewal;
   final Map<String, ScrollReturnController> _scrollReturns = {};
   final List<ScrollReturnController> _retiredScrollReturns = [];
+  String? _removalSectionTitle;
+  bool _confirmationPending = false;
+  int _nextRemoval = 0;
+  int _actionSessionGeneration = 0;
   NotificationRemovalButtonPhase _removeSelectedPhase =
       NotificationRemovalButtonPhase.idle;
   NotificationRemovalButtonPhase _nukeSectionPhase =
@@ -58,6 +95,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       Duration(milliseconds: 1050);
 
   bool get _destructiveActionBusy =>
+      _confirmationPending ||
       _removeSelectedPhase != NotificationRemovalButtonPhase.idle ||
       _nukeSectionPhase != NotificationRemovalButtonPhase.idle ||
       _removeAllPhase != NotificationRemovalButtonPhase.idle;
@@ -68,10 +106,18 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   @override
   void initState() {
     super.initState();
+    _ads = FaAdPanelController(
+      repository: context.read<FaAdsRepository>(),
+      placements: const {FaAdPlacement.headerMiddle},
+    );
+    widget.sessionClosing.addListener(_sessionClosingChanged);
+    _appResumed = WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
     widget.scrollActionPort?.bind(_scrollFromNavigation, _cancelNavigationScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      unawaited(_activitiesController.loadOnFirstOpen());
+      unawaited(_loadOnFirstOpen());
     });
   }
 
@@ -79,27 +125,66 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final service = Provider.of<FaNotificationsController>(context, listen: false);
+    if (!identical(service, _notificationsService)) {
+      _notificationsService?.removeListener(_onNotificationsChanged);
+      _notificationsService = service;
+      _lastAdPageRevision = -1;
+      _adConfigurationPageRevision = -1;
+      _adRenewalPageRevision = -1;
+      service.addListener(_onNotificationsChanged);
+    }
     if (!_activitiesControllerInitialized) {
       _activitiesPollingPort = context.read<FaActivitiesPollingPort>();
       _activitiesController = NotificationActivitiesController(
         service,
         pollingService: _activitiesPollingPort,
+        onRefreshed: _onScreenRefreshed,
       );
       _activitiesControllerInitialized = true;
     }
+    final route = ModalRoute.of(context);
+    if (route != _route) {
+      if (_route != null) routeObserver.unsubscribe(this);
+      _route = route;
+      if (route != null) {
+        routeObserver.subscribe(this, route);
+        _routeVisible = route.isCurrent;
+      }
+    }
+    _updateAdActivity();
+    _scheduleAdsSynchronization();
   }
 
   @override
   void didUpdateWidget(covariant NotificationsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionClosing != widget.sessionClosing) {
+      oldWidget.sessionClosing.removeListener(_sessionClosingChanged);
+      widget.sessionClosing.addListener(_sessionClosingChanged);
+      _sessionClosingChanged();
+    }
     if (oldWidget.scrollActionPort != widget.scrollActionPort) {
       oldWidget.scrollActionPort?.unbind(_scrollFromNavigation);
       widget.scrollActionPort?.bind(_scrollFromNavigation, _cancelNavigationScroll);
     }
+    if (oldWidget.sfwEnabled != widget.sfwEnabled) {
+      _ads.clear();
+      _scheduleAdsSynchronization();
+      unawaited(_ensurePageMode(force: true));
+    } else if (!oldWidget.isActive && widget.isActive) {
+      unawaited(_ensurePageMode());
+    }
+    _updateAdActivity();
   }
 
   @override
   void dispose() {
+    _pendingRemovalAdRenewal = null;
+    widget.sessionClosing.removeListener(_sessionClosingChanged);
+    _notificationsService?.removeListener(_onNotificationsChanged);
+    routeObserver.unsubscribe(this);
+    WidgetsBinding.instance.removeObserver(this);
+    _ads.dispose();
     widget.scrollActionPort?.unbind(_scrollFromNavigation);
     for (final scrollReturn in [..._scrollReturns.values, ..._retiredScrollReturns]) {
       scrollReturn.dispose();
@@ -112,16 +197,318 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     super.dispose();
   }
 
+  Future<void> _loadOnFirstOpen() async {
+    await _activitiesController.loadOnFirstOpen();
+    if (!mounted) return;
+    await _ensurePageMode();
+    _scheduleAdsSynchronization();
+  }
+
+  Future<void> _ensurePageMode({bool force = false}) async {
+    if (!mounted || !widget.isActive || widget.sessionClosing.value) return;
+    final service = _notificationsService;
+    if (service == null || service.documentSfwEnabled == widget.sfwEnabled) return;
+    if (!force &&
+        (service.documentSfwEnabled == null ||
+            service.isLoading ||
+            service.errorMessage != null)) {
+      return;
+    }
+    await service.fetchNotifications(sfwEnabled: widget.sfwEnabled);
+    if (mounted) _scheduleAdsSynchronization();
+  }
+
+  void _onNotificationsChanged() {
+    final service = _notificationsService;
+    if (!mounted ||
+        service == null ||
+        _lastAdPageRevision == service.adPageRevision) {
+      return;
+    }
+    _lastAdPageRevision = service.adPageRevision;
+    if (service.adPageMetadata == null) _ads.clear();
+    _scheduleAdsSynchronization();
+  }
+
+  void _scheduleAdsSynchronization({bool renew = false}) {
+    _renewAdsPending = _renewAdsPending || renew;
+    if (_adsSyncScheduled || !mounted) return;
+    _adsSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _adsSyncScheduled = false;
+      if (!mounted) return;
+      if (widget.sessionClosing.value) {
+        _renewAdsPending = false;
+        _ads.clear();
+        return;
+      }
+      final service = _notificationsService;
+      final renew = _renewAdsPending;
+      _renewAdsPending = false;
+      final previous = _ads.section;
+      _ads.synchronize(
+        page: service?.adPageMetadata,
+        viewportWidth: MediaQuery.sizeOf(context).width,
+        sfwEnabled: widget.sfwEnabled,
+        renew: renew,
+      );
+      if (!identical(previous, _ads.section) && _ads.section != null) {
+        _adConfigurationPageRevision = service?.adPageRevision ?? -1;
+      }
+      unawaited(_ensurePageMode());
+    });
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  Future<void> _onScreenRefreshed(int previousPageRevision) async {
+    final service = _notificationsService;
+    if (!mounted ||
+        service?.errorMessage != null ||
+        service?.documentSfwEnabled != widget.sfwEnabled) {
+      return;
+    }
+    if (service == null || _adRenewalPageRevision == service.adPageRevision) return;
+    _adRenewalPageRevision = service.adPageRevision;
+    final renew = _adConfigurationPageRevision <= previousPageRevision;
+    _scheduleAdsSynchronization(renew: renew);
+    FaAdsLog.event(FaAdsLogCategory.lifecycle, 'notifications_screen_refreshed',
+        checks: {'adRenewalRequested': renew, 'fromBackgroundPolling': false,
+          'freshConfigurationAlreadyCreated': !renew});
+  }
+
+  _NotificationRemovalAdContext _captureRemovalAdContext() {
+    final section = _ads.section;
+    return _NotificationRemovalAdContext(
+      number: ++_nextRemoval,
+      service: _notificationsService,
+      section: section,
+      delivery: section?.deliveryGeneration,
+      pageRevision: _notificationsService?.adPageRevision ?? -1,
+      sfwEnabled: widget.sfwEnabled,
+      sessionGeneration: _actionSessionGeneration,
+    );
+  }
+
+  void _renewAdAfterRemoval(
+    _NotificationRemovalAdContext previous,
+    _NotificationRemovalAction action,
+  ) {
+    final service = _notificationsService;
+    if (!mounted ||
+        widget.sessionClosing.value ||
+        previous.sessionGeneration != _actionSessionGeneration ||
+        !identical(service, previous.service) ||
+        service?.errorMessage != null ||
+        widget.sfwEnabled != previous.sfwEnabled ||
+        service?.documentSfwEnabled != widget.sfwEnabled) {
+      return;
+    }
+    if (_adTapPending) {
+      _pendingRemovalAdRenewal = () => _renewAdAfterRemoval(previous, action);
+      return;
+    }
+    final section = _ads.section;
+    final freshDelivery = !identical(section, previous.section) ||
+        section?.deliveryGeneration != previous.delivery ||
+        _adConfigurationPageRevision > previous.pageRevision;
+    _scheduleAdsSynchronization(renew: !freshDelivery);
+    FaAdsLog.event(
+      FaAdsLogCategory.lifecycle,
+      'notifications_removal_succeeded',
+      section: section?.sectionNumber,
+      delivery: section?.deliveryGeneration,
+      counts: {'operation': previous.number},
+      checks: {
+        'removeSelected': action == _NotificationRemovalAction.selected,
+        'sectionNuke': action == _NotificationRemovalAction.section,
+        'allNuke': action == _NotificationRemovalAction.all,
+        'adRenewalRequested': !freshDelivery,
+        'freshDeliveryAlreadyCreated': freshDelivery,
+      },
+    );
+  }
+
+  void _contentOpened() => _contentExcursion = true;
+
+  @override
+  void didPushNext() {
+    _routeVisible = false;
+    _updateAdActivity();
+  }
+
+  @override
+  void didPopNext() {
+    _routeVisible = true;
+    _adHandoff = false;
+    if (_contentExcursion && !_adExcursion) {
+      _scheduleAdsSynchronization(renew: true);
+      FaAdsLog.event(FaAdsLogCategory.lifecycle, 'notifications_content_return',
+          checks: {'adRenewalRequested': true});
+    } else if (_adExcursion) {
+      FaAdsLog.event(FaAdsLogCategory.lifecycle, 'notifications_ad_return_retained',
+          checks: {'deliveryRetained': true, 'repeatImpression': false});
+    }
+    _contentExcursion = false;
+    _adExcursion = false;
+    _updateAdActivity();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appResumed = state == AppLifecycleState.resumed;
+    if (_appResumed && _adHandoff && _routeVisible) {
+      _adHandoff = false;
+      _adExcursion = false;
+      FaAdsLog.event(FaAdsLogCategory.lifecycle, 'notifications_ad_return_retained',
+          checks: {'deliveryRetained': true, 'repeatImpression': false});
+    }
+    _updateAdActivity();
+  }
+
+  void _sessionClosingChanged() {
+    if (widget.sessionClosing.value) {
+      _actionSessionGeneration++;
+      _pendingRemovalAdRenewal = null;
+      _ads.setActive(false);
+      _ads.clear();
+      _renewAdsPending = false;
+    } else {
+      _scheduleAdsSynchronization();
+    }
+    _updateAdActivity();
+  }
+
+  void _updateAdActivity() => _ads.setActive(!widget.sessionClosing.value && widget.isActive &&
+      _screenVisible && _routeVisible && _appResumed && !_adHandoff);
+
+  Future<void> _openAd(FaAdSectionController section, FaAdSlotController slot) async {
+    if (_adTapPending || !_ads.active.value || !identical(_ads.section, section)) return;
+    _adTapPending = true;
+    try {
+      final destination = await section.click(slot);
+      if (destination == null ||
+          !mounted ||
+          !_ads.active.value ||
+          !identical(_ads.section, section)) {
+        return;
+      }
+      _contentExcursion = false;
+      _adExcursion = true;
+      _adHandoff = true;
+      _updateAdActivity();
+      final disposition = await handleFAAdDestination(context, destination);
+      if (!mounted) return;
+      FaAdsLog.event(FaAdsLogCategory.click, 'destination_handed_off',
+          section: section.sectionNumber, slot: slot.definition.placement.name,
+          checks: {'internal': disposition == FaAdLinkDisposition.internal,
+            'external': disposition == FaAdLinkDisposition.external,
+            'opened': disposition != FaAdLinkDisposition.failed,
+            'confirmationSkippedForAd': true, 'trackingUrlOpenedTwice': false});
+      if (disposition == FaAdLinkDisposition.failed ||
+          (disposition == FaAdLinkDisposition.external && _appResumed && _routeVisible)) {
+        _adHandoff = false;
+        _adExcursion = false;
+        _updateAdActivity();
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _adHandoff = false;
+      _adExcursion = false;
+      _updateAdActivity();
+      FaAdsLog.event(FaAdsLogCategory.click, 'handoff_failed');
+    } finally {
+      _adTapPending = false;
+      final pendingRenewal = _pendingRemovalAdRenewal;
+      _pendingRemovalAdRenewal = null;
+      pendingRenewal?.call();
+    }
+  }
+
+  PreferredSizeWidget? _buildAdHeader({TabBar? tabs}) {
+    const dividerHeight = 4.0;
+    const tabSpacingHeight = 3.4;
+    final panel = FaAdPanel(
+      controller: _ads,
+      viewportKey: _adViewportKey,
+      fillAvailableWidth: true,
+      onTap: _openAd,
+    );
+    final adHeight = panel.heightFor(MediaQuery.sizeOf(context).width);
+    if (adHeight == 0 && tabs == null) return null;
+    final height = dividerHeight +
+        (tabs == null ? 0 : tabSpacingHeight + tabs.preferredSize.height);
+    return PreferredSize(
+      preferredSize: Size.fromHeight(adHeight + height),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          panel,
+          const Divider(
+            height: dividerHeight,
+            thickness: 4,
+            color: Color(0xFF111111),
+          ),
+          if (tabs != null) ...[
+            const Divider(
+              height: tabSpacingHeight,
+              thickness: 4,
+              color: Colors.black,
+            ),
+            Container(
+              decoration: const BoxDecoration(color: Color(0xFF111111)),
+              child: tabs,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   void _syncActiveNotificationSection() {
-    _activitiesController.setActiveSection(_tabController?.index);
+    _activitiesController.setActiveSection(_selectedSectionIndex);
+  }
+
+  String? get _selectedSectionTitle {
+    final index = _tabController?.index;
+    if (index == null || index < 0 || index >= _tabSectionTitles.length) {
+      return null;
+    }
+    return _tabSectionTitles[index];
+  }
+
+  int? get _selectedSectionIndex {
+    final title = _selectedSectionTitle;
+    if (title == null) return null;
+    final index = _activitiesController.sections.indexWhere(
+      (section) => section.title == title,
+    );
+    return index < 0 ? null : index;
+  }
+
+  int? _activeSectionIndex(String sectionTitle, {bool requireSettled = true}) {
+    final tabs = _tabController;
+    if (!mounted ||
+        !widget.isActive ||
+        widget.sessionClosing.value ||
+        !_routeVisible ||
+        !_appResumed ||
+        tabs == null ||
+        (requireSettled &&
+            (tabs.indexIsChanging || tabs.offset.abs() > 0.001)) ||
+        _selectedSectionTitle != sectionTitle ||
+        !listEquals(
+          _tabSectionTitles,
+          _activitiesController.sections.map((section) => section.title).toList(),
+        )) {
+      return null;
+    }
+    return _selectedSectionIndex;
   }
 
   ScrollReturnController? get _currentScrollReturn {
     if (!_activitiesControllerInitialized) return null;
-    final index = _tabController?.index;
-    final sections = _activitiesController.sections;
-    if (index == null || index < 0 || index >= sections.length) return null;
-    return _scrollReturns[sections[index].title];
+    final title = _selectedSectionTitle;
+    return title == null ? null : _scrollReturns[title];
   }
 
   void _synchronizeScrollReturns() {
@@ -245,52 +632,79 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 
-  void _initializeTabController(int sectionCount) {
-    _cancelNavigationScroll();
-    _tabController?.dispose();
-    _initialTabIndex = _activitiesController.initialTabIndex(
-      widget.initialSection,
-    );
-    if (_initialTabIndex >= sectionCount) {
-      _initialTabIndex = sectionCount > 0 ? sectionCount - 1 : 0;
+  void _scheduleTabSynchronization() {
+    final titles = _activitiesController.sections
+        .map((section) => section.title)
+        .toList(growable: false);
+    if (_tabSynchronizationScheduled || listEquals(titles, _tabSectionTitles)) {
+      return;
     }
+    _tabSynchronizationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _tabSynchronizationScheduled = false;
+      if (!mounted) return;
+      _initializeTabController();
+    });
+  }
+
+  void _initializeTabController() {
+    _cancelNavigationScroll();
+    final previousTitle = _selectedSectionTitle;
+    final previousIndex = _tabController?.index ?? 0;
+    final titles = _activitiesController.sections
+        .map((section) => section.title)
+        .toList(growable: false);
+    _tabController?.dispose();
+    _tabController = null;
+    _tabSectionTitles = titles;
+    if (titles.isEmpty) {
+      _lastTabIndex = -1;
+      _syncActiveNotificationSection();
+      setState(() {});
+      return;
+    }
+    final retainedIndex = titles.indexOf(previousTitle ?? '');
+    _initialTabIndex = retainedIndex >= 0
+        ? retainedIndex
+        : previousTitle == null
+            ? _activitiesController.initialTabIndex(widget.initialSection)
+            : previousIndex.clamp(0, titles.length - 1).toInt();
     _tabController = TabController(
-        length: sectionCount, vsync: this, initialIndex: _initialTabIndex);
+        length: titles.length, vsync: this, initialIndex: _initialTabIndex);
     _lastTabIndex = _tabController!.index;
     _syncActiveNotificationSection();
     appAnalytics.logScreen(
-      AppScreens.notificationSection(
-        _activitiesController.sections[_lastTabIndex].title,
-      ),
+      AppScreens.notificationSection(titles[_lastTabIndex]),
     );
-    _tabController!.addListener(() {
-      if (!mounted) return;
-      final idx = _tabController!.index;
-      if (idx != _lastTabIndex) {
-        _cancelNavigationScroll();
-        _lastTabIndex = idx;
-        _syncActiveNotificationSection();
-        appAnalytics.logScreen(
-          AppScreens.notificationSection(
-            _activitiesController.sections[idx].title,
-          ),
-        );
-        setState(() {});
-      }
-    });
-    _previousSectionCount = sectionCount;
+    _tabController!.addListener(_onTabChanged);
     setState(() {});
   }
 
-  void _toggleSelectAll() {
+  void _onTabChanged() {
+    if (!mounted || _tabController == null) return;
+    final titles = _activitiesController.sections
+        .map((section) => section.title)
+        .toList(growable: false);
+    if (!listEquals(titles, _tabSectionTitles)) {
+      _scheduleTabSynchronization();
+      return;
+    }
+    final index = _tabController!.index;
+    if (index != _lastTabIndex) {
+      _cancelNavigationScroll();
+      _lastTabIndex = index;
+      _syncActiveNotificationSection();
+      appAnalytics.logScreen(AppScreens.notificationSection(titles[index]));
+    }
+    setState(() {});
+  }
+
+  void _toggleSelectAll(String sectionTitle) {
     if (_destructiveActionBusy || _activitiesController.sections.isEmpty) {
       return;
     }
-    final currentTabIndex = _tabController?.index ?? 0;
-    if (currentTabIndex < 0 ||
-        currentTabIndex >= _activitiesController.sections.length) {
-      return;
-    }
+    final currentTabIndex = _activeSectionIndex(sectionTitle);
+    if (currentTabIndex == null) return;
     if (_activitiesController.isShoutsSection(currentTabIndex)) {
       _shoutsSectionKey.currentState?.toggleSelectAll();
     } else {
@@ -298,17 +712,16 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     }
   }
 
-  Future<void> _removeSelected() async {
+  Future<void> _removeSelected(String sectionTitle) async {
     if (_destructiveActionBusy || _activitiesController.sections.isEmpty) {
       return;
     }
-    final currentTabIndex = _tabController?.index ?? 0;
-    if (currentTabIndex < 0 ||
-        currentTabIndex >= _activitiesController.sections.length) {
-      return;
-    }
+    final currentTabIndex = _activeSectionIndex(sectionTitle);
+    if (currentTabIndex == null) return;
+    final adContext = _captureRemovalAdContext();
 
     setState(() {
+      _removalSectionTitle = sectionTitle;
       _removeSelectedPhase = NotificationRemovalButtonPhase.processing;
     });
 
@@ -330,6 +743,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     if (!mounted) return;
     switch (outcome) {
       case NotificationRemovalOutcome.success:
+        _renewAdAfterRemoval(adContext, _NotificationRemovalAction.selected);
         setState(() {
           _removeSelectedPhase = NotificationRemovalButtonPhase.success;
         });
@@ -340,17 +754,20 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         }
         setState(() {
           _removeSelectedPhase = NotificationRemovalButtonPhase.idle;
+          _removalSectionTitle = null;
         });
         return;
       case NotificationRemovalOutcome.nothingSelected:
         setState(() {
           _removeSelectedPhase = NotificationRemovalButtonPhase.idle;
+          _removalSectionTitle = null;
         });
         _showRemovalMessage('Select at least one notification first.');
         return;
       case NotificationRemovalOutcome.failed:
         setState(() {
           _removeSelectedPhase = NotificationRemovalButtonPhase.idle;
+          _removalSectionTitle = null;
         });
         _showRemovalMessage(
           'Could not remove the selected notifications. Please try again later.',
@@ -359,6 +776,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       case NotificationRemovalOutcome.indeterminate:
         setState(() {
           _removeSelectedPhase = NotificationRemovalButtonPhase.idle;
+          _removalSectionTitle = null;
         });
         _showRemovalMessage(
           'Could not confirm whether the selected notifications were removed. Refresh notifications before trying again.',
@@ -378,36 +796,59 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 
-  Future<void> _nukeCurrentSection() async {
+  Future<bool> _confirmRemoval({
+    required String title,
+    required String message,
+  }) async {
+    final sessionGeneration = _actionSessionGeneration;
+    setState(() {
+      _confirmationPending = true;
+    });
+    try {
+      final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Text(title),
+              content: Text(message),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  child: const Text('Confirm'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      return confirmed && sessionGeneration == _actionSessionGeneration;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _confirmationPending = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _nukeCurrentSection(String sectionTitle) async {
     if (_destructiveActionBusy || _activitiesController.sections.isEmpty) {
       return;
     }
-    final currentTabIndex = _tabController?.index ?? 0;
-    if (currentTabIndex < 0 ||
-        currentTabIndex >= _activitiesController.sections.length) {
-      return;
-    }
-    final confirm = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Confirm Nuke'),
-            content: const Text(
-                'Are you sure you want to nuke all items in this section?'),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(false),
-                  child: const Text('Cancel')),
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(true),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('Confirm'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    if (!confirm || !mounted) return;
+    if (_activeSectionIndex(sectionTitle) == null) return;
+    final confirm = await _confirmRemoval(
+      title: 'Confirm Nuke',
+      message: 'Are you sure you want to nuke all items in this section?',
+    );
+    if (!confirm || !mounted || _destructiveActionBusy) return;
+    final currentTabIndex = _activeSectionIndex(sectionTitle);
+    if (currentTabIndex == null) return;
+    final adContext = _captureRemovalAdContext();
     setState(() {
+      _removalSectionTitle = sectionTitle;
       _nukeSectionPhase = NotificationRemovalButtonPhase.processing;
     });
 
@@ -428,6 +869,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     if (!mounted) return;
     switch (outcome) {
       case NotificationRemovalOutcome.success:
+        _renewAdAfterRemoval(adContext, _NotificationRemovalAction.section);
         setState(() {
           _nukeSectionPhase = NotificationRemovalButtonPhase.success;
         });
@@ -438,17 +880,20 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         }
         setState(() {
           _nukeSectionPhase = NotificationRemovalButtonPhase.idle;
+          _removalSectionTitle = null;
         });
         return;
       case NotificationRemovalOutcome.nothingSelected:
         setState(() {
           _nukeSectionPhase = NotificationRemovalButtonPhase.idle;
+          _removalSectionTitle = null;
         });
         _showRemovalMessage('No notifications to remove.');
         return;
       case NotificationRemovalOutcome.failed:
         setState(() {
           _nukeSectionPhase = NotificationRemovalButtonPhase.idle;
+          _removalSectionTitle = null;
         });
         _showRemovalMessage(
           'Could not remove the notifications in this section. Please try again later.',
@@ -457,6 +902,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       case NotificationRemovalOutcome.indeterminate:
         setState(() {
           _nukeSectionPhase = NotificationRemovalButtonPhase.idle;
+          _removalSectionTitle = null;
         });
         _showRemovalMessage(
           'Could not confirm whether the notifications in this section were removed. Refresh notifications before trying again.',
@@ -473,27 +919,20 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       );
       return;
     }
-    final confirm = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Confirm'),
-            content: const Text(
-                'Are you sure you want to remove ALL notifications?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(true),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('Confirm'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    if (!confirm || !mounted) return;
+    final confirm = await _confirmRemoval(
+      title: 'Confirm',
+      message: 'Are you sure you want to remove ALL notifications?',
+    );
+    if (!confirm ||
+        !mounted ||
+        _destructiveActionBusy ||
+        !widget.isActive ||
+        widget.sessionClosing.value ||
+        !_routeVisible ||
+        !_appResumed) {
+      return;
+    }
+    final adContext = _captureRemovalAdContext();
     setState(() {
       _removeAllPhase = NotificationRemovalButtonPhase.processing;
     });
@@ -508,6 +947,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     if (!mounted) return;
     switch (outcome) {
       case NotificationRemovalOutcome.success:
+        _renewAdAfterRemoval(adContext, _NotificationRemovalAction.all);
         setState(() {
           _removeAllPhase = NotificationRemovalButtonPhase.success;
         });
@@ -567,16 +1007,19 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 
-  Widget _buildBulkActionRow() {
-    final actionsEnabled =
-        !_destructiveActionBusy && _activitiesController.sections.isNotEmpty;
+  Widget _buildBulkActionRow({required String sectionTitle}) {
+    final actionsEnabled = !_destructiveActionBusy &&
+        _activeSectionIndex(sectionTitle, requireSettled: false) != null;
+    final ownsAction = sectionTitle == _removalSectionTitle;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 0.0, vertical: 2.0),
       child: Row(
         children: [
           Expanded(
             child: ElevatedButton(
-              onPressed: actionsEnabled ? _toggleSelectAll : null,
+              onPressed: actionsEnabled
+                  ? () => _toggleSelectAll(sectionTitle)
+                  : null,
               style: _bulkActionButtonStyle(const Color(0xFF1F1F1F)),
               child: const FittedBox(
                 fit: BoxFit.scaleDown,
@@ -588,20 +1031,28 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           const SizedBox(width: 5),
           Expanded(
             child: ElevatedButton(
-              onPressed: actionsEnabled ? _removeSelected : null,
+              onPressed: actionsEnabled
+                  ? () => _removeSelected(sectionTitle)
+                  : null,
               style: _bulkActionButtonStyle(const Color(0xFF1F1F1F)),
               child: NotificationRemovalButtonContent(
-                phase: _removeSelectedPhase,
+                phase: ownsAction
+                    ? _removeSelectedPhase
+                    : NotificationRemovalButtonPhase.idle,
               ),
             ),
           ),
           const SizedBox(width: 5),
           Expanded(
             child: ElevatedButton(
-              onPressed: actionsEnabled ? _nukeCurrentSection : null,
+              onPressed: actionsEnabled
+                  ? () => _nukeCurrentSection(sectionTitle)
+                  : null,
               style: _bulkActionButtonStyle(const Color(0xFFE09321)),
               child: NotificationActionButtonContent(
-                phase: _nukeSectionPhase,
+                phase: ownsAction
+                    ? _nukeSectionPhase
+                    : NotificationRemovalButtonPhase.idle,
                 idleChild: const Text('Nuke'),
                 processingIndicatorColor: Colors.black,
               ),
@@ -618,7 +1069,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       needsRecovery: () => context.read<FaNotificationsController>().errorMessage != null,
       isBusy: () => context.read<FaNotificationsController>().isLoading || _destructiveActionBusy,
       onRecover: () => _activitiesController.refresh(source: 'cloudflare_recovery'),
-      child: _buildContent(context),
+      child: SizedBox(
+        key: _adViewportKey,
+        child: ListenableBuilder(
+          listenable: _ads,
+          builder: (context, _) => _buildContent(context),
+        ),
+      ),
     );
   }
 
@@ -626,10 +1083,12 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     return VisibilityDetector(
       key: const Key('notifications_screen_visibility'),
       onVisibilityChanged: (info) {
+        _screenVisible = info.visibleFraction > 0.01;
+        _updateAdActivity();
         if (info.visibleFraction <= 0.01) _cancelNavigationScroll();
         _activitiesController.setScreenVisible(
           info.visibleFraction > 0.01,
-          activeIndex: _tabController?.index,
+          activeIndex: _selectedSectionIndex,
         );
       },
       child: Consumer<FaNotificationsController>(
@@ -637,11 +1096,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           _activitiesController.updateService(service);
           _synchronizeScrollReturns();
           final sections = _activitiesController.sections;
+          _scheduleTabSynchronization();
           final showInitialLoading =
               _activitiesController.showInitialLoading;
           if (showInitialLoading) {
             return Scaffold(
               appBar: AppBar(
+                bottom: _buildAdHeader(),
                 title: const Text('Notifications'),
                 centerTitle: true,
                 backgroundColor: Colors.black,
@@ -669,10 +1130,14 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               _activitiesController.setActiveSection(null);
             });
             WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) {
+                return;
+              }
               _activitiesController.triggerEmptyAutoRefresh();
             });
             return Scaffold(
               appBar: AppBar(
+                bottom: _buildAdHeader(),
                 title: const Text('Notifications'),
                 centerTitle: true,
                 backgroundColor: Colors.black,
@@ -692,7 +1157,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                           NotificationRemovalButtonPhase.idle ||
                       _nukeSectionPhase !=
                           NotificationRemovalButtonPhase.idle)
-                    _buildBulkActionRow(),
+                    _buildBulkActionRow(sectionTitle: _removalSectionTitle ?? ''),
                   Expanded(
                     child: RefreshIndicator(
                       color: const Color(0xFFE09321),
@@ -715,13 +1180,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               ),
             );
           }
-          if (sections.length != _previousSectionCount) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _initializeTabController(sections.length);
-            });
-          }
           if (_tabController == null ||
-              _tabController!.length != sections.length) {
+              !listEquals(
+                _tabSectionTitles,
+                sections.map((section) => section.title).toList(),
+              )) {
             return const Scaffold(body: SizedBox.shrink());
           }
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -742,77 +1205,58 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                 },
               ),
             ],
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(kToolbarHeight + 8),
-              child: Column(
-                children: [
-                  const Divider(
-                      height: 4.0, color: Color(0xFF111111), thickness: 4.0),
-                  const Divider(
-                      height: 3.4, color: Colors.black, thickness: 4.0),
-                  Container(
-                    decoration: const BoxDecoration(color: Color(0xFF111111)),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 0.0),
-                      child: Consumer<FaNotificationsController>(
-                        builder: (context, _, child) {
-                          return TabBar(
-                            controller: _tabController,
-                            isScrollable: true,
-                            indicator: const UnderlineTabIndicator(
-                              borderSide: BorderSide(
-                                  color: Color(0xFFE09321), width: 3.4),
-                              insets: EdgeInsets.symmetric(horizontal: -6.0),
-                            ),
-                            labelStyle: const TextStyle(
-                                fontSize: 17.0, fontWeight: FontWeight.bold),
-                            unselectedLabelStyle:
-                                const TextStyle(fontSize: 15.0),
-                            tabAlignment: TabAlignment.start,
-                            dividerColor: Colors.black,
-                            dividerHeight: 3.7,
-                            tabs: sections.map((section) {
-                              final badgeValue =
-                                  _activitiesController.badgeValueFor(section);
-                              final rawCount = badgeValue.rawCount;
-                              final displayText = badgeValue.displayText;
+            bottom: _buildAdHeader(
+              tabs: TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                indicator: const UnderlineTabIndicator(
+                  borderSide: BorderSide(
+                      color: Color(0xFFE09321), width: 3.4),
+                  insets: EdgeInsets.symmetric(horizontal: -6.0),
+                ),
+                labelStyle: const TextStyle(
+                    fontSize: 17.0, fontWeight: FontWeight.bold),
+                unselectedLabelStyle:
+                    const TextStyle(fontSize: 15.0),
+                tabAlignment: TabAlignment.start,
+                dividerColor: Colors.black,
+                dividerHeight: 3.7,
+                tabs: sections.map((section) {
+                  final badgeValue =
+                      _activitiesController.badgeValueFor(section);
+                  final rawCount = badgeValue.rawCount;
+                  final displayText = badgeValue.displayText;
 
-                              return Tab(
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(section.title),
-                                      const SizedBox(width: 4),
-                                      if (rawCount > 0)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFE09321),
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                          child: Text(
-                                            displayText,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
+                  return Tab(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(section.title),
+                          const SizedBox(width: 4),
+                          if (rawCount > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE09321),
+                                borderRadius:
+                                    BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                displayText,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                              );
-                            }).toList(),
-                          );
-                        },
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                  );
+                }).toList(),
               ),
             ),
           ),
@@ -824,7 +1268,6 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   children: [
                     const Divider(
                         height: 4.0, color: Color(0xFF111111), thickness: 4.0),
-                    _buildBulkActionRow(),
                     Expanded(
                       child: NotificationListener<ScrollNotification>(
                         onNotification: (ScrollNotification notification) {
@@ -854,8 +1297,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                 return ShoutsSectionWidget(
                                   key: _shoutsSectionKey,
                                   scrollReturn: _scrollReturns[section.title]!,
+                                  actions: _buildBulkActionRow(
+                                    sectionTitle: section.title,
+                                  ),
                                   service: service,
                                   pollingService: _activitiesPollingPort,
+                                  onRefreshed: _onScreenRefreshed,
+                                  onContentOpened: _contentOpened,
                                   isActive:
                                       (_tabController?.index ?? 0) == index,
                                 );
@@ -864,7 +1312,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                   key: ValueKey('notification-${section.title}'),
                                   sectionIndex: index,
                                   scrollReturn: _scrollReturns[section.title]!,
+                                  actions: _buildBulkActionRow(
+                                    sectionTitle: section.title,
+                                  ),
                                   controller: _activitiesController,
+                                  onContentOpened: _contentOpened,
                                 );
                               }
                             },
@@ -879,7 +1331,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                 left: 0,
                 top: 0,
                 bottom: 0,
-                width: 19,
+                width: 25,
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onHorizontalDragStart: (details) {
@@ -919,7 +1371,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                       }
                     }
                   },
-                  child: Container(color: Colors.transparent),
+                  child: const SizedBox.expand(),
                 ),
               ),
             ],
@@ -929,4 +1381,26 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       ),
     );
   }
+}
+
+enum _NotificationRemovalAction { selected, section, all }
+
+class _NotificationRemovalAdContext {
+  const _NotificationRemovalAdContext({
+    required this.number,
+    required this.service,
+    required this.section,
+    required this.delivery,
+    required this.pageRevision,
+    required this.sfwEnabled,
+    required this.sessionGeneration,
+  });
+
+  final int number;
+  final FaNotificationsController? service;
+  final FaAdSectionController? section;
+  final int? delivery;
+  final int pageRevision;
+  final bool sfwEnabled;
+  final int sessionGeneration;
 }

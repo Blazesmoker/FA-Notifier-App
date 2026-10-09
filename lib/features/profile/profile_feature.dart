@@ -1,4 +1,7 @@
 import 'package:provider/provider.dart';
+import 'package:fanotifier/shared/fa/data/fa_author_watch_state_cache.dart';
+import 'package:fanotifier/shared/fa/domain/fa_author_watch_state_store.dart';
+import 'package:fanotifier/core/media/domain/media_bytes_repository.dart';
 
 import 'package:fanotifier/features/profile/data/image_inspect_media_export_service.dart';
 import 'package:fanotifier/features/profile/data/profile_favorites_service.dart';
@@ -24,8 +27,14 @@ class ProfileFeature {
 
   static Provider<UserProfileRepository> repositoryProvider() {
     return Provider<UserProfileRepository>(
-      create: (_) => UserProfileRepositoryImpl(),
+      create: (context) => UserProfileRepositoryImpl(
+        authorWatchStateStore: context.read<FaAuthorWatchStateStore>(),
+      ),
     );
+  }
+
+  static FaAuthorWatchStateStore createAuthorWatchStateStore() {
+    return FaAuthorWatchStateCache();
   }
 
   static ProfileShoutRepository createShoutRepository() {
@@ -48,8 +57,12 @@ class ProfileFeature {
     return ProfileJournalsService();
   }
 
-  static ProfileMediaExportRepository createMediaExportRepository() {
-    return const ImageInspectMediaExportService();
+  static ProfileMediaExportRepository createMediaExportRepository({
+    required MediaBytesRepository mediaBytesRepository,
+  }) {
+    return ImageInspectMediaExportService(
+      mediaBytesRepository: mediaBytesRepository,
+    );
   }
 
   static UserDescriptionRepository createUserDescriptionRepository() {

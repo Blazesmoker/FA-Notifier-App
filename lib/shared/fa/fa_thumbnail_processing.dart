@@ -3,6 +3,7 @@ import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html_parser;
 
 import 'package:fanotifier/shared/fa/fa_thumbnail_parser.dart';
+import 'package:fanotifier/shared/fa/data/fa_content_block_parser.dart';
 
 Future<List<Map<String, dynamic>>> parseFaThumbnailHtml(String html) {
   return compute(_parseFaThumbnailHtml, html);
@@ -14,10 +15,14 @@ List<Map<String, dynamic>> _parseFaThumbnailHtml(String html) {
 
 List<Map<String, dynamic>> parseFaThumbnailDocument(Document document) {
   final figures = FaThumbnailParser.selectThumbnailFigures(document);
+  final contentBlockSnapshot = parseFaContentBlockSnapshot(document);
   final imageMetadata = <Map<String, dynamic>>[];
 
   for (final fig in figures) {
-    final data = FaThumbnailParser.extract(fig);
+    final data = FaThumbnailParser.extract(
+      fig,
+      contentBlockSnapshot: contentBlockSnapshot,
+    );
     if (data == null) continue;
     imageMetadata.add({
       'url': data['thumbnailUrl'],
@@ -29,6 +34,7 @@ List<Map<String, dynamic>> parseFaThumbnailDocument(Document document) {
       'author': data['author'],
       'authorProfileUrl': data['authorProfileUrl'],
       'postUrl': data['postUrl'],
+      'contentBlock': data['contentBlock'],
     });
   }
 

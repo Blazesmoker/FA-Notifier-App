@@ -8,6 +8,7 @@ import 'package:fanotifier/features/submissions/data/submission_stats_parser.dar
 import 'package:fanotifier/features/submissions/data/submission_attachment_parser.dart';
 import 'package:fanotifier/features/submissions/domain/submission_document_models.dart';
 import 'package:fanotifier/shared/fa/parsing_utils.dart';
+import 'package:fanotifier/shared/fa/data/fa_content_block_parser.dart';
 
 class SubmissionDocumentParser {
   static SubmissionParseResult parsePostDocument(dom.Document document) {
@@ -138,6 +139,14 @@ class SubmissionDocumentParser {
       imageWidth: metadata.imageWidth,
       imageHeight: metadata.imageHeight,
       submissionAttachment: parseSubmissionAttachment(document),
+      contentBlock: parseFaContentBlockData(
+        imageElem,
+        snapshot: parseFaContentBlockSnapshot(document),
+        fallbackTags: [
+          for (final tag in metadata.keywordTags) tag.name,
+          for (final tag in metadata.metaKeywordTags) tag.name,
+        ],
+      ),
     );
   }
 

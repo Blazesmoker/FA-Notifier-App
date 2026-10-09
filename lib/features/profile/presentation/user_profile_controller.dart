@@ -5,16 +5,20 @@ import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart'
 import 'package:fanotifier/features/profile/domain/user_profile_load_result.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_repository.dart';
 import 'package:fanotifier/shared/fa/fa_username.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 
 class UserProfileController {
   UserProfileController({
     required this._repository,
+    this.contentBlockController,
     SfwModePreference? sfwModePreference,
     required String nickname,
   })  : _sfwModePreference = sfwModePreference ?? SfwModePreference(),
         _sanitizedUsername = sanitizeFAUsername(nickname);
 
   final UserProfileRepository _repository;
+  final FaContentBlockController? contentBlockController;
   final SfwModePreference _sfwModePreference;
 
   bool _sfwEnabled = true;
@@ -61,8 +65,12 @@ class UserProfileController {
   String? get featuredImageUrl => _parsed?.featuredImageUrl;
   String? get featuredImageTitle => _parsed?.featuredImageTitle;
   String? get featuredPostNumber => _parsed?.featuredPostNumber;
+  FaContentBlockData get featuredContentBlock =>
+      _parsed?.featuredContentBlock ?? const FaContentBlockData();
   String? get userProfileImageUrl => _parsed?.userProfileImageUrl;
   String? get userProfilePostNumber => _parsed?.userProfilePostNumber;
+  FaContentBlockData get userProfileContentBlock =>
+      _parsed?.userProfileContentBlock ?? const FaContentBlockData();
   String? get userProfileTexts => _parsed?.userProfileTexts;
   List<Map<String, String>> get contactInformationLinks =>
       _parsed?.contactInformationLinks ?? const <Map<String, String>>[];
@@ -83,6 +91,7 @@ class UserProfileController {
   }
 
   Future<UserProfileLoadResult> loadProfile(String nickname) async {
+    final contentBlockRevision = contentBlockController?.revision ?? 0;
     _isLoading = true;
     _errorMessage = '';
     try {
@@ -92,6 +101,10 @@ class UserProfileController {
       );
       _sanitizedUsername = result.sanitizedUsername;
       _parsed = result.parsed;
+      contentBlockController?.acceptSnapshot(
+        result.parsed.featuredContentBlock.snapshot,
+        expectedRevision: contentBlockRevision,
+      );
       _isLoading = false;
       return result;
     } on StateError catch (error) {

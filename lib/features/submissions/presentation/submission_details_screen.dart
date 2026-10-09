@@ -58,6 +58,8 @@ import 'package:fanotifier/shared/translation/translation_source_text_builder.da
 import 'package:fanotifier/shared/platform/fa_share_service.dart';
 import 'package:fanotifier/shared/navigation/transparent_slide_page_route.dart';
 import 'package:provider/provider.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
+import 'package:fanotifier/shared/fa/domain/fa_author_watch_state_store.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
 
 import '../../../shared/utils/bbcode_context_menu.dart';
@@ -112,6 +114,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
     implements DetachableWebViewRouteOwner {
   bool _loadBlocked = false;
   bool _fetchingDetails = false;
+  bool _imageRevealed = false;
   late final EdgeBackSwipeController _backSwipe;
   bool _showFullPublicationDate = false;
   final CommentComposerController _commentComposer =
@@ -202,12 +205,14 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
   void initState() {
     super.initState();
     _controller = SubmissionDetailsController(
+      contentBlockController: context.read<FaContentBlockController>(),
+      authorWatchStateStore: context.read<FaAuthorWatchStateStore>(),
       submissionId: widget.submissionId,
       repository: widget.repository ?? context.read<SubmissionDetailsRepository>(),
       isMounted: () => mounted,
       updateState: (update) => setState(update),
       reloadUserActions: _fetchUserPageLinks,
-      reloadDetails: _fetchPostDetails,
+      reloadDetails: () => _fetchPostDetails(resetImageReveal: true),
       showActionMessage: _showActionMessage,
     );
     _favoriteStateController =
@@ -237,7 +242,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
       _loadSfwEnabled(),
       _fetchPostDetails(),
     ]).then((_) {
-      if (username != null && !widget.skipInitialWatchCheck) {
+      if (mounted && username != null && !widget.skipInitialWatchCheck) {
         _fetchUserPageLinks();
       }
     });
@@ -328,6 +333,9 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
   @override
   void didPopNext() {
     _setRouteWebViewDetached(false);
+    if (_controller.restoreCachedAuthorWatchState() && mounted) {
+      setState(() {});
+    }
     _commentComposer.armFocusGuard();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_commentComposer.focusNode.hasFocus) return;
@@ -537,8 +545,10 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
         false;
   }
 
-  Future<void> _fetchUserPageLinks() async {
+  Future<void> _fetchUserPageLinks({bool forceRefresh = false}) async {
+    if (!mounted) return;
     final updated = await _controller.loadUserActions(
+      forceRefresh: forceRefresh,
       confirmNsfw: _showNSFWConfirmationDialog,
       onNsfwAllowed: () {
         if (mounted) setState(() {});
@@ -670,8 +680,13 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
     }
   }
 
-  Future<void> _fetchPostDetails({bool allowChallengePrompt = true}) async {
+  Future<void> _fetchPostDetails({
+    bool allowChallengePrompt = true,
+    bool resetImageReveal = false,
+  }) async {
     if (_fetchingDetails || !mounted) return;
+    final previousImageUrl = fullViewImageUrl;
+    if (resetImageReveal) _imageRevealed = false;
     _fetchingDetails = true;
     _loadBlocked = false;
     try {
@@ -689,6 +704,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
       );
       if (!mounted) return;
       _observedFavoriteState = isFavorited;
+      if (previousImageUrl != fullViewImageUrl) _imageRevealed = false;
       setState(() {});
 
       if (result.status == SubmissionDetailsLoadStatus.httpFailure) {
@@ -1277,8 +1293,9 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
   Future<void> _openManageSubmissions() async {
     await _prepareForInternalWebViewNavigation();
     if (!mounted) return;
-    await Navigator.of(context).push(ManageSubmissionsScreen.route());
-    if (!mounted) return;
+    final changed = await Navigator.of(context)
+        .push<bool>(ManageSubmissionsScreen.route());
+    if (!mounted || changed != true) return;
     await _fetchPostDetails();
   }
 
@@ -1393,6 +1410,13 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
   }
 
   Widget _buildContent(BuildContext context) {
+    final contentBlocked = context.select<FaContentBlockController, bool>(
+      (controller) => controller.isBlocked(
+        widget.submissionId,
+        _controller.contentBlock,
+      ),
+    );
+    final imageBlurred = contentBlocked && !_imageRevealed;
     final translatorSettings = context.watch<TranslatorSettingsProvider>();
     final commentSettings = context.watch<CommentSettingsProvider>();
     final submissionTimeFormat =
@@ -1551,7 +1575,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                             color: const Color(0xFFE09321),
                             backgroundColor: Colors.black,
                             onRefresh: () async {
-                              await _fetchPostDetails();
+                              await _fetchPostDetails(resetImageReveal: true);
                             },
                             child: CustomScrollView(
                               key: ValueKey<int>(_iosScrollRecoveryKey),
@@ -1631,6 +1655,16 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                                               }
                                             },
                                             onTap: () {
+                                              if (!_imageRevealed &&
+                                                  context
+                                                      .read<FaContentBlockController>()
+                                                      .isBlocked(
+                                                        widget.submissionId,
+                                                        _controller.contentBlock,
+                                                      )) {
+                                                setState(() => _imageRevealed = true);
+                                                return;
+                                              }
                                               _openImageInspectScreen(
                                                   fullViewImageUrl!);
                                             },
@@ -1638,6 +1672,7 @@ class _SubmissionDetailsScreenState extends State<SubmissionDetailsScreen>
                                               imageUrl: fullViewImageUrl!,
                                               imageWidth: imageWidth,
                                               imageHeight: imageHeight,
+                                              blurred: imageBlurred,
                                             ),
                                           ),
                                         ),

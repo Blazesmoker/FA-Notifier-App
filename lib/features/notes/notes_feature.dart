@@ -1,4 +1,5 @@
 import 'package:fanotifier/core/notifications/domain/local_notification_gateway.dart';
+import 'package:fanotifier/core/media/domain/media_bytes_repository.dart';
 import 'package:fanotifier/features/notes/data/google_images_webview_resolver.dart';
 import 'package:fanotifier/features/notes/data/new_message_service.dart';
 import 'package:fanotifier/features/notes/data/note_message_service.dart';
@@ -56,10 +57,12 @@ class NotesFeature {
 
   static NoteSubmissionPreviewRepository createSubmissionPreviewRepository({
     required SubmissionDetailsRepository submissionDetailsRepository,
+    required MediaBytesRepository mediaBytesRepository,
   }) {
     return NoteSubmissionPreviewRepositoryImpl(
       submissionDetailsRepository: submissionDetailsRepository,
       googleImageResolver: GoogleImagesWebViewResolver(),
+      mediaBytesRepository: mediaBytesRepository,
     );
   }
 

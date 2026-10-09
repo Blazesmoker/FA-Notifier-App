@@ -1,5 +1,6 @@
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:fanotifier/features/ads/data/fa_ad_parser.dart';
 
 import 'package:fanotifier/features/notifications/data/fa_notification_link_parser.dart';
 import 'package:fanotifier/features/notifications/data/notification_section_parser_helpers.dart';
@@ -7,6 +8,7 @@ import 'package:fanotifier/features/notifications/data/notification_shout_parser
 import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notifications_page_parser_state.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notifications_page_snapshot.dart';
+import 'package:fanotifier/features/notifications/domain/notification_shout_mapper.dart';
 import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 import 'package:fanotifier/shared/fa/domain/notifications.dart';
 
@@ -14,6 +16,9 @@ FaNotificationsPageSnapshot parseFaNotificationsPage(
   String htmlBody, {
   required Map<String, int> messageBarCounts,
   required FaNotificationsPageParserState sideState,
+  int? startedAtMilliseconds,
+  Uri? documentUri,
+  bool? sfwEnabled,
 }) {
   final document = html_parser.parse(htmlBody);
 
@@ -113,6 +118,35 @@ FaNotificationsPageSnapshot parseFaNotificationsPage(
   final fetchedSections = <NotificationSection>[];
   for (var container in containers) {
     String heading = notificationSectionHeadingFromContainer(container);
+
+    if (heading.toLowerCase().contains('shouts')) {
+      final shouts = deduplicateNotificationShouts(
+        mergeMessageCenterShoutsWithProfile(
+          messageItems: parseMessageCenterShouts(document)
+              .where((item) => (item['id'] as String? ?? '').trim().isNotEmpty)
+              .toList(),
+          profileShouts: const [],
+        ),
+      );
+      fetchedSections.add(
+        NotificationSection(
+          title: heading,
+          formAction: formAction,
+          items: shouts
+              .map((shout) => NotificationItem(
+                    id: shout.id,
+                    content: shout.textContent,
+                    username: shout.nickname,
+                    linkUsername: shout.nicknameLink,
+                    avatarUrl: shout.avatarUrl,
+                    date: shout.postedAgo,
+                    fullDate: shout.postedTitle,
+                  ))
+              .toList(),
+        ),
+      );
+      continue;
+    }
 
     final liItems = container
         .querySelectorAll('ul.message-stream > li')
@@ -235,131 +269,6 @@ FaNotificationsPageSnapshot parseFaNotificationsPage(
         if (content.isNotEmpty) {
           content = content.substring(0, content.length - 1);
         }
-      } else if (lowerHeading.contains('shouts')) {
-        bool isClassic = document
-                .querySelector('body')
-                ?.attributes['data-static-path'] ==
-            '/themes/classic';
-        if (isClassic) {
-          if (li.localName == 'table' && li.id.startsWith('shout-')) {
-            if (li.text.trim() == 'Shout has been removed from your page.') {
-              content = 'Shout has been removed from your page.';
-            } else {
-              dom.Element? av = li.querySelector('td.alt1 a img.avatar');
-              if (av != null) {
-                avatarUrl = normalizeNotificationImageUrl(
-                  av.attributes['src'],
-                );
-              }
-              dom.Element? unameLink = li.querySelector(
-                'div.c-usernameBlock a.c-usernameBlock__displayName',
-              );
-              if (unameLink != null) {
-                username = unameLink.text.trim();
-                url = unameLink.attributes['href'];
-              }
-              dom.Element? dateElem = li.querySelector('span.popup_date');
-              if (dateElem != null) {
-                date = dateElem.text.trim();
-                fullDate = dateElem.attributes['title'] ?? date;
-                dateElem.remove();
-              }
-              dom.Element? contentDiv =
-                  li.querySelector('td.alt1.addpad div.no_overflow');
-              if (contentDiv != null) {
-                content = contentDiv.text.trim();
-              } else {
-                content = li.text.trim();
-              }
-            }
-          } else if (li.querySelector(
-                'input[type="checkbox"][name="shouts[]"]',
-              ) !=
-              null) {
-            dom.Element? userLink = li.querySelector('a[href*="/user/"]');
-            if (userLink != null) {
-              username = userLink.text.trim();
-              url = userLink.attributes['href'];
-            }
-            dom.Element? dateElem = li.querySelector('span.popup_date');
-            if (dateElem != null) {
-              date = dateElem.text.trim();
-              fullDate = dateElem.attributes['title'] ?? date;
-              dateElem.remove();
-            }
-            content = li.text.trim();
-          } else {
-            if (li.text.contains('Shout has been removed')) {
-              content = 'Shout has been removed from your page.';
-            } else {
-              dom.Element? userLink = li.querySelector('a[href*="/user/"]');
-              if (userLink != null) {
-                username = userLink.text.trim();
-                url = userLink.attributes['href'];
-              }
-              dom.Element? av = li.querySelector('div.avatar img.avatar');
-              if (av != null) {
-                avatarUrl = normalizeNotificationImageUrl(
-                  av.attributes['src'],
-                );
-              }
-            }
-          }
-        } else {
-          dom.Element? nameSpan = li.querySelector(
-            'span.c-usernameBlockSimple.username-underlined a[href*="/user/"] span.c-usernameBlockSimple__displayName',
-          );
-          if (nameSpan != null) {
-            username = nameSpan.text.trim();
-          }
-          dom.Element? parentAnchor = li.querySelector(
-            'span.c-usernameBlockSimple.username-underlined a[href*="/user/"]',
-          );
-          if (parentAnchor != null) {
-            url = parentAnchor.attributes['href'];
-            String extracted = extractNotificationNicknameLink(li);
-            if (extracted.isNotEmpty) {
-              username = username ?? '';
-            }
-          }
-          dom.Element? avatarImg =
-              li.querySelector('div.avatar img.avatar');
-          if (avatarImg != null) {
-            avatarUrl = normalizeNotificationImageUrl(
-              avatarImg.attributes['src'],
-            );
-          }
-          dom.Element? timeSpan =
-              li.querySelector('div.floatright span.popup_date');
-          if (timeSpan != null) {
-            date = timeSpan.text.trim();
-            fullDate = timeSpan.attributes['title'] ?? date;
-            timeSpan.remove();
-          }
-          final lower = li.text.toLowerCase();
-          content = lower.contains('shout has been removed')
-              ? 'Shout has been removed from your page.'
-              : '';
-        }
-
-        String finalNicknameLink = extractNotificationNicknameLink(li);
-
-        items.add(
-          NotificationItem(
-            id: id,
-            content: content,
-            username: username,
-            linkUsername: finalNicknameLink,
-            submissionId: submissionId,
-            journalId: journalId,
-            url: url,
-            avatarUrl: avatarUrl,
-            date: date,
-            fullDate: fullDate,
-          ),
-        );
-
-        continue;
       } else if (lowerHeading.contains('journals')) {
         dom.Element? journLink = li.querySelector('a[href*="/journal/"]');
         if (journLink != null) {
@@ -401,6 +310,16 @@ FaNotificationsPageSnapshot parseFaNotificationsPage(
   }
 
   return FaNotificationsPageSnapshot(
+    startedAtMilliseconds: startedAtMilliseconds,
+    documentSfwEnabled: sfwEnabled,
+    ads: documentUri == null || sfwEnabled == null
+        ? null
+        : parseFaAdPage(
+            html: htmlBody,
+            parsedDocument: document,
+            documentUri: documentUri,
+            sfwEnabled: sfwEnabled,
+          ),
     messageBarCounts: messageBarCounts,
     latestCounts: sideState.latestCounts!,
     latestTopBarNotifications: sideState.latestTopBarNotifications!,

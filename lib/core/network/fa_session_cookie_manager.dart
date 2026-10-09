@@ -5,6 +5,7 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/network/fa_page_counter_observer.dart';
 
 class FaSessionCookieManager extends CookieManager {
   FaSessionCookieManager(super.cookieJar);
@@ -22,6 +23,11 @@ class FaSessionCookieManager extends CookieManager {
   ) async {
     if (_isFaRequest(options)) {
       options.headers[HttpHeaders.userAgentHeader] = FAHttp.userAgent;
+      if (options.extra['observeFaCounters'] != false &&
+          !(options.method != 'GET' && options.uri.path.startsWith('/msg/pms'))) {
+        options.extra['faPageCounterRequest'] =
+            FaPageCounterObserver.instance.capture(options.uri);
+      }
     }
     await super.onRequest(options, handler);
   }
@@ -70,5 +76,13 @@ class FaSessionCookieManager extends CookieManager {
       uri: response.realUri,
       headers: response.headers[HttpHeaders.setCookieHeader] ?? const <String>[],
     );
+    final body = response.data;
+    final request = response.requestOptions.extra['faPageCounterRequest'];
+    if (body is String && request is FaPageCounterRequest) {
+      FaPageCounterObserver.instance.accept(
+        request: request, uri: response.realUri,
+        statusCode: response.statusCode ?? 0, html: body,
+      );
+    }
   }
 }

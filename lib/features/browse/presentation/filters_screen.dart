@@ -238,6 +238,8 @@ class _FiltersScreenState extends State<FiltersScreen> {
                         );
                       }),
                       FaPaginationFilterFields(
+                        accentColor: applyButtonColor,
+                        pageTextColor: Colors.white,
                         formKey: _paginationFormKey,
                         pageController: _pageController,
                         resultsPerPage:

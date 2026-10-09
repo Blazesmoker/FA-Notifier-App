@@ -8,6 +8,8 @@ abstract interface class CloudflareCheckGateway {
 
   Future<void> accessVerified();
 
+  Future<void> waitForSiteRetry({bool Function()? isCancelled});
+
   bool isFaUrl(String url);
 
   Future<void> setStoredCookies();
@@ -26,6 +28,13 @@ abstract interface class CloudflareCheckGateway {
   });
 
   bool isSuccessfulPage({
+    required String url,
+    required String body,
+    int? statusCode,
+    Map<String, String>? headers,
+  });
+
+  CloudflareHttpAccessResult classifyPage({
     required String url,
     required String body,
     int? statusCode,

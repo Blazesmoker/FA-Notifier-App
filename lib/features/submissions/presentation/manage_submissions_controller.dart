@@ -4,6 +4,7 @@ import 'package:fanotifier/features/submissions/domain/submission_folder_color_r
 import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
 import 'package:fanotifier/features/submissions/domain/submission_management_repository.dart';
 import 'widgets/submission_management_styles.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 
 class ManageSubmissionsController {
   ManageSubmissionsController({
@@ -13,9 +14,11 @@ class ManageSubmissionsController {
     required this._updateState,
     required this._confirmDelete,
     required this._showMessage,
+    this.contentBlockController,
   });
 
   final SubmissionManagementRepository _repository;
+  final FaContentBlockController? contentBlockController;
   final SubmissionFolderColorRepository _folderColorRepository;
   final bool Function() _isMounted;
   final void Function(VoidCallback) _updateState;
@@ -50,6 +53,7 @@ class ManageSubmissionsController {
     bool resetDrafts = false,
   }) async {
     if (_loading && _page != null) return;
+    final contentBlockRevision = contentBlockController?.revision ?? 0;
     _updateState(() {
       _loading = true;
       _loadError = null;
@@ -61,6 +65,12 @@ class ManageSubmissionsController {
       );
       final folderColors = await _loadFolderColors(page);
       if (!_isMounted()) return;
+      if (page.submissions.isNotEmpty) {
+        contentBlockController?.acceptSnapshot(
+          page.submissions.first.contentBlock.snapshot,
+          expectedRevision: contentBlockRevision,
+        );
+      }
       _setPage(page, folderColors: folderColors, resetDrafts: resetDrafts);
     } catch (error) {
       if (!_isMounted()) return;
@@ -149,6 +159,18 @@ class ManageSubmissionsController {
     }
   }
 
+  Future<void> refreshFolderColors() async {
+    final page = _page;
+    if (page == null) {
+      return;
+    }
+    final colors = await _loadFolderColors(page);
+    if (!_isMounted() || !identical(page, _page)) {
+      return;
+    }
+    _updateState(() => _folderColors = colors);
+  }
+
   Future<void> applyAction(
     SubmissionManagementActionType actionType, {
     String? folderId,
@@ -172,13 +194,16 @@ class ManageSubmissionsController {
       );
     } catch (error) {
       if (!_isMounted()) return;
+      _changed = true;
       _updateState(() => _mutating = false);
       _showMessage('$error', error: true);
       return;
     }
     if (!_isMounted()) return;
     _updateState(() => _mutating = false);
-    if (result.changed) _changed = true;
+    if (result.changed || result.partial || result.indeterminate) {
+      _changed = true;
+    }
     if (result.success) {
       _clearDrafts();
       final refreshed = result.submissionPage;

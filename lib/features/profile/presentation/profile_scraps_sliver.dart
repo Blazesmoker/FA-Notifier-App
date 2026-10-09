@@ -14,6 +14,8 @@ import 'package:fanotifier/features/submissions/domain/submission_management_mod
 import 'package:fanotifier/features/submissions/domain/submission_management_repository.dart';
 import 'package:fanotifier/shared/widgets/heart_animation.dart';
 import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 
 const double _profileSelectionBorderWidth = 2.0;
 
@@ -248,12 +250,18 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
 
     try {
       while (_nextPageUrl != null) {
+        final contentBlockController = context.read<FaContentBlockController>();
+        final contentBlockRevision = contentBlockController.revision;
         final requestedUrl = _nextPageUrl!;
         final result = await _profileScrapsRepository.fetchScrapsPage(
           requestedUrl,
           isCancelled: () => !mounted || fetchGeneration != _fetchGeneration,
         );
         if (!mounted || fetchGeneration != _fetchGeneration) return;
+        contentBlockController.acceptItems(
+          result.posts,
+          expectedRevision: contentBlockRevision,
+        );
         final batch = _loadedIds.prepare(
           result.posts,
           idOf: (image) => image['uniqueNumber'] as String,
@@ -382,6 +390,8 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
       valueListenable: _selectionState(submissionId),
       builder: (context, isSelected, child) {
         return _FavImageTileScrapsSliver(
+          contentBlock: im['contentBlock'] as FaContentBlockData? ??
+              const FaContentBlockData(),
           key: ValueKey<String>('profile-scrap-$submissionId'),
           width: width,
           height: height,
@@ -465,6 +475,7 @@ class ProfileScrapsSliverState extends State<ProfileScrapsSliver> {
 }
 
 class _FavImageTileScrapsSliver extends StatefulWidget {
+  final FaContentBlockData contentBlock;
   final double width;
   final double height;
   final String imageUrl;
@@ -478,6 +489,7 @@ class _FavImageTileScrapsSliver extends StatefulWidget {
   final VoidCallback onSelectionToggle;
 
   const _FavImageTileScrapsSliver({
+    this.contentBlock = const FaContentBlockData(),
     super.key,
     required this.width,
     required this.height,
@@ -511,6 +523,8 @@ class _FavImageTileScrapsSliverState extends State<_FavImageTileScrapsSliver> {
       (controller) => controller.valueFor(widget.submissionId, false),
     );
     final thumbnail = FaThumbnailOutline(
+      submissionId: widget.submissionId,
+      contentBlock: widget.contentBlock,
       rating: widget.rating,
       borderRadius: 8,
       child: ClipRRect(

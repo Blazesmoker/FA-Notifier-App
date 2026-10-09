@@ -14,6 +14,8 @@ import 'package:fanotifier/features/submissions/presentation/submission_favorite
 import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
 import 'package:fanotifier/shared/widgets/heart_animation.dart';
 import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 
 const double _profileSelectionBorderWidth = 2.0;
 
@@ -272,12 +274,18 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
 
     try {
       while (_nextPageUrl != null) {
+        final contentBlockController = context.read<FaContentBlockController>();
+        final contentBlockRevision = contentBlockController.revision;
         final requestedUrl = _nextPageUrl!;
         final parseResult = await _profileFavoritesRepository.fetchFavoritesPage(
           requestedUrl,
           isCancelled: () => !mounted || fetchGeneration != _fetchGeneration,
         );
         if (!mounted || fetchGeneration != _fetchGeneration) return;
+        contentBlockController.acceptItems(
+          parseResult.posts,
+          expectedRevision: contentBlockRevision,
+        );
         final batch = _loadedIds.prepare(
           parseResult.posts,
           idOf: (image) => image['uniqueNumber'] as String,
@@ -405,6 +413,8 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
         : _selectionState(favoriteId);
     Widget buildTile(bool isSelected) {
       return _FavImageTileFavs(
+        contentBlock: im['contentBlock'] as FaContentBlockData? ??
+            const FaContentBlockData(),
         key: ValueKey<String>(
           'profile-favorite-${favoriteId ?? submissionId}',
         ),
@@ -496,6 +506,7 @@ class ProfileFavoritesSliverState extends State<ProfileFavoritesSliver> {
 }
 
 class _FavImageTileFavs extends StatefulWidget {
+  final FaContentBlockData contentBlock;
   final double width;
   final double height;
   final String imageUrl;
@@ -510,6 +521,7 @@ class _FavImageTileFavs extends StatefulWidget {
   final VoidCallback onSelectionToggle;
 
   const _FavImageTileFavs({
+    this.contentBlock = const FaContentBlockData(),
     super.key,
     required this.width,
     required this.height,
@@ -547,6 +559,8 @@ class _FavImageTileFavsState extends State<_FavImageTileFavs> {
       ),
     );
     final thumbnail = FaThumbnailOutline(
+      submissionId: widget.submissionId,
+      contentBlock: widget.contentBlock,
       rating: widget.rating,
       borderRadius: 8,
       child: ClipRRect(

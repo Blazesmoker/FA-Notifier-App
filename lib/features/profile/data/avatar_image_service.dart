@@ -2,21 +2,22 @@ import 'dart:typed_data';
 
 import 'package:fanotifier/features/profile/domain/avatar_image_data.dart';
 import 'package:fanotifier/shared/fa/fa_default_image_loader.dart';
-import 'package:fanotifier/core/network/fa_http.dart';
-import 'package:fanotifier/core/fa/fa_media_auth.dart';
+import 'package:fanotifier/core/media/domain/media_bytes_repository.dart';
 
-Future<AvatarImageData> fetchAvatarImageData(String imageUrl) async {
-  final response = await FAHttp.getMedia(
-    Uri.parse(imageUrl),
-    headers: await FaMediaAuth.headersForUrl(imageUrl) ??
-        {'User-Agent': FAHttp.userAgent},
+Future<AvatarImageData> fetchAvatarImageData(
+  String imageUrl, {
+  required MediaBytesRepository mediaBytesRepository,
+}) async {
+  final response = await mediaBytesRepository.load(
+    imageUrl,
+    purpose: MediaLoadPurpose.download,
   );
   final bytes = response.statusCode == 200
-      ? response.bodyBytes
+      ? response.bytes
       : await loadDefaultAvatarImageBytes();
   final extension = avatarImageExtensionFromUrlOrContentType(
     imageUrl,
-    response.headers['content-type'],
+    response.contentType,
   );
 
   return AvatarImageData(

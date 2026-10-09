@@ -15,15 +15,30 @@ import 'package:fanotifier/features/submissions/domain/submission_folder_color_r
 import 'package:fanotifier/features/submissions/domain/submission_management_repository.dart';
 import 'package:fanotifier/features/submissions/domain/submissions_repository.dart';
 import 'package:fanotifier/shared/fa/domain/submission_comment_repository.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_repository.dart';
+import 'package:fanotifier/features/submissions/data/submission_content_block_repository_impl.dart';
+import 'package:fanotifier/core/media/domain/media_bytes_repository.dart';
+import 'package:fanotifier/features/submissions/data/submission_image_service.dart';
+import 'package:fanotifier/features/submissions/data/submission_media_export_service.dart';
 
 class SubmissionsFeature {
   const SubmissionsFeature._();
 
+  static FaContentBlockRepository createContentBlockRepository() {
+    return const SubmissionContentBlockRepositoryImpl();
+  }
+
   static SubmissionDetailsRepository createSubmissionDetailsRepository({
     required SubmissionCommentRepository submissionCommentRepository,
+    required MediaBytesRepository mediaBytesRepository,
   }) {
     return SubmissionDetailsRepositoryImpl(
       submissionCommentRepository: submissionCommentRepository,
+      mediaExportService: SubmissionMediaExportService(
+        imageService: SubmissionImageService(
+          mediaBytesRepository: mediaBytesRepository,
+        ),
+      ),
     );
   }
 

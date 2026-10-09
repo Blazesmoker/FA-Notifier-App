@@ -33,7 +33,7 @@ class SubmissionDetailsRepositoryImpl implements SubmissionDetailsRepository {
     this._sfwModePreference = const SfwModePreference(),
     this._detailsLoader = const SubmissionDetailsLoader(),
     this._userActionsLoader = const SubmissionUserActionsLoader(),
-    this._mediaExportService = const SubmissionMediaExportService(),
+    required this._mediaExportService,
     SubmissionFileDownloadService? fileDownloadService,
     required this._submissionCommentRepository,
   }) :
@@ -66,6 +66,7 @@ class SubmissionDetailsRepositoryImpl implements SubmissionDetailsRepository {
     required bool nsfwAllowed,
     Map<String, String>? additionalHeaders,
     bool skipSfw = false,
+    bool Function()? isCancelled,
   }) async {
     final response = await _cookieService.getWithSfwCookie(
       url: url,
@@ -73,8 +74,12 @@ class SubmissionDetailsRepositoryImpl implements SubmissionDetailsRepository {
       nsfwAllowed: nsfwAllowed,
       additionalHeaders: additionalHeaders,
       skipSfw: skipSfw,
+      isCancelled: isCancelled,
     );
 
+    if (isCancelled?.call() ?? false) {
+      throw StateError('Submission request cancelled');
+    }
     if (FaCookieHelper.isCloudflareChallengePage(
       body: response.body,
       statusCode: response.statusCode,

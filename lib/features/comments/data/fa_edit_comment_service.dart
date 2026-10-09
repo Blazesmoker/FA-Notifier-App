@@ -7,6 +7,7 @@ import 'package:fanotifier/features/comments/domain/comment_edit_models.dart';
 import 'package:fanotifier/features/comments/domain/comment_edit_repository.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/core/network/fa_page_counter_observer.dart';
 import 'package:fanotifier/core/network/fa_request_coordinator.dart';
 
 class FaEditCommentService {
@@ -151,6 +152,7 @@ Future<EditCommentLoadResult> loadEditCommentTextWithClient({
 }) async {
   try {
     await FaRequestCoordinator.instance.waitForTurn(label: 'GET $editLink');
+    final counterRequest = FaPageCounterObserver.instance.capture(Uri.parse(editLink));
     final response = await client.get(
       Uri.parse(editLink),
       headers: await _editCommentHeaders(
@@ -163,6 +165,12 @@ Future<EditCommentLoadResult> loadEditCommentTextWithClient({
       statusCode: response.statusCode,
       headers: response.headers,
       responseBody: response.statusCode == 403 ? response.body : null,
+    );
+    FaPageCounterObserver.instance.acceptBytes(
+      request: counterRequest,
+      uri: Uri.parse(editLink),
+      statusCode: response.statusCode,
+      bytes: response.bodyBytes,
     );
 
     if (response.statusCode != 200) {
@@ -199,6 +207,7 @@ Future<EditCommentSubmitResult> submitEditCommentWithClient({
 }) async {
   try {
     await FaRequestCoordinator.instance.waitForTurn(label: 'GET $editLink');
+    final counterRequest = FaPageCounterObserver.instance.capture(Uri.parse(editLink));
     final getResponse = await client.get(
       Uri.parse(editLink),
       headers: await _editCommentHeaders(
@@ -211,6 +220,12 @@ Future<EditCommentSubmitResult> submitEditCommentWithClient({
       statusCode: getResponse.statusCode,
       headers: getResponse.headers,
       responseBody: getResponse.statusCode == 403 ? getResponse.body : null,
+    );
+    FaPageCounterObserver.instance.acceptBytes(
+      request: counterRequest,
+      uri: Uri.parse(editLink),
+      statusCode: getResponse.statusCode,
+      bytes: getResponse.bodyBytes,
     );
 
     if (getResponse.statusCode != 200) {

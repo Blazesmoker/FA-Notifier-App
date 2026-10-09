@@ -7,10 +7,12 @@ import 'package:fanotifier/shared/platform/image_export_service.dart';
 
 class SubmissionMediaExportService {
   const SubmissionMediaExportService({
+    required this._imageService,
     this._imageExportService = const ImageExportService(),
   });
 
   final ImageExportService _imageExportService;
+  final SubmissionImageService _imageService;
 
   Future<SubmissionMediaExportResult> exportToGallery(String imageUrl) async {
     if (!await requestImageExportPermission()) {
@@ -19,7 +21,7 @@ class SubmissionMediaExportService {
       );
     }
     final bytes =
-        await const SubmissionImageService().fetchImageBytes(imageUrl) ??
+        await _imageService.fetchImageBytes(imageUrl) ??
             await loadDefaultImageBytes();
     final saved = await saveImageToGallery(bytes);
     return SubmissionMediaExportResult(
@@ -36,7 +38,7 @@ class SubmissionMediaExportService {
       );
     }
     final bytes =
-        await const SubmissionImageService().fetchImageBytes(imageUrl) ??
+        await _imageService.fetchImageBytes(imageUrl) ??
             await loadDefaultImageBytes();
     await shareImage(bytes);
     return const SubmissionMediaExportResult(
@@ -55,8 +57,7 @@ class SubmissionMediaExportService {
   Future<bool> saveImageToGallery(Uint8List bytes) {
     return _imageExportService.saveImageToGallery(
       bytes,
-      quality: 80,
-      fileName: 'image_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      fileName: 'image_${DateTime.now().millisecondsSinceEpoch}',
       skipIfExists: false,
       androidRelativePath: 'Pictures/YourAppName/images',
     );
@@ -65,7 +66,7 @@ class SubmissionMediaExportService {
   Future<void> shareImage(Uint8List bytes) {
     return _imageExportService.shareImage(
       bytes,
-      fileName: 'shared_image_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      fileName: 'shared_image_${DateTime.now().millisecondsSinceEpoch}',
       recursiveCreate: false,
     );
   }

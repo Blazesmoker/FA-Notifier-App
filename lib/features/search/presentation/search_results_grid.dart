@@ -11,6 +11,8 @@ import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 import 'package:fanotifier/shared/widgets/heart_animation.dart';
 import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 import 'package:fanotifier/shared/widgets/fa_unavailable_screen.dart';
 import 'package:fanotifier/features/auth/presentation/cloudflare_check_screen.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_details_screen.dart';
@@ -45,6 +47,7 @@ class SearchResultsGridState extends State<SearchResultsGrid> {
   void initState() {
     super.initState();
     _controller = SearchImageController(
+      contentBlockController: context.read<FaContentBlockController>(),
       selectedFilters: widget.selectedFilters,
       searchQuery: widget.searchQuery,
       isMounted: () => mounted,
@@ -382,6 +385,9 @@ class _FavSearchTileState extends State<_FavSearchTile> {
             containerWidth: widget.width,
             containerHeight: widget.height,
             child: FaThumbnailOutline(
+              submissionId: submissionId,
+              contentBlock: widget.item['contentBlock'] as FaContentBlockData? ??
+                  const FaContentBlockData(),
               rating: rating,
               borderRadius: 8.0,
               child: ClipRRect(

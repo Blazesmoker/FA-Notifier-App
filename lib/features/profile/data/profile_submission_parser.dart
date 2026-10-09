@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:html/parser.dart' as html_parser;
 
 import 'package:fanotifier/features/profile/domain/profile_submission_data.dart';
+import 'package:fanotifier/features/submissions/data/submission_content_block_parser.dart';
 import 'package:fanotifier/shared/fa/parsing/submission_favorite_links_parser.dart';
 
 Future<ProfileSubmissionData> parseProfileSubmissionPage(List<int> bodyBytes) {
@@ -53,6 +54,7 @@ ProfileSubmissionData _parseProfileSubmissionPage(List<int> bodyBytes) {
     includeClassicFallback: true,
   );
   return ProfileSubmissionData(
+    contentBlock: parseSubmissionContentBlockData(doc),
     hqUrl: hqUrl,
     isFav: favoriteLinks.isFavorited,
     favUrl: favoriteLinks.favUrl,

@@ -272,7 +272,7 @@ class FaService {
   }
 
   String _extractNumber(String text) {
-    final Match? match = RegExp(r'\d{1,3}(?:[,.]\d{3})*').firstMatch(text);
+    final Match? match = RegExp(r'\d+(?:[,.]\d{3})*').firstMatch(text);
     if (match == null) return '0';
 
     return match.group(0)!

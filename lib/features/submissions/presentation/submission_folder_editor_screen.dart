@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:fanotifier/core/analytics/app_screen.dart';
 import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
 import 'package:fanotifier/features/submissions/domain/submission_management_repository.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_management_route.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_folder_management_styles.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_folder_management_widgets.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_management_shrinkable_text.dart';
@@ -16,23 +17,28 @@ class SubmissionFolderEditorScreen extends StatefulWidget {
     this.uri,
     this.navigationAction,
     this.appBarTitle,
+    this._onChanged,
   });
 
   final Uri? uri;
   final FaManagementFormAction? navigationAction;
   final String? appBarTitle;
+  final VoidCallback? _onChanged;
 
   static Route<bool> route({
     Uri? uri,
     FaManagementFormAction? navigationAction,
     String? appBarTitle,
   }) {
-    return MaterialPageRoute<bool>(
+    var changed = false;
+    return SubmissionManagementRoute<bool>(
+      readResult: () => changed,
       settings: const AnalyticsRouteSettings(AppScreens.editSubmissionFolder),
       builder: (_) => SubmissionFolderEditorScreen(
         uri: uri,
         navigationAction: navigationAction,
         appBarTitle: appBarTitle,
+        onChanged: () => changed = true,
       ),
     );
   }
@@ -55,6 +61,7 @@ class _SubmissionFolderEditorScreenState
   bool _loading = true;
   bool _saving = false;
   bool _saveOutcomeUnknown = false;
+  bool _changed = false;
   bool _allowPop = false;
   bool _settingControllers = false;
 
@@ -160,6 +167,10 @@ class _SubmissionFolderEditorScreenState
     );
     if (!mounted) return;
     setState(() => _saving = false);
+    if (result.success || result.indeterminate) {
+      _changed = true;
+      widget._onChanged?.call();
+    }
     if (result.success) {
       setState(() => _allowPop = true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -190,7 +201,7 @@ class _SubmissionFolderEditorScreenState
       return;
     }
     if (!_dirty) {
-      Navigator.of(context).pop(false);
+      Navigator.of(context).pop(_changed);
       return;
     }
     final close = await ConfirmCloseDialog.show(
@@ -201,7 +212,7 @@ class _SubmissionFolderEditorScreenState
     if (!mounted || !close) return;
     setState(() => _allowPop = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) Navigator.of(context).pop(false);
+      if (mounted) Navigator.of(context).pop(_changed);
     });
   }
 
@@ -209,7 +220,7 @@ class _SubmissionFolderEditorScreenState
   Widget build(BuildContext context) {
     final page = _page;
     return PopScope(
-      canPop: _allowPop || !_dirty,
+      canPop: _allowPop || (!_dirty && !_saveOutcomeUnknown),
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) _requestClose();
       },

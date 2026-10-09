@@ -31,7 +31,7 @@ Future<TagBlocklistParseResult> fetchTagBlocklist({
   return TagBlocklistApiService.parse(doc, decoded);
 }
 
-Future<void> sendTagBlocklistRequest({
+Future<String> sendTagBlocklistRequest({
   FlutterSecureStorage? secureStorage,
   required bool sfwEnabled,
   required String nonce,
@@ -70,6 +70,15 @@ Future<void> sendTagBlocklistRequest({
   if (response.statusCode != 200) {
     throw Exception('Tag blocklist request failed: ${response.statusCode}');
   }
+  final result = jsonDecode(_decodeBody(response));
+  if (result is! Map || result['success'] != true) {
+    throw Exception('Fur Affinity did not confirm the tag blocklist update.');
+  }
+  final confirmedTagName = result['result'];
+  if (confirmedTagName is! String || confirmedTagName.trim().isEmpty) {
+    throw Exception('Fur Affinity did not return the updated tag.');
+  }
+  return confirmedTagName;
 }
 
 Future<Response> _getWithCookie(

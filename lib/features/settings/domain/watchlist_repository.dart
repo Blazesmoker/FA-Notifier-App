@@ -11,5 +11,6 @@ abstract interface class WatchlistRepository {
     required int maxRetries,
     required Duration retryDelay,
     void Function(String message)? onRetry,
+    bool Function()? isCancelled,
   });
 }

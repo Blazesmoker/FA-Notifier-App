@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_management_styles.dart';
+import 'package:fanotifier/shared/widgets/fa_content_blur.dart';
 import 'package:fanotifier/shared/widgets/fa_thumbnail_display.dart';
 
 class SubmissionImagePreview extends StatelessWidget {
@@ -46,6 +47,8 @@ class SubmissionImagePreview extends StatelessWidget {
                         image: true,
                         label: '${submission.title} preview. Tap to close.',
                         child: FaThumbnailOutline(
+                          submissionId: submission.id,
+                          contentBlock: submission.contentBlock,
                           rating: submission.rating,
                           borderRadius: submissionPreviewBorderRadius,
                           child: SizedBox.expand(
@@ -60,6 +63,14 @@ class SubmissionImagePreview extends StatelessWidget {
                                   fit: BoxFit.contain,
                                   filterQuality: FilterQuality.medium,
                                   excludeFromSemantics: true,
+                                  frameBuilder: (context, child, frame, sync) {
+                                    return FaImageBlur(
+                                      blurred:
+                                          frame != null &&
+                                          FaContentBlurScope.blurredOf(context),
+                                      child: child,
+                                    );
+                                  },
                                   errorBuilder: (context, error, stackTrace) {
                                     return const Center(
                                       child: Icon(

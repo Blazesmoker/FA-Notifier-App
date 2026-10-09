@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:fanotifier/core/notifications/domain/local_notification_gateway.dart';
 import 'package:fanotifier/features/notes/data/background_note_unread_service.dart';
 import 'package:fanotifier/features/notes/data/message_storage.dart';
@@ -19,12 +20,24 @@ class NotesUnreadNotificationService {
 
   final NotesApiService _notesApi;
   final LocalNotificationGateway _notificationGateway;
+  static Future<void> _handlingQueue = Future<void>.value();
+  static final Set<CancelToken> _pendingTokens = {};
 
-  Future<bool> _restorePendingUnreadNotes(Set<String> noteIds) async {
+  static void cancelPending() {
+    for (final token in _pendingTokens) {
+      token.cancel();
+    }
+  }
+
+  Future<bool> _restorePendingUnreadNotes(Set<String> noteIds, CancelToken token) async {
     for (var attempt = 1; attempt <= _unreadRestoreMaxAttempts; attempt++) {
       try {
+        if (token.isCancelled) {
+          return false;
+        }
         final result = await restoreBackgroundNotesAsUnread(
           noteIds: noteIds,
+          cancelToken: token,
         );
         if (result.success) {
           await MessageStorage.removePendingUnreadRestores(noteIds);
@@ -46,6 +59,26 @@ class NotesUnreadNotificationService {
     required List<Message> fetchedInbox,
     required String? previousTopId,
     required bool didFirstRunSkip,
+  }) {
+    final token = CancelToken();
+    _pendingTokens.add(token);
+    final operation = _handlingQueue.then((_) => _handle(
+      fetchedInbox: fetchedInbox,
+      previousTopId: previousTopId,
+      didFirstRunSkip: didFirstRunSkip,
+      cancelToken: token,
+    )).whenComplete(() {
+      _pendingTokens.remove(token);
+    });
+    _handlingQueue = operation.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return operation;
+  }
+
+  Future<NotesUnreadNotificationResult> _handle({
+    required List<Message> fetchedInbox,
+    required String? previousTopId,
+    required bool didFirstRunSkip,
+    required CancelToken cancelToken,
   }) async {
     String? latestTopId = previousTopId;
     if (fetchedInbox.isNotEmpty) {
@@ -54,7 +87,7 @@ class NotesUnreadNotificationService {
 
     try {
       final unread = fetchedInbox.where((m) => m.isUnread).toList();
-      if (unread.isEmpty || !didFirstRunSkip) {
+      if (unread.isEmpty || !didFirstRunSkip || cancelToken.isCancelled) {
         return NotesUnreadNotificationResult(
           latestTopId: latestTopId,
           shownCount: 0,
@@ -75,20 +108,25 @@ class NotesUnreadNotificationService {
       final preparedNotes = <({Message message, String content})>[];
       for (final msg in newUnread) {
         try {
+          if (cancelToken.isCancelled) {
+            break;
+          }
           await MessageStorage.queueNoteDelivery(noteId: msg.id, link: msg.link);
           await MessageStorage.addPendingUnreadRestore(
             noteId: msg.id,
             link: msg.link,
           );
           pendingRestoreIds.add(msg.id);
-          final content = await _notesApi.fetchMessageContent(msg.link);
+          final content = await _notesApi.fetchMessageContent(
+            msg.link, cancelToken: cancelToken,
+          );
           preparedNotes.add((message: msg, content: content));
         } catch (_) {}
       }
 
       if (pendingRestoreIds.isNotEmpty) {
         await Future<void>.delayed(_unreadRestoreAfterReadDelay);
-        await _restorePendingUnreadNotes(pendingRestoreIds);
+        await _restorePendingUnreadNotes(pendingRestoreIds, cancelToken);
       }
 
       var shownCount = 0;
@@ -97,8 +135,14 @@ class NotesUnreadNotificationService {
         var claimed = false;
         var notificationShown = false;
         try {
+          if (cancelToken.isCancelled) {
+            break;
+          }
           claimed = await MessageStorage.claimUnshownNoteId(msg.id);
           if (!claimed) continue;
+          if (cancelToken.isCancelled) {
+            break;
+          }
           await _notificationGateway.showNotification(
             stableNotificationIdFromString(msg.id),
             'New Note from ${msg.sender}',

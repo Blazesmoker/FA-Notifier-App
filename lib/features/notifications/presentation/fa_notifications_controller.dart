@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:fanotifier/features/ads/domain/fa_ad_models.dart';
 import 'package:fanotifier/shared/fa/domain/notifications.dart';
 import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
@@ -8,6 +9,7 @@ import 'package:fanotifier/features/notifications/domain/fa_notifications_reposi
 import 'package:fanotifier/shared/fa/domain/fa_notification_state_port.dart';
 import 'package:fanotifier/features/notifications/domain/notification_shout_merge_policy.dart';
 import 'package:fanotifier/features/notifications/domain/notification_removal_outcome.dart';
+import 'package:fanotifier/core/fa/fa_media_auth.dart';
 
 class FaNotificationsController with ChangeNotifier implements FaNotificationStatePort {
   FaNotificationsController({
@@ -16,12 +18,29 @@ class FaNotificationsController with ChangeNotifier implements FaNotificationSta
 
   final FaNotificationsRepository _repository;
   Future<void>? _fetchNotificationsInFlight;
+  int _pageGeneration = 0;
+  int _adContextGeneration = 0;
+  bool _adSessionClosing = false;
+  final Map<String, Future<String?>> _previewFutures = {};
+  int _previewSessionRevision = -1;
+  Future<List<Shout>>? _shoutsEnrichmentInFlight;
+  String? _shoutsEnrichmentInFlightSignature;
+  String? _shoutsEnrichmentInFlightUsername;
   Future<NotificationRemovalOutcome>? _notificationMutationInFlight;
 
   FaNotificationsRepository get _notificationsRepository => _repository;
 
   bool isLoading = true;
   bool hasFetched = false;
+  FaAdPageMetadata? adPageMetadata;
+  bool? documentSfwEnabled;
+  int adPageRevision = 0;
+  @override
+  NotificationCounts? listCounts;
+  @override
+  int? listFetchedAtMilliseconds;
+  @override
+  int? listStartedAtMilliseconds;
   @override
   String? errorMessage;
   List<NotificationSection> sections = [];
@@ -36,6 +55,8 @@ class FaNotificationsController with ChangeNotifier implements FaNotificationSta
   bool shoutsEnriched = false;
   String _shoutsLightSignature = '';
   String? _shoutsEnrichedSignature;
+  bool _shoutsPageNeedsProfile = false;
+  bool get shoutsPageNeedsProfile => _shoutsPageNeedsProfile;
   String get shoutsLightSignature => _shoutsLightSignature;
   String? get shoutsEnrichedSignature => _shoutsEnrichedSignature;
 
@@ -71,6 +92,9 @@ class FaNotificationsController with ChangeNotifier implements FaNotificationSta
 
   @override
   void applyTopbarCounts(NotificationCounts counts) {
+    if (hasValidLatestCountsSnapshot && !counts.isDifferentFrom(latestCounts)) {
+      return;
+    }
     hasValidLatestCountsSnapshot = true;
     latestCounts = counts;
     _setMessageBarCount('S', counts.submissions);
@@ -99,11 +123,30 @@ class FaNotificationsController with ChangeNotifier implements FaNotificationSta
     }
   }
 
+  void setAdSessionClosing(bool closing) {
+    if (_adSessionClosing == closing) return;
+    _adSessionClosing = closing;
+    _adContextGeneration++;
+    adPageMetadata = null;
+    adPageRevision++;
+    notifyListeners();
+  }
+
   void clearAllNotifications() {
+    _previewFutures.clear();
+    _pageGeneration++;
+    _adContextGeneration++;
+    _fetchNotificationsInFlight = null;
     isLoading = false;
     hasFetched = true;
     errorMessage = null;
     sections.clear();
+    listCounts = null;
+    listFetchedAtMilliseconds = null;
+    listStartedAtMilliseconds = null;
+    adPageMetadata = null;
+    documentSfwEnabled = null;
+    adPageRevision++;
     notifyListeners();
   }
 
@@ -114,16 +157,30 @@ class FaNotificationsController with ChangeNotifier implements FaNotificationSta
 
   /// Fetch and parse notifications from /msg/others/.
   @override
-  Future<void> fetchNotifications() {
+  Future<void> fetchNotifications({bool? sfwEnabled}) {
+    final generation = _pageGeneration;
     final activeRemoval = _notificationMutationInFlight;
     if (activeRemoval != null) {
-      return activeRemoval.then<void>((_) => fetchNotifications());
+      return activeRemoval.then<void>((_) async {
+        if (generation != _pageGeneration) {
+          return;
+        }
+        await fetchNotifications(sfwEnabled: sfwEnabled);
+      });
     }
     final activeFetch = _fetchNotificationsInFlight;
-    if (activeFetch != null) return activeFetch;
+    if (activeFetch != null) {
+      if (sfwEnabled == null) return activeFetch;
+      return activeFetch.then<void>((_) async {
+        if (generation != _pageGeneration || documentSfwEnabled == sfwEnabled) {
+          return;
+        }
+        await fetchNotifications(sfwEnabled: sfwEnabled);
+      });
+    }
 
     late final Future<void> fetch;
-    fetch = _fetchNotificationsNow().whenComplete(() {
+    fetch = _fetchNotificationsNow(sfwEnabled: sfwEnabled).whenComplete(() {
       if (identical(_fetchNotificationsInFlight, fetch)) {
         _fetchNotificationsInFlight = null;
       }
@@ -132,7 +189,9 @@ class FaNotificationsController with ChangeNotifier implements FaNotificationSta
     return fetch;
   }
 
-  Future<void> _fetchNotificationsNow() async {
+  Future<void> _fetchNotificationsNow({bool? sfwEnabled}) async {
+    final generation = _pageGeneration;
+    final adGeneration = _adContextGeneration;
     isLoading = true;
     errorMessage = null;
     hasValidLatestCountsSnapshot = false;
@@ -143,28 +202,38 @@ class FaNotificationsController with ChangeNotifier implements FaNotificationSta
         linkUsername: linkUsername,
         displayName: displayName,
       );
+      final fetchedMessageBarCounts = <String, int>{};
       late final FaNotificationsPageSnapshot pageSnapshot;
       try {
         pageSnapshot = await _notificationsRepository.fetchNotifications(
-          messageBarCounts: messageBarCounts,
+          messageBarCounts: fetchedMessageBarCounts,
           parserState: parserState,
+          sfwEnabled: sfwEnabled,
+          canAcceptAdContext: () => !_adSessionClosing &&
+              adGeneration == _adContextGeneration && generation == _pageGeneration,
         );
       } finally {
-        if (parserState.hasValidLatestCountsSnapshot) {
-          latestCounts = parserState.latestCounts!;
-          hasValidLatestCountsSnapshot = true;
+        if (generation == _pageGeneration) {
+          if (parserState.hasValidLatestCountsSnapshot) {
+            messageBarCounts = fetchedMessageBarCounts;
+            latestCounts = parserState.latestCounts!;
+            hasValidLatestCountsSnapshot = true;
+          }
+          final parsedTopBarNotifications = parserState.latestTopBarNotifications;
+          if (parsedTopBarNotifications != null) {
+            latestTopBarNotifications = parsedTopBarNotifications;
+          }
+          if (parserState.hasParsedCurrentUsername) {
+            currentUsername = parserState.currentUsername;
+            currentUsernameFromLink = currentUsername;
+          }
+          linkUsername = parserState.linkUsername;
+          displayName = parserState.displayName;
         }
-        final parsedTopBarNotifications =
-            parserState.latestTopBarNotifications;
-        if (parsedTopBarNotifications != null) {
-          latestTopBarNotifications = parsedTopBarNotifications;
-        }
-        if (parserState.hasParsedCurrentUsername) {
-          currentUsername = parserState.currentUsername;
-          currentUsernameFromLink = currentUsername;
-        }
-        linkUsername = parserState.linkUsername;
-        displayName = parserState.displayName;
+      }
+
+      if (generation != _pageGeneration) {
+        return;
       }
 
       final prevEnrichedSig = _shoutsEnrichedSignature;
@@ -173,6 +242,17 @@ class FaNotificationsController with ChangeNotifier implements FaNotificationSta
           : <String, NotificationItem>{};
 
       sections = pageSnapshot.sections.toList();
+      _notificationsRepository.refreshSubmissionPreviews();
+      _previewFutures.clear();
+      listCounts = parserState.latestCounts;
+      listFetchedAtMilliseconds = DateTime.now().millisecondsSinceEpoch;
+      listStartedAtMilliseconds = pageSnapshot.startedAtMilliseconds;
+      adPageMetadata = !_adSessionClosing && adGeneration == _adContextGeneration
+          ? pageSnapshot.ads
+          : null;
+      documentSfwEnabled = pageSnapshot.documentSfwEnabled;
+      adPageRevision++;
+      _shoutsPageNeedsProfile = _shoutMergePolicy.needsProfileContent(sections);
       debugPrint("[fetchNotifications] Parsed sections: "
           "${sections.map((s) => s.title).toList()}");
       // Shouts signature is used to decide if we need enrichment when the user opens the tab.
@@ -205,14 +285,19 @@ class FaNotificationsController with ChangeNotifier implements FaNotificationSta
 
     } catch (e, st) {
 
+      if (generation != _pageGeneration) {
+        return;
+      }
       errorMessage = e.toString();
       debugPrint("[fetchNotifications] Error: $e\n$st");
     } finally {
 
 
-      isLoading = false;
-      hasFetched = true;
-      notifyListeners();
+      if (generation == _pageGeneration) {
+        isLoading = false;
+        hasFetched = true;
+        notifyListeners();
+      }
     }
   }
 
@@ -555,25 +640,70 @@ class FaNotificationsController with ChangeNotifier implements FaNotificationSta
     );
     sections[idx].items = updated;
     shoutsEnriched = true;
+    _shoutsPageNeedsProfile = false;
     final sig = _shoutMergePolicy.signatureFromItems(updated);
     _shoutsLightSignature = sig;
     _shoutsEnrichedSignature = sig;
     notifyListeners();
   }
 
-  Future<List<Shout>> enrichShoutsFromProfileIfNeeded({bool force = false}) async {
+  Future<List<Shout>> enrichShoutsFromProfileIfNeeded({bool force = false}) {
+    final signature = _shoutsLightSignature;
+    final myUsername = (currentUsername ?? '').trim();
+    final existing = _shoutsEnrichmentInFlight;
+    if (existing != null) {
+      if (_shoutsEnrichmentInFlightSignature == signature &&
+          _shoutsEnrichmentInFlightUsername == myUsername) {
+        return existing;
+      }
+      return existing.then<List<Shout>>(
+        (_) => enrichShoutsFromProfileIfNeeded(force: force),
+      );
+    }
+
+    late final Future<List<Shout>> enrichment;
+    enrichment = _enrichShoutsFromProfile(
+      force: force,
+      signature: signature,
+      myUsername: myUsername,
+    ).whenComplete(() {
+      if (identical(_shoutsEnrichmentInFlight, enrichment)) {
+        _shoutsEnrichmentInFlight = null;
+        _shoutsEnrichmentInFlightSignature = null;
+        _shoutsEnrichmentInFlightUsername = null;
+      }
+    });
+    _shoutsEnrichmentInFlight = enrichment;
+    _shoutsEnrichmentInFlightSignature = signature;
+    _shoutsEnrichmentInFlightUsername = myUsername;
+    return enrichment;
+  }
+
+  Future<List<Shout>> _enrichShoutsFromProfile({
+    required bool force,
+    required String signature,
+    required String myUsername,
+  }) async {
     final idx = _shoutMergePolicy.shoutSectionIndex(sections);
     if (idx == -1) return const <Shout>[];
     if (!force && shoutsEnriched) {
       return _shoutMergePolicy.shoutsFromItems(sections[idx].items);
     }
 
-    final my = (currentUsername ?? '').trim();
-    if (my.isEmpty) return const <Shout>[];
+    if (myUsername.isEmpty) return const <Shout>[];
 
-    final profileShouts = await fetchProfileShouts(my, forceRefresh: true);
+    final profileShouts =
+        await fetchProfileShouts(myUsername, forceRefresh: true);
 
-    final currentItems = sections[idx].items;
+    final currentIndex = _shoutMergePolicy.shoutSectionIndex(sections);
+    if (currentIndex == -1 ||
+        (currentUsername ?? '').trim() != myUsername) {
+      return const <Shout>[];
+    }
+    final currentItems = sections[currentIndex].items;
+    if (_shoutsLightSignature != signature) {
+      return _shoutMergePolicy.shoutsFromItems(currentItems);
+    }
     final enriched = _shoutMergePolicy.mergeWithProfile(
       currentItems: currentItems,
       profileShouts: profileShouts,
@@ -613,8 +743,14 @@ class FaNotificationsController with ChangeNotifier implements FaNotificationSta
   }
 
   Future<String?> fetchSubmissionPreview(String submissionId) {
-    return _notificationsRepository.fetchSubmissionPreview(
+    final sessionRevision = FaMediaAuth.changes.value;
+    if (_previewSessionRevision != sessionRevision) {
+      _previewFutures.clear();
+      _previewSessionRevision = sessionRevision;
+    }
+    return _previewFutures.putIfAbsent(
       submissionId,
+      () => _notificationsRepository.fetchSubmissionPreview(submissionId),
     );
   }
 }

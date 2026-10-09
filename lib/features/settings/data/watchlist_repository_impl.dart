@@ -19,6 +19,7 @@ class WatchlistRepositoryImpl implements WatchlistRepository {
     required int maxRetries,
     required Duration retryDelay,
     void Function(String message)? onRetry,
+    bool Function()? isCancelled,
   }) {
     return fetchWatchlistUsersPage(
       title: title,
@@ -28,6 +29,7 @@ class WatchlistRepositoryImpl implements WatchlistRepository {
       maxRetries: maxRetries,
       retryDelay: retryDelay,
       onRetry: onRetry,
+      isCancelled: isCancelled,
     );
   }
 }

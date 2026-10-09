@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fanotifier/core/network/fa_request_coordinator.dart';
+import 'package:fanotifier/core/network/fa_page_counter_observer.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 
 typedef _Call<T> = Future<T> Function();
@@ -154,6 +155,7 @@ class FAHttp {
   static Future<R> _withOneRetry<R>(
     _Call<R> call, {
     bool recordRecoverableFailure = true,
+    bool Function()? shouldRecordRecoverableFailure,
     bool Function()? isCancelled,
   }) async {
     try {
@@ -162,7 +164,7 @@ class FAHttp {
       if (isCancelled?.call() ?? false) rethrow;
       if (_isRecoverable(e)) {
         reset();
-        if (recordRecoverableFailure) {
+        if (shouldRecordRecoverableFailure?.call() ?? recordRecoverableFailure) {
           FaRequestCoordinator.instance.recordRecoverableFailure();
         }
         return await call();
@@ -189,6 +191,7 @@ class FAHttp {
         throw StateError('Background fetch cancelled');
       }
       final client = _ensureClient(timeout: requestTimeout);
+      final counterRequest = FaPageCounterObserver.instance.capture(uri);
       final response =
           await client.get(uri, headers: await _mergeHeaders(headers, uri)).timeout(requestTimeout);
       FaRequestCoordinator.instance.recordHttpStatus(
@@ -196,6 +199,12 @@ class FAHttp {
         headers: response.headers,
         responseBody: response.statusCode == 403 ? response.body : null,
       );
+      if (!(isCancelled?.call() ?? false)) {
+        FaPageCounterObserver.instance.acceptBytes(
+          request: counterRequest, uri: uri, statusCode: response.statusCode,
+          bytes: response.bodyBytes,
+        );
+      }
       return response;
     }
 
@@ -230,6 +239,7 @@ class FAHttp {
       if (isCancelled?.call() ?? false) throw StateError('FA request cancelled');
       final client = _ensureClient(timeout: requestTimeout);
       return (() async {
+        final counterRequest = FaPageCounterObserver.instance.capture(uri);
         final request = http.Request('GET', uri)
           ..followRedirects = followRedirects
           ..headers.addAll(await _mergeHeaders(headers, uri));
@@ -245,6 +255,12 @@ class FAHttp {
           responseBody:
               response.statusCode == 403 ? response.body : null,
         );
+        if (!(isCancelled?.call() ?? false)) {
+          FaPageCounterObserver.instance.acceptBytes(
+            request: counterRequest, uri: resolvedUri,
+            statusCode: response.statusCode, bytes: response.bodyBytes,
+          );
+        }
         return FAHttpResolvedResponse(
           response: response,
           resolvedUri: resolvedUri,
@@ -272,6 +288,7 @@ class FAHttp {
       if (isCancelled?.call() ?? false) throw StateError('FA request cancelled');
       final client = _ensureClient(timeout: requestTimeout);
       return (() async {
+        final counterRequest = FaPageCounterObserver.instance.capture(uri);
         final request = http.Request('POST', uri)
           ..followRedirects = followRedirects
           ..headers.addAll(await _mergeHeaders(headers, uri))
@@ -286,6 +303,12 @@ class FAHttp {
           headers: response.headers,
           responseBody: response.statusCode == 403 ? response.body : null,
         );
+        if (!(isCancelled?.call() ?? false)) {
+          FaPageCounterObserver.instance.acceptBytes(
+            request: counterRequest, uri: resolvedUri,
+            statusCode: response.statusCode, bytes: response.bodyBytes,
+          );
+        }
         return FAHttpResolvedResponse(response: response, resolvedUri: resolvedUri);
       })().timeout(requestTimeout);
     }, isCancelled: isCancelled);
@@ -295,14 +318,82 @@ class FAHttp {
       Uri uri, {
         Map<String, String>? headers,
         Duration? timeout,
+        bool queueFaRequest = false,
+        Future<void>? bypassQueue,
+        bool Function()? isCancelled,
+        void Function(int loaded, int? total)? onBytesReceived,
       }) async {
     final requestTimeout = timeout ?? defaultTimeout;
+    final host = uri.host.toLowerCase();
+    final isFaMedia = host == 'furaffinity.net' ||
+        host.endsWith('.furaffinity.net') ||
+        host == 'facdn.net' ||
+        host.endsWith('.facdn.net');
+    final queuedFaMedia = queueFaRequest && isFaMedia;
+    var bypassed = false;
+    var recordMediaFailure = false;
+    final queueBypass = bypassQueue?.then<void>((_) {
+      bypassed = true;
+    });
     return _withOneRetry(
       () async {
-        final client = _ensureClient(timeout: requestTimeout);
-        return client.get(uri, headers: await _mergeHeaders(headers, uri)).timeout(requestTimeout);
+        if (queuedFaMedia && !bypassed) {
+          final turn = FaRequestCoordinator.instance.waitForTurn(
+            label: 'FA media download',
+            isCancelled: () => bypassed || (isCancelled?.call() ?? false),
+          );
+          if (queueBypass == null) {
+            await turn;
+          } else {
+            await Future.any<void>([turn, queueBypass]);
+          }
+        }
+        if (isCancelled?.call() ?? false) {
+          throw StateError('Media request cancelled');
+        }
+        recordMediaFailure = queuedFaMedia && !bypassed;
+        final client = _ensureClient(
+          timeout: requestTimeout == Duration.zero ? defaultTimeout : requestTimeout,
+        );
+        final responseFuture = (() async {
+          final request = http.Request('GET', uri)
+            ..headers.addAll(await _mergeHeaders(headers, uri));
+          if (isCancelled?.call() ?? false) {
+            throw StateError('Media request cancelled');
+          }
+          final streamed = await client.send(request);
+          var loaded = 0;
+          final stream = streamed.stream.map((chunk) {
+            loaded += chunk.length;
+            onBytesReceived?.call(loaded, streamed.contentLength);
+            return chunk;
+          });
+          return http.Response.fromStream(http.StreamedResponse(
+            stream,
+            streamed.statusCode,
+            contentLength: streamed.contentLength,
+            request: streamed.request,
+            headers: streamed.headers,
+            isRedirect: streamed.isRedirect,
+            persistentConnection: streamed.persistentConnection,
+            reasonPhrase: streamed.reasonPhrase,
+          ));
+        })();
+        final response = requestTimeout == Duration.zero
+            ? await responseFuture
+            : await responseFuture.timeout(requestTimeout);
+        if (recordMediaFailure) {
+          FaRequestCoordinator.instance.recordHttpStatus(
+            statusCode: response.statusCode,
+            headers: response.headers,
+            responseBody: response.statusCode == 403 ? response.body : null,
+          );
+        }
+        return response;
       },
       recordRecoverableFailure: false,
+      shouldRecordRecoverableFailure: () => recordMediaFailure,
+      isCancelled: isCancelled,
     );
   }
 
@@ -320,6 +411,7 @@ class FAHttp {
         label: 'POST $uri',
       );
       final client = _ensureClient(timeout: requestTimeout);
+      final counterRequest = FaPageCounterObserver.instance.capture(uri);
       final response = await client
           .post(uri, headers: await _mergeHeaders(headers, uri), body: body, encoding: encoding)
           .timeout(requestTimeout);
@@ -327,6 +419,10 @@ class FAHttp {
         statusCode: response.statusCode,
         headers: response.headers,
         responseBody: response.statusCode == 403 ? response.body : null,
+      );
+      FaPageCounterObserver.instance.acceptBytes(
+        request: counterRequest, uri: uri, statusCode: response.statusCode,
+        bytes: response.bodyBytes,
       );
       return response;
     }

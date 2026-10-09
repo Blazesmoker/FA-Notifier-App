@@ -1,6 +1,8 @@
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/fa/fa_webview_cookie_service.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/features/auth/data/fa_access_page_classifier.dart';
+import 'package:fanotifier/features/auth/domain/cloudflare_http_access_result.dart';
 import 'package:fanotifier/features/auth/domain/startup_cloudflare_checker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -28,7 +30,14 @@ class StartupCloudflareCheckService implements StartupCloudflareChecker {
   @override
   Future<StartupCloudflareCheckResult> checkHome({
     String url = 'https://www.furaffinity.net/',
+    bool Function()? isCancelled,
   }) async {
+    if (isCancelled?.call() ?? false) {
+      return const StartupCloudflareCheckResult(
+        needsChallenge: false,
+        accessGranted: false,
+      );
+    }
     try {
       await FAWebViewCookieService(secureStorage: _secureStorage).captureCookies(
         url: url,
@@ -53,7 +62,14 @@ class StartupCloudflareCheckService implements StartupCloudflareChecker {
       final response = await FAHttp.get(
         Uri.parse(url),
         headers: headers,
+        isCancelled: isCancelled,
       );
+      if (isCancelled?.call() ?? false) {
+        return const StartupCloudflareCheckResult(
+          needsChallenge: false,
+          accessGranted: false,
+        );
+      }
 
       final refreshedCf = FaCookieHelper.extractCfClearanceFromSetCookieHeader(
         response.headers['set-cookie'],
@@ -61,23 +77,33 @@ class StartupCloudflareCheckService implements StartupCloudflareChecker {
       if (refreshedCf != null && refreshedCf.isNotEmpty) {
         await FaCookieHelper.writeCfClearance(refreshedCf);
       }
+      if (isCancelled?.call() ?? false) {
+        return const StartupCloudflareCheckResult(
+          needsChallenge: false,
+          accessGranted: false,
+        );
+      }
 
-      final needsChallenge = FaCookieHelper.isCloudflareChallengePage(
+      final access = classifyFaAccessPage(
+        url: url,
         body: response.body,
         statusCode: response.statusCode,
         headers: response.headers,
       );
-      final accessGranted = FaCookieHelper.isFaDocument(
-        body: response.body,
-        statusCode: response.statusCode,
-        headers: response.headers,
-      );
+      recordFaAccessAvailability(access);
       return StartupCloudflareCheckResult(
-        needsChallenge: needsChallenge,
-        accessGranted: accessGranted,
-        homeHtml: accessGranted ? response.body : null,
+        needsChallenge: access.status == CloudflareHttpAccessStatus.challenged,
+        accessGranted: access.granted,
+        homeHtml: access.pageHtml,
+        siteUnavailableMessage: access.siteUnavailableMessage,
       );
     } catch (_) {
+      if (isCancelled?.call() ?? false) {
+        return const StartupCloudflareCheckResult(
+          needsChallenge: false,
+          accessGranted: false,
+        );
+      }
       if (kDebugMode) debugPrint('[Cloudflare] Startup check unavailable.');
       return const StartupCloudflareCheckResult(needsChallenge: false);
     }

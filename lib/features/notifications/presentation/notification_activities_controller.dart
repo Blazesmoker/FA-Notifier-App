@@ -9,10 +9,12 @@ class NotificationActivitiesController {
   NotificationActivitiesController(
     this._service, {
     required this._pollingService,
+    this.onRefreshed,
   });
 
   FaNotificationsController _service;
   final FaActivitiesPollingPort _pollingService;
+  final Future<void> Function(int previousPageRevision)? onRefreshed;
   bool _didAutoRefetch = false;
 
   bool get hasFetched => _service.hasFetched;
@@ -25,26 +27,34 @@ class NotificationActivitiesController {
   }
 
   Future<void> loadOnFirstOpen() async {
-    if (hasFetched) return;
-    await _pollingService.triggerNow(
-      resetTimer: false,
+    await _pollingService.ensureNotificationsFresh(
       source: 'notifications_first_open',
     );
   }
 
-  Future<void> refresh({required String source}) {
-    return _pollingService.triggerNow(
+  Future<void> refresh({required String source}) async {
+    final revision = _service.adPageRevision;
+    await _pollingService.triggerNow(
       resetTimer: true,
       source: source,
+      requireFresh: true,
     );
+    if (_service.errorMessage == null && _service.adPageRevision > revision) {
+      await onRefreshed?.call(revision);
+    }
   }
 
   void triggerEmptyAutoRefresh() {
-    if (_didAutoRefetch) return;
+    if (_didAutoRefetch ||
+        (_service.errorMessage == null &&
+            _service.hasValidLatestCountsSnapshot)) {
+      return;
+    }
     _didAutoRefetch = true;
     _pollingService.triggerNow(
       resetTimer: false,
       source: 'notifications_empty_autorefresh',
+      requireFresh: true,
     );
   }
 

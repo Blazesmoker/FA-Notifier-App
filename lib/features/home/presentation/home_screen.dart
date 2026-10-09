@@ -11,11 +11,13 @@ import 'package:fanotifier/features/search/presentation/search_screen.dart';
 import 'package:fanotifier/features/search/domain/search_repository.dart';
 import 'package:fanotifier/features/submissions/presentation/submissions_screen.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_favorite_state_controller.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 import 'package:fanotifier/features/upload/presentation/upload_submission_screen.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/shared/fa/domain/fa_activities_polling_port.dart';
 import 'package:fanotifier/features/notifications/presentation/fa_notifications_controller.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
+import 'package:fanotifier/shared/widgets/fa_unavailable_screen.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
@@ -71,7 +73,10 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   bool isCheckingLoginStatus = true;
   bool _startupAccessBlocked = false;
+  bool _startupInitializationInProgress = false;
+  String? _startupSiteUnavailableMessage;
   bool isLoggedIn = false;
+  final ValueNotifier<bool> _adsSessionClosing = ValueNotifier(false);
   bool _sfwEnabled = true;
   final SfwModePreference _sfwModePreference = SfwModePreference();
   late final HomeSessionRepository _homeSessionRepository;
@@ -186,6 +191,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _webViewController = null;
     filterOptionsNotifier.dispose();
     _unreadCount.dispose();
+    _adsSessionClosing.dispose();
     _navProvider.removeListener(_handleNavProviderChange);
     super.dispose();
   }
@@ -225,19 +231,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _initializeAndLoadLoginState() async {
+    if (!mounted || _startupInitializationInProgress) return;
+    _startupInitializationInProgress = true;
+    try {
+      await _loadInitialLoginState();
+    } finally {
+      _startupInitializationInProgress = false;
+    }
+  }
+
+  Future<void> _loadInitialLoginState() async {
     if (_startupAccessBlocked) {
       setState(() {
         _startupAccessBlocked = false;
+        _startupSiteUnavailableMessage = null;
         isCheckingLoginStatus = true;
       });
     }
     await _privacySettings.load();
+    if (!mounted) return;
     await _loadSfwEnabled();
+    if (!mounted) return;
     await _loadLoginState();
+    if (!mounted) return;
     await (_homeStartPreferenceFuture ?? Future<void>.value());
+    if (!mounted) return;
     if (isLoggedIn) {
       await _profileController.loadCachedUserProfile();
     }
+    if (!mounted) return;
     final canProceed = await _runStartupCloudflareCheck();
     if (!mounted) return;
     if (!canProceed) {
@@ -279,13 +301,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<bool> _runStartupCloudflareCheck() async {
-    final check = await _startupCloudflareChecker.checkHome();
+    final check = await _startupCloudflareChecker.checkHome(
+      isCancelled: () => !mounted,
+    );
+    if (!mounted) return false;
+    _startupSiteUnavailableMessage = check.siteUnavailableMessage;
     _profileController.setStartupHomeHtml(isLoggedIn ? check.homeHtml : null);
     if (!check.needsChallenge) {
-      return check.accessGranted;
-    }
-    if (!mounted) {
-      return false;
+      return check.siteUnavailableMessage == null && check.accessGranted;
     }
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) {
@@ -296,16 +319,21 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       returnPageHtml: true,
     );
-    if (mounted && result?.passed == true) {
+    if (!mounted) return false;
+    _startupSiteUnavailableMessage = result?.siteUnavailableMessage;
+    if (result?.siteUnavailableMessage == null && result?.passed == true) {
       _profileController.setStartupHomeHtml(isLoggedIn ? result?.pageHtml : null);
     }
-    return result?.passed == true;
+    return result?.siteUnavailableMessage == null && result?.passed == true;
   }
 
   void _startActivitiesPolling({required bool triggerImmediate}) {
     try {
       final svc = Provider.of<FaNotificationsController>(context, listen: false);
-      _activitiesPolling.start(faNotificationService: svc);
+      _activitiesPolling.start(
+        faNotificationService: svc,
+        notesRepositoryFactory: context.read<NotesRepositoryFactory>(),
+      );
       if (triggerImmediate) {
         unawaited(_activitiesPolling.triggerNow(
           resetTimer: true,
@@ -321,8 +349,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadLoginState() async {
     bool savedLoginState = await _homeSessionRepository.loadIsLoggedIn();
+    if (!mounted) return;
     setState(() {
       isLoggedIn = savedLoginState;
+      if (savedLoginState) {
+        context.read<FaNotificationsController>().setAdSessionClosing(false);
+        _adsSessionClosing.value = false;
+      }
       if (!savedLoginState) {
         _didOpenStartupProfile = false;
       }
@@ -331,6 +364,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadSfwEnabled() async {
     final sfwEnabled = await _sfwModePreference.loadSfwEnabled();
+    if (!mounted) return;
     setState(() {
       _sfwEnabled = sfwEnabled;
       browseFilters =
@@ -361,6 +395,8 @@ class _HomeScreenState extends State<HomeScreen> {
       commentsEnabled: settings.commentsEnabled,
       favoritesEnabled: settings.favoritesEnabled,
       shoutsEnabled: settings.shoutsEnabled,
+      counts: faNotificationService.hasValidLatestCountsSnapshot
+          ? faNotificationService.latestCounts : null,
     );
   }
 
@@ -602,6 +638,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showAuthenticatedHome() {
     setState(() {
       isLoggedIn = true;
+      context.read<FaNotificationsController>().setAdSessionClosing(false);
+      _adsSessionClosing.value = false;
       _webViewController = null;
     });
     _logSelectedHomeScreen();
@@ -720,8 +758,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 350));
     if (!mounted || !isLoggedIn) return;
 
-    await _activitiesPolling.triggerNow(
-      resetTimer: true,
+    await _activitiesPolling.ensureNotificationsFresh(
       source: 'startup_warmup',
     );
 
@@ -895,6 +932,9 @@ class _HomeScreenState extends State<HomeScreen> {
           3,
           () => NotificationsScreen(
             drawerKey: _drawerKey,
+            isActive: isLoggedIn && _selectedIndex == 3,
+            sfwEnabled: _sfwEnabled,
+            sessionClosing: _adsSessionClosing,
             scrollActionPort: _scrollActions[3],
             key: ValueKey(_notificationsInitialSection),
             initialSection: _notificationsInitialSection,
@@ -975,6 +1015,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _logout() async {
+    _adsSessionClosing.value = true;
+    context.read<FaNotificationsController>().setAdSessionClosing(true);
     for (final action in _scrollActions) {
       action.cancel();
     }
@@ -993,6 +1035,7 @@ class _HomeScreenState extends State<HomeScreen> {
       context.read<BrowseRepository>().clearFilterOptions();
       context.read<SearchRepository>().clearFilterOptions();
       context.read<SubmissionFavoriteStateController>().clear();
+      context.read<FaContentBlockController>().clear();
       await _homeSessionRepository.clearLocalSession();
 
       if (!mounted) return;
@@ -1075,26 +1118,32 @@ class _HomeScreenState extends State<HomeScreen> {
             )
           : _startupAccessBlocked
               ? SafeArea(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            'Fur Affinity access could not be verified. '
-                            'Please try again.',
-                            textAlign: TextAlign.center,
+                  child: _startupSiteUnavailableMessage != null
+                      ? FaUnavailableScreen(
+                          title: 'Fur Affinity is temporarily offline',
+                          message: _startupSiteUnavailableMessage!,
+                          onRefresh: _initializeAndLoadLoginState,
+                        )
+                      : Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'Fur Affinity access could not be verified. '
+                                  'Please try again.',
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 12),
+                                TextButton(
+                                  onPressed: _initializeAndLoadLoginState,
+                                  child: const Text('Retry verification'),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: _initializeAndLoadLoginState,
-                            child: const Text('Retry verification'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                        ),
                 )
               : isLoggedIn
                   ? _buildMainAppScreen(context)

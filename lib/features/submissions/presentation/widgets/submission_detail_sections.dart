@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/widgets/fa_content_blur.dart';
 
 Widget buildSubmissionAuthorHeader({
   required String profileImageUrl,
@@ -150,6 +151,7 @@ Widget buildSubmissionImage({
   required String imageUrl,
   required double? imageWidth,
   required double? imageHeight,
+  bool blurred = false,
 }) {
   return ClipRect(
     child: LayoutBuilder(
@@ -162,6 +164,13 @@ Widget buildSubmissionImage({
           child: FaNetworkImage(
             imageUrl,
             fit: BoxFit.contain,
+            frameBuilder: (context, child, frame, synchronouslyLoaded) {
+              return FaImageBlur(
+                blurred: blurred && frame != null,
+                sigma: 150,
+                child: child,
+              );
+            },
             loadingBuilder:
                 (
                   BuildContext context,

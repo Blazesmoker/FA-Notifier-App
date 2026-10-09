@@ -42,7 +42,7 @@ class CacheMonitorService {
   Future<void> _clearDataDirectory(Directory dataDir) async {
     try {
       if (await dataDir.exists()) {
-        for (final file in dataDir.listSync()) {
+        await for (final file in dataDir.list()) {
           if (file is File && !_isProtectedFile(file)) {
             await file.delete();
           } else if (file is Directory && !_isProtectedDirectory(file)) {
@@ -63,7 +63,7 @@ class CacheMonitorService {
     int size = 0;
     try {
       if (await directory.exists()) {
-        for (final entity in directory.listSync(recursive: true)) {
+        await for (final entity in directory.list(recursive: true)) {
           if (entity is File) {
             size += await entity.length();
           }

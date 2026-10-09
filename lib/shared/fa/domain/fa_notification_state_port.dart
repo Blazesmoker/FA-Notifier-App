@@ -5,6 +5,12 @@ abstract interface class FaNotificationStatePort {
 
   NotificationCounts get latestCounts;
 
+  NotificationCounts? get listCounts;
+
+  int? get listFetchedAtMilliseconds;
+
+  int? get listStartedAtMilliseconds;
+
   String? get errorMessage;
 
   void applyTopbarCounts(NotificationCounts counts);

@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
+import 'package:fanotifier/shared/widgets/fa_content_blur.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 
 import 'package:fanotifier/features/profile/domain/shout.dart';
@@ -32,9 +34,11 @@ class UserProfileHomeSection extends StatelessWidget {
     required this.featuredImageUrl,
     required this.featuredImageTitle,
     required this.featuredPostNumber,
+    this.featuredContentBlock = const FaContentBlockData(),
     required this.onOpenSubmission,
     required this.userProfileImageUrl,
     required this.userProfilePostNumber,
+    this.userProfileContentBlock = const FaContentBlockData(),
     required this.userProfileTexts,
     required this.isClassicMarkup,
     required this.acceptingTrades,
@@ -74,11 +78,13 @@ class UserProfileHomeSection extends StatelessWidget {
   final String? featuredImageUrl;
   final String? featuredImageTitle;
   final String? featuredPostNumber;
+  final FaContentBlockData featuredContentBlock;
   final void Function(
       BuildContext context, String imageUrl, String submissionId) onOpenSubmission;
 
   final String? userProfileImageUrl;
   final String? userProfilePostNumber;
+  final FaContentBlockData userProfileContentBlock;
   final String? userProfileTexts;
   final bool isClassicMarkup;
   final bool acceptingTrades;
@@ -170,6 +176,8 @@ class UserProfileHomeSection extends StatelessWidget {
                   featuredPostNumber!.isNotEmpty)
                 SliverToBoxAdapter(
                   child: FeaturedSubmissionSection(
+                    submissionId: featuredPostNumber!,
+                    contentBlock: featuredContentBlock,
                     imageUrl: featuredImageUrl!,
                     title: featuredImageTitle!,
                     onTap: () {
@@ -194,6 +202,7 @@ class UserProfileHomeSection extends StatelessWidget {
                   userProfileTexts != 'No additional profile information.')
                 SliverToBoxAdapter(
                   child: UserProfileAdditionalInfoSection(
+                    contentBlock: userProfileContentBlock,
                     userProfileImageUrl: userProfileImageUrl,
                     userProfilePostNumber: userProfilePostNumber,
                     userProfileTexts: userProfileTexts!,
@@ -269,6 +278,7 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
     super.key,
     required this.userProfileImageUrl,
     required this.userProfilePostNumber,
+    this.contentBlock = const FaContentBlockData(),
     required this.userProfileTexts,
     required this.isClassicMarkup,
     required this.acceptingTrades,
@@ -279,6 +289,7 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
 
   final String? userProfileImageUrl;
   final String? userProfilePostNumber;
+  final FaContentBlockData contentBlock;
   final String userProfileTexts;
   final bool isClassicMarkup;
   final bool acceptingTrades;
@@ -319,23 +330,27 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
                 child: Center(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8.0),
-                    child: FaNetworkImage(
-                      userProfileImageUrl!,
-                      fit: BoxFit.cover,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) {
-                          return child;
-                        }
-                        return const SizedBox(
-                          height: 200,
-                          child: Center(
-                            child: CircularProgressIndicator(),
-                          ),
-                        );
-                      },
-                      errorBuilder: (context, error, stackTrace) {
-                        return const SizedBox();
-                      },
+                    child: FaContentBlur(
+                      submissionId: userProfilePostNumber ?? '',
+                      data: contentBlock,
+                      child: FaNetworkImage(
+                        userProfileImageUrl!,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) {
+                            return child;
+                          }
+                          return const SizedBox(
+                            height: 200,
+                            child: Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return const SizedBox();
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -360,11 +375,20 @@ class UserProfileAdditionalInfoSection extends StatelessWidget {
               ),
             const SizedBox(height: 8.0),
             CachedProfileHtml(
-              cacheKey: userProfileTexts,
+              cacheKey: (
+                userProfileTexts,
+                userProfilePostNumber,
+                userProfileImageUrl,
+                contentBlock,
+              ),
               child: html_pkg.Html(
                 data: userProfileTexts,
                 style: userProfileHtmlStylesCompact(),
-                extensions: buildUserProfileBBCodeExtensions(),
+                extensions: buildUserProfileBBCodeExtensions(
+                  submissionImageUrl: userProfileImageUrl,
+                  submissionId: userProfilePostNumber,
+                  contentBlock: contentBlock,
+                ),
                 onLinkTap: (url, _, _) => onHandleFALink(context, url!),
               ),
             ),

@@ -90,6 +90,10 @@ import 'package:fanotifier/features/upload/domain/upload_webview_session_gateway
 import 'package:fanotifier/features/upload/upload_feature.dart';
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/fa/domain/fa_session_access.dart';
+import 'package:fanotifier/shared/fa/domain/fa_author_watch_state_store.dart';
+import 'package:fanotifier/core/media/domain/media_bytes_repository.dart';
+import 'package:fanotifier/core/media/media_feature.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 
 class AppProviders extends StatelessWidget {
   const AppProviders({
@@ -111,6 +115,12 @@ class AppProviders extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        Provider<MediaBytesRepository>.value(value: MediaFeature.bytesRepository),
+        ChangeNotifierProvider<FaContentBlockController>(
+          create: (_) => FaContentBlockController(
+            repository: SubmissionsFeature.createContentBlockRepository(),
+          ),
+        ),
         Provider<FaSessionAccess>.value(value: AuthFeature.sessionAccess),
         Provider<FaLinkNavigator>(
           create: (_) => const AppFaLinkNavigator(),
@@ -178,6 +188,10 @@ class AppProviders extends StatelessWidget {
         Provider<LocalNotificationGateway>.value(
           value: NotificationsFeature.localNotificationGateway,
         ),
+        Provider<FaAuthorWatchStateStore>(
+          create: (_) => ProfileFeature.createAuthorWatchStateStore(),
+          dispose: (_, store) => store.dispose(),
+        ),
         ProfileFeature.repositoryProvider(),
         Provider<ProfileShoutRepositoryFactory>(
           create: (_) => ProfileFeature.createShoutRepository,
@@ -195,7 +209,9 @@ class AppProviders extends StatelessWidget {
           create: (_) => ProfileFeature.createJournalsRepository(),
         ),
         Provider<ProfileMediaExportRepository>(
-          create: (_) => ProfileFeature.createMediaExportRepository(),
+          create: (context) => ProfileFeature.createMediaExportRepository(
+            mediaBytesRepository: context.read<MediaBytesRepository>(),
+          ),
         ),
         Provider<UserDescriptionRepository>(
           create: (_) => ProfileFeature.createUserDescriptionRepository(),
@@ -306,12 +322,14 @@ class AppProviders extends StatelessWidget {
         ),
         Provider<SubmissionDetailsRepository>(
           create: (context) => SubmissionsFeature.createSubmissionDetailsRepository(
+            mediaBytesRepository: context.read<MediaBytesRepository>(),
             submissionCommentRepository:
                 context.read<SubmissionCommentRepository>(),
           ),
         ),
         Provider<NoteSubmissionPreviewRepository>(
           create: (context) => NotesFeature.createSubmissionPreviewRepository(
+            mediaBytesRepository: context.read<MediaBytesRepository>(),
             submissionDetailsRepository: context.read<SubmissionDetailsRepository>(),
           ),
         ),
@@ -345,7 +363,9 @@ class AppProviders extends StatelessWidget {
           create: (_) => CommentSettingsProvider(),
         ),
         ChangeNotifierProvider<FaNotificationsController>(
-          create: (_) => NotificationsFeature.createNotificationService(),
+          create: (context) => NotificationsFeature.createNotificationService(
+            adsRepository: context.read<FaAdsRepository>(),
+          ),
         ),
       ],
       child: child,

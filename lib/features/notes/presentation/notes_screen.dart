@@ -133,7 +133,11 @@ class NotesScreenState extends State<NotesScreen>
     _notesController.initialize().then((_) async {
       if (!mounted) return;
       await _initInboxAndSent();
+      if (!mounted) {
+        return;
+      }
       _initialInboxLoadCompleted = true;
+      _notesController.bindInboxRefresh();
     });
   }
 
@@ -310,6 +314,7 @@ class NotesScreenState extends State<NotesScreen>
 
   @override
   void dispose() {
+    _notesController.unbindInboxRefresh();
     widget.scrollActionPort?.unbind(_scrollFromNavigation);
     _inboxScrollReturn.dispose();
     _sentScrollReturn.dispose();
@@ -409,7 +414,6 @@ class NotesScreenState extends State<NotesScreen>
         _fetchInbox(
           page: 1,
           clearOld: false,
-          suppressNewUnreadNotifications: true,
         );
         _refreshSentIfVisibleOrMarkStale();
       });
@@ -956,7 +960,7 @@ class NotesScreenState extends State<NotesScreen>
                 }
               }
             },
-            child: Container(color: Colors.transparent),
+            child: const SizedBox.expand(),
           ),
         ),
       ],

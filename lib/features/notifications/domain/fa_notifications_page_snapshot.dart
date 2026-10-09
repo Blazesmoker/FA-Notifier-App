@@ -1,3 +1,4 @@
+import 'package:fanotifier/features/ads/domain/fa_ad_models.dart';
 import 'package:fanotifier/features/notifications/domain/fa_notification_models.dart';
 import 'package:fanotifier/shared/fa/domain/notification_counts.dart';
 import 'package:fanotifier/shared/fa/domain/notifications.dart';
@@ -11,6 +12,9 @@ class FaNotificationsPageSnapshot {
     required List<NotificationSection> sections,
     required this.linkUsername,
     required this.displayName,
+    this.startedAtMilliseconds,
+    this.ads,
+    this.documentSfwEnabled,
   })  : messageBarCounts = Map.unmodifiable(messageBarCounts),
         sections = List.unmodifiable(sections);
 
@@ -21,4 +25,7 @@ class FaNotificationsPageSnapshot {
   final List<NotificationSection> sections;
   final String? linkUsername;
   final String? displayName;
+  final int? startedAtMilliseconds;
+  final FaAdPageMetadata? ads;
+  final bool? documentSfwEnabled;
 }

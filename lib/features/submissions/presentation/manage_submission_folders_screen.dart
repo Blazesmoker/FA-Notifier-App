@@ -7,6 +7,7 @@ import 'package:fanotifier/features/submissions/domain/submission_folder_color_r
 import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
 import 'package:fanotifier/features/submissions/domain/submission_management_repository.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_folder_editor_screen.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_management_route.dart';
 import 'package:fanotifier/features/submissions/presentation/submission_folder_group_editor_screen.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_folder_cards.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_folder_color_dialog.dart';
@@ -18,19 +19,29 @@ import 'package:fanotifier/shared/utils/external_link_launcher.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 
 class ManageSubmissionFoldersResult {
-  const ManageSubmissionFoldersResult({this.openSubmissionsAction});
+  const ManageSubmissionFoldersResult({
+    this.openSubmissionsAction,
+    this.changed = false,
+  });
 
   final FaManagementFormAction? openSubmissionsAction;
+  final bool changed;
 }
 
 class ManageSubmissionFoldersScreen extends StatefulWidget {
-  const ManageSubmissionFoldersScreen({super.key});
+  const ManageSubmissionFoldersScreen({super.key, this._onChanged});
+
+  final VoidCallback? _onChanged;
 
   static Route<ManageSubmissionFoldersResult> route() {
-    return MaterialPageRoute<ManageSubmissionFoldersResult>(
+    var changed = false;
+    return SubmissionManagementRoute<ManageSubmissionFoldersResult>(
+      readResult: () => ManageSubmissionFoldersResult(changed: changed),
       settings:
           const AnalyticsRouteSettings(AppScreens.manageSubmissionFolders),
-      builder: (_) => const ManageSubmissionFoldersScreen(),
+      builder: (_) => ManageSubmissionFoldersScreen(
+        onChanged: () => changed = true,
+      ),
     );
   }
 
@@ -49,6 +60,12 @@ class _ManageSubmissionFoldersScreenState
   Object? _loadError;
   bool _loading = true;
   bool _mutating = false;
+  bool _changed = false;
+
+  void _markChanged() {
+    _changed = true;
+    widget._onChanged?.call();
+  }
 
   @override
   void initState() {
@@ -159,6 +176,7 @@ class _ManageSubmissionFoldersScreenState
     setState(() => _mutating = false);
     _showResult(result);
     if (result.success || result.indeterminate) {
+      _markChanged();
       await _load();
     }
   }
@@ -224,7 +242,10 @@ class _ManageSubmissionFoldersScreenState
         appBarTitle: appBarTitle,
       ),
     );
-    if (changed == true && mounted) await _load();
+    if (changed == true && mounted) {
+      _markChanged();
+      await _load();
+    }
   }
 
   Future<void> _openGroupEditor({FaManagedFolderGroup? group}) async {
@@ -240,14 +261,23 @@ class _ManageSubmissionFoldersScreenState
     );
     if (!mounted || result == null) return;
     _showResult(result);
-    if (result.success || result.indeterminate) await _load();
+    if (result.success || result.indeterminate) {
+      _markChanged();
+      await _load();
+    }
   }
 
   Future<void> _openSubmissions(FaManagementFormAction? action) async {
     if (action == null || _mutating) return;
-    Navigator.of(context).pop(
-      ManageSubmissionFoldersResult(openSubmissionsAction: action),
-    );
+    _close(openSubmissionsAction: action);
+  }
+
+  void _close({FaManagementFormAction? openSubmissionsAction}) {
+    if (_mutating) return;
+    Navigator.of(context).pop(ManageSubmissionFoldersResult(
+      openSubmissionsAction: openSubmissionsAction,
+      changed: _changed,
+    ));
   }
 
   Future<void> _openFaPlus() async {
@@ -263,6 +293,16 @@ class _ManageSubmissionFoldersScreenState
 
   @override
   Widget build(BuildContext context) {
+    return PopScope<ManageSubmissionFoldersResult>(
+      canPop: !_mutating,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _close();
+      },
+      child: _buildScaffold(),
+    );
+  }
+
+  Widget _buildScaffold() {
     final page = _page;
     final createFolderUri = page?.createFolderUri;
     return Scaffold(

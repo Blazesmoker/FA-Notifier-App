@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fanotifier/core/fa/fa_media_auth.dart';
+import 'package:fanotifier/core/media/domain/media_bytes_repository.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
 import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 import 'package:fanotifier/features/notes/data/note_submission_preview_parser.dart';
@@ -16,11 +17,13 @@ class NoteSubmissionPreviewRepositoryImpl
   NoteSubmissionPreviewRepositoryImpl({
     required this._submissionDetailsRepository,
     required this._googleImageResolver,
+    required this._mediaBytesRepository,
     this._sfwModePreference = const SfwModePreference(),
   });
 
   final SubmissionDetailsRepository _submissionDetailsRepository;
   final NoteGoogleImageResolver _googleImageResolver;
+  final MediaBytesRepository _mediaBytesRepository;
   final SfwModePreference _sfwModePreference;
   final Map<String, NoteSubmissionPreview> _cache = {};
   final Map<String, Future<NoteSubmissionPreview?>> _inFlight = {};
@@ -365,21 +368,22 @@ class NoteSubmissionPreviewRepositoryImpl
             'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
             'Referer': ?referer,
           };
-    final response = await FAHttp.get(
-      Uri.parse(imageUrl),
+    final response = await _mediaBytesRepository.load(
+      imageUrl,
       headers: headers,
+      purpose: MediaLoadPurpose.display,
       timeout: useFaMediaAuth
           ? null
           : const Duration(seconds: 60),
     );
     final contentType =
-        (response.headers['content-type'] ?? '').toLowerCase();
+        (response.contentType ?? '').toLowerCase();
     if (response.statusCode != 200 ||
-        response.bodyBytes.isEmpty ||
+        response.bytes.isEmpty ||
         contentType.contains('text/html')) {
       _logPreview(
         'image response rejected status=${response.statusCode} '
-        'type=$contentType bytes=${response.bodyBytes.length} '
+        'type=$contentType bytes=${response.bytes.length} '
         'image=$imageUrl',
       );
       return null;
@@ -388,10 +392,10 @@ class NoteSubmissionPreviewRepositoryImpl
     return NoteSubmissionPreview(
       submissionUrl: sourceUrl,
       imageUrl: imageUrl,
-      imageBytes: response.bodyBytes,
+      imageBytes: response.bytes,
       extension: noteSubmissionImageExtension(
         imageUrl,
-        response.headers['content-type'],
+        response.contentType,
       ),
     );
   }

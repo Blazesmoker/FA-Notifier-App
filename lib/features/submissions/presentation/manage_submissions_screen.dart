@@ -11,6 +11,7 @@ import 'package:fanotifier/features/submissions/domain/submission_folder_color_r
 import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
 import 'package:fanotifier/features/submissions/domain/submission_management_repository.dart';
 import 'package:fanotifier/features/submissions/presentation/manage_submission_folders_screen.dart';
+import 'package:fanotifier/features/submissions/presentation/submission_management_route.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/manage_submissions_bottom_overlay.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_image_preview.dart';
 import 'package:fanotifier/features/submissions/presentation/widgets/submission_management_shrinkable_text.dart';
@@ -19,6 +20,7 @@ import 'package:fanotifier/features/submissions/presentation/widgets/submission_
 import 'package:fanotifier/shared/navigation/fa_link_handler.dart';
 import 'package:fanotifier/shared/widgets/confirm_close_dialog.dart';
 import 'package:fanotifier/shared/widgets/fa_network_image.dart';
+import 'package:fanotifier/shared/fa/presentation/fa_content_block_controller.dart';
 import 'package:fanotifier/shared/widgets/pulsating_loading_indicator.dart';
 
 enum _SubmissionActionDialog {
@@ -32,17 +34,22 @@ class ManageSubmissionsScreen extends StatefulWidget {
   const ManageSubmissionsScreen({
     super.key,
     this.initialNavigationAction,
+    this._onChanged,
   });
 
   final FaManagementFormAction? initialNavigationAction;
+  final VoidCallback? _onChanged;
 
   static Route<bool> route({
     FaManagementFormAction? initialNavigationAction,
   }) {
-    return MaterialPageRoute<bool>(
+    var changed = false;
+    return SubmissionManagementRoute<bool>(
+      readResult: () => changed,
       settings: const AnalyticsRouteSettings(AppScreens.manageSubmissions),
       builder: (_) => ManageSubmissionsScreen(
         initialNavigationAction: initialNavigationAction,
+        onChanged: () => changed = true,
       ),
     );
   }
@@ -64,7 +71,8 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
   bool get _mutating => _controller.mutating;
   bool _allowPop = false;
   bool _titlesEnabled = true;
-  bool get _changed => _controller.changed;
+  bool _foldersChanged = false;
+  bool get _changed => _controller.changed || _foldersChanged;
   bool _openingFolder = false;
   bool _preparingPreview = false;
 
@@ -75,10 +83,16 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
     super.initState();
     _repository = context.read<SubmissionManagementRepository>();
     _controller = ManageSubmissionsController(
+      contentBlockController: context.read<FaContentBlockController>(),
       repository: _repository,
       folderColorRepository: context.read<SubmissionFolderColorRepository>(),
       isMounted: () => mounted,
-      updateState: (update) => setState(update),
+      updateState: (update) {
+        setState(update);
+        if (_changed) {
+          widget._onChanged?.call();
+        }
+      },
       confirmDelete: _confirmDelete,
       showMessage: _showMessage,
     );
@@ -89,17 +103,15 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
   }
 
   Future<void> _requestClose() async {
-    if (_mutating) return;
-    if (!_dirty) {
-      Navigator.of(context).pop(_changed);
-      return;
+    if (_mutating || _allowPop) return;
+    if (_dirty) {
+      final discard = await ConfirmCloseDialog.show(
+        context,
+        title: 'Discard changes?',
+        message: 'Your selection has not been applied. Discard it?',
+      );
+      if (!mounted || !discard) return;
     }
-    final discard = await ConfirmCloseDialog.show(
-      context,
-      title: 'Discard changes?',
-      message: 'Your selection has not been applied. Discard it?',
-    );
-    if (!mounted || !discard) return;
     setState(() => _allowPop = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) Navigator.of(context).pop(_changed);
@@ -130,6 +142,10 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
       ManageSubmissionFoldersScreen.route(),
     );
     if (!mounted) return;
+    if (result?.changed == true) {
+      _foldersChanged = true;
+      widget._onChanged?.call();
+    }
     final action = result?.openSubmissionsAction;
     if (action != null) {
       final discard = await _confirmDiscardForNavigation(
@@ -139,7 +155,11 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
       await _controller.load(navigationAction: action, resetDrafts: true);
       return;
     }
-    await _controller.load(uri: _page?.sourceUri, resetDrafts: false);
+    if (result?.changed == true) {
+      await _controller.load(uri: _page?.sourceUri, resetDrafts: false);
+    } else {
+      await _controller.refreshFolderColors();
+    }
   }
 
   Future<void> _openActionDialog(_SubmissionActionDialog action) async {
@@ -393,8 +413,8 @@ class _ManageSubmissionsScreenState extends State<ManageSubmissionsScreen> {
   Widget build(BuildContext context) {
     final page = _page;
     final hasSelection = _selectedIds.isNotEmpty;
-    return PopScope(
-      canPop: _allowPop || !_dirty,
+    return PopScope<bool>(
+      canPop: _allowPop || (!_dirty && !_mutating),
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) _requestClose();
       },

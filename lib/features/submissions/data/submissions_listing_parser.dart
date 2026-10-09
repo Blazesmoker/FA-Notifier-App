@@ -4,9 +4,12 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:fanotifier/features/submissions/domain/submission_image_group.dart';
 import 'package:fanotifier/features/submissions/domain/submissions_listing_parse_result.dart';
 import 'package:fanotifier/shared/fa/fa_thumbnail_parser.dart';
+import 'package:fanotifier/shared/fa/data/fa_content_block_parser.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
 
 SubmissionsListingParseResult parseSubmissionsListing(String html) {
   final doc = html_parser.parse(html);
+  final contentBlockSnapshot = parseFaContentBlockSnapshot(doc);
   final isClassicStyle =
       doc.body?.attributes['data-static-path']?.contains('/themes/classic') ??
           false;
@@ -25,7 +28,7 @@ SubmissionsListingParseResult parseSubmissionsListing(String html) {
 
     final images = <Map<String, dynamic>>[];
     for (final fig in figures) {
-      final map = _extractListingData(fig);
+      final map = _extractListingData(fig, contentBlockSnapshot);
       if (map != null) {
         images.add(map);
       }
@@ -51,8 +54,14 @@ String? _extractBaseSubmissionsUrl(html_dom.Document doc) {
   return action.startsWith('http') ? action : 'https://www.furaffinity.net$action';
 }
 
-Map<String, dynamic>? _extractListingData(html_dom.Element fig) {
-  final data = FaThumbnailParser.extract(fig);
+Map<String, dynamic>? _extractListingData(
+  html_dom.Element fig,
+  FaContentBlockSnapshot? contentBlockSnapshot,
+) {
+  final data = FaThumbnailParser.extract(
+    fig,
+    contentBlockSnapshot: contentBlockSnapshot,
+  );
   if (data == null) return null;
 
   return {
@@ -65,6 +74,7 @@ Map<String, dynamic>? _extractListingData(html_dom.Element fig) {
     'title': data['title'],
     'author': data['author'],
     'authorProfileUrl': data['authorProfileUrl'],
+    'contentBlock': data['contentBlock'],
     'hqUrl': null,
     'isFav': false,
     'initialIsFav': false,

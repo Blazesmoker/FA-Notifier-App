@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fanotifier/features/notes/data/background_inbox_service.dart';
 import 'package:fanotifier/features/notes/data/message_storage.dart';
+import 'package:fanotifier/features/notes/domain/inbox_second_page_policy.dart';
+import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/features/notes/domain/note_activity_snapshot.dart';
 import 'package:fanotifier/features/notes/domain/note_arrival_policy.dart';
 
@@ -19,6 +21,29 @@ class ManualNoteActivityStore {
 
   Future<void> registerManualUnread(String noteId) {
     return registerManualUnreadBatch([noteId]);
+  }
+
+  Future<void> ensureTracking({bool Function()? isCancelled}) {
+    return _serialized(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      if ((isCancelled?.call() ?? false) || _read(prefs) != null) {
+        return;
+      }
+      final shown = await MessageStorage.getShownNoteIds();
+      final seen = await MessageStorage.getSeenNoteIds();
+      await prefs.reload();
+      if ((isCancelled?.call() ?? false) || _read(prefs) != null) {
+        return;
+      }
+      await _save(prefs, _ManualNoteActivityState(
+        knownIds: {...shown, ...seen},
+        pendingIds: {},
+        notBeforeMilliseconds: DateTime.now().millisecondsSinceEpoch,
+        baselineReady: (prefs.getBool('did_first_run_skip') ?? false) &&
+            (shown.isNotEmpty || seen.isNotEmpty),
+      ));
+    });
   }
 
   Future<void> registerManualUnreadBatch(Iterable<String> noteIds) {
@@ -67,10 +92,37 @@ class ManualNoteActivityStore {
     });
   }
 
-  Future<NoteActivitySnapshot?> fetchSnapshotIfEnabled() async {
+  Future<NoteActivitySnapshot?> fetchSnapshotIfEnabled({
+    NoteActivitySnapshot? existingSnapshot,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
-    if (_read(prefs) == null) return null;
+    final state = _read(prefs);
+    if (state == null) {
+      return null;
+    }
+    if (existingSnapshot != null &&
+        existingSnapshot.startedAtMilliseconds >= state.notBeforeMilliseconds) {
+      if (existingSnapshot.fetchedPage2 ||
+          !shouldFetchSecondInboxPage(
+            page1Messages: existingSnapshot.messages,
+            shownNoteIds: await MessageStorage.getShownNoteIds(),
+            seenNoteIds: await MessageStorage.getSeenNoteIds(),
+            topbarNotes: existingSnapshot.unreadCount,
+          )) {
+        return existingSnapshot;
+      }
+      final page2 = await BackgroundInboxService().fetchSecondPage();
+      return NoteActivitySnapshot(
+        messages: List<Message>.unmodifiable([
+          ...existingSnapshot.messages,
+          ...page2.messages,
+        ]),
+        startedAtMilliseconds: existingSnapshot.startedAtMilliseconds,
+        unreadCount: existingSnapshot.unreadCount,
+        fetchedPage2: true,
+      );
+    }
     final startedAt = DateTime.now().millisecondsSinceEpoch;
     final snapshot = await BackgroundInboxService().fetchSnapshot(
       shownNoteIds: await MessageStorage.getShownNoteIds(),
@@ -83,6 +135,7 @@ class ManualNoteActivityStore {
       messages: snapshot.messages,
       startedAtMilliseconds: startedAt,
       unreadCount: snapshot.topbarCounts!.notes,
+      fetchedPage2: snapshot.fetchedPage2,
     );
   }
 
@@ -91,7 +144,11 @@ class ManualNoteActivityStore {
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
       final state = _read(prefs);
-      if (state == null) return null;
+      if (state == null) {
+
+        return null;
+
+      }
       if (snapshot != null &&
           snapshot.startedAtMilliseconds >= state.notBeforeMilliseconds) {
         final restoring = await MessageStorage.getPendingUnreadRestores();

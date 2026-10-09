@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'package:fanotifier/features/ads/domain/fa_ad_models.dart';
 import 'package:fanotifier/features/ads/presentation/fa_ad_section_controller.dart';
 import 'package:fanotifier/shared/widgets/dashed_loading_indicator.dart';
 
@@ -12,6 +13,7 @@ class FaAdBanner extends StatelessWidget {
     required this.slot,
     required this.active,
     required this.onTap,
+    this.fillAvailableWidth = false,
     super.key,
   });
 
@@ -19,6 +21,20 @@ class FaAdBanner extends StatelessWidget {
   final FaAdSlotController slot;
   final ValueListenable<bool> active;
   final VoidCallback onTap;
+  final bool fillAvailableWidth;
+
+  static FaAdSize renderSize(
+    FaAdSize size, double availableWidth, {
+    bool fillAvailableWidth = false,
+  }) {
+    availableWidth = availableWidth.isFinite
+        ? math.max(0.0, availableWidth)
+        : size.width.toDouble();
+    final width = fillAvailableWidth
+        ? availableWidth
+        : math.min(size.width.toDouble(), availableWidth);
+    return FaAdSize(width, size.height * width / size.width);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,19 +50,24 @@ class FaAdBanner extends StatelessWidget {
               builder: (context, state, _) => LayoutBuilder(
                 builder: (context, constraints) {
                   final size = slot.effectiveSize;
-                  final width = math.min(size.width.toDouble(), constraints.maxWidth);
-                  final height = size.height * width / size.width;
+                  final rendered = renderSize(size, constraints.maxWidth,
+                      fillAvailableWidth: fillAvailableWidth);
+                  final width = rendered.width.toDouble();
+                  final height = rendered.height.toDouble();
                   section.reportLayout(slot, width, height, constraints.maxWidth);
                   return Center(
                     child: SizedBox(
                       width: width, height: height,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: SizedBox(
-                          width: size.width.toDouble(), height: size.height.toDouble(),
-                          child: _content(state),
-                        ),
-                      ),
+                      child: fillAvailableWidth
+                          ? _content(state, renderedSize: rendered)
+                          : FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: SizedBox(
+                                width: size.width.toDouble(),
+                                height: size.height.toDouble(),
+                                child: _content(state),
+                              ),
+                            ),
                     ),
                   );
                 },
@@ -58,7 +79,7 @@ class FaAdBanner extends StatelessWidget {
     );
   }
 
-  Widget _content(FaAdSlotState state) {
+  Widget _content(FaAdSlotState state, {FaAdSize? renderedSize}) {
     if (state.phase == FaAdSlotPhase.unavailable) {
       return const ColoredBox(
         color: Color(0xFF343434),
@@ -72,7 +93,7 @@ class FaAdBanner extends StatelessWidget {
     }
     final bytes = state.bytes;
     if (bytes == null) return const _AdLoading();
-    final size = slot.effectiveSize;
+    final size = renderedSize ?? slot.effectiveSize;
     return Center(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,

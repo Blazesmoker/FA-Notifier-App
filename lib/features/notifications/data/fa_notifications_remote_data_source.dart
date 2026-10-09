@@ -5,13 +5,25 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:fanotifier/features/notifications/data/notification_removal_request_builder.dart';
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
+import 'package:fanotifier/core/logging/fa_ads_logging.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
 import 'package:fanotifier/core/network/fa_request_coordinator.dart';
+import 'package:fanotifier/core/preferences/sfw_mode_preference.dart';
 
 class FaNotificationsFetchResponse {
-  const FaNotificationsFetchResponse({required this.htmlBody});
+  const FaNotificationsFetchResponse({
+    required this.htmlBody,
+    required this.startedAtMilliseconds,
+    required this.documentUri,
+    required this.sfwEnabled,
+    required this.adCookiesAccepted,
+  });
 
   final String htmlBody;
+  final int startedAtMilliseconds;
+  final Uri documentUri;
+  final bool sfwEnabled;
+  final bool adCookiesAccepted;
 }
 
 class FaNotificationMutationResponse {
@@ -35,11 +47,16 @@ class FaNotificationsRemoteSession {
 }
 
 class FaNotificationsRemoteDataSource {
-  FaNotificationsRemoteDataSource() {
+  FaNotificationsRemoteDataSource({this.onDocumentCookies}) {
     _initializeDio();
   }
 
   final Dio _dio = Dio();
+  final SfwModePreference _sfwModePreference = const SfwModePreference();
+  final Future<void> Function({
+    required Uri documentUri,
+    required String? setCookieHeader,
+  })? onDocumentCookies;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     iOptions: IOSOptions(
       accountName: 'flutter_secure_storage_service',
@@ -74,16 +91,21 @@ class FaNotificationsRemoteDataSource {
   }
 
   Future<FaNotificationsFetchResponse> fetchNotificationsPage(
-    FaNotificationsRemoteSession session,
-  ) async {
+    FaNotificationsRemoteSession session, {
+    bool? sfwEnabled,
+    bool Function()? canAcceptAdContext,
+  }) async {
     const url = 'https://www.furaffinity.net/msg/others/';
+    final mode = sfwEnabled ?? await _sfwModePreference.loadSfwEnabled();
+    final cookieHeader = '${await _cookieHeader(session)}; sfw=${mode ? '1' : '0'}';
     await FaRequestCoordinator.instance.waitForTurn(label: 'GET $url');
+    final startedAt = DateTime.now().millisecondsSinceEpoch;
     try {
       final response = await _dio.get(
         url,
         options: Options(
           headers: {
-            'Cookie': await _cookieHeader(session),
+            'Cookie': cookieHeader,
             'Referer': 'https://www.furaffinity.net/msg/others/',
           },
         ),
@@ -95,11 +117,28 @@ class FaNotificationsRemoteDataSource {
         ),
         responseBody: response.statusCode == 403 ? response.data : null,
       );
+      var adCookiesAccepted = canAcceptAdContext?.call() != false;
+      try {
+        if (adCookiesAccepted) {
+          await onDocumentCookies?.call(
+            documentUri: response.realUri,
+            setCookieHeader: response.headers[HttpHeaders.setCookieHeader]?.join(', '),
+          );
+        }
+      } catch (_) {
+        adCookiesAccepted = false;
+        FaAdsLog.event(FaAdsLogCategory.cookie, 'document_cookie_bridge_failed',
+            checks: {'adsAllowed': false});
+      }
       if (response.statusCode != 200) {
         throw Exception('Failed to load notifications.');
       }
       return FaNotificationsFetchResponse(
         htmlBody: response.data.toString(),
+        startedAtMilliseconds: startedAt,
+        documentUri: response.realUri,
+        sfwEnabled: mode,
+        adCookiesAccepted: adCookiesAccepted,
       );
     } on DioException catch (error) {
       if (_isRecoverableDioFailure(error)) {

@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 
@@ -32,17 +31,12 @@ class BackgroundInboxService {
     if (isCancelled?.call() ?? false) {
       throw StateError('Background fetch cancelled');
     }
-    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
-    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
-    if (cookieA == null || cookieB == null) {
-      debugPrint('[BG] No cookies found - user not logged in');
-      throw Exception('Not logged in');
-    }
+    final cookies = await _loadCookies();
 
     final page1 = await _fetchPage(
       page: 1,
-      cookieA: cookieA,
-      cookieB: cookieB,
+      cookieA: cookies.cookieA,
+      cookieB: cookies.cookieB,
       isCancelled: isCancelled,
     );
     final result = <Message>[...page1.messages];
@@ -59,8 +53,8 @@ class BackgroundInboxService {
       }
       final page2 = await _fetchPage(
         page: 2,
-        cookieA: cookieA,
-        cookieB: cookieB,
+        cookieA: cookies.cookieA,
+        cookieB: cookies.cookieB,
         isCancelled: isCancelled,
       );
       result.addAll(page2.messages);
@@ -72,6 +66,30 @@ class BackgroundInboxService {
       topbarCounts: page1.topbarCounts,
       fetchedPage2: fetchedPage2,
     );
+  }
+
+  Future<BackgroundInboxPage> fetchSecondPage({
+    bool Function()? isCancelled,
+  }) async {
+    if (isCancelled?.call() ?? false) {
+      throw StateError('Background fetch cancelled');
+    }
+    final cookies = await _loadCookies();
+    return _fetchPage(
+      page: 2,
+      cookieA: cookies.cookieA,
+      cookieB: cookies.cookieB,
+      isCancelled: isCancelled,
+    );
+  }
+
+  Future<({String cookieA, String cookieB})> _loadCookies() async {
+    final cookieA = await _secureStorage.read(key: 'fa_cookie_a');
+    final cookieB = await _secureStorage.read(key: 'fa_cookie_b');
+    if (cookieA == null || cookieB == null) {
+      throw Exception('Not logged in');
+    }
+    return (cookieA: cookieA, cookieB: cookieB);
   }
 
   Future<BackgroundInboxPage> _fetchPage({

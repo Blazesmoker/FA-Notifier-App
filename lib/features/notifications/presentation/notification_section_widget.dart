@@ -6,6 +6,7 @@ import 'package:fanotifier/features/notifications/domain/notification_message_fo
 import 'package:fanotifier/features/notifications/domain/notification_section_kind.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_activities_controller.dart';
 import 'package:fanotifier/features/notifications/presentation/notification_shouts_section.dart';
+import 'package:fanotifier/features/notifications/presentation/notification_tab_scroll_view.dart';
 import 'package:fanotifier/features/profile/domain/profile_section.dart';
 import 'package:fanotifier/features/profile/presentation/user_profile_screen.dart';
 import 'package:fanotifier/features/settings/domain/time_display_models.dart';
@@ -24,17 +25,26 @@ class NotificationSectionWidget extends StatelessWidget {
   final int sectionIndex;
   final NotificationActivitiesController controller;
   final ScrollReturnController scrollReturn;
+  final Widget actions;
+  final VoidCallback? onContentOpened;
   final SfwModePreference _sfwModePreference = const SfwModePreference();
   const NotificationSectionWidget({
     super.key,
     required this.sectionIndex,
     required this.controller,
     required this.scrollReturn,
+    required this.actions,
+    this.onContentOpened,
   })
       ;
 
   Future<bool> isSfwModeEnabled() async {
     return _sfwModePreference.loadSfwEnabled();
+  }
+
+  Future<T?> _openRoute<T>(BuildContext context, Route<T> route) {
+    onContentOpened?.call();
+    return Navigator.push<T>(context, route);
   }
 
   @override
@@ -49,37 +59,29 @@ class NotificationSectionWidget extends StatelessWidget {
             scrollReturn.reset();
             return controller.refresh(source: 'notifications_refresh_indicator');
           },
-          child: section.items.isEmpty
-              ? ListView(
-                  key: PageStorageKey('notification-${section.title}'),
-                  controller: scrollReturn.scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: const [
-                    SizedBox(
-                      height: 200,
-                      child: Center(
-                          child: Text('No notifications.',
-                              style: TextStyle(color: Colors.grey))),
+          child: NotificationTabScrollView(
+            storageKey: PageStorageKey('notification-${section.title}'),
+            scrollController: scrollReturn.scrollController,
+            actions: actions,
+            slivers: [
+              if (section.items.isEmpty)
+                const SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 200,
+                    child: Center(
+                      child: Text('No notifications.',
+                          style: TextStyle(color: Colors.grey)),
                     ),
-                  ],
+                  ),
                 )
-              : ListView.builder(
-                  key: PageStorageKey('notification-${section.title}'),
-                  controller: scrollReturn.scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  itemCount: section.items.length,
-                  itemBuilder: (context, itemIndex) {
+              else
+                SliverList(
+                  delegate: SliverChildBuilderDelegate((context, itemIndex) {
                     final item = section.items[itemIndex];
                     final sectionKind =
                         notificationSectionKindFromTitle(section.title);
                     return Column(
                       children: [
-                        if (itemIndex == 0)
-                          const Divider(
-                            height: 4.0,
-                            color: Color(0xFF111111),
-                            thickness: 4.0,
-                          ),
                         Padding(
                           padding: const EdgeInsets.only(left: 0.0),
                           child: Row(
@@ -151,7 +153,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                     debugPrint(
                                         "Opening profile: ${item.linkUsername}");
                                     if (item.linkUsername != null) {
-                                      Navigator.push(
+                                      _openRoute(
                                         context,
                                         UserProfileScreen.route(
                                             nickname: item.linkUsername!),
@@ -177,7 +179,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                       debugPrint(
                                           "Opening profile: ${item.linkUsername}");
                                       if (item.linkUsername != null) {
-                                        Navigator.push(
+                                        _openRoute(
                                           context,
                                           UserProfileScreen.route(
                                               nickname: item.linkUsername!),
@@ -189,7 +191,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                             NotificationSectionKind
                                                 .submissionComments) {
                                       if (item.submissionId != null) {
-                                        Navigator.push(
+                                        _openRoute(
                                           context,
                                           SubmissionDetailsScreen.route(
                                             submissionId: item.submissionId!,
@@ -201,7 +203,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                         NotificationSectionKind
                                             .journalComments) {
                                       if (item.journalId != null) {
-                                        Navigator.push(
+                                        _openRoute(
                                           context,
                                           MaterialPageRoute(
                                             settings:
@@ -220,7 +222,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                       debugPrint("shout clicked: $username");
 
                                       if (username != null) {
-                                        Navigator.push(
+                                        _openRoute(
                                           context,
                                           UserProfileScreen.route(
                                               nickname: username),
@@ -229,7 +231,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                     } else if (sectionKind ==
                                         NotificationSectionKind.journals) {
                                       if (item.journalId != null) {
-                                        Navigator.push(
+                                        _openRoute(
                                           context,
                                           MaterialPageRoute(
                                             settings:
@@ -304,7 +306,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                                 final target = matchFALink(url);
                                                 switch (target.type) {
                                                   case FALinkTargetType.gallery:
-                                                    Navigator.push(
+                                                    _openRoute(
                                                       context,
                                                       UserProfileScreen.route(
                                                         nickname:
@@ -330,7 +332,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                                           folderNumber,
                                                       folderName: folderName,
                                                     );
-                                                    Navigator.push(
+                                                    _openRoute(
                                                       context,
                                                       UserProfileScreen.route(
                                                         nickname:
@@ -346,7 +348,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                                     );
                                                     return;
                                                   case FALinkTargetType.scraps:
-                                                    Navigator.push(
+                                                    _openRoute(
                                                       context,
                                                       UserProfileScreen.route(
                                                         nickname:
@@ -358,7 +360,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                                     );
                                                     return;
                                                   case FALinkTargetType.user:
-                                                    Navigator.push(
+                                                    _openRoute(
                                                       context,
                                                       UserProfileScreen.route(
                                                         nickname:
@@ -368,7 +370,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                                     return;
                                                   case FALinkTargetType
                                                         .journalUser:
-                                                    Navigator.push(
+                                                    _openRoute(
                                                       context,
                                                       UserProfileScreen.route(
                                                         nickname:
@@ -380,7 +382,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                                     );
                                                     return;
                                                   case FALinkTargetType.journal:
-                                                    Navigator.push(
+                                                    _openRoute(
                                                       context,
                                                       MaterialPageRoute(
                                                         settings:
@@ -398,7 +400,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                                     return;
                                                   case FALinkTargetType
                                                         .submission:
-                                                    Navigator.push(
+                                                    _openRoute(
                                                       context,
                                                       SubmissionDetailsScreen.route(
                                                         submissionId: target
@@ -478,7 +480,7 @@ class NotificationSectionWidget extends StatelessWidget {
                                           GestureDetector(
                                             onTap: () {
                                               if (item.submissionId != null) {
-                                                Navigator.push(
+                                                _openRoute(
                                                   context,
                                                   SubmissionDetailsScreen.route(
                                                     submissionId:
@@ -567,8 +569,10 @@ class NotificationSectionWidget extends StatelessWidget {
                         ),
                       ],
                     );
-                  },
+                  }, childCount: section.items.length),
                 ),
+            ],
+          ),
         );
       },
     );

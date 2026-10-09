@@ -73,9 +73,20 @@ class FaAdPageMetadata extends FaAdPageContext {
   final Uri deliveryUri;
   final List<FaAdLayout> layouts;
 
-  FaAdLayout? layoutFor(double width) {
+  FaAdLayout? layoutFor(double width, {Set<FaAdPlacement>? placements}) {
     for (final layout in layouts) {
-      if (layout.fits(width)) return layout;
+      if (!layout.fits(width)) continue;
+      if (placements == null) return layout;
+      final slots = layout.slots
+          .where((slot) => placements.contains(slot.placement))
+          .toList(growable: false);
+      if (slots.isEmpty) return null;
+      return FaAdLayout(
+        minimumWidth: layout.minimumWidth,
+        maximumWidth: layout.maximumWidth,
+        slots: List.unmodifiable(slots),
+        fetchOnlyZones: layout.fetchOnlyZones,
+      );
     }
     return null;
   }

@@ -2,6 +2,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_html/flutter_html.dart' as html_pkg;
 
 import 'package:fanotifier/core/fa/fa_media_auth.dart';
+import 'package:fanotifier/core/media/media_feature.dart';
+import 'package:fanotifier/core/media/presentation/media_image_provider.dart';
+import 'package:fanotifier/shared/widgets/fa_content_blur.dart';
 
 class FaNetworkImage extends StatefulWidget {
   const FaNetworkImage(
@@ -119,6 +122,7 @@ class _FaNetworkImageState extends State<FaNetworkImage> {
 
   @override
   Widget build(BuildContext context) {
+    final blurred = FaContentBlurScope.blurredOf(context);
     return FutureBuilder<Map<String, String>?>(
       key: ValueKey<int>(_imageGeneration),
       future: _headersFuture,
@@ -128,10 +132,18 @@ class _FaNetworkImageState extends State<FaNetworkImage> {
             !snapshot.hasData) {
           return SizedBox(width: widget.width, height: widget.height);
         }
-        return Image.network(
-          _resolvedUrl,
+        return Image(
+          image: ResizeImage.resizeIfNeeded(
+            widget.cacheWidth,
+            widget.cacheHeight,
+            MediaImageProvider(
+              url: _resolvedUrl,
+              repository: MediaFeature.bytesRepository,
+              sessionRevision: _mediaRevision,
+              headers: snapshot.data,
+            ),
+          ),
           key: ValueKey<int>(_imageGeneration),
-          headers: snapshot.data,
           width: widget.width,
           height: widget.height,
           fit: widget.fit,
@@ -149,10 +161,13 @@ class _FaNetworkImageState extends State<FaNetworkImage> {
             if (frame != null) {
               _loadFailed = false;
             }
+            final image = blurred && !_loadFailed && frame != null
+                ? FaImageBlur(blurred: true, child: child)
+                : child;
             return widget.frameBuilder?.call(
-                  context, child, frame, wasSynchronouslyLoaded,
+                  context, image, frame, wasSynchronouslyLoaded,
                 ) ??
-                child;
+                image;
           },
           loadingBuilder: widget.loadingBuilder,
           errorBuilder: (context, error, stackTrace) {
@@ -164,8 +179,6 @@ class _FaNetworkImageState extends State<FaNetworkImage> {
           },
           semanticLabel: widget.semanticLabel,
           excludeFromSemantics: widget.excludeFromSemantics,
-          cacheWidth: widget.cacheWidth,
-          cacheHeight: widget.cacheHeight,
         );
       },
     );
@@ -175,7 +188,12 @@ class _FaNetworkImageState extends State<FaNetworkImage> {
 Future<ImageProvider> faNetworkImageProvider(String url) async {
   final resolvedUrl = FaMediaAuth.normalizeUrl(url);
   final headers = await FaMediaAuth.headersForUrl(resolvedUrl);
-  return NetworkImage(resolvedUrl, headers: headers);
+  return MediaImageProvider(
+    url: resolvedUrl,
+    repository: MediaFeature.bytesRepository,
+    sessionRevision: FaMediaAuth.changes.value,
+    headers: headers,
+  );
 }
 
 html_pkg.HtmlExtension faHtmlImageExtension({

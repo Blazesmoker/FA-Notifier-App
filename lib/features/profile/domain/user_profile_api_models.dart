@@ -1,5 +1,6 @@
 import 'package:fanotifier/features/profile/domain/shout.dart';
 import 'package:fanotifier/shared/fa/domain/user_link.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
 
 class UserProfileParsed {
   UserProfileParsed({
@@ -48,6 +49,8 @@ class UserProfileParsed {
     required this.isWatching,
     required this.isBlocked,
     required this.isOwnProfile,
+    this.featuredContentBlock = const FaContentBlockData(),
+    this.userProfileContentBlock = const FaContentBlockData(),
   });
 
   String? profileBannerUrl;
@@ -74,8 +77,10 @@ class UserProfileParsed {
   String? featuredImageUrl;
   String? featuredImageTitle;
   String? featuredPostNumber;
+  final FaContentBlockData featuredContentBlock;
   String? userProfileImageUrl;
   String? userProfilePostNumber;
+  final FaContentBlockData userProfileContentBlock;
   String? userProfileTexts;
   List<Map<String, String>> contactInformationLinks;
   List<UserLink> recentWatchers;

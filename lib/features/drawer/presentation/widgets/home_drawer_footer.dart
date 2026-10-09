@@ -1,11 +1,11 @@
 import 'package:material_ui/material_ui.dart';
-import 'package:flutter_switch/flutter_switch.dart';
+import 'home_drawer_mode_switch.dart';
 
 List<Widget> buildHomeDrawerFooter(
   BuildContext context, {
   required bool sfwEnabled,
   required String registeredUsersOnline,
-  required ValueChanged<bool> onToggle,
+  required Future<void> Function(bool) onToggle,
 }) {
   return [
     Padding(
@@ -17,23 +17,9 @@ List<Widget> buildHomeDrawerFooter(
       ),
       child: Row(
         children: [
-          FlutterSwitch(
-            width: 68.0,
-            height: 30.0,
-            toggleSize: 20.0,
+          HomeDrawerModeSwitch(
             value: !sfwEnabled,
-            borderRadius: 18.0,
-            padding: 3,
-            activeText: 'NSFW',
-            inactiveText: ' SFW',
-            valueFontSize: 11.6,
-            activeTextColor: Colors.black,
-            activeToggleColor: Colors.black,
-            inactiveTextColor: Colors.white,
-            activeColor: const Color(0xFFE09321),
-            inactiveColor: const Color(0xFF111111),
-            showOnOff: true,
-            onToggle: onToggle,
+            onChanged: onToggle,
           ),
         ],
       ),

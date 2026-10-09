@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:fanotifier/core/fa/fa_cookie_helper.dart';
 import 'package:fanotifier/core/network/fa_http.dart';
+import 'package:fanotifier/features/auth/data/fa_access_page_classifier.dart';
 import 'package:fanotifier/features/auth/domain/cloudflare_http_access_result.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -77,6 +78,11 @@ class CloudflareHttpAccessVerifier {
           headers: [if (response.headers['set-cookie'] != null)
             response.headers['set-cookie']!],
         );
+        if (isCancelled?.call() ?? false) {
+          return const CloudflareHttpAccessResult(
+            status: CloudflareHttpAccessStatus.cancelled,
+          );
+        }
         if ([301, 302, 303, 307, 308].contains(response.statusCode)) {
           final location = response.headers['location'];
           if (location == null || location.isEmpty) break;
@@ -84,32 +90,21 @@ class CloudflareHttpAccessVerifier {
           continue;
         }
         final body = utf8.decode(response.bodyBytes, allowMalformed: true);
-        final isChallenge = FaCookieHelper.isCloudflareChallengePage(
+        final access = classifyFaAccessPage(
+          url: uri.toString(),
           body: body,
           statusCode: response.statusCode,
           headers: response.headers,
         );
-        final isDocument = FaCookieHelper.isFaDocument(
-          body: body,
-          statusCode: response.statusCode,
-          headers: response.headers,
-        );
+        recordFaAccessAvailability(access);
         if (kDebugMode) {
           debugPrint(
             '[Cloudflare] HTTP verification status=${response.statusCode}, '
-            'challenge=$isChallenge, document=$isDocument',
+            'challenge=${access.status == CloudflareHttpAccessStatus.challenged}, '
+            'document=${access.granted}',
           );
         }
-        return CloudflareHttpAccessResult(
-          status: isDocument
-              ? CloudflareHttpAccessStatus.granted
-              : isChallenge
-                  ? CloudflareHttpAccessStatus.challenged
-                  : CloudflareHttpAccessStatus.denied,
-          statusCode: response.statusCode,
-          pageHtml: isDocument ? body : null,
-          finalUrl: isDocument ? uri.toString() : null,
-        );
+        return access;
       }
     } catch (_) {
       if (kDebugMode) debugPrint('[Cloudflare] HTTP verification unavailable.');

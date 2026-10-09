@@ -1,4 +1,6 @@
 import 'package:html/dom.dart' as dom;
+import 'package:fanotifier/shared/fa/data/fa_content_block_parser.dart';
+import 'package:fanotifier/shared/fa/domain/fa_content_block_data.dart';
 
 /// Shared thumbnail parsing helpers for FA "gallery" style grids.
 ///
@@ -115,7 +117,10 @@ class FaThumbnailParser {
   /// - title (String?)
   /// - author (String?)
   /// - authorProfileUrl (String?)
-  static Map<String, dynamic>? extract(dom.Element figure) {
+  static Map<String, dynamic>? extract(
+    dom.Element figure, {
+    required FaContentBlockSnapshot? contentBlockSnapshot,
+  }) {
     final postUrl = extractPostUrl(figure);
     final thumbnailUrl = extractThumbnailUrl(figure);
     final width = extractDataWidth(figure);
@@ -135,6 +140,10 @@ class FaThumbnailParser {
       'title': extractTitle(figure),
       'author': extractAuthor(figure),
       'authorProfileUrl': extractAuthorProfileUrl(figure),
+      'contentBlock': parseFaContentBlockData(
+        figure.querySelector(_thumbSelector),
+        snapshot: contentBlockSnapshot,
+      ),
     };
   }
 }

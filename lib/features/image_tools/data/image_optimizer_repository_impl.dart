@@ -270,7 +270,6 @@ class ImageOptimizerRepositoryImpl implements ImageOptimizerRepository {
     if (!permitted) return false;
     return _exportService.saveImageToGallery(
       result.bytes,
-      quality: 100,
       fileName: result.fileName,
       androidRelativePath: 'Pictures/FANotifier/Optimized',
       skipIfExists: false,

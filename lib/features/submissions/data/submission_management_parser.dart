@@ -5,6 +5,7 @@ import 'package:html/parser.dart' as html_parser;
 
 import 'package:fanotifier/features/submissions/domain/submission_management_models.dart';
 import 'package:fanotifier/shared/fa/fa_system_message_parser.dart';
+import 'package:fanotifier/shared/fa/data/fa_content_block_parser.dart';
 
 const String faSubmissionManagementPath = '/controls/submissions/';
 const String faFolderManagementPath = '/controls/folders/submissions/';
@@ -73,6 +74,7 @@ FaSubmissionManagementPage parseSubmissionManagementPage(
   }
 
   final descriptionData = _submissionDescriptions(document);
+  final contentBlockSnapshot = parseFaContentBlockSnapshot(document);
   final submissions = <FaManagedSubmission>[];
   for (final figure in
       form.querySelectorAll('#gallery-manage-submissions figure')) {
@@ -116,6 +118,10 @@ FaSubmissionManagementPage parseSubmissionManagementPage(
         height: height,
         missingTags: missingTags,
         assignedFolders: _assignedFolders(descriptionData[id]),
+        contentBlock: parseFaContentBlockData(
+          image,
+          snapshot: contentBlockSnapshot,
+        ),
       ),
     );
   }

@@ -63,6 +63,8 @@ class SubmissionSelectionTile extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     FaThumbnailOutline(
+                      submissionId: submission.id,
+                      contentBlock: submission.contentBlock,
                       rating: submission.rating,
                       borderRadius: 10,
                       outlineBorderRadius: showDetails

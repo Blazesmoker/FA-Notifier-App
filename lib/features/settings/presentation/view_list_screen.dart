@@ -108,6 +108,7 @@ class _ViewListScreenState extends State<ViewListScreen> {
       cookieHeader: cookieHeader,
       maxRetries: _maxRetries,
       retryDelay: _retryDelay,
+      isCancelled: () => !mounted,
       onRetry: (message) {
         if (!mounted) return;
         setState(() {
@@ -134,6 +135,7 @@ class _ViewListScreenState extends State<ViewListScreen> {
 
   Future<void> _fetchAllUsers() async {
     final cookieHeader = await _watchlistRepository.buildCookieHeader();
+    if (!mounted) return;
 
     if (cookieHeader.isEmpty) {
       setState(() {

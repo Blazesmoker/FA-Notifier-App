@@ -6,9 +6,16 @@ import 'package:fanotifier/features/profile/data/user_profile_shout_delete_url.d
 import 'package:fanotifier/shared/fa/domain/user_link.dart';
 import 'package:fanotifier/features/profile/domain/user_profile_api_models.dart';
 import 'package:fanotifier/shared/fa/parsing_utils.dart';
+import 'package:fanotifier/shared/fa/data/fa_content_block_parser.dart';
 
 UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
   final document = html_parser.parse(htmlBody);
+  final contentBlockSnapshot = parseFaContentBlockSnapshot(document);
+  var userProfileContentBlock = parseFaContentBlockData(
+    null,
+    snapshot: contentBlockSnapshot,
+  );
+  var featuredContentBlock = userProfileContentBlock;
 
   String? userProfileImageUrl;
   String? userProfilePostNumber;
@@ -258,6 +265,10 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
               section.querySelector('.section-body img');
 
           if (imageElem != null) {
+            userProfileContentBlock = parseFaContentBlockData(
+              imageElem,
+              snapshot: contentBlockSnapshot,
+            );
             String? imageSrc = imageElem.attributes['src'];
             if (imageSrc != null && imageSrc.isNotEmpty) {
               if (imageSrc.startsWith('//')) {
@@ -300,6 +311,10 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
 
       final imageElem = profileIdElem.querySelector('img');
       if (imageElem != null) {
+        userProfileContentBlock = parseFaContentBlockData(
+          imageElem,
+          snapshot: contentBlockSnapshot,
+        );
         String? imageSrc = imageElem.attributes['src'];
         if (imageSrc != null) {
           if (imageSrc.startsWith('//')) {
@@ -372,6 +387,10 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
           featuredSection.querySelector('.section-body img') ??
           featuredSection.querySelector('img');
       if (imgElem != null) {
+        featuredContentBlock = parseFaContentBlockData(
+          imgElem,
+          snapshot: contentBlockSnapshot,
+        );
         var imageSrc = imgElem.attributes['src'] ?? '';
         if (imageSrc.isNotEmpty) {
           if (imageSrc.startsWith('//')) {
@@ -424,6 +443,10 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
           }
           final img = anchor.querySelector('img');
           if (img != null) {
+            featuredContentBlock = parseFaContentBlockData(
+              img,
+              snapshot: contentBlockSnapshot,
+            );
             String? imageSrc = img.attributes['src'];
             if (imageSrc != null) {
               if (imageSrc.startsWith('//')) {
@@ -857,8 +880,10 @@ UserProfileParsed parseUserProfileHtmlDocument(String htmlBody) {
     featuredImageUrl: featuredImageUrl,
     featuredImageTitle: featuredImageTitle,
     featuredPostNumber: featuredPostNumber,
+    featuredContentBlock: featuredContentBlock,
     userProfileImageUrl: userProfileImageUrl,
     userProfilePostNumber: userProfilePostNumber,
+    userProfileContentBlock: userProfileContentBlock,
     userProfileTexts: userProfileTexts,
     contactInformationLinks: contactInformationLinks,
     recentWatchers: recentWatchers,

@@ -560,8 +560,10 @@ class _HomeDrawerState extends State<HomeDrawer> {
                         registeredUsersOnline:
                             _notifications.registeredUsersOnline,
                         onToggle: (val) async {
+                          if (val == !_sfwEnabled) return;
                           bool confirmationDisabled =
                               await _nsfwConfirmationRepository.loadDisabled();
+                          if (!mounted) return;
                           if (confirmationDisabled) {
                             await _toggleNsfwMode();
                           } else {

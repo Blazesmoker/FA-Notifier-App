@@ -11,6 +11,7 @@ import 'package:fanotifier/features/notes/domain/message_model.dart';
 import 'package:fanotifier/features/notes/domain/note_activity_snapshot.dart';
 import 'package:fanotifier/features/notes/domain/note_management.dart';
 import 'package:fanotifier/features/notes/domain/notes_page_result.dart';
+import 'package:fanotifier/features/notes/domain/notes_inbox_snapshot.dart';
 import 'package:fanotifier/features/notes/domain/notes_repository.dart';
 import 'package:fanotifier/features/notes/domain/notes_refresh_port.dart';
 import 'package:fanotifier/features/notes/domain/notes_unread_notification_result.dart';
@@ -63,6 +64,34 @@ class NotesRepositoryImpl implements NotesRepository {
   }
 
   @override
+  NotesInboxSnapshot? get latestInboxSnapshot => _refreshPort.latestInboxSnapshot;
+
+  @override
+  int get inboxGeneration => _refreshPort.inboxGeneration;
+
+  @override
+  Future<NotesInboxSnapshot?> refreshInbox(
+    Future<NotesInboxSnapshot?> Function() fallback,
+  ) {
+    return _refreshPort.refreshInbox(fallback);
+  }
+
+  @override
+  void bindInboxRefresh(Future<NotesInboxSnapshot?> Function() handler) {
+    _refreshPort.bindInboxRefresh(handler);
+  }
+
+  @override
+  void unbindInboxRefresh(Future<NotesInboxSnapshot?> Function() handler) {
+    _refreshPort.unbindInboxRefresh(handler);
+  }
+
+  @override
+  void rememberInboxSnapshot(NotesInboxSnapshot snapshot) {
+    _refreshPort.rememberInboxSnapshot(snapshot);
+  }
+
+  @override
   void setScreenVisible(bool visible) {
     _activitiesPollingPort.setNotesScreenVisible(visible);
   }
@@ -71,13 +100,24 @@ class NotesRepositoryImpl implements NotesRepository {
   Future<NotesPageResult> fetchPage({
     required String folder,
     required int page,
+    bool requireFresh = false,
   }) async {
-    final snapshot =
-        await _notesApi.fetchNotesPageSnapshot(folder: folder, page: page);
-    return NotesPageResult(
-      messages: snapshot.messages,
-      topbarCounts: snapshot.topbarCounts,
-    );
+    Future<NotesPageResult> load() async {
+      final snapshot =
+          await _notesApi.fetchNotesPageSnapshot(folder: folder, page: page);
+      return NotesPageResult(
+        messages: snapshot.messages,
+        topbarCounts: snapshot.topbarCounts,
+        startedAtMilliseconds: snapshot.startedAtMilliseconds,
+        completedAtMilliseconds: snapshot.completedAtMilliseconds,
+      );
+    }
+    if (folder == 'inbox') {
+      return _refreshPort.fetchInboxPage(
+        load, page: page, requireFresh: requireFresh,
+      );
+    }
+    return load();
   }
 
   @override
@@ -85,7 +125,7 @@ class NotesRepositoryImpl implements NotesRepository {
     required String folder,
     required int page,
   }) {
-    return _notesApi.fetchNotesPage(folder: folder, page: page);
+    return fetchPage(folder: folder, page: page).then((result) => result.messages);
   }
 
   @override
@@ -144,12 +184,16 @@ class NotesRepositoryImpl implements NotesRepository {
   Future<void> handleTopbarCounts(
     NotificationCounts? counts, {
     required String source,
+    NoteActivitySnapshot? noteActivitySnapshot,
+    int? startedAtMilliseconds,
   }) async {
     if (counts == null) return;
     await _activitiesPollingPort.handleExternalCounts(
       currentCounts: counts,
       resetTimer: true,
       source: source,
+      noteActivitySnapshot: noteActivitySnapshot,
+      startedAtMilliseconds: startedAtMilliseconds,
     );
   }
 
